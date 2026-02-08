@@ -6,4 +6,9 @@ Index:
 
 - overview.md
 - glossary.md
-- features/*.md: each feature a document; Feature document must only include: user stories, flow, acceptance criteria, and involved surfaces.
+- features/*.md: each feature a document;
+  - Feature document must include: user stories, flow, acceptance criteria, and involved surfaces.
+    It may also include an optional domain glossary section for feature-local terms.
+  - User story answers why does this exist.
+  - Acceptance criteria should become executable behavior specifications.
+- features/ai-gateway.md

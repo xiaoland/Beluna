@@ -6,50 +6,41 @@ BELUNA is an agent that:
 
 - turns user intentions into environment changes through iteration and feedback.
 
-## Core structure
+## Core Design
 
-### 1. One mind
+> NEED FURTHER ADJUSTMENTS
 
-- One primary LLM
-- Memory is central
-- Responsible for reasoning, decisions, and iteration
-- No multi-mind architecture.
+### 1. Architecture
 
-### 2. Helpers (sub-agents)
+#### Layer 1 — AI Backend (Provider/Model)
 
-> Exists since primary LLM is not powerful enough to drive the whole "BODY"
+- adapters: OpenAI/Anthropic/Gemini/local
+- uniform request schema
+- uniform event stream schema
 
-- Dispatched by the mind
-- Reduce cognitive load
-- Task-scoped and temporary
-- Not independent agents
+#### Layer 2 — Beluna Runtime (non-AI substrate)
 
-### 3. BELUNA framework (the “circulatory system”)
-
-BELUNA’s code:
-
-- routes data and control
-- handles automation pipelines
-- validates structured data (e.g., JSON)
-- connects mind ↔ tools ↔ environment
+- helpers (sub-agents) (Exists since primary LLM is not powerful enough to drive the whole "BODY")
+  - Dispatched by the mind
+  - Reduce cognitive load
+  - Task-scoped and temporary
+  - Not independent agents
+- The Body: Input ↔ Output, makes BELUNA stays environment-agnostic, connects mind ↔ tools ↔ environment.
+  - shell
+  - filesystem
+  - GUI automation
+  - MCP / retrieval
+  - runtime tools
 
 Not infrastructure, not the LLM itself.
 
-### 4. Body abstraction
+#### Layer 3 — Mind (pluggable)
 
-The body is simply:
+- a meta-level control system that orchestrates, evaluates, and evolves the whole intelligent runtime.
+- can call Layer 1
+- can be non-LLM later (one SOTA LLM now)
 
-- Input ↔ Output
-- Adapters implement this:
-- shell
-- filesystem
-- GUI automation
-- MCP / retrieval
-- runtime tools
-
-BELUNA stays environment-agnostic.
-
-### 5. Feedback loop (core operating principle)
+### 2. Feedback loop (core operating principle)
 
 ```ascii
 Goal → Action → Environment change → Feedback → Next action
@@ -61,7 +52,7 @@ Or:
 BELUNA acts to generate feedback that improves understanding.
 ```
 
-### 6. Natural language as protocol
+### 3. Natural language as protocol
 
 Natural language is the interface for:
 
@@ -70,16 +61,7 @@ Natural language is the interface for:
 
 Structured data remains execution-level artifacts.
 
-### 7. Long-term idea (not required now)
-
-BELUNA may eventually:
-
-- modify its own framework
-- test new versions
-- migrate memory
-- evolve safely
-
-### 8. AI Gateway (MVP)
+### 4. AI Gateway (MVP)
 
 Beluna now includes a minimal AI Gateway module that standardizes inference calls across multiple backend dialects:
 
@@ -101,3 +83,12 @@ Gateway guarantees and behavior in MVP:
   - rate smoothing
   - token usage post-check is best-effort accounting only
 - Cancellation propagation when stream consumer drops
+
+### 5. Long-term idea (not required now)
+
+BELUNA may eventually:
+
+- modify its own framework
+- test new versions
+- migrate memory
+- evolve safely
