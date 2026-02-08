@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "The schema URL for this configuration file."
+    },
+    "socket_path": {
+      "type": "string",
+      "description": "Unix socket path for NDJSON control messages.",
+      "default": "beluna.sock"
+    },
+    "ai_gateway": {
+      "type": "object",
+      "properties": {
+        "default_backend": {
+          "type": "string"
+        },
+        "reliability": {
+          "type": "object",
+          "properties": {
+            "request_timeout_ms": { "type": "integer", "minimum": 1 },
+            "max_retries": { "type": "integer", "minimum": 0 },
+            "backoff_base_ms": { "type": "integer", "minimum": 1 },
+            "backoff_max_ms": { "type": "integer", "minimum": 1 },
+            "retry_policy": {
+              "type": "string",
+              "enum": ["before_first_event_only", "adapter_resumable"]
+            },
+            "breaker_failure_threshold": { "type": "integer", "minimum": 1 },
+            "breaker_open_ms": { "type": "integer", "minimum": 1 }
+          },
+          "additionalProperties": false
+        },
+        "budget": {
+          "type": "object",
+          "properties": {
+            "max_request_time_ms": { "type": "integer", "minimum": 1 },
+            "max_usage_tokens_per_request": { "type": ["integer", "null"], "minimum": 1 },
+            "max_concurrency_per_backend": { "type": "integer", "minimum": 1 },
+            "rate_smoothing_per_second": { "type": ["integer", "null"], "minimum": 1 }
+          },
+          "additionalProperties": false
+        },
+        "backends": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "dialect": {
+                "type": "string",
+                "enum": ["openai_compatible", "ollama", "github_copilot_sdk"]
+              },
+              "endpoint": { "type": ["string", "null"] },
+              "credential": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": { "const": "env" },
+                      "var": { "type": "string", "minLength": 1 }
+                    },
+                    "required": ["type", "var"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": { "const": "inline_token" },
+                      "token": { "type": "string", "minLength": 1 }
+                    },
+                    "required": ["type", "token"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": { "const": "none" }
+                    },
+                    "required": ["type"],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "default_model": { "type": "string", "minLength": 1 },
+              "capabilities": {
+                "type": ["object", "null"],
+                "properties": {
+                  "streaming": { "type": "boolean" },
+                  "tool_calls": { "type": "boolean" },
+                  "json_mode": { "type": "boolean" },
+                  "vision": { "type": "boolean" },
+                  "resumable_streaming": { "type": "boolean" }
+                },
+                "additionalProperties": false
+              },
+              "copilot": {
+                "type": ["object", "null"],
+                "properties": {
+                  "command": { "type": "string", "minLength": 1 },
+                  "args": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  }
+                },
+                "required": ["command"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["id", "dialect", "credential", "default_model"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["default_backend", "backends"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["ai_gateway"],
+  "additionalProperties": false
+}
