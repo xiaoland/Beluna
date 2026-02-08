@@ -1,12 +1,26 @@
-# AGENTS.md for src/ai-gateway
+# AGENTS.md for src/ai_gateway
 
-AI Gateway is a thin boundary that standardizes how the Beluna core calls external AI backends and receives results.
+This directory implements the AI Gateway feature.
 
-## File Structure
+## Design Sources (Authoritative)
+
+- PRD: `docs/features/ai-gateway/PRD.md`
+- HLD: `docs/features/ai-gateway/HLD.md`
+- LLD: `docs/features/ai-gateway/LLD.md`
+
+The architecture guidance previously described here is now maintained in HLD.
+
+## Boundary and Quality Rules
+
+- Keep behavior aligned with contracts in `docs/contracts/ai-gateway/*`.
+- Keep tests aligned under `tests/ai_gateway/*`.
+- Keep routing deterministic and avoid hidden fallback logic.
+- Keep request and stream invariants deterministic and test-covered.
+
+## Source Surfaces
 
 ```text
 src/ai_gateway/
-├── AGENTS.md
 ├── mod.rs
 ├── types.rs
 ├── error.rs
@@ -19,70 +33,15 @@ src/ai_gateway/
 ├── budget.rs
 ├── telemetry.rs
 ├── gateway.rs
-├── adapters/
-│   ├── mod.rs
-│   ├── http_common.rs
-│   ├── openai_compatible.rs
-│   ├── ollama.rs
-│   ├── github_copilot.rs
-│   └── copilot_rpc.rs
-└── tests/
+└── adapters/
     ├── mod.rs
-    ├── request_normalizer.rs
-    ├── router.rs
-    ├── reliability.rs
-    ├── budget.rs
+    ├── http_common.rs
     ├── openai_compatible.rs
     ├── ollama.rs
-    ├── copilot_adapter.rs
-    └── gateway_e2e.rs
+    ├── github_copilot.rs
+    └── copilot_rpc.rs
 ```
 
-## Design Invariants
+## Last Updated
 
-- Keep routing deterministic: select exactly one backend, no multi-backend fallback in MVP.
-- Keep protocol strict: reject invalid requests early in `RequestNormalizer`.
-- Preserve canonical stream ordering:
-  - first event is `Started`
-  - exactly one terminal event (`Completed` or `Failed`)
-- Gateway stream must not emit `ToolCallStatus::Executed` or `ToolCallStatus::Rejected`.
-- Retry safety:
-  - default retry only before first output/tool event
-  - no hidden retry after output/tool events unless explicitly supported
-- Stream drop must cancel in-flight backend work and release budget/concurrency resources.
-
-## Adapter Rules
-
-- BackendAdapter owns both transport and dialect mapping.
-- OpenAI-compatible means `chat/completions`-like compatibility, not strict parity.
-- Handle provider divergence with graceful degradation when possible.
-- Map non-reconcilable payloads to deterministic canonical errors.
-
-## Security and Credentials
-
-- Resolve secrets only through `CredentialProvider`.
-- Do not leak tokens/headers in error messages or telemetry.
-- Keep redaction defaults on any provider/raw metadata output.
-
-## Budget and Reliability
-
-- Enforce timeout, per-backend concurrency, and rate smoothing.
-- Treat usage token post-check as best-effort accounting; do not terminate active stream based on late usage.
-- Circuit breaker counting should include transient backend failures, not caller cancellation.
-
-## Testing and Docs
-
-- Add/adjust unit tests for normalization, routing, reliability, and budget changes.
-- Add/adjust adapter tests for parsing/mapping changes.
-
-## Current State
-
-> Last Updated At: 2026-02-08T15:04:33Z+08:00
-
-### Live Capabilities
-
-### Known Limitations & Mocks
-
-- Copilot adapter targets SDK/LSP flow with conservative assumptions; method/shape drift across SDK versions may require follow-up updates.
-
-### Immediate Next Focus
+> 2026-02-08

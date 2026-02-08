@@ -8,87 +8,65 @@ BELUNA is an agent that:
 
 ## Core Design
 
-> NEED FURTHER ADJUSTMENTS
-
 ### 1. Architecture
 
 #### Layer 1 — AI Backend (Provider/Model)
 
-- adapters: OpenAI/Anthropic/Gemini/local
-- uniform request schema
-- uniform event stream schema
+- adapters: OpenAI-compatible / Ollama / Copilot SDK (MVP)
+- uniform canonical request schema
+- uniform canonical event stream schema
 
 #### Layer 2 — Beluna Runtime (non-AI substrate)
 
-- helpers (sub-agents) (Exists since primary LLM is not powerful enough to drive the whole "BODY")
-  - Dispatched by the mind
-  - Reduce cognitive load
-  - Task-scoped and temporary
-  - Not independent agents
-- The Body: Input ↔ Output, makes BELUNA stays environment-agnostic, connects mind ↔ tools ↔ environment.
+- helpers (sub-agents)
+  - dispatched by the mind
+  - reduce cognitive load
+  - task-scoped and temporary
+  - not independent agents
+- body abstraction (input/output adapters)
   - shell
   - filesystem
   - GUI automation
   - MCP / retrieval
   - runtime tools
 
-Not infrastructure, not the LLM itself.
-
 #### Layer 3 — Mind (pluggable)
 
-- a meta-level control system that orchestrates, evaluates, and evolves the whole intelligent runtime.
-- can call Layer 1
-- can be non-LLM later (one SOTA LLM now)
+- orchestrates, evaluates, and evolves runtime behavior
+- can call Layer 1 via AI Gateway
+- one SOTA LLM now, non-LLM options possible later
 
-### 2. Feedback loop (core operating principle)
-
-```ascii
-Goal → Action → Environment change → Feedback → Next action
-```
-
-Or:
+### 2. Feedback loop
 
 ```ascii
-BELUNA acts to generate feedback that improves understanding.
+Goal -> Action -> Environment change -> Feedback -> Next action
 ```
 
 ### 3. Natural language as protocol
 
 Natural language is the interface for:
 
-- human ↔ BELUNA
-- LLM ↔ helper processes
-
-Structured data remains execution-level artifacts.
+- human <-> BELUNA
+- LLM <-> helper processes
 
 ### 4. AI Gateway (MVP)
 
-Beluna now includes a minimal AI Gateway module that standardizes inference calls across multiple backend dialects:
+Beluna includes a minimal AI Gateway module with deterministic routing, strict normalization, canonical streaming, reliability controls, and budget enforcement.
 
-- `openai_compatible` (`chat/completions`-like protocol, graceful degradation on provider divergence)
-- `ollama` (`/api/chat`)
-- `github_copilot_sdk` (Copilot language server over stdio JSON-RPC)
+Detailed feature PRD:
 
-Gateway guarantees and behavior in MVP:
+- `docs/features/ai-gateway/PRD.md`
 
-- Deterministic backend routing (no multi-backend fallback)
-- Strict request normalization and validation before adapter dispatch
-- Canonical event stream (`Started` -> deltas/tool events/usage -> terminal event)
-- Retry with exponential backoff under safe boundaries
-  - default: retry only before first output/tool event
-- Minimal per-backend circuit breaker
-- Budget enforcement
-  - timeout bound
-  - per-backend concurrency limit
-  - rate smoothing
-  - token usage post-check is best-effort accounting only
-- Cancellation propagation when stream consumer drops
+Design docs:
 
-### 5. Long-term idea (not required now)
+- `docs/features/ai-gateway/HLD.md`
+- `docs/features/ai-gateway/LLD.md`
 
-BELUNA may eventually:
+Glossary note:
 
-- modify its own framework
-- test new versions
-- migrate memory
-- evolve safely
+- top-level terms: `docs/product/glossary.md`
+- AI Gateway domain terms: `docs/features/ai-gateway/glossary.md`
+
+### 5. Long-term direction
+
+- framework self-modification and safe evolution remain long-term ideas, not MVP requirements.

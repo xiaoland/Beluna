@@ -1,14 +1,17 @@
 # README of Beluna docs/product
 
-Files under `docs/product` consists Beluna's Product Requirement Document.
+Files under `docs/product` are the top-level product docs.
 
 Index:
 
-- overview.md
-- glossary.md
-- features/*.md: each feature a document;
-  - Feature document must include: user stories, flow, acceptance criteria, and involved surfaces.
-    It may also include an optional domain glossary section for feature-local terms.
-  - User story answers why does this exist.
-  - Acceptance criteria should become executable behavior specifications.
-- features/ai-gateway.md
+- [overview.md](./overview.md)
+- [glossary.md](./glossary.md)
+- [features index](../features/README.md)
+- feature package requirements:
+  - must include PRD, HLD, and LLD
+  - PRD should include user stories, flow, and acceptance criteria
+  - HLD should cover architecture and involved surfaces
+  - LLD should define contracts and low-level constraints
+  - may include an optional domain glossary for feature-local terms
+  - should reference `docs/modules/*` for implementation-facing detail
+- [AI Gateway](../features/ai-gateway/README.md)

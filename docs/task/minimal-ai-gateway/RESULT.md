@@ -120,15 +120,6 @@ Test coverage includes:
 - Copilot method/response shape assumptions are conservative and may need adjustment against exact SDK/server versions.
 - No live provider-network integration tests are run in CI (mock/in-process tests only).
 
-## 10) Product Docs Updated
-
-Updated product documents to include explicit AI Gateway feature documentation and glossary terms:
-
-- `docs/product/overview.md`
-- `docs/product/README.md`
-- `docs/product/glossary.md`
-- `docs/product/features/ai-gateway.md`
-
 ## 9) Invariant Confirmation
 
 Confirmed in implementation and tests:
@@ -137,3 +128,15 @@ Confirmed in implementation and tests:
 - strict tool-message linkage validation in `RequestNormalizer`
 - gateway stream does not emit `ToolCallStatus::Executed` or `ToolCallStatus::Rejected`
 - cancellation-on-drop invokes adapter cancellation and releases budget resources
+
+## 10) Product Docs Updated
+
+Updated product documents to include explicit AI Gateway feature documentation and glossary terms:
+
+- `docs/product/overview.md`
+- `docs/product/README.md`
+- `docs/product/glossary.md`
+- `docs/features/ai-gateway/README.md`
+- `docs/features/ai-gateway/PRD.md`
+- `docs/features/ai-gateway/HLD.md`
+- `docs/features/ai-gateway/LLD.md`

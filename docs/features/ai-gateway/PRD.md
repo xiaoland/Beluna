@@ -1,4 +1,19 @@
-# AI Gateway
+# AI Gateway PRD
+
+## Product Statement
+
+AI Gateway is Beluna's provider- and model-agnostic inference boundary.
+It standardizes how Beluna runtime sends inference requests and consumes results.
+
+## MVP Scope
+
+- Supported dialects:
+  - `openai_compatible` (`chat/completions`-like protocol)
+  - `ollama` (`/api/chat`)
+  - `github_copilot_sdk` (Copilot language server over stdio JSON-RPC)
+- Gateway selects by API dialect, not by local vs remote deployment model.
+- Streaming interface: `Stream<Item = GatewayEvent>`.
+- Cost model in MVP: usage-only accounting.
 
 ## User Stories
 
@@ -7,26 +22,43 @@
 - As Beluna runtime, I need strict request normalization so invalid tool/message linkage fails early and consistently.
 - As Beluna runtime, I need canonical streaming events so upper layers can consume one stable event protocol.
 - As Beluna runtime, I need retry/circuit/budget policies so backend failures do not destabilize the system.
-- As Beluna runtime, I need support for `openai_compatible`, `ollama`, and `github_copilot_sdk` in MVP.
+
+## Functional Requirements
+
+- Route each request to exactly one configured backend profile.
+- Normalize request/response shapes to Beluna canonical formats.
+- Unify tool/function calling semantics into one internal representation.
+- Support cross-cutting concerns:
+  - auth and endpoint config
+  - retries/timeouts/circuit breaker
+  - rate limits and transient error mapping
+  - telemetry (latency, usage; cost derived from usage when available)
+  - capability probing and feature flags
+
+## Non-Goals (MVP)
+
+- No multi-backend fallback.
+- No exact protocol parity guarantee for OpenAI-compatible providers.
+- No hard dependency on usage availability for in-flight stream termination.
 
 ## Flow
 
 1. Runtime submits `BelunaInferenceRequest`.
-2. RequestNormalizer validates and maps request to `CanonicalRequest`.
-3. BackendRouter selects one backend profile deterministically.
-4. CredentialProvider resolves auth material for that backend.
-5. CapabilityGuard validates requested features against effective backend capabilities.
-6. BudgetEnforcer applies pre-dispatch checks and acquires backend concurrency/rate budget.
-7. ReliabilityLayer invokes BackendAdapter with retry/backoff and circuit-breaker logic.
-8. BackendAdapter (transport + dialect mapping) emits backend raw events.
-9. ResponseNormalizer converts backend raw events to canonical gateway events.
+2. `RequestNormalizer` validates and maps request to `CanonicalRequest`.
+3. `BackendRouter` selects one backend profile deterministically.
+4. `CredentialProvider` resolves auth material for that backend.
+5. `CapabilityGuard` validates requested features against effective backend capabilities.
+6. `BudgetEnforcer` applies pre-dispatch checks and acquires backend concurrency/rate budget.
+7. `ReliabilityLayer` invokes `BackendAdapter` with retry/backoff and circuit-breaker logic.
+8. `BackendAdapter` (transport + dialect mapping) emits backend raw events.
+9. `ResponseNormalizer` converts backend raw events to canonical gateway events.
 10. Gateway emits canonical stream to caller and propagates cancellation on consumer drop.
 11. Budget and telemetry are updated; stream ends with one terminal event.
 
 ## Acceptance Criteria
 
 - Backend routing is deterministic and does not perform multi-backend fallback.
-- RequestNormalizer returns `InvalidRequest` for invalid message/tool linkage states.
+- `RequestNormalizer` returns `InvalidRequest` for invalid message/tool linkage states.
 - Gateway canonical stream starts with `Started` and ends with exactly one terminal event (`Completed` or `Failed`).
 - Default retry policy retries only before first output/tool event.
 - Circuit breaker can open per backend after repeated transient failures.
@@ -50,24 +82,3 @@
 - ReliabilityLayer: Retry/backoff and circuit-breaker layer with safe retry boundaries for streaming/tool semantics.
 - CredentialProvider: Secret resolution boundary used by gateway adapters.
 - Stream Drop Cancellation: Behavior where dropping consumer stream cancels in-flight backend work and releases resources.
-
-## Involved Surfaces
-
-- `src/ai_gateway/gateway.rs`
-- `src/ai_gateway/request_normalizer.rs`
-- `src/ai_gateway/router.rs`
-- `src/ai_gateway/capabilities.rs`
-- `src/ai_gateway/budget.rs`
-- `src/ai_gateway/reliability.rs`
-- `src/ai_gateway/response_normalizer.rs`
-- `src/ai_gateway/credentials.rs`
-- `src/ai_gateway/adapters/openai_compatible.rs`
-- `src/ai_gateway/adapters/ollama.rs`
-- `src/ai_gateway/adapters/github_copilot.rs`
-- `src/ai_gateway/adapters/copilot_rpc.rs`
-- `src/ai_gateway/types.rs`
-- `src/ai_gateway/error.rs`
-- `src/ai_gateway/telemetry.rs`
-- `src/config.rs`
-- `beluna.schema.json`
-- `beluna.jsonc`

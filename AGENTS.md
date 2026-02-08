@@ -11,7 +11,7 @@ Beluna is an agent.
 ```text
 .
 ├── target/
-├── docs/
+├── docs/                # Product, BDT Contracts, Modules, ADR and Tasks
 ├── tests/
 └── src/
     ├── main.rs
@@ -20,17 +20,20 @@ Beluna is an agent.
     ├── protocol.rs
     ├── server.rs
     └── ai_gateway/
-        └── AGENTS.md
 ```
 
-## Documentations
+## Documents
 
 Read following documents if needed, and keep them current:
 
-- [Product Design](./docs/product/README.md): Product overview, glossary, feature documents involves user story, acceptance criteria.
-- [BDT Contract](./docs/contract/README.md)
-- [AI Gateway](./src/ai_gateway/AGENTS.md)
+- [Overview](./docs/overview.md): Product overview.
+- [Glossary](./docs/glossary.md): Product top-level glossary.
+- [Feature Document](./docs/features/README.md): Feature document, answers "What to do", each feature has its PRD, HLD and LLD.
+- [Modules](./docs/modules/README.md)
+- [BDT Contract](./docs/contracts/README.md)
+- [ADR](./docs/descisions/README.md)
 
+> Note that documents are for communication only, code are the single source of truth.
 > You are encouraged to add an AGENTS.md file under modules with significant complexity when needed.
 
 ## Coding Guidelines
@@ -50,8 +53,8 @@ Read following documents if needed, and keep them current:
 
 ### Known Limitations & Mocks
 
-- Gateway is implemented is not yet integrated into the system.
+- Gateway is implemented, not yet integrated into the system.
 
 ### Immediate Next Focus
 
-- An interactive shell that bridges human and Beluna (use the Unix Socket), the very first UI of Beluna.
+- A simple MacOS Desktop App that bridges human and Beluna (use the Unix Socket), the very first UI of Beluna.

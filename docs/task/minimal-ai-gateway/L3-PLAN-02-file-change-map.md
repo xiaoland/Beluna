@@ -88,31 +88,31 @@
 
 ## 4) Files to Add (Tests)
 
-1. `src/ai_gateway/tests/mod.rs`
+1. `tests/ai_gateway/mod.rs`
 - shared test utilities and fixture wiring.
 
-2. `src/ai_gateway/tests/request_normalizer.rs`
+2. `tests/ai_gateway/request_normalizer.rs`
 - strict message linkage validation tests.
 
-3. `src/ai_gateway/tests/router.rs`
+3. `tests/ai_gateway/router.rs`
 - deterministic selection and no fallback tests.
 
-4. `src/ai_gateway/tests/reliability.rs`
+4. `tests/ai_gateway/reliability.rs`
 - retry boundaries, circuit breaker, cancellation accounting.
 
-5. `src/ai_gateway/tests/budget.rs`
+5. `tests/ai_gateway/budget.rs`
 - concurrency/rate limits and post-usage accounting behavior.
 
-6. `src/ai_gateway/tests/openai_compatible.rs`
+6. `tests/ai_gateway/openai_compatible.rs`
 - mock SSE parsing and graceful missing-field handling.
 
-7. `src/ai_gateway/tests/ollama.rs`
+7. `tests/ai_gateway/ollama.rs`
 - mock NDJSON parsing and usage extraction.
 
-8. `src/ai_gateway/tests/copilot_adapter.rs`
+8. `tests/ai_gateway/copilot_adapter.rs`
 - mock JSON-RPC process lifecycle/auth/completion behavior.
 
-9. `src/ai_gateway/tests/gateway_e2e.rs`
+9. `tests/ai_gateway/gateway_e2e.rs`
 - full pipeline with test adapters and event invariants.
 
 ## 5) Files to Add (Task Artifact)
