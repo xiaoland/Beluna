@@ -1,12 +1,5 @@
-mod ai_gateway;
-mod cli;
-mod config;
-mod protocol;
-mod server;
-
 use anyhow::Context;
-use cli::config_path_from_args;
-use config::Config;
+use beluna::{cli::config_path_from_args, config::Config, server};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

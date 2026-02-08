@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::ai_gateway::{
+use beluna::ai_gateway::{
     request_normalizer::RequestNormalizer,
     types::{
         BelunaContentPart, BelunaInferenceRequest, BelunaMessage, BelunaRole, BelunaToolDefinition,
@@ -31,7 +31,7 @@ fn base_request() -> BelunaInferenceRequest {
 }
 
 #[test]
-fn generates_request_id_when_missing() {
+fn given_request_id_is_missing_when_normalized_then_non_empty_request_id_is_generated() {
     let normalizer = RequestNormalizer;
     let request = base_request();
     let normalized = normalizer
@@ -41,7 +41,7 @@ fn generates_request_id_when_missing() {
 }
 
 #[test]
-fn rejects_tool_message_missing_tool_call_id() {
+fn given_tool_message_without_tool_call_id_when_normalized_then_invalid_request_is_returned() {
     let normalizer = RequestNormalizer;
     let mut request = base_request();
     request.messages = vec![BelunaMessage {
@@ -60,7 +60,27 @@ fn rejects_tool_message_missing_tool_call_id() {
 }
 
 #[test]
-fn rejects_non_tool_message_with_tool_linkage() {
+fn given_tool_message_with_image_part_when_normalized_then_invalid_request_is_returned() {
+    let normalizer = RequestNormalizer;
+    let mut request = base_request();
+    request.messages = vec![BelunaMessage {
+        role: BelunaRole::Tool,
+        parts: vec![BelunaContentPart::ImageUrl {
+            url: "https://example.com/image.png".to_string(),
+            mime_type: Some("image/png".to_string()),
+        }],
+        tool_call_id: Some("call-1".to_string()),
+        tool_name: Some("my_tool".to_string()),
+    }];
+
+    let err = normalizer
+        .normalize(request)
+        .expect_err("normalization should fail");
+    assert!(err.message.contains("text/json"));
+}
+
+#[test]
+fn given_non_tool_message_with_tool_linkage_when_normalized_then_invalid_request_is_returned() {
     let normalizer = RequestNormalizer;
     let mut request = base_request();
     request.messages[0].tool_call_id = Some("abc".to_string());
@@ -72,7 +92,7 @@ fn rejects_non_tool_message_with_tool_linkage() {
 }
 
 #[test]
-fn rejects_tool_schema_unknown_keyword() {
+fn given_tool_schema_with_unknown_keyword_when_normalized_then_invalid_request_is_returned() {
     let normalizer = RequestNormalizer;
     let mut request = base_request();
     request.tools = vec![BelunaToolDefinition {

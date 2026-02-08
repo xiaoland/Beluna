@@ -1,5 +1,5 @@
-use crate::ai_gateway::{
-    adapters::{BackendAdapter, github_copilot::GitHubCopilotAdapter},
+use beluna::ai_gateway::{
+    adapters::{BackendAdapter, openai_compatible::OpenAiCompatibleAdapter},
     error::GatewayErrorKind,
     types::{
         AdapterContext, BackendDialect, BackendProfile, CanonicalContentPart, CanonicalLimits,
@@ -10,9 +10,9 @@ use crate::ai_gateway::{
 
 fn request() -> CanonicalRequest {
     CanonicalRequest {
-        request_id: "req-copilot".to_string(),
-        backend_hint: Some("copilot".to_string()),
-        model_override: Some("copilot-default".to_string()),
+        request_id: "req-openai".to_string(),
+        backend_hint: Some("b1".to_string()),
+        model_override: Some("gpt-4.1-mini".to_string()),
         messages: vec![CanonicalMessage {
             role: CanonicalRole::User,
             parts: vec![CanonicalContentPart::Text {
@@ -31,36 +31,30 @@ fn request() -> CanonicalRequest {
 }
 
 #[tokio::test]
-async fn requires_copilot_config() {
-    let adapter = GitHubCopilotAdapter;
-    assert_eq!(adapter.dialect(), BackendDialect::GitHubCopilotSdk);
+async fn given_missing_endpoint_when_openai_compatible_invoked_then_invalid_request_is_returned() {
+    let adapter = OpenAiCompatibleAdapter::default();
+    assert_eq!(adapter.dialect(), BackendDialect::OpenAiCompatible);
 
     let ctx = AdapterContext {
-        backend_id: "copilot".to_string(),
-        model: "copilot-default".to_string(),
+        backend_id: "b1".to_string(),
+        model: "gpt-4.1-mini".to_string(),
         profile: BackendProfile {
-            id: "copilot".to_string(),
-            dialect: BackendDialect::GitHubCopilotSdk,
+            id: "b1".to_string(),
+            dialect: BackendDialect::OpenAiCompatible,
             endpoint: None,
             credential: CredentialRef::None,
-            default_model: "copilot-default".to_string(),
+            default_model: "gpt-4.1-mini".to_string(),
             capabilities: None,
             copilot: None,
         },
         credential: ResolvedCredential::none(),
         timeout: std::time::Duration::from_secs(5),
-        request_id: "req-copilot".to_string(),
+        request_id: "req-openai".to_string(),
     };
 
-    let invocation = adapter
-        .invoke_stream(ctx, request())
-        .await
-        .expect("adapter should build invocation");
-
-    let mut stream = invocation.stream;
-    let first = futures_util::StreamExt::next(&mut stream)
-        .await
-        .expect("first item should exist")
-        .expect_err("first item should be error");
-    assert_eq!(first.kind, GatewayErrorKind::InvalidRequest);
+    let err = match adapter.invoke_stream(ctx, request()).await {
+        Ok(_) => panic!("missing endpoint should fail"),
+        Err(err) => err,
+    };
+    assert_eq!(err.kind, GatewayErrorKind::InvalidRequest);
 }

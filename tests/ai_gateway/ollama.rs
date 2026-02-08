@@ -1,4 +1,4 @@
-use crate::ai_gateway::{
+use beluna::ai_gateway::{
     adapters::{BackendAdapter, ollama::OllamaAdapter},
     error::GatewayErrorKind,
     types::{
@@ -31,7 +31,7 @@ fn request() -> CanonicalRequest {
 }
 
 #[tokio::test]
-async fn requires_endpoint() {
+async fn given_missing_endpoint_when_ollama_invoked_then_invalid_request_is_returned() {
     let adapter = OllamaAdapter::default();
     assert_eq!(adapter.dialect(), BackendDialect::Ollama);
 
