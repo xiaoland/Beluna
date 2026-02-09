@@ -1,60 +1,36 @@
-# AGENTS.md of Beluna
+# AGENTS.md of Beluna Workspace
 
-Beluna is an agent.
+Beluna is now organized as a multi-component repository.
 
-## Tech Stacks
-
-- Language: Rust (2024 edition)
-
-## File Structure (Crucial Only)
+## Repository Layout (Crucial Only)
 
 ```text
 .
-├── target/
-├── docs/                # Product, BDT Contracts, Modules, ADR and Tasks
-├── tests/
-└── src/
-    ├── main.rs
-    ├── cli.rs
-    ├── config.rs
-    ├── protocol.rs
-    ├── server.rs
-    └── ai_gateway/
+├── core/               # Rust runtime and domain implementation
+├── desktop/            # macOS desktop app (Swift)
+├── docs/               # Product, BDT contracts, modules, ADR and tasks
+└── pyproject.toml      # Tooling scripts
 ```
+
+## Component Guides
+
+- Core runtime guide: `./core/AGENTS.md`
+- Desktop app guide: `./desktop/AGENTS.md`
+
+When editing a component, treat its local `AGENTS.md` as authoritative for that scope.
 
 ## Documents
 
 Read following documents if needed, and keep them current:
 
-- [Overview](./docs/overview.md): Product overview.
-- [Glossary](./docs/glossary.md): Product top-level glossary.
-- [Feature Document](./docs/features/README.md): Feature document, answers "What to do", each feature has its PRD, HLD and LLD.
-- [Modules](./docs/modules/README.md)
-- [BDT Contract](./docs/contracts/README.md)
-- [ADR](./docs/descisions/README.md)
+- [Overview](../docs/overview.md): Product overview.
+- [Glossary](../docs/glossary.md): Product top-level glossary.
+- [Feature Document](../docs/features/README.md): Feature document, answers "What to do", each feature has its PRD, HLD and LLD.
+- [Modules](../docs/modules/README.md)
+- [BDT Contract](../docs/contracts/README.md)
+- [ADR](../docs/descisions/README.md)
 
 > Note that documents are for communication only, code are the single source of truth.
 > You are encouraged to add an AGENTS.md file under modules with significant complexity when needed.
 
-## Coding Guidelines
-
-- Avoid Loose protocol design.
-- Uses Behavior-Driven Development: User Story -> Acceptance Criteria -> BDT Contract -> Tests -> Implementation.
-
-## Current State
-
-> Last Updated At: 2026-02-08T14:10Z+08:00
-
-### Live Capabilities
-
-- Load config (jsonc, with JSONSchema support)
-- Start the core loop listening on an Unix Socket (NDJSON), exit on SIGTERM or exit message.
-- AI Gateway MVP, a thin boundary that standardizes how the runtime calls external AI backends and receives results.
-
-### Known Limitations & Mocks
-
-- Gateway is implemented, not yet integrated into the system.
-
-### Immediate Next Focus
-
-- A simple MacOS Desktop App that bridges human and Beluna (use the Unix Socket), the very first UI of Beluna.
+> Documents are communication tools; code remains the single source of truth.

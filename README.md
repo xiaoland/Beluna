@@ -3,3 +3,8 @@
 Beluna is an agent.
 
 Read product documents in `docs/product/*`.
+
+## Monorepo
+
+- Beluna Core: `./core`
+- Beluna Desktop App: `./desktop`

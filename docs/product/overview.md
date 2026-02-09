@@ -35,6 +35,8 @@ BELUNA is an agent that:
 - orchestrates, evaluates, and evolves runtime behavior
 - can call Layer 1 via AI Gateway
 - one SOTA LLM now, non-LLM options possible later
+- implemented as internal `src/mind/*` control core in MVP
+- does not interact with Unix socket protocol/runtime directly
 
 ### 2. Feedback loop
 
@@ -67,6 +69,23 @@ Glossary note:
 - top-level terms: `docs/product/glossary.md`
 - AI Gateway domain terms: `docs/features/ai-gateway/glossary.md`
 
-### 5. Long-term direction
+### 5. Mind Layer (MVP)
+
+Mind MVP includes:
+
+- explicit in-process `MindState` continuity model,
+- `GoalManager` single-active-goal invariants,
+- preemption dispositions (`pause`, `cancel`, `continue`, `merge`) with safe point/checkpoint data,
+- trait-based delegation and memory policy ports,
+- deterministic conflict resolution,
+- proposal-only evolution decisions.
+
+Design docs:
+
+- `docs/features/mind/PRD.md`
+- `docs/features/mind/HLD.md`
+- `docs/features/mind/LLD.md`
+
+### 6. Long-term direction
 
 - framework self-modification and safe evolution remain long-term ideas, not MVP requirements.

@@ -20,3 +20,4 @@ Notes:
 Index:
 
 - [AI Gateway](./ai-gateway/PRD.md)
+- [Mind](./mind/PRD.md)

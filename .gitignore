@@ -19,3 +19,7 @@ __pycache__/
 
 # Debug
 *.sock
+beluna.jsonc
+.firecrawl
+
+/core/target/
