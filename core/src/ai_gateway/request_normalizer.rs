@@ -57,6 +57,7 @@ impl RequestNormalizer {
                 max_request_time_ms: request.limits.max_request_time_ms,
             },
             metadata: request.metadata,
+            cost_attribution_id: request.cost_attribution_id,
             stream: request.stream,
         })
     }

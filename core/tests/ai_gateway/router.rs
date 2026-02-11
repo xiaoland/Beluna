@@ -53,6 +53,7 @@ fn request_with_backend(backend_id: Option<&str>) -> CanonicalRequest {
         output_mode: CanonicalOutputMode::Text,
         limits: CanonicalLimits::default(),
         metadata: Default::default(),
+        cost_attribution_id: None,
         stream: true,
     }
 }

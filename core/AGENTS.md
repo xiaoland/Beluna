@@ -20,7 +20,9 @@ Beluna Core is the runtime and domain agent implementation.
     ├── main.rs
     ├── cli.rs
     ├── config.rs
-    ├── mind/
+    ├── cortex/
+    ├── non_cortex/
+    ├── spine/
     ├── protocol.rs
     ├── server.rs
     └── ai_gateway/
@@ -28,26 +30,31 @@ Beluna Core is the runtime and domain agent implementation.
 
 ## Coding Guidelines
 
-- Avoid Loose protocol design.
-- Uses Behavior-Driven Development: User Story -> Acceptance Criteria -> BDT Contract -> Tests -> Implementation.
+- Avoid loose protocol design.
+- Use behavior-driven development: User Story -> Acceptance Criteria -> BDT Contract -> Tests -> Implementation.
 
 ## Current State
 
-> Last Updated At: 2026-02-08T14:10Z+08:00
+> Last Updated At: 2026-02-11T14:30Z+08:00
 
 ### Live Capabilities
 
-- Load config (jsonc, with JSONSchema support)
-- Start the core loop listening on an Unix Socket (NDJSON), exit on SIGTERM or exit message.
-- AI Gateway MVP, a thin boundary that standardizes how the runtime calls external AI backends and receives results.
-- Mind layer MVP, with deterministic goal management, preemption, evaluation, conflict handling, and proposal-only evolution decisions.
+- Load config (jsonc, with JSONSchema support).
+- Start the core loop listening on a Unix Socket (NDJSON), exit on SIGTERM or exit message.
+- AI Gateway MVP with deterministic routing, strict normalization, reliability controls, and budget enforcement.
+- Cortex + Non-cortex + Spine contracts:
+  - Cortex owns goals/commitments and emits deterministic, non-binding `IntentAttempt[]`.
+  - Non-cortex admits/denies mechanically, maintains survival ledger, and reconciles settlements.
+  - Spine executes admitted actions only and returns ordered, replayable execution events.
 
 ### Known Limitations & Mocks
 
-- Current design is likely lacking of interactivity, lost Human-in-loop.
-- Gateway is implemented, not yet integrated into the system.
-- Mind is internal-only in MVP and does not interact with Unix socket protocol/runtime directly.
+- Gateway is implemented, not yet wired into the runtime socket loop.
+- Spine is contract-level MVP (execution adapter is deterministic noop in tests/default path).
+- Economic debits from AI Gateway are approximate and currently token-based.
 
 ### Immediate Next Focus
 
-- A simple macOS Desktop App that bridges human and Beluna (use the Unix Socket), the very first UI of Beluna.
+- Wire Cortex/Non-cortex/Spine loop into runtime entrypoints.
+- Increase debit fidelity and add persistent ledger storage.
+- Continue building macOS Desktop App bridge over Unix Socket.

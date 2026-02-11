@@ -107,6 +107,7 @@ impl AIGateway {
                 request_id: canonical_request.request_id.clone(),
                 backend_id: selected.backend_id.clone(),
                 model: selected.resolved_model.clone(),
+                cost_attribution_id: canonical_request.cost_attribution_id.clone(),
             });
 
         let (tx, rx) = mpsc::channel::<Result<GatewayEvent, GatewayError>>(128);
@@ -219,6 +220,7 @@ async fn run_stream_task(
     budget_lease: BudgetLease,
 ) {
     let request_id = canonical_request.request_id.clone();
+    let cost_attribution_id = canonical_request.cost_attribution_id.clone();
     let mut attempt = 0_u32;
     let mut usage_emitted = false;
     let mut last_usage: Option<UsageStats> = None;
@@ -234,7 +236,10 @@ async fn run_stream_task(
         .is_err()
     {
         release_lease(&budget_enforcer, &mut lease);
-        telemetry.on_event(GatewayTelemetryEvent::RequestCancelled { request_id });
+        telemetry.on_event(GatewayTelemetryEvent::RequestCancelled {
+            request_id,
+            cost_attribution_id,
+        });
         return;
     }
 
@@ -243,6 +248,7 @@ async fn run_stream_task(
             release_lease(&budget_enforcer, &mut lease);
             telemetry.on_event(GatewayTelemetryEvent::RequestCancelled {
                 request_id: request_id.clone(),
+                cost_attribution_id: cost_attribution_id.clone(),
             });
             return;
         }
@@ -250,6 +256,7 @@ async fn run_stream_task(
         telemetry.on_event(GatewayTelemetryEvent::AttemptStarted {
             request_id: request_id.clone(),
             attempt,
+            cost_attribution_id: cost_attribution_id.clone(),
         });
 
         if let Err(err) = reliability
@@ -267,6 +274,7 @@ async fn run_stream_task(
                 request_id,
                 attempts: attempt + 1,
                 error_kind: err.kind,
+                cost_attribution_id,
             });
             return;
         }
@@ -309,6 +317,7 @@ async fn run_stream_task(
                     attempt,
                     kind: err.kind,
                     retryable: err.retryable,
+                    cost_attribution_id: cost_attribution_id.clone(),
                 });
 
                 reliability
@@ -324,7 +333,10 @@ async fn run_stream_task(
                     tokio::select! {
                         _ = tx.closed() => {
                             release_lease(&budget_enforcer, &mut lease);
-                            telemetry.on_event(GatewayTelemetryEvent::RequestCancelled { request_id: request_id.clone() });
+                            telemetry.on_event(GatewayTelemetryEvent::RequestCancelled {
+                                request_id: request_id.clone(),
+                                cost_attribution_id: cost_attribution_id.clone(),
+                            });
                             return;
                         }
                         _ = sleep(delay) => {}
@@ -343,6 +355,7 @@ async fn run_stream_task(
                     request_id,
                     attempts: attempt + 1,
                     error_kind: err.kind,
+                    cost_attribution_id,
                 });
                 return;
             }
@@ -360,7 +373,10 @@ async fn run_stream_task(
                         cancel();
                     }
                     release_lease(&budget_enforcer, &mut lease);
-                    telemetry.on_event(GatewayTelemetryEvent::RequestCancelled { request_id: request_id.clone() });
+                    telemetry.on_event(GatewayTelemetryEvent::RequestCancelled {
+                        request_id: request_id.clone(),
+                        cost_attribution_id: cost_attribution_id.clone(),
+                    });
                     return;
                 }
                 next_item = stream.next() => {
@@ -426,7 +442,10 @@ async fn run_stream_task(
                                     cancel();
                                 }
                                 release_lease(&budget_enforcer, &mut lease);
-                                telemetry.on_event(GatewayTelemetryEvent::RequestCancelled { request_id: request_id.clone() });
+                                telemetry.on_event(GatewayTelemetryEvent::RequestCancelled {
+                                    request_id: request_id.clone(),
+                                    cost_attribution_id: cost_attribution_id.clone(),
+                                });
                                 return;
                             }
                         }
@@ -444,7 +463,10 @@ async fn run_stream_task(
                                     cancel();
                                 }
                                 release_lease(&budget_enforcer, &mut lease);
-                                telemetry.on_event(GatewayTelemetryEvent::RequestCancelled { request_id: request_id.clone() });
+                                telemetry.on_event(GatewayTelemetryEvent::RequestCancelled {
+                                    request_id: request_id.clone(),
+                                    cost_attribution_id: cost_attribution_id.clone(),
+                                });
                                 return;
                             }
                         }
@@ -466,6 +488,7 @@ async fn run_stream_task(
                 request_id,
                 attempts: attempt + 1,
                 usage: last_usage,
+                cost_attribution_id,
             });
             return;
         }
@@ -493,6 +516,7 @@ async fn run_stream_task(
             attempt,
             kind: err.kind,
             retryable: err.retryable,
+            cost_attribution_id: cost_attribution_id.clone(),
         });
 
         reliability
@@ -511,7 +535,10 @@ async fn run_stream_task(
                         cancel();
                     }
                     release_lease(&budget_enforcer, &mut lease);
-                    telemetry.on_event(GatewayTelemetryEvent::RequestCancelled { request_id: request_id.clone() });
+                    telemetry.on_event(GatewayTelemetryEvent::RequestCancelled {
+                        request_id: request_id.clone(),
+                        cost_attribution_id: cost_attribution_id.clone(),
+                    });
                     return;
                 }
                 _ = sleep(delay) => {}
@@ -530,6 +557,7 @@ async fn run_stream_task(
             request_id,
             attempts: attempt + 1,
             error_kind: err.kind,
+            cost_attribution_id,
         });
         return;
     }

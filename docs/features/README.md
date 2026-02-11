@@ -20,4 +20,7 @@ Notes:
 Index:
 
 - [AI Gateway](./ai-gateway/PRD.md)
-- [Mind](./mind/PRD.md)
+- [Cortex](./cortex/PRD.md)
+- [Non-cortex](./non-cortex/PRD.md)
+- [Spine](./spine/PRD.md)
+- [Mind (deprecated)](./mind/PRD.md)

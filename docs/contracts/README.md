@@ -15,4 +15,7 @@ They are executable specifications for writing behavior-driven tests.
 Index:
 
 - docs/contracts/ai-gateway/README.md
-- docs/contracts/mind/README.md
+- docs/contracts/cortex/README.md
+- docs/contracts/non-cortex/README.md
+- docs/contracts/spine/README.md
+- docs/contracts/mind/README.md (deprecated)

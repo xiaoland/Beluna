@@ -284,6 +284,8 @@ pub struct BelunaInferenceRequest {
     pub limits: RequestLimitOverrides,
     #[serde(default)]
     pub metadata: BTreeMap<String, String>,
+    #[serde(default)]
+    pub cost_attribution_id: Option<String>,
     #[serde(default = "default_stream")]
     pub stream: bool,
 }
@@ -311,6 +313,7 @@ pub struct CanonicalRequest {
     pub output_mode: CanonicalOutputMode,
     pub limits: CanonicalLimits,
     pub metadata: BTreeMap<String, String>,
+    pub cost_attribution_id: Option<String>,
     pub stream: bool,
 }
 

@@ -26,6 +26,7 @@ fn request() -> CanonicalRequest {
         output_mode: CanonicalOutputMode::Text,
         limits: CanonicalLimits::default(),
         metadata: Default::default(),
+        cost_attribution_id: None,
         stream: true,
     }
 }

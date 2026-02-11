@@ -13,6 +13,6 @@ Make progressive planning:
 
 Notes:
 
-- Write each stage of plan to file `docs/task/<task-name>/L<X>-PLAN.md`. Files has more than 250 lines MUST be splitted.
+- Write each stage of plan to file `docs/task/<task-name>/L<X>-PLAN.md`. Spilt into multiple files if needed.
 - MUST ask user for explicit approval before getting into next planning.
 - Make use of sub agent to reduct your cognitive load.

@@ -287,6 +287,7 @@ fn request() -> BelunaInferenceRequest {
         output_mode: OutputMode::Text,
         limits: RequestLimitOverrides::default(),
         metadata: BTreeMap::new(),
+        cost_attribution_id: None,
         stream: true,
     }
 }
