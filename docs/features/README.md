@@ -21,6 +21,9 @@ Index:
 
 - [AI Gateway](./ai-gateway/PRD.md)
 - [Cortex](./cortex/PRD.md)
-- [Non-cortex](./non-cortex/PRD.md)
+- [Continuity](./continuity/PRD.md)
+- [Admission](./admission/PRD.md)
+- [Ledger](./ledger/PRD.md)
 - [Spine](./spine/PRD.md)
+- [Non-cortex (deprecated)](./non-cortex/PRD.md)
 - [Mind (deprecated)](./mind/PRD.md)

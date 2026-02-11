@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::non_cortex::types::{AdmissionReport, IntentAttempt};
+use crate::admission::types::{AdmissionReport, IntentAttempt};
 
 pub type GoalId = String;
 pub type CommitmentId = String;

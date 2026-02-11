@@ -7,9 +7,19 @@
 
 `beluna::mind` was removed and replaced by canonical `cortex + non_cortex + spine` modules.
 
+Follow-up refactor in the same task execution:
+
+`non_cortex` was further decomposed and lifted to peer top-level modules:
+
+`cortex + continuity + admission + ledger + spine`
+
 Execution path now follows:
 
 `Cortex -> IntentAttempt[] -> Non-cortex admission -> AdmittedAction[] -> Spine -> ordered events -> Non-cortex reconciliation`
+
+Current canonical flow:
+
+`Sense -> Continuity -> SituationView -> Cortex -> IntentAttempt[] -> Admission -> Ledger reserve -> AdmittedAction[] -> Spine -> Feedback -> Continuity + Ledger settlement`
 
 ## Implemented Work
 
@@ -70,6 +80,19 @@ Execution path now follows:
   - `docs/contracts/spine/README.md`
 - Updated indexes and product docs to make `cortex + non-cortex + spine` canonical.
 - Updated `core/AGENTS.md` to current module structure.
+
+5. Follow-up topology split
+- Removed `core/src/non_cortex/*`.
+- Added:
+  - `core/src/continuity/*`
+  - `core/src/admission/*`
+  - `core/src/ledger/*`
+- Rewired cortex and tests to use new module boundaries.
+- Replaced non-cortex tests with:
+  - `core/tests/admission_bdt.rs`
+  - `core/tests/continuity_bdt.rs`
+  - `core/tests/ledger_bdt.rs`
+  - `core/tests/cortex_continuity_flow.rs`
 
 ## Verification
 

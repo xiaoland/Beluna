@@ -21,7 +21,9 @@ Beluna Core is the runtime and domain agent implementation.
     ├── cli.rs
     ├── config.rs
     ├── cortex/
-    ├── non_cortex/
+    ├── continuity/
+    ├── admission/
+    ├── ledger/
     ├── spine/
     ├── protocol.rs
     ├── server.rs
@@ -42,9 +44,11 @@ Beluna Core is the runtime and domain agent implementation.
 - Load config (jsonc, with JSONSchema support).
 - Start the core loop listening on a Unix Socket (NDJSON), exit on SIGTERM or exit message.
 - AI Gateway MVP with deterministic routing, strict normalization, reliability controls, and budget enforcement.
-- Cortex + Non-cortex + Spine contracts:
+- Cortex + Continuity + Admission + Ledger + Spine contracts:
   - Cortex owns goals/commitments and emits deterministic, non-binding `IntentAttempt[]`.
-  - Non-cortex admits/denies mechanically, maintains survival ledger, and reconciles settlements.
+  - Continuity ingests feedback and builds non-semantic `SituationView`.
+  - Admission performs deterministic effectuation gating.
+  - Ledger enforces survival resource accounting and settlement terminality.
   - Spine executes admitted actions only and returns ordered, replayable execution events.
 
 ### Known Limitations & Mocks
@@ -55,6 +59,6 @@ Beluna Core is the runtime and domain agent implementation.
 
 ### Immediate Next Focus
 
-- Wire Cortex/Non-cortex/Spine loop into runtime entrypoints.
+- Wire Cortex/Continuity/Admission/Ledger/Spine loop into runtime entrypoints.
 - Increase debit fidelity and add persistent ledger storage.
 - Continue building macOS Desktop App bridge over Unix Socket.

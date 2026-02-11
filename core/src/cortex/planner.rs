@@ -3,6 +3,7 @@ use std::sync::Arc;
 use sha2::{Digest, Sha256};
 
 use crate::{
+    admission::types::{IntentAttempt, RequestedResources},
     cortex::{
         error::{CortexError, internal_error},
         noop::NoopGoalDecomposer,
@@ -10,7 +11,6 @@ use crate::{
         state::CortexState,
         types::{Goal, GoalClass, GoalScope, SchedulingContext},
     },
-    non_cortex::types::{IntentAttempt, RequestedResources},
 };
 
 #[derive(Debug, Clone)]

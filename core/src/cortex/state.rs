@@ -1,13 +1,13 @@
 use std::collections::{BTreeMap, VecDeque};
 
 use crate::{
+    admission::types::{AdmissionReport, IntentAttempt},
     cortex::{
         error::{CortexError, invariant_violation},
         types::{
             CommitmentId, CommitmentRecord, CommitmentStatus, Goal, GoalId, SchedulingContext,
         },
     },
-    non_cortex::types::{AdmissionReport, IntentAttempt},
 };
 
 const MAX_ADMISSION_REPORTS: usize = 64;

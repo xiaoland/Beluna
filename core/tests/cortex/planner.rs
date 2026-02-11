@@ -1,5 +1,5 @@
+use beluna::admission::RequestedResources;
 use beluna::cortex::{CortexCommand, CortexFacade, Goal, GoalClass, GoalScope, derive_attempt_id};
-use beluna::non_cortex::types::RequestedResources;
 
 fn goal(id: &str) -> Goal {
     Goal {

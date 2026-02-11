@@ -1,7 +1,5 @@
 # Beluna Product Overview
 
-## System definition
-
 Beluna is a long-running, goal-driven, embodied agent system whose deliberative core (cortex) operates inside mechanistically enforced constraints and economic limits.
 
 Key properties:
@@ -24,12 +22,34 @@ Beluna is an environment-shaped agent, Beluna’s behavior emerges from Cortex i
 Beluna is not a moral system, It does not obey because it is “told to obey.”.
 It acts within affordances, adapts to constraint feedback, optimizes under resource survival pressure.
 
+Beluna is NOT a chatbot, free sovereign AI, memory system, rule engine, a centralized authority hierarchy
+
+## Runtime Topology
+
+Beluna Core canonical top-level components:
+
+- Cortex (cognition)
+- Continuity (operational state)
+- Admission (effectuation gate)
+- Ledger (resource control)
+- Spine (execution transport)
+
+Operational flow:
+
+```text
+Sense -> Continuity
+Continuity builds SituationView -> Cortex
+Cortex emits IntentAttempt[] -> Admission
+Admission checks + queries Ledger -> Ledger reserves
+Admission produces AdmittedAction[] -> Spine
+Spine executes -> Feedback -> Continuity + Ledger settlement
+```
+
 ## Core Invariants
 
 - Cortex may intend anything.
 - Cortex must manage goals to form a self.
 - The cortex operates within encoded priors (inductive biases), not as a blank learner.
-- Non-cortex never semantically judges intent.
 - Only effectuation is gated; intention remains free.
 - Constraints are runtime affordances and economics, not narrated memory.
 - Continuity and safety are mechanism-based, not dependent on cortex internals.
@@ -37,6 +57,6 @@ It acts within affordances, adapts to constraint feedback, optimizes under resou
 
 ## MVP Status
 
-- Cortex/Non-cortex/Spine contracts are implemented in `core/src/*`.
+- Cortex/Continuity/Admission/Ledger/Spine contracts are implemented in `core/src/*`.
 - Spine adapter is deterministic noop for current MVP.
 - AI Gateway debit observations are approximate and attribution-linked.
