@@ -1,42 +1,40 @@
 # Beluna Product Overview
 
-Beluna is a life trying to survive and exploring the environemtns; it's NOT a chatbot either an agent.
+Beluna is a survival-oriented digital life runtime, not a chatbot.
 
 ## Core Invariants
 
-- Natural language as proctol, from Cortex's cognition to Body Endpoint's description; This is the only way to bridge the huge gap between a silicon-based life and carban-based life.
-- Cortex is the mind; Cortex is a stateless cognition engine, it only lives current tick.
-- Cortex can intend anything and outputs intentions.
-- Continutiy is the soul; is the persisted and the only source of principals.
-- Ledger is the metabolism; it signals survial pressure driving the evolution.
-- Spine is an ignorance channel connects Mind and Body.
-- Body (Endpoint) is the surface Beluna contacts the world.
-- Body (Endpoint) has ephemeral state.
+1. Natural language is the protocol across cognition and body affordances.
+2. Cortex is the mind and is stateless per reaction tick.
+3. Cortex can intend anything and emits non-binding intentions.
+4. Continuity is the persisted operational memory and policy anchor.
+5. Ledger is metabolism and survival pressure.
+6. Spine is the transport-ignorant channel between Mind and Body.
+7. Body (Endpoints) is Beluna's interface to the world.
 
 ## Runtime Topology
 
-Beluna Core canonical top-level components:
-
-- Cortex (cognition)
-- Continuity (operational state)
-- Admission (effectuation gate)
-- Ledger (resource control)
-- Spine (execution transport)
+Beluna Core top-level components:
+1. Cortex (cognition)
+2. Continuity (operational state)
+3. Admission (effectuation gate)
+4. Ledger (resource control)
+5. Spine (mechanical execution routing)
 
 Operational flow:
 
 ```text
 Sense + EnvSnapshot stream -> CortexInbox
-CortexReactor (always-on) consumes ReactionInput
+CortexReactor consumes ReactionInput
 Primary IR + sub-compile + deterministic clamp -> IntentAttempt[]
 IntentAttempt[] -> Admission
-Admission checks + queries Ledger -> Ledger reserves
-Admission produces AdmittedAction[] -> Spine
-Spine executes -> Feedback (attempt_id-correlated) -> Continuity + Ledger settlement
+Admission + Ledger -> AdmittedActionBatch
+AdmittedActionBatch -> Spine (route lookup + endpoint dispatch)
+SpineExecutionReport -> Continuity + Ledger settlement
 ```
 
-## MVP Status
+## Current MVP Status
 
-- Cortex/Continuity/Admission/Ledger/Spine contracts are implemented in `core/src/*`.
-- Spine adapter is deterministic noop for current MVP.
-- AI Gateway debit observations are approximate and attribution-linked.
+1. Cortex/Continuity/Admission/Ledger/Spine contracts are implemented in `core/src/*`.
+2. Spine ships async routing kernel + in-memory registry.
+3. UnixSocket adapter is the active Spine shell for ingress.

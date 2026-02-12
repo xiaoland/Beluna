@@ -36,12 +36,13 @@ fn attempt(
     }
 }
 
-#[test]
-fn given_unknown_affordance_when_admitting_then_hard_denial_code_is_returned() {
+#[tokio::test]
+async fn given_unknown_affordance_when_admitting_then_hard_denial_code_is_returned() {
     let mut engine = ContinuityEngine::with_defaults(10_000);
 
     let output = engine
         .process_attempts(1, vec![attempt("a1", "unknown", "cap.core", 1)])
+        .await
         .expect("processing should succeed");
 
     assert_eq!(output.admission_report.outcomes.len(), 1);
@@ -51,12 +52,13 @@ fn given_unknown_affordance_when_admitting_then_hard_denial_code_is_returned() {
     ));
 }
 
-#[test]
-fn given_insufficient_budget_when_admitting_then_economic_denial_code_is_returned() {
+#[tokio::test]
+async fn given_insufficient_budget_when_admitting_then_economic_denial_code_is_returned() {
     let mut engine = ContinuityEngine::with_defaults(100);
 
     let output = engine
         .process_attempts(1, vec![attempt("a1", "deliberate.plan", "cap.core", 10)])
+        .await
         .expect("processing should succeed");
 
     assert_eq!(output.admission_report.outcomes.len(), 1);
@@ -66,12 +68,14 @@ fn given_insufficient_budget_when_admitting_then_economic_denial_code_is_returne
     ));
 }
 
-#[test]
-fn given_base_cost_unaffordable_when_degradation_is_affordable_then_admitted_with_degraded_true() {
+#[tokio::test]
+async fn given_base_cost_unaffordable_when_degradation_is_affordable_then_admitted_with_degraded_true()
+ {
     let mut engine = ContinuityEngine::with_defaults(300);
 
     let output = engine
         .process_attempts(1, vec![attempt("a1", "deliberate.plan", "cap.core", 10)])
+        .await
         .expect("processing should succeed");
 
     assert!(matches!(
@@ -80,8 +84,9 @@ fn given_base_cost_unaffordable_when_degradation_is_affordable_then_admitted_wit
     ));
 }
 
-#[test]
-fn given_tied_degradation_candidates_when_admitting_then_stable_tiebreaker_and_cap_are_applied() {
+#[tokio::test]
+async fn given_tied_degradation_candidates_when_admitting_then_stable_tiebreaker_and_cap_are_applied()
+ {
     let profile = AffordanceProfile {
         profile_id: "p0".to_string(),
         affordance_key: "deliberate.plan".to_string(),
@@ -133,6 +138,7 @@ fn given_tied_degradation_candidates_when_admitting_then_stable_tiebreaker_and_c
 
     let output = engine
         .process_attempts(1, vec![attempt("a1", "deliberate.plan", "cap.core", 0)])
+        .await
         .expect("processing should succeed");
 
     assert!(matches!(

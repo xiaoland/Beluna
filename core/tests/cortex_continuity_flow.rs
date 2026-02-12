@@ -14,8 +14,8 @@ use beluna::{
         ProseIr, ReactionInput, ReactionLimits, SenseDelta,
     },
     spine::types::{
-        AdmittedActionBatch, OrderedSpineEvent, SpineEvent, SpineExecutionMode,
-        SpineExecutionReport,
+        AdmittedActionBatch, OrderedSpineEvent, SpineCapabilityCatalog, SpineEvent,
+        SpineExecutionMode, SpineExecutionReport,
     },
 };
 
@@ -30,8 +30,9 @@ impl RecordingScrambledSpine {
     }
 }
 
+#[async_trait]
 impl SpinePort for RecordingScrambledSpine {
-    fn execute_admitted(
+    async fn execute_admitted(
         &self,
         admitted: AdmittedActionBatch,
     ) -> Result<SpineExecutionReport, ContinuityError> {
@@ -61,13 +62,20 @@ impl SpinePort for RecordingScrambledSpine {
             replay_cursor: Some(format!("cursor:{}", admitted.cycle_id)),
         })
     }
+
+    fn capability_catalog_snapshot(&self) -> SpineCapabilityCatalog {
+        SpineCapabilityCatalog::default()
+    }
 }
 
 struct StaticPrimary;
 
 #[async_trait]
 impl PrimaryReasonerPort for StaticPrimary {
-    async fn infer_ir(&self, _req: PrimaryReasonerRequest) -> Result<ProseIr, beluna::cortex::CortexError> {
+    async fn infer_ir(
+        &self,
+        _req: PrimaryReasonerRequest,
+    ) -> Result<ProseIr, beluna::cortex::CortexError> {
         Ok(ProseIr {
             text: "compose attempt".to_string(),
         })
@@ -183,6 +191,7 @@ async fn cortex_continuity_spine_flow_preserves_contracts() {
 
     let output = continuity
         .process_attempts(cycle_out.reaction_id, attempts)
+        .await
         .expect("admission + reconciliation should succeed");
 
     assert!(output.admitted_action_count > 0);
@@ -219,6 +228,7 @@ async fn cortex_continuity_spine_flow_preserves_contracts() {
             replacement_cycle.reaction_id + cycle_out.reaction_id,
             replacement_cycle.attempts,
         )
+        .await
         .expect("continuity should hold across cortex replacement");
 
     assert!(continuity.state().ledger.balance_survival_micro() <= balance_after_first);

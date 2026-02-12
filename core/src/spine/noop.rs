@@ -1,9 +1,11 @@
+use async_trait::async_trait;
+
 use crate::spine::{
     error::{SpineError, invalid_batch},
     ports::SpineExecutorPort,
     types::{
-        AdmittedActionBatch, OrderedSpineEvent, SpineEvent, SpineExecutionMode,
-        SpineExecutionReport,
+        AdmittedActionBatch, OrderedSpineEvent, SpineCapabilityCatalog, SpineEvent,
+        SpineExecutionMode, SpineExecutionReport,
     },
 };
 
@@ -26,12 +28,13 @@ impl Default for DeterministicNoopSpine {
     }
 }
 
+#[async_trait]
 impl SpineExecutorPort for DeterministicNoopSpine {
     fn mode(&self) -> SpineExecutionMode {
         self.mode
     }
 
-    fn execute_admitted(
+    async fn execute_admitted(
         &self,
         admitted: AdmittedActionBatch,
     ) -> Result<SpineExecutionReport, SpineError> {
@@ -67,5 +70,9 @@ impl SpineExecutorPort for DeterministicNoopSpine {
             events,
             replay_cursor: Some(format!("noop:{}:{}", admitted.cycle_id, action_count)),
         })
+    }
+
+    fn capability_catalog_snapshot(&self) -> SpineCapabilityCatalog {
+        SpineCapabilityCatalog::default()
     }
 }

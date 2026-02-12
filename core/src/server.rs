@@ -1,23 +1,20 @@
 use std::{
     collections::{BTreeMap, VecDeque},
-    fs,
-    io::ErrorKind,
-    os::unix::fs::FileTypeExt,
-    path::Path,
     sync::Arc,
 };
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use tokio::{
-    io::{AsyncBufReadExt, BufReader},
-    net::{UnixListener, UnixStream},
     signal::unix::{SignalKind, signal},
     sync::mpsc,
 };
+use tokio_util::sync::CancellationToken;
 
 use crate::{
     admission::{AdmissionDisposition, AdmissionReport},
-    ai_gateway::{credentials::EnvCredentialProvider, gateway::AIGateway, telemetry::NoopTelemetrySink},
+    ai_gateway::{
+        credentials::EnvCredentialProvider, gateway::AIGateway, telemetry::NoopTelemetrySink,
+    },
     config::Config,
     continuity::ContinuityEngine,
     cortex::{
@@ -26,7 +23,9 @@ use crate::{
         DeterministicAttemptClamp, EndpointSnapshot, IntentContext, NoopTelemetryPort,
         ReactionInput, ReactionLimits, SenseDelta,
     },
-    protocol::{ClientMessage, parse_client_message},
+    spine::adapters::{
+        catalog_bridge::to_cortex_catalog, unix_socket::UnixSocketAdapter, wire::ClientMessage,
+    },
 };
 
 const MAX_FEEDBACK_WINDOW: usize = 64;
@@ -54,6 +53,10 @@ impl CortexIngressAssembler {
         }
     }
 
+    fn set_capability_catalog(&mut self, catalog: CapabilityCatalog) {
+        self.capability_catalog = catalog;
+    }
+
     fn on_message(&mut self, message: ClientMessage) -> Option<ReactionInput> {
         match message {
             ClientMessage::Exit => None,
@@ -70,10 +73,8 @@ impl CortexIngressAssembler {
                 }
                 None
             }
-            ClientMessage::CapabilityCatalogUpdate(catalog) => {
-                self.capability_catalog = catalog;
-                None
-            }
+            // Spine owns capability catalog. Runtime catalog updates over wire are ignored.
+            ClientMessage::CapabilityCatalogUpdate(_) => None,
             ClientMessage::CortexLimitsUpdate(limits) => {
                 self.limits = limits;
                 None
@@ -100,10 +101,6 @@ impl CortexIngressAssembler {
 }
 
 pub async fn run(config: Config) -> Result<()> {
-    prepare_socket_path(&config.socket_path)?;
-    let listener = UnixListener::bind(&config.socket_path)
-        .with_context(|| format!("unable to bind socket {}", config.socket_path.display()))?;
-
     let gateway = Arc::new(
         AIGateway::new(
             config.ai_gateway.clone(),
@@ -147,8 +144,15 @@ pub async fn run(config: Config) -> Result<()> {
     let mut sigterm = signal(SignalKind::terminate()).context("unable to listen for SIGTERM")?;
     let (message_tx, mut message_rx) = mpsc::unbounded_channel::<ClientMessage>();
 
-    let mut assembler = CortexIngressAssembler::with_defaults(config.cortex.default_limits.clone());
     let mut continuity = ContinuityEngine::with_defaults(1_000_000);
+    let mut assembler = CortexIngressAssembler::with_defaults(config.cortex.default_limits.clone());
+    assembler.set_capability_catalog(to_cortex_catalog(&continuity.capability_catalog_snapshot()));
+
+    let shutdown = CancellationToken::new();
+    let unix_socket_adapter = UnixSocketAdapter::new(config.socket_path.clone());
+    let adapter_shutdown = shutdown.clone();
+    let adapter_task =
+        tokio::spawn(async move { unix_socket_adapter.run(message_tx, adapter_shutdown).await });
 
     eprintln!(
         "Beluna listening on unix socket (NDJSON): {}",
@@ -159,23 +163,13 @@ pub async fn run(config: Config) -> Result<()> {
         tokio::select! {
             _ = sigint.recv() => break ExitReason::Signal("SIGINT"),
             _ = sigterm.recv() => break ExitReason::Signal("SIGTERM"),
-            accept_result = listener.accept() => {
-                match accept_result {
-                    Ok((stream, _)) => {
-                        let sender = message_tx.clone();
-                        tokio::spawn(async move {
-                            if let Err(err) = handle_client(stream, sender).await {
-                                eprintln!("client handling failed: {err:#}");
-                            }
-                        });
-                    }
-                    Err(err) => eprintln!("accept failed: {err}"),
-                }
-            }
             Some(message) = message_rx.recv() => {
                 if matches!(message, ClientMessage::Exit) {
                     break ExitReason::SocketMessage;
                 }
+
+                assembler.set_capability_catalog(to_cortex_catalog(&continuity.capability_catalog_snapshot()));
+
                 if let Some(input) = assembler.on_message(message) {
                     match reaction_tx.try_send(input) {
                         Ok(()) => {}
@@ -191,7 +185,7 @@ pub async fn run(config: Config) -> Result<()> {
             }
             Some(result) = result_rx.recv() => {
                 let reaction_id = result.reaction_id;
-                match continuity.process_attempts(reaction_id, result.attempts) {
+                match continuity.process_attempts(reaction_id, result.attempts).await {
                     Ok(cycle_output) => {
                         let feedback = admission_report_to_feedback(&cycle_output.admission_report);
                         for signal in feedback {
@@ -226,71 +220,23 @@ pub async fn run(config: Config) -> Result<()> {
         }
     };
 
+    shutdown.cancel();
     drop(reaction_tx);
+
+    match adapter_task.await {
+        Ok(Ok(())) => {}
+        Ok(Err(err)) => eprintln!("unix socket adapter exited with error: {err:#}"),
+        Err(err) => eprintln!("unix socket adapter task join failed: {err}"),
+    }
+
     let _ = reactor_task.await;
 
-    cleanup_socket_path(&config.socket_path)?;
     match exit_reason {
         ExitReason::SocketMessage => eprintln!("Beluna stopped: received exit message"),
         ExitReason::Signal(signal_name) => eprintln!("Beluna stopped: received {signal_name}"),
     }
 
     Ok(())
-}
-
-async fn handle_client(stream: UnixStream, message_tx: mpsc::UnboundedSender<ClientMessage>) -> Result<()> {
-    let mut lines = BufReader::new(stream).lines();
-
-    while let Some(line) = lines.next_line().await? {
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-
-        match parse_client_message(line) {
-            Ok(message) => {
-                let _ = message_tx.send(message);
-            }
-            Err(err) => eprintln!("ignoring invalid protocol message: {err}"),
-        }
-    }
-
-    Ok(())
-}
-
-fn prepare_socket_path(path: &Path) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("unable to create {}", parent.display()))?;
-    }
-
-    match fs::symlink_metadata(path) {
-        Ok(metadata) => {
-            if metadata.file_type().is_socket() || metadata.is_file() {
-                fs::remove_file(path)
-                    .with_context(|| format!("unable to remove stale socket {}", path.display()))?;
-            } else {
-                bail!(
-                    "socket path exists but is not removable as file/socket: {}",
-                    path.display()
-                );
-            }
-        }
-        Err(err) if err.kind() == ErrorKind::NotFound => {}
-        Err(err) => {
-            return Err(err).with_context(|| format!("unable to inspect {}", path.display()));
-        }
-    }
-
-    Ok(())
-}
-
-fn cleanup_socket_path(path: &Path) -> Result<()> {
-    match fs::remove_file(path) {
-        Ok(_) => Ok(()),
-        Err(err) if err.kind() == ErrorKind::NotFound => Ok(()),
-        Err(err) => Err(err).with_context(|| format!("unable to remove {}", path.display())),
-    }
 }
 
 fn admission_report_to_feedback(report: &AdmissionReport) -> Vec<AdmissionOutcomeSignal> {

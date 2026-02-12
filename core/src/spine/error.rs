@@ -5,6 +5,9 @@ pub enum SpineErrorKind {
     InvalidBatch,
     InvariantViolation,
     BackendFailure,
+    RouteConflict,
+    RouteNotFound,
+    RegistrationInvalid,
     Internal,
 }
 
@@ -41,6 +44,18 @@ pub fn invariant_violation(message: impl Into<String>) -> SpineError {
 
 pub fn backend_failure(message: impl Into<String>) -> SpineError {
     SpineError::new(SpineErrorKind::BackendFailure, message)
+}
+
+pub fn route_conflict(message: impl Into<String>) -> SpineError {
+    SpineError::new(SpineErrorKind::RouteConflict, message)
+}
+
+pub fn route_not_found(message: impl Into<String>) -> SpineError {
+    SpineError::new(SpineErrorKind::RouteNotFound, message)
+}
+
+pub fn registration_invalid(message: impl Into<String>) -> SpineError {
+    SpineError::new(SpineErrorKind::RegistrationInvalid, message)
 }
 
 pub fn internal_error(message: impl Into<String>) -> SpineError {

@@ -37,7 +37,7 @@ Beluna Core is the runtime and domain agent implementation.
 
 ## Current State
 
-> Last Updated At: 2026-02-11T23:40Z+08:00
+> Last Updated At: 2026-02-12T20:30Z+08:00
 
 ### Live Capabilities
 
@@ -52,11 +52,12 @@ Beluna Core is the runtime and domain agent implementation.
   - Continuity ingests feedback and builds non-semantic `SituationView`.
   - Admission performs deterministic effectuation gating.
   - Ledger enforces survival resource accounting and settlement terminality.
-  - Spine executes admitted actions only and returns ordered, replayable execution events.
+  - Spine executes admitted actions only via mechanical route lookup and returns ordered, replayable execution events.
+  - Spine capability catalog snapshots are bridged into Cortex capability input.
 
 ### Known Limitations & Mocks
 
-- Spine is contract-level MVP (execution adapter is deterministic noop in tests/default path).
+- WebSocket/HTTP Spine adapters are not implemented in current MVP (UnixSocket adapter only).
 - Economic debits from AI Gateway are approximate and currently token-based.
 - AI Gateway adapters for cortex extraction/fill rely on model JSON compliance; deterministic clamp remains final authority.
 

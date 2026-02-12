@@ -45,13 +45,14 @@ fn engine_with_debit_source(debit_source: Arc<InMemoryDebitSource>) -> Continuit
     )
 }
 
-#[test]
-fn given_unmatched_attribution_when_applying_external_debit_then_observation_is_ignored() {
+#[tokio::test]
+async fn given_unmatched_attribution_when_applying_external_debit_then_observation_is_ignored() {
     let debit_source = Arc::new(InMemoryDebitSource::default());
     let mut engine = engine_with_debit_source(Arc::clone(&debit_source));
 
     engine
         .process_attempts(1, vec![attempt()])
+        .await
         .expect("first cycle should succeed");
 
     debit_source.push(ExternalDebitObservation {
@@ -64,18 +65,20 @@ fn given_unmatched_attribution_when_applying_external_debit_then_observation_is_
 
     let output = engine
         .process_attempts(2, Vec::new())
+        .await
         .expect("second cycle should succeed");
 
     assert_eq!(output.external_debit_applied_count, 0);
 }
 
-#[test]
-fn given_duplicate_external_reference_when_applied_then_debit_is_deduped() {
+#[tokio::test]
+async fn given_duplicate_external_reference_when_applied_then_debit_is_deduped() {
     let debit_source = Arc::new(InMemoryDebitSource::default());
     let mut engine = engine_with_debit_source(Arc::clone(&debit_source));
 
     engine
         .process_attempts(1, vec![attempt()])
+        .await
         .expect("first cycle should succeed");
 
     debit_source.push(ExternalDebitObservation {
@@ -95,6 +98,7 @@ fn given_duplicate_external_reference_when_applied_then_debit_is_deduped() {
 
     let output = engine
         .process_attempts(2, Vec::new())
+        .await
         .expect("second cycle should succeed");
 
     assert_eq!(output.external_debit_applied_count, 1);

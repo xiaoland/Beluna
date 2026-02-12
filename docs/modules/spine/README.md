@@ -1,9 +1,12 @@
 # Spine Module
 
-Spine is the control substrate that executes admitted actions and emits ordered execution feedback.
+Spine is the execution substrate between Admission/Continuity and Body Endpoints.
 
 Code:
-- `core/src/spine/*`
+1. `core/src/spine/*` (core routing/registry/contracts)
+2. `core/src/spine/adapters/*` (transport shells and wire parsing)
 
-MVP scope:
-- interface/contracts and deterministic noop implementation
+Current scope:
+1. async routing executor with in-memory endpoint registry
+2. capability catalog snapshot owned by Spine
+3. UnixSocket adapter shell (`sense` ingress)

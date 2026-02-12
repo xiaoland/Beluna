@@ -2,5 +2,5 @@
 
 Latest completed task:
 
-- `cortex-mvp`
-- Result: `/Users/lanzhijiang/Development/Beluna/docs/task/cortex-mvp/RESULT.md`
+- `spine-implementation`
+- Result: `/Users/lanzhijiang/Development/Beluna/docs/task/spine-implementation/RESULT.md`

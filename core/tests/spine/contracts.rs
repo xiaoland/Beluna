@@ -25,27 +25,29 @@ fn action(action_id: &str, reserve_entry_id: &str) -> AdmittedAction {
     }
 }
 
-#[test]
-fn given_invalid_admitted_action_when_execute_then_batch_is_rejected() {
+#[tokio::test]
+async fn given_invalid_admitted_action_when_execute_then_batch_is_rejected() {
     let spine = DeterministicNoopSpine::default();
     let err = spine
         .execute_admitted(AdmittedActionBatch {
             cycle_id: 1,
             actions: vec![action("", "")],
         })
+        .await
         .expect_err("batch should be rejected");
 
     assert_eq!(err.kind, SpineErrorKind::InvalidBatch);
 }
 
-#[test]
-fn given_admitted_actions_when_execute_then_events_are_ordered_and_settlement_linked() {
+#[tokio::test]
+async fn given_admitted_actions_when_execute_then_events_are_ordered_and_settlement_linked() {
     let spine = DeterministicNoopSpine::new(SpineExecutionMode::SerializedDeterministic);
     let report = spine
         .execute_admitted(AdmittedActionBatch {
             cycle_id: 1,
             actions: vec![action("act:1", "resv:1"), action("act:2", "resv:2")],
         })
+        .await
         .expect("execution should succeed");
 
     assert_eq!(report.mode, SpineExecutionMode::SerializedDeterministic);
@@ -71,14 +73,15 @@ fn given_admitted_actions_when_execute_then_events_are_ordered_and_settlement_li
     }
 }
 
-#[test]
-fn given_best_effort_mode_when_execute_then_mode_is_reported_without_losing_ordering() {
+#[tokio::test]
+async fn given_best_effort_mode_when_execute_then_mode_is_reported_without_losing_ordering() {
     let spine = DeterministicNoopSpine::new(SpineExecutionMode::BestEffortReplayable);
     let report = spine
         .execute_admitted(AdmittedActionBatch {
             cycle_id: 2,
             actions: vec![action("act:1", "resv:1")],
         })
+        .await
         .expect("execution should succeed");
 
     assert_eq!(report.mode, SpineExecutionMode::BestEffortReplayable);

@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use async_trait::async_trait;
+
 use crate::{
     continuity::{
         debit_sources::ExternalDebitSourcePort,
@@ -7,7 +9,10 @@ use crate::{
         ports::SpinePort,
         types::ExternalDebitObservation,
     },
-    spine::{ports::SpineExecutorPort, types::AdmittedActionBatch},
+    spine::{
+        ports::SpineExecutorPort,
+        types::{AdmittedActionBatch, SpineCapabilityCatalog},
+    },
 };
 
 pub struct SpinePortAdapter {
@@ -20,14 +25,20 @@ impl SpinePortAdapter {
     }
 }
 
+#[async_trait]
 impl SpinePort for SpinePortAdapter {
-    fn execute_admitted(
+    async fn execute_admitted(
         &self,
         admitted: AdmittedActionBatch,
     ) -> Result<crate::spine::types::SpineExecutionReport, ContinuityError> {
         self.inner
             .execute_admitted(admitted)
+            .await
             .map_err(|err| ContinuityError::new(ContinuityErrorKind::Internal, err.to_string()))
+    }
+
+    fn capability_catalog_snapshot(&self) -> SpineCapabilityCatalog {
+        self.inner.capability_catalog_snapshot()
     }
 }
 

@@ -23,6 +23,36 @@ pub struct CostVector {
     pub token_units: u64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct RouteKey {
+    pub affordance_key: String,
+    pub capability_handle: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EndpointCapabilityDescriptor {
+    pub route: RouteKey,
+    pub payload_schema: serde_json::Value,
+    pub max_payload_bytes: usize,
+    #[serde(default)]
+    pub default_cost: CostVector,
+    #[serde(default)]
+    pub metadata: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EndpointRegistration {
+    pub endpoint_id: String,
+    pub descriptor: EndpointCapabilityDescriptor,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct SpineCapabilityCatalog {
+    pub version: u64,
+    #[serde(default)]
+    pub entries: Vec<EndpointCapabilityDescriptor>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AdmittedAction {
     pub action_id: ActionId,
@@ -45,6 +75,27 @@ pub struct AdmittedAction {
 pub struct AdmittedActionBatch {
     pub cycle_id: CycleId,
     pub actions: Vec<AdmittedAction>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EndpointInvocation {
+    pub action: AdmittedAction,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum EndpointExecutionOutcome {
+    Applied {
+        actual_cost_micro: i64,
+        reference_id: String,
+    },
+    Rejected {
+        reason_code: String,
+        reference_id: String,
+    },
+    Deferred {
+        reason_code: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

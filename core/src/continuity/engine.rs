@@ -13,7 +13,12 @@ use crate::{
         state::ContinuityState,
         types::{ContinuityCycleOutput, ExternalDebitObservation, SenseSample, SituationView},
     },
-    spine::{noop::DeterministicNoopSpine, types::SpineEvent},
+    spine::{
+        EndpointCapabilityDescriptor, EndpointExecutionOutcome, EndpointRegistration,
+        EndpointRegistryPort, InMemoryEndpointRegistry, NativeFunctionEndpoint, RouteKey,
+        RoutingSpineExecutor, SpineExecutionMode,
+        types::{CostVector, SpineCapabilityCatalog, SpineEvent},
+    },
 };
 
 pub struct ContinuityEngine {
@@ -62,12 +67,87 @@ impl ContinuityEngine {
             AdmissionResolverConfig::default(),
         );
 
+        let registry: Arc<dyn EndpointRegistryPort> = Arc::new(InMemoryEndpointRegistry::new());
+        let native_endpoint = Arc::new(NativeFunctionEndpoint::new(Arc::new(|invocation| {
+            let action = invocation.action;
+            Ok(EndpointExecutionOutcome::Applied {
+                actual_cost_micro: action.reserved_cost.survival_micro,
+                reference_id: format!("native:settle:{}", action.action_id),
+            })
+        })));
+
+        let register = |affordance_key: &str, capability_handle: &str, default_cost: CostVector| {
+            registry
+                .register(
+                    EndpointRegistration {
+                        endpoint_id: format!("ep:native:{}:{}", affordance_key, capability_handle),
+                        descriptor: EndpointCapabilityDescriptor {
+                            route: RouteKey {
+                                affordance_key: affordance_key.to_string(),
+                                capability_handle: capability_handle.to_string(),
+                            },
+                            payload_schema: serde_json::json!({"type":"object"}),
+                            max_payload_bytes: 16_384,
+                            default_cost,
+                            metadata: Default::default(),
+                        },
+                    },
+                    native_endpoint.clone(),
+                )
+                .expect("default native endpoint registration should succeed");
+        };
+
+        register(
+            "deliberate.plan",
+            "cap.core",
+            CostVector {
+                survival_micro: 250,
+                time_ms: 120,
+                io_units: 1,
+                token_units: 128,
+            },
+        );
+        register(
+            "deliberate.plan",
+            "cap.core.lite",
+            CostVector {
+                survival_micro: 250,
+                time_ms: 120,
+                io_units: 1,
+                token_units: 128,
+            },
+        );
+        register(
+            "deliberate.plan",
+            "cap.core.minimal",
+            CostVector {
+                survival_micro: 250,
+                time_ms: 120,
+                io_units: 1,
+                token_units: 128,
+            },
+        );
+        register(
+            "execute.tool",
+            "cap.core",
+            CostVector {
+                survival_micro: 400,
+                time_ms: 200,
+                io_units: 2,
+                token_units: 256,
+            },
+        );
+
+        let spine_executor: Arc<dyn crate::spine::SpineExecutorPort> = Arc::new(
+            RoutingSpineExecutor::new(SpineExecutionMode::SerializedDeterministic, registry),
+        );
+
         Self::new(
             ContinuityState::new(initial_survival_micro),
             admission,
-            Arc::new(crate::continuity::noop::SpinePortAdapter::new(Arc::new(
-                DeterministicNoopSpine::default(),
-            ))),
+            Arc::new(crate::continuity::noop::SpinePortAdapter::new(
+                spine_executor,
+            )),
             Arc::new(crate::continuity::noop::NoopDebitSource),
         )
     }
@@ -84,7 +164,11 @@ impl ContinuityEngine {
         self.state.build_situation()
     }
 
-    pub fn effectuate_attempts(
+    pub fn capability_catalog_snapshot(&self) -> SpineCapabilityCatalog {
+        self.spine.capability_catalog_snapshot()
+    }
+
+    pub async fn effectuate_attempts(
         &mut self,
         cycle_id: u64,
         attempts: Vec<IntentAttempt>,
@@ -103,7 +187,7 @@ impl ContinuityEngine {
         )?;
 
         let admitted_action_count = admitted_batch.actions.len();
-        let spine_report = self.spine.execute_admitted(admitted_batch)?;
+        let spine_report = self.spine.execute_admitted(admitted_batch).await?;
 
         self.reconcile_spine_report(cycle_id, &spine_report)?;
 
@@ -127,12 +211,12 @@ impl ContinuityEngine {
         })
     }
 
-    pub fn process_attempts(
+    pub async fn process_attempts(
         &mut self,
         cycle_id: u64,
         attempts: Vec<IntentAttempt>,
     ) -> Result<ContinuityCycleOutput, ContinuityError> {
-        self.effectuate_attempts(cycle_id, attempts)
+        self.effectuate_attempts(cycle_id, attempts).await
     }
 
     fn reconcile_spine_report(
