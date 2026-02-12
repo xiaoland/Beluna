@@ -1,25 +1,26 @@
 #![allow(dead_code)]
 
-pub mod commitment_manager;
+pub mod adapters;
+pub mod clamp;
 pub mod error;
-pub mod facade;
-pub mod noop;
-pub mod planner;
+pub mod pipeline;
 pub mod ports;
-pub mod state;
+pub mod reactor;
 pub mod types;
 
-pub use commitment_manager::CommitmentManager;
+pub use adapters::{AIGatewayAttemptExtractor, AIGatewayPayloadFiller, AIGatewayPrimaryReasoner};
+pub use clamp::{DeterministicAttemptClamp, derive_attempt_id, derive_cost_attribution_id};
 pub use error::{CortexError, CortexErrorKind};
-pub use facade::CortexFacade;
-pub use noop::NoopGoalDecomposer;
-pub use planner::{
-    DeterministicPlanner, PlannerConfig, derive_attempt_id, derive_cost_attribution_id,
+pub use pipeline::CortexPipeline;
+pub use ports::{
+    AttemptClampPort, AttemptClampRequest, AttemptExtractorPort, AttemptExtractorRequest,
+    CortexTelemetryEvent, CortexTelemetryPort, NoopTelemetryPort, PayloadFillerPort,
+    PayloadFillerRequest, PrimaryReasonerPort, PrimaryReasonerRequest,
 };
-pub use ports::GoalDecomposerPort;
-pub use state::CortexState;
+pub use reactor::CortexReactor;
 pub use types::{
-    CommitmentId, CommitmentRecord, CommitmentStatus, CortexCommand, CortexCycleOutput,
-    CortexEvent, Goal, GoalClass, GoalId, GoalMetadataEntry, GoalMetadataValue, GoalScope,
-    MetadataProvenance, MetadataSource, SchedulingContext,
+    AdmissionOutcomeSignal, AffordanceCapability, AttemptDraft, AttemptId, AttentionTag,
+    CapabilityCatalog, ClampResult, ClampViolation, ClampViolationCode, ConstitutionalIntent,
+    EmergentIntentCandidate, EndpointSnapshot, EnvironmentalIntentSignal, IntentContext, ProseIr,
+    ReactionId, ReactionInput, ReactionLimits, ReactionResult, SenseDelta, SenseId,
 };

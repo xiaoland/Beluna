@@ -2,9 +2,13 @@ use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CortexErrorKind {
-    InvalidRequest,
-    InvariantViolation,
-    PolicyViolation,
+    InvalidReactionInput,
+    PrimaryInferenceFailed,
+    ExtractorInferenceFailed,
+    FillerInferenceFailed,
+    ClampRejectedAll,
+    BudgetExceeded,
+    CycleTimeout,
     Internal,
 }
 
@@ -31,16 +35,32 @@ impl fmt::Display for CortexError {
 
 impl std::error::Error for CortexError {}
 
-pub fn invalid_request(message: impl Into<String>) -> CortexError {
-    CortexError::new(CortexErrorKind::InvalidRequest, message)
+pub fn invalid_input(message: impl Into<String>) -> CortexError {
+    CortexError::new(CortexErrorKind::InvalidReactionInput, message)
 }
 
-pub fn invariant_violation(message: impl Into<String>) -> CortexError {
-    CortexError::new(CortexErrorKind::InvariantViolation, message)
+pub fn primary_failed(message: impl Into<String>) -> CortexError {
+    CortexError::new(CortexErrorKind::PrimaryInferenceFailed, message)
 }
 
-pub fn policy_violation(message: impl Into<String>) -> CortexError {
-    CortexError::new(CortexErrorKind::PolicyViolation, message)
+pub fn extractor_failed(message: impl Into<String>) -> CortexError {
+    CortexError::new(CortexErrorKind::ExtractorInferenceFailed, message)
+}
+
+pub fn filler_failed(message: impl Into<String>) -> CortexError {
+    CortexError::new(CortexErrorKind::FillerInferenceFailed, message)
+}
+
+pub fn clamp_rejected(message: impl Into<String>) -> CortexError {
+    CortexError::new(CortexErrorKind::ClampRejectedAll, message)
+}
+
+pub fn budget_exceeded(message: impl Into<String>) -> CortexError {
+    CortexError::new(CortexErrorKind::BudgetExceeded, message)
+}
+
+pub fn cycle_timeout(message: impl Into<String>) -> CortexError {
+    CortexError::new(CortexErrorKind::CycleTimeout, message)
 }
 
 pub fn internal_error(message: impl Into<String>) -> CortexError {

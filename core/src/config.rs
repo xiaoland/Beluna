@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::ai_gateway::types::AIGatewayConfig;
+use crate::{ai_gateway::types::AIGatewayConfig, cortex::ReactionLimits};
 use anyhow::{Context, Result, anyhow};
 use jsonschema::{JSONSchema, ValidationError};
 use serde::Deserialize;
@@ -14,6 +14,7 @@ pub struct Config {
     pub socket_path: PathBuf,
     #[allow(dead_code)]
     pub ai_gateway: AIGatewayConfig,
+    pub cortex: CortexRuntimeConfig,
 }
 
 #[derive(Debug, Deserialize)]
@@ -21,10 +22,46 @@ struct RawConfig {
     #[serde(default = "default_socket_path")]
     socket_path: PathBuf,
     ai_gateway: AIGatewayConfig,
+    #[serde(default)]
+    cortex: CortexRuntimeConfig,
 }
 
 fn default_socket_path() -> PathBuf {
     PathBuf::from("beluna.sock")
+}
+
+fn default_cortex_inbox_capacity() -> usize {
+    32
+}
+
+fn default_cortex_outbox_capacity() -> usize {
+    32
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CortexRuntimeConfig {
+    #[serde(default = "default_cortex_inbox_capacity")]
+    pub inbox_capacity: usize,
+    #[serde(default = "default_cortex_outbox_capacity")]
+    pub outbox_capacity: usize,
+    #[serde(default)]
+    pub default_limits: ReactionLimits,
+    #[serde(default)]
+    pub primary_backend_id: Option<String>,
+    #[serde(default)]
+    pub sub_backend_id: Option<String>,
+}
+
+impl Default for CortexRuntimeConfig {
+    fn default() -> Self {
+        Self {
+            inbox_capacity: default_cortex_inbox_capacity(),
+            outbox_capacity: default_cortex_outbox_capacity(),
+            default_limits: ReactionLimits::default(),
+            primary_backend_id: None,
+            sub_backend_id: None,
+        }
+    }
 }
 
 impl Config {
@@ -77,6 +114,7 @@ impl Config {
         Ok(Self {
             socket_path,
             ai_gateway: parsed.ai_gateway,
+            cortex: parsed.cortex,
         })
     }
 }

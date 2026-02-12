@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::spine::types::ActionId;
 
 pub type AttemptId = String;
+pub type SenseId = String;
 pub type GoalId = String;
 pub type CommitmentId = String;
 pub type CostAttributionId = String;
@@ -27,6 +28,8 @@ pub struct IntentAttempt {
     pub commitment_id: CommitmentId,
     pub goal_id: GoalId,
     pub planner_slot: u16,
+    #[serde(default)]
+    pub based_on: Vec<SenseId>,
     pub affordance_key: String,
     pub capability_handle: String,
     pub normalized_payload: serde_json::Value,

@@ -117,6 +117,33 @@
       },
       "required": ["default_backend", "backends"],
       "additionalProperties": false
+    },
+    "cortex": {
+      "type": "object",
+      "properties": {
+        "inbox_capacity": { "type": "integer", "minimum": 1 },
+        "outbox_capacity": { "type": "integer", "minimum": 1 },
+        "default_limits": {
+          "type": "object",
+          "properties": {
+            "max_sense_items": { "type": "integer", "minimum": 1 },
+            "max_snapshot_items": { "type": "integer", "minimum": 1 },
+            "max_snapshot_bytes_per_item": { "type": "integer", "minimum": 1 },
+            "max_attempts": { "type": "integer", "minimum": 1 },
+            "max_payload_bytes": { "type": "integer", "minimum": 1 },
+            "max_cycle_time_ms": { "type": "integer", "minimum": 1 },
+            "max_primary_calls": { "type": "integer", "const": 1 },
+            "max_sub_calls": { "type": "integer", "minimum": 1 },
+            "max_repair_attempts": { "type": "integer", "minimum": 0, "maximum": 1 },
+            "max_primary_output_tokens": { "type": "integer", "minimum": 1 },
+            "max_sub_output_tokens": { "type": "integer", "minimum": 1 }
+          },
+          "additionalProperties": false
+        },
+        "primary_backend_id": { "type": ["string", "null"] },
+        "sub_backend_id": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
     }
   },
   "required": ["ai_gateway"],

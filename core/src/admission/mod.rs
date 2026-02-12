@@ -12,6 +12,6 @@ pub use resolver::{
 pub use types::{
     AdmissionDisposition, AdmissionReport, AdmissionReportItem, AdmissionWhy,
     AffordabilitySnapshot, AttributionRecord, CommitmentId, ConstraintCode, CostAttributionId,
-    CycleId, EconomicCode, GoalId, IntentAttempt, MetadataValue, RequestedResources,
+    CycleId, EconomicCode, GoalId, IntentAttempt, MetadataValue, RequestedResources, SenseId,
     ReservationDelta,
 };

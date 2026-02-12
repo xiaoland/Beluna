@@ -22,6 +22,7 @@ fn attempt(
         commitment_id: "c1".to_string(),
         goal_id: "g1".to_string(),
         planner_slot: 0,
+        based_on: vec!["s1".to_string()],
         affordance_key: affordance_key.to_string(),
         capability_handle: capability_handle.to_string(),
         normalized_payload: serde_json::json!({"x": 1}),

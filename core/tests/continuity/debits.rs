@@ -19,6 +19,7 @@ fn attempt() -> IntentAttempt {
         commitment_id: "c1".to_string(),
         goal_id: "g1".to_string(),
         planner_slot: 0,
+        based_on: vec!["s1".to_string()],
         affordance_key: "deliberate.plan".to_string(),
         capability_handle: "cap.core".to_string(),
         normalized_payload: serde_json::json!({"k": "v"}),

@@ -3,22 +3,34 @@
 ## Module Boundary
 
 Inputs:
-- `CortexCommand`
-- prior `CortexState`
-- optional `AdmissionReport` feedback
+- `ReactionInput`
+  - ordered `sense_window` with stable `sense_id`,
+  - latest endpoint snapshots,
+  - admission feedback signals correlated by `attempt_id`,
+  - capability catalog,
+  - bounded cycle limits,
+  - distributed intent context.
 
 Outputs:
-- updated `CortexState`
-- `CortexCycleOutput` with deterministic `IntentAttempt[]`
+- `ReactionResult`
+  - `attempts: IntentAttempt[]` (or empty noop),
+  - `based_on: [sense_id...]`,
+  - `attention_tags`.
 
 ## Key Components
 
-- `CommitmentManager`: goal/commitment transitions and invariant checks.
-- `DeterministicPlanner`: dynamic scheduling and attempt derivation.
-- `CortexFacade`: cycle orchestrator.
+- `CortexReactor`: always-on async inbox loop.
+- `CortexPipeline`: single-cycle cognition orchestration.
+- Cognition ports:
+  - `PrimaryReasonerPort`,
+  - `AttemptExtractorPort`,
+  - `PayloadFillerPort`.
+- `DeterministicAttemptClamp`: final schema/catalog/capability/cap authority.
 
 ## Invariants
 
-- Goal identity and commitment lifecycle are separate.
-- `Failed` commitment requires `failure_code`.
-- Supersession is a relationship (`superseded_by`), not a commitment status.
+- Reactor progression is inbox-event driven.
+- Cortex is stateless for durable goal/commitment storage.
+- `IntentAttempt` remains non-binding and world-relative.
+- feedback to Cortex includes `attempt_id` correlation.
+- business output remains clean (telemetry is out-of-band).

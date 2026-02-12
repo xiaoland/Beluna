@@ -1,8 +1,10 @@
 # AGENTS.md for core/src/cortex
 
-Cortex owns goals and commitments, then emits non-binding `IntentAttempt[]` each cycle.
+Cortex is an always-on reactor that consumes bounded `ReactionInput` and emits non-binding `IntentAttempt[]`.
 
 ## Invariants
-- Goal identity is separate from commitment lifecycle.
-- Scheduling priority is dynamic and recomputed each cycle.
+- Reactor progression is inbox-event driven only.
+- Cortex does not durably persist goals/commitments.
+- Primary output is prose IR; sub-stages compile to structured attempts.
+- Deterministic clamp is final authority before attempt emission.
 - `attempt_id` and `cost_attribution_id` derivation is deterministic.
