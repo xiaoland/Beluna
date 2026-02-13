@@ -45,11 +45,12 @@ impl SpinePort for RecordingScrambledSpine {
             .map(|(index, action)| OrderedSpineEvent {
                 seq_no: (index as u64) + 1,
                 event: SpineEvent::ActionApplied {
-                    action_id: action.action_id.clone(),
+                    neural_signal_id: action.neural_signal_id.clone(),
+                    capability_instance_id: action.capability_instance_id.clone(),
                     reserve_entry_id: action.reserve_entry_id.clone(),
                     cost_attribution_id: action.cost_attribution_id.clone(),
                     actual_cost_micro: action.reserved_cost.survival_micro,
-                    reference_id: format!("scrambled:settle:{}", action.action_id),
+                    reference_id: format!("scrambled:settle:{}", action.neural_signal_id),
                 },
             })
             .collect();
@@ -94,8 +95,9 @@ impl AttemptExtractorPort for StaticExtractor {
             intent_span: "attempt work".to_string(),
             based_on: vec!["s1".to_string()],
             attention_tags: vec!["plan".to_string()],
-            affordance_key: "deliberate.plan".to_string(),
-            capability_handle: "cap.core".to_string(),
+            endpoint_id: "core.mind".to_string(),
+            capability_id: "deliberate.plan".to_string(),
+            capability_instance_id: "instance:extract".to_string(),
             payload_draft: serde_json::json!({"ok": true}),
             requested_resources: Default::default(),
             commitment_hint: Some("c1".to_string()),
@@ -145,8 +147,8 @@ fn reaction_input(reaction_id: u64) -> ReactionInput {
         capability_catalog: CapabilityCatalog {
             version: "v1".to_string(),
             affordances: vec![beluna::cortex::AffordanceCapability {
-                affordance_key: "deliberate.plan".to_string(),
-                allowed_capability_handles: vec!["cap.core".to_string()],
+                endpoint_id: "core.mind".to_string(),
+                allowed_capability_ids: vec!["deliberate.plan".to_string()],
                 payload_schema: serde_json::json!({"type":"object"}),
                 max_payload_bytes: 4096,
                 default_resources: Default::default(),
@@ -179,8 +181,9 @@ async fn cortex_continuity_spine_flow_preserves_contracts() {
         goal_id: "g1".to_string(),
         planner_slot: 999,
         based_on: vec!["s1".to_string()],
-        affordance_key: "unknown.affordance".to_string(),
-        capability_handle: "cap.core".to_string(),
+        endpoint_id: "unknown.affordance".to_string(),
+        capability_id: "deliberate.plan".to_string(),
+        capability_instance_id: "instance:denied".to_string(),
         normalized_payload: serde_json::json!({"invalid": true}),
         requested_resources: Default::default(),
         cost_attribution_id: "cat:denied".to_string(),
@@ -216,7 +219,7 @@ async fn cortex_continuity_spine_flow_preserves_contracts() {
     assert!(
         attribution_records
             .iter()
-            .any(|record| record.action_id == first_action.action_id)
+            .any(|record| record.action_id == first_action.neural_signal_id)
     );
 
     let balance_after_first = continuity.state().ledger.balance_survival_micro();

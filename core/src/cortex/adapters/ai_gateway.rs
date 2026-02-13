@@ -115,8 +115,9 @@ impl AttemptExtractorPort for AIGatewayAttemptExtractor {
                     "intent_span": "string",
                     "based_on": ["sense_id"],
                     "attention_tags": ["tag"],
-                    "affordance_key": "string",
-                    "capability_handle": "string",
+                    "endpoint_id": "string",
+                    "capability_id": "string",
+                    "capability_instance_id": "optional string marker",
                     "payload_draft": {},
                     "requested_resources": {
                         "survival_micro": 0,
@@ -130,7 +131,7 @@ impl AttemptExtractorPort for AIGatewayAttemptExtractor {
             ]
         });
         let prompt = format!(
-            "Compile this prose IR into attempt drafts JSON.\nReturn strictly one JSON object matching this shape: {}\nAllowed affordances: {}\nIR: {}",
+            "Compile this prose IR into attempt drafts JSON.\nReturn strictly one JSON object matching this shape: {}\nAllowed endpoint capabilities: {}\nIR: {}",
             schema_hint,
             serde_json::to_string(&req.capability_catalog.affordances)
                 .unwrap_or_else(|_| "[]".to_string()),

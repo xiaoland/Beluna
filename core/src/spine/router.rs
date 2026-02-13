@@ -97,22 +97,24 @@ impl RoutingSpineExecutor {
     }
 
     async fn invoke_one(&self, action: AdmittedAction) -> SpineEvent {
-        let action_id = action.action_id.clone();
+        let neural_signal_id = action.neural_signal_id.clone();
+        let capability_instance_id = action.capability_instance_id.clone();
         let reserve_entry_id = action.reserve_entry_id.clone();
         let cost_attribution_id = action.cost_attribution_id.clone();
 
         let route = RouteKey {
-            affordance_key: action.affordance_key.clone(),
-            capability_handle: action.capability_handle.clone(),
+            endpoint_id: action.endpoint_id.clone(),
+            capability_id: action.capability_id.clone(),
         };
 
         let Some(endpoint) = self.registry.resolve(&route) else {
             return SpineEvent::ActionRejected {
-                action_id,
+                neural_signal_id,
+                capability_instance_id,
                 reserve_entry_id,
                 cost_attribution_id,
                 reason_code: "route_not_found".to_string(),
-                reference_id: format!("spine:missing_route:{}", action.action_id),
+                reference_id: format!("spine:missing_route:{}", action.neural_signal_id),
             };
         };
 
@@ -121,7 +123,8 @@ impl RoutingSpineExecutor {
                 actual_cost_micro,
                 reference_id,
             }) => SpineEvent::ActionApplied {
-                action_id,
+                neural_signal_id,
+                capability_instance_id,
                 reserve_entry_id,
                 cost_attribution_id,
                 actual_cost_micro,
@@ -131,20 +134,23 @@ impl RoutingSpineExecutor {
                 reason_code,
                 reference_id,
             }) => SpineEvent::ActionRejected {
-                action_id,
+                neural_signal_id,
+                capability_instance_id,
                 reserve_entry_id,
                 cost_attribution_id,
                 reason_code,
                 reference_id,
             },
             Ok(EndpointExecutionOutcome::Deferred { reason_code }) => SpineEvent::ActionDeferred {
-                action_id,
+                neural_signal_id,
+                capability_instance_id,
                 reason_code,
             },
             Err(_) => {
                 let reference_id = format!("spine:error:{}", cost_attribution_id);
                 SpineEvent::ActionRejected {
-                    action_id,
+                    neural_signal_id,
+                    capability_instance_id,
                     reserve_entry_id,
                     cost_attribution_id,
                     reason_code: "endpoint_error".to_string(),
@@ -173,10 +179,10 @@ impl SpineExecutorPort for RoutingSpineExecutor {
         if admitted
             .actions
             .iter()
-            .any(|action| action.action_id.is_empty() || action.reserve_entry_id.is_empty())
+            .any(|action| action.neural_signal_id.is_empty() || action.reserve_entry_id.is_empty())
         {
             return Err(invalid_batch(
-                "admitted action is missing action_id or reserve_entry_id",
+                "admitted action is missing neural_signal_id or reserve_entry_id",
             ));
         }
 
@@ -218,14 +224,15 @@ mod tests {
         }
     }
 
-    fn make_action(affordance_key: &str, capability_handle: &str) -> AdmittedAction {
+    fn make_action(endpoint_id: &str, capability_id: &str) -> AdmittedAction {
         AdmittedAction {
-            action_id: "act:1".to_string(),
+            neural_signal_id: "ns:1".to_string(),
+            capability_instance_id: "plan.instance".to_string(),
             source_attempt_id: "att:1".to_string(),
             reserve_entry_id: "res:1".to_string(),
             cost_attribution_id: "cost:1".to_string(),
-            affordance_key: affordance_key.to_string(),
-            capability_handle: capability_handle.to_string(),
+            endpoint_id: endpoint_id.to_string(),
+            capability_id: capability_id.to_string(),
             normalized_payload: serde_json::json!({"ok":true}),
             reserved_cost: CostVector::default(),
             degraded: false,
@@ -244,7 +251,7 @@ mod tests {
         let report = executor
             .execute_admitted(AdmittedActionBatch {
                 cycle_id: 1,
-                actions: vec![make_action("observe.state", "cap.missing")],
+                actions: vec![make_action("core.mind", "missing.capability")],
             })
             .await
             .expect("execution should succeed with per-action rejection");
@@ -265,8 +272,8 @@ mod tests {
                     endpoint_id: "ep:observe:core".to_string(),
                     descriptor: EndpointCapabilityDescriptor {
                         route: RouteKey {
-                            affordance_key: "observe.state".to_string(),
-                            capability_handle: "cap.core".to_string(),
+                            endpoint_id: "core.mind".to_string(),
+                            capability_id: "observe.state".to_string(),
                         },
                         payload_schema: serde_json::json!({"type":"object"}),
                         max_payload_bytes: 1024,
@@ -283,7 +290,7 @@ mod tests {
         let report = executor
             .execute_admitted(AdmittedActionBatch {
                 cycle_id: 1,
-                actions: vec![make_action("observe.state", "cap.core")],
+                actions: vec![make_action("core.mind", "observe.state")],
             })
             .await
             .expect("execution should succeed with per-action rejection");

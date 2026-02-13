@@ -3,14 +3,15 @@ use beluna::spine::{
     types::{AdmittedAction, AdmittedActionBatch, CostVector, SpineEvent},
 };
 
-fn action(action_id: &str, reserve_entry_id: &str) -> AdmittedAction {
+fn action(neural_signal_id: &str, reserve_entry_id: &str) -> AdmittedAction {
     AdmittedAction {
-        action_id: action_id.to_string(),
+        neural_signal_id: neural_signal_id.to_string(),
+        capability_instance_id: format!("instance:{neural_signal_id}"),
         source_attempt_id: "att:1".to_string(),
         reserve_entry_id: reserve_entry_id.to_string(),
         cost_attribution_id: "cat:1".to_string(),
-        affordance_key: "deliberate.plan".to_string(),
-        capability_handle: "cap.core".to_string(),
+        endpoint_id: "deliberate.plan".to_string(),
+        capability_id: "cap.core".to_string(),
         normalized_payload: serde_json::json!({"k": "v"}),
         reserved_cost: CostVector {
             survival_micro: 10,

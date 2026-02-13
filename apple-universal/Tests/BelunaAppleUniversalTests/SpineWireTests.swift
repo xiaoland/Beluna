@@ -7,8 +7,8 @@ final class SpineWireTests: XCTestCase {
 
         XCTAssertEqual(envelope.type, "body_endpoint_register")
         XCTAssertEqual(envelope.endpointID, appleEndpointID)
-        XCTAssertEqual(envelope.descriptor.route.affordanceKey, appleAffordanceKey)
-        XCTAssertEqual(envelope.descriptor.route.capabilityHandle, appleCapabilityHandle)
+        XCTAssertEqual(envelope.descriptor.route.endpointID, appleEndpointID)
+        XCTAssertEqual(envelope.descriptor.route.capabilityID, appleCapabilityID)
     }
 
     func testUserSenseEnvelopeMatchesResponsesSubset() throws {
@@ -28,15 +28,15 @@ final class SpineWireTests: XCTestCase {
         XCTAssertEqual(firstMessage?["role"], .string("user"))
     }
 
-    func testDecodeEndpointInvokeAndExtractAssistantText() throws {
+    func testDecodeActAndExtractAssistantText() throws {
         let line = """
         {
-          "type": "body_endpoint_invoke",
-          "request_id": "req:1",
+          "type": "act",
           "action": {
-            "action_id": "act:1",
-            "affordance_key": "chat.reply.emit",
-            "capability_handle": "cap.apple.universal.chat",
+            "neural_signal_id": "018f94da-9f92-7bc5-bc58-b5f01b0406f5",
+            "capability_instance_id": "chat.1",
+            "endpoint_id": "macos-app.01",
+            "capability_id": "present.message",
             "normalized_payload": {
               "conversation_id": "conv_1",
               "response": {
@@ -66,11 +66,42 @@ final class SpineWireTests: XCTestCase {
         let message = try decodeServerMessage(from: line)
 
         switch message {
-        case let .endpointInvoke(requestID, action):
-            XCTAssertEqual(requestID, "req:1")
-            XCTAssertEqual(action.affordanceKey, appleAffordanceKey)
+        case let .act(action):
+            XCTAssertEqual(action.neuralSignalID, "018f94da-9f92-7bc5-bc58-b5f01b0406f5")
+            XCTAssertEqual(action.endpointID, appleEndpointID)
+            XCTAssertEqual(action.capabilityID, appleCapabilityID)
             let texts = try extractAssistantTexts(from: action.normalizedPayload)
             XCTAssertEqual(texts, ["Hello from Beluna"])
         }
+    }
+
+    func testActResultSenseEnvelopeEchoesCorrelationFields() throws {
+        let action = AdmittedActionWire(
+            neuralSignalID: "018f94da-9f92-7bc5-bc58-b5f01b0406f5",
+            capabilityInstanceID: "chat.1",
+            endpointID: appleEndpointID,
+            capabilityID: appleCapabilityID,
+            normalizedPayload: .object([:]),
+            reservedCost: CostVectorWire(
+                survivalMicro: 120,
+                timeMS: 100,
+                ioUnits: 1,
+                tokenUnits: 64
+            )
+        )
+
+        let envelope = makeActResultSenseEnvelope(
+            action: action,
+            status: "applied",
+            referenceID: "apple-universal:chat:018f94da-9f92-7bc5-bc58-b5f01b0406f5"
+        )
+        let data = try JSONEncoder().encode(envelope)
+        let decoded = try JSONDecoder().decode([String: JSONValue].self, from: data)
+        let payload = decoded["payload"]?.objectValue
+
+        XCTAssertEqual(payload?["neural_signal_id"], .string(action.neuralSignalID))
+        XCTAssertEqual(payload?["capability_instance_id"], .string(action.capabilityInstanceID))
+        XCTAssertEqual(payload?["endpoint_id"], .string(action.endpointID))
+        XCTAssertEqual(payload?["capability_id"], .string(action.capabilityID))
     }
 }

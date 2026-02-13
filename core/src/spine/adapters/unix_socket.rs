@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet},
     fs,
     io::ErrorKind,
     os::unix::fs::FileTypeExt,
@@ -8,7 +8,6 @@ use std::{
         Arc, Mutex,
         atomic::{AtomicU64, Ordering},
     },
-    time::Duration,
 };
 
 use anyhow::{Context, Result, bail};
@@ -16,8 +15,7 @@ use async_trait::async_trait;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     net::{UnixListener, UnixStream},
-    sync::{mpsc, oneshot},
-    time::timeout,
+    sync::mpsc,
 };
 use tokio_util::sync::CancellationToken;
 
@@ -28,37 +26,27 @@ use crate::spine::{
 };
 
 use super::wire::{
-    BodyEgressMessage, BodyEndpointResultMessage, BodyEndpointResultOutcome, BodyIngressMessage,
-    InboundBodyMessage, encode_body_egress_message, parse_body_ingress_message,
+    BodyEgressMessage, BodyIngressMessage, InboundBodyMessage, encode_body_egress_message,
+    parse_body_ingress_message,
 };
-
-struct PendingInvoke {
-    body_endpoint_id: u64,
-    response_tx: oneshot::Sender<EndpointExecutionOutcome>,
-}
 
 #[derive(Default)]
 struct BodyEndpointBrokerState {
     body_endpoints: BTreeMap<u64, mpsc::UnboundedSender<BodyEgressMessage>>,
     route_owner: BTreeMap<RouteKey, u64>,
     routes_by_body_endpoint: BTreeMap<u64, BTreeSet<RouteKey>>,
-    pending: HashMap<String, PendingInvoke>,
 }
 
 pub struct BodyEndpointBroker {
     state: Mutex<BodyEndpointBrokerState>,
     next_body_endpoint_id: AtomicU64,
-    next_request_id: AtomicU64,
-    invoke_timeout: Duration,
 }
 
 impl BodyEndpointBroker {
-    pub fn new(invoke_timeout_ms: u64) -> Self {
+    pub fn new(_invoke_timeout_ms: u64) -> Self {
         Self {
             state: Mutex::new(BodyEndpointBrokerState::default()),
             next_body_endpoint_id: AtomicU64::new(1),
-            next_request_id: AtomicU64::new(1),
-            invoke_timeout: Duration::from_millis(invoke_timeout_ms.max(1)),
         }
     }
 
@@ -92,7 +80,7 @@ impl BodyEndpointBroker {
             if *owner != body_endpoint_id {
                 return Err(route_conflict(format!(
                     "route already owned by another body endpoint: {}::{}",
-                    route.affordance_key, route.capability_handle
+                    route.endpoint_id, route.capability_id
                 )));
             }
             return Ok(());
@@ -134,58 +122,7 @@ impl BodyEndpointBroker {
             state.route_owner.remove(route);
         }
 
-        let mut stale_ids = Vec::new();
-        for (request_id, pending) in &state.pending {
-            if pending.body_endpoint_id == body_endpoint_id {
-                stale_ids.push(request_id.clone());
-            }
-        }
-
-        for request_id in stale_ids {
-            if let Some(pending) = state.pending.remove(&request_id) {
-                let _ = pending
-                    .response_tx
-                    .send(EndpointExecutionOutcome::Rejected {
-                        reason_code: "body_endpoint_disconnected".to_string(),
-                        reference_id: format!("remote:disconnected:{request_id}"),
-                    });
-            }
-        }
-
         routes
-    }
-
-    pub fn resolve_result(&self, body_endpoint_id: u64, result: BodyEndpointResultMessage) {
-        let mut state = self.state.lock().expect("lock poisoned");
-        let Some(pending) = state.pending.remove(&result.request_id) else {
-            return;
-        };
-
-        if pending.body_endpoint_id != body_endpoint_id {
-            return;
-        }
-
-        let mapped = match result.outcome {
-            BodyEndpointResultOutcome::Applied {
-                actual_cost_micro,
-                reference_id,
-            } => EndpointExecutionOutcome::Applied {
-                actual_cost_micro,
-                reference_id,
-            },
-            BodyEndpointResultOutcome::Rejected {
-                reason_code,
-                reference_id,
-            } => EndpointExecutionOutcome::Rejected {
-                reason_code,
-                reference_id,
-            },
-            BodyEndpointResultOutcome::Deferred { reason_code } => {
-                EndpointExecutionOutcome::Deferred { reason_code }
-            }
-        };
-
-        let _ = pending.response_tx.send(mapped);
     }
 
     pub async fn invoke_route(
@@ -193,12 +130,12 @@ impl BodyEndpointBroker {
         route: &RouteKey,
         action: AdmittedAction,
     ) -> Result<EndpointExecutionOutcome, SpineError> {
-        let (request_id, body_endpoint_tx, response_rx) = {
-            let mut state = self.state.lock().expect("lock poisoned");
+        let body_endpoint_tx = {
+            let state = self.state.lock().expect("lock poisoned");
             let Some(body_endpoint_id) = state.route_owner.get(route).copied() else {
                 return Err(route_not_found(format!(
                     "route is not registered: {}::{}",
-                    route.affordance_key, route.capability_handle
+                    route.endpoint_id, route.capability_id
                 )));
             };
 
@@ -209,53 +146,25 @@ impl BodyEndpointBroker {
                     body_endpoint_id
                 )));
             };
-
-            let request_id = format!(
-                "req:{}",
-                self.next_request_id.fetch_add(1, Ordering::Relaxed)
-            );
-            let (response_tx, response_rx) = oneshot::channel();
-            state.pending.insert(
-                request_id.clone(),
-                PendingInvoke {
-                    body_endpoint_id,
-                    response_tx,
-                },
-            );
-
-            (request_id, body_endpoint_tx, response_rx)
+            body_endpoint_tx
         };
 
         if body_endpoint_tx
-            .send(BodyEgressMessage::BodyEndpointInvoke {
-                request_id: request_id.clone(),
-                action,
+            .send(BodyEgressMessage::Act {
+                action: action.clone(),
             })
             .is_err()
         {
-            let mut state = self.state.lock().expect("lock poisoned");
-            state.pending.remove(&request_id);
             return Err(backend_failure(format!(
-                "failed to send invoke request {}",
-                request_id
+                "failed to send act {}",
+                action.neural_signal_id
             )));
         }
 
-        match timeout(self.invoke_timeout, response_rx).await {
-            Ok(Ok(outcome)) => Ok(outcome),
-            Ok(Err(_)) => Err(backend_failure(format!(
-                "remote invoke channel closed for {}",
-                request_id
-            ))),
-            Err(_) => {
-                let mut state = self.state.lock().expect("lock poisoned");
-                state.pending.remove(&request_id);
-                Err(backend_failure(format!(
-                    "remote invoke timed out for {}",
-                    request_id
-                )))
-            }
-        }
+        Ok(EndpointExecutionOutcome::Applied {
+            actual_cost_micro: action.reserved_cost.survival_micro.max(0),
+            reference_id: format!("remote:act_sent:{}", action.neural_signal_id),
+        })
     }
 }
 
@@ -397,9 +306,6 @@ async fn handle_body_endpoint(
 
         match parse_body_ingress_message(line) {
             Ok(message) => match message {
-                InboundBodyMessage::BodyEndpointResult(result) => {
-                    broker.resolve_result(body_endpoint_id, result);
-                }
                 InboundBodyMessage::BodyEndpointRegister {
                     endpoint_id,
                     descriptor,

@@ -26,7 +26,10 @@ pub async fn handle_web_invoke(
             return WebHandlerOutput {
                 outcome: EndpointExecutionOutcome::Rejected {
                     reason_code: "invalid_payload".to_string(),
-                    reference_id: format!("body.std.web:invalid_payload:{}", action.action_id),
+                    reference_id: format!(
+                        "body.std.web:invalid_payload:{}",
+                        action.neural_signal_id
+                    ),
                 },
                 sense: None,
             };
@@ -39,7 +42,10 @@ pub async fn handle_web_invoke(
             return WebHandlerOutput {
                 outcome: EndpointExecutionOutcome::Rejected {
                     reason_code: "unsupported_scheme".to_string(),
-                    reference_id: format!("body.std.web:unsupported_scheme:{}", action.action_id),
+                    reference_id: format!(
+                        "body.std.web:unsupported_scheme:{}",
+                        action.neural_signal_id
+                    ),
                 },
                 sense: None,
             };
@@ -48,7 +54,7 @@ pub async fn handle_web_invoke(
             return WebHandlerOutput {
                 outcome: EndpointExecutionOutcome::Rejected {
                     reason_code: "invalid_payload".to_string(),
-                    reference_id: format!("body.std.web:invalid_url:{}", action.action_id),
+                    reference_id: format!("body.std.web:invalid_url:{}", action.neural_signal_id),
                 },
                 sense: None,
             };
@@ -61,7 +67,10 @@ pub async fn handle_web_invoke(
             return WebHandlerOutput {
                 outcome: EndpointExecutionOutcome::Rejected {
                     reason_code: "invalid_payload".to_string(),
-                    reference_id: format!("body.std.web:invalid_method:{}", action.action_id),
+                    reference_id: format!(
+                        "body.std.web:invalid_method:{}",
+                        action.neural_signal_id
+                    ),
                 },
                 sense: None,
             };
@@ -74,7 +83,7 @@ pub async fn handle_web_invoke(
             return WebHandlerOutput {
                 outcome: EndpointExecutionOutcome::Rejected {
                     reason_code: "invalid_payload".to_string(),
-                    reference_id: format!("body.std.web:{reason}:{}", action.action_id),
+                    reference_id: format!("body.std.web:{reason}:{}", action.neural_signal_id),
                 },
                 sense: None,
             };
@@ -96,7 +105,7 @@ pub async fn handle_web_invoke(
             return WebHandlerOutput {
                 outcome: EndpointExecutionOutcome::Rejected {
                     reason_code: "network_error".to_string(),
-                    reference_id: format!("body.std.web:network_error:{}", action.action_id),
+                    reference_id: format!("body.std.web:network_error:{}", action.neural_signal_id),
                 },
                 sense: None,
             };
@@ -105,7 +114,7 @@ pub async fn handle_web_invoke(
             return WebHandlerOutput {
                 outcome: EndpointExecutionOutcome::Rejected {
                     reason_code: "timeout".to_string(),
-                    reference_id: format!("body.std.web:timeout:{}", action.action_id),
+                    reference_id: format!("body.std.web:timeout:{}", action.neural_signal_id),
                 },
                 sense: None,
             };
@@ -121,7 +130,10 @@ pub async fn handle_web_invoke(
             return WebHandlerOutput {
                 outcome: EndpointExecutionOutcome::Rejected {
                     reason_code: "network_error".to_string(),
-                    reference_id: format!("body.std.web:body_read_error:{}", action.action_id),
+                    reference_id: format!(
+                        "body.std.web:body_read_error:{}",
+                        action.neural_signal_id
+                    ),
                 },
                 sense: None,
             };
@@ -130,7 +142,7 @@ pub async fn handle_web_invoke(
             return WebHandlerOutput {
                 outcome: EndpointExecutionOutcome::Rejected {
                     reason_code: "timeout".to_string(),
-                    reference_id: format!("body.std.web:body_timeout:{}", action.action_id),
+                    reference_id: format!("body.std.web:body_timeout:{}", action.neural_signal_id),
                 },
                 sense: None,
             };
@@ -142,14 +154,17 @@ pub async fn handle_web_invoke(
     WebHandlerOutput {
         outcome: EndpointExecutionOutcome::Applied {
             actual_cost_micro: action.reserved_cost.survival_micro.max(0),
-            reference_id: format!("body.std.web:applied:{}", action.action_id),
+            reference_id: format!("body.std.web:applied:{}", action.neural_signal_id),
         },
         sense: Some(SenseDelta {
             sense_id: format!("sense:web:{request_id}"),
             source: "body.std.web".to_string(),
             payload: serde_json::json!({
                 "kind": "web_fetch_result",
-                "action_id": action.action_id,
+                "neural_signal_id": action.neural_signal_id,
+                "capability_instance_id": action.capability_instance_id,
+                "endpoint_id": action.endpoint_id,
+                "capability_id": action.capability_id,
                 "url": final_url,
                 "status_code": status_code,
                 "body_text": body_text,
@@ -192,14 +207,15 @@ mod tests {
 
     use super::{WebLimits, handle_web_invoke};
 
-    fn build_action(action_id: &str, payload: serde_json::Value) -> AdmittedAction {
+    fn build_action(neural_signal_id: &str, payload: serde_json::Value) -> AdmittedAction {
         AdmittedAction {
-            action_id: action_id.to_string(),
+            neural_signal_id: neural_signal_id.to_string(),
+            capability_instance_id: "web.instance".to_string(),
             source_attempt_id: "att:1".to_string(),
             reserve_entry_id: "res:1".to_string(),
             cost_attribution_id: "cost:1".to_string(),
-            affordance_key: "tool.web.fetch".to_string(),
-            capability_handle: "cap.std.web.fetch".to_string(),
+            endpoint_id: "ep:body:std:web".to_string(),
+            capability_id: "tool.web.fetch".to_string(),
             normalized_payload: payload,
             reserved_cost: CostVector {
                 survival_micro: 321,

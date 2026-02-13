@@ -46,9 +46,9 @@ impl EndpointRegistryPort for InMemoryEndpointRegistry {
         }
 
         let route = &registration.descriptor.route;
-        if route.affordance_key.trim().is_empty() || route.capability_handle.trim().is_empty() {
+        if route.endpoint_id.trim().is_empty() || route.capability_id.trim().is_empty() {
             return Err(registration_invalid(
-                "route affordance_key/capability_handle cannot be empty",
+                "route endpoint_id/capability_id cannot be empty",
             ));
         }
 
@@ -56,13 +56,15 @@ impl EndpointRegistryPort for InMemoryEndpointRegistry {
         if guard.by_route.contains_key(route) {
             return Err(route_conflict(format!(
                 "route already registered: {}::{}",
-                route.affordance_key, route.capability_handle
+                route.endpoint_id, route.capability_id
             )));
         }
 
-        for existing in guard.by_route.values().filter(|item| {
-            item.registration.descriptor.route.affordance_key == route.affordance_key
-        }) {
+        for existing in guard
+            .by_route
+            .values()
+            .filter(|item| item.registration.descriptor.route.endpoint_id == route.endpoint_id)
+        {
             let lhs = &existing.registration.descriptor;
             let rhs = &registration.descriptor;
             if lhs.payload_schema != rhs.payload_schema
@@ -70,8 +72,8 @@ impl EndpointRegistryPort for InMemoryEndpointRegistry {
                 || lhs.default_cost != rhs.default_cost
             {
                 return Err(registration_invalid(format!(
-                    "inconsistent descriptor for affordance '{}'",
-                    route.affordance_key
+                    "inconsistent descriptor for endpoint '{}'",
+                    route.endpoint_id
                 )));
             }
         }
@@ -151,16 +153,16 @@ mod tests {
     }
 
     fn registration(
-        affordance_key: &str,
-        capability_handle: &str,
+        endpoint_id: &str,
+        capability_id: &str,
         max_payload_bytes: usize,
     ) -> EndpointRegistration {
         EndpointRegistration {
-            endpoint_id: format!("ep:{}:{}", affordance_key, capability_handle),
+            endpoint_id: format!("ep:{}:{}", endpoint_id, capability_id),
             descriptor: EndpointCapabilityDescriptor {
                 route: RouteKey {
-                    affordance_key: affordance_key.to_string(),
-                    capability_handle: capability_handle.to_string(),
+                    endpoint_id: endpoint_id.to_string(),
+                    capability_id: capability_id.to_string(),
                 },
                 payload_schema: serde_json::json!({"type":"object"}),
                 max_payload_bytes,
@@ -175,20 +177,20 @@ mod tests {
         let registry = InMemoryEndpointRegistry::new();
         let endpoint: Arc<dyn EndpointPort> = Arc::new(StubEndpoint);
         let route = RouteKey {
-            affordance_key: "observe.state".to_string(),
-            capability_handle: "cap.core".to_string(),
+            endpoint_id: "core.mind".to_string(),
+            capability_id: "observe.state".to_string(),
         };
 
         registry
             .register(
-                registration(&route.affordance_key, &route.capability_handle, 1024),
+                registration(&route.endpoint_id, &route.capability_id, 1024),
                 Arc::clone(&endpoint),
             )
             .expect("first registration should succeed");
 
         let err = registry
             .register(
-                registration(&route.affordance_key, &route.capability_handle, 1024),
+                registration(&route.endpoint_id, &route.capability_id, 1024),
                 endpoint,
             )
             .expect_err("duplicate route should fail");
@@ -206,17 +208,17 @@ mod tests {
 
         registry
             .register(
-                registration("observe.state", "cap.core", 1024),
+                registration("core.mind", "observe.state", 1024),
                 Arc::clone(&endpoint),
             )
             .expect("first registration should succeed");
 
         let err = registry
             .register(
-                registration("observe.state", "cap.core.remote", 2048),
+                registration("core.mind", "observe.state.remote", 2048),
                 endpoint,
             )
-            .expect_err("inconsistent affordance descriptor should fail");
+            .expect_err("inconsistent endpoint descriptor should fail");
 
         assert!(matches!(
             err.kind,
@@ -231,18 +233,18 @@ mod tests {
 
         registry
             .register(
-                registration("z.affordance", "cap.2", 1024),
+                registration("endpoint.z", "cap.2", 1024),
                 Arc::clone(&endpoint),
             )
             .expect("registration should succeed");
         registry
-            .register(registration("a.affordance", "cap.1", 1024), endpoint)
+            .register(registration("endpoint.a", "cap.1", 1024), endpoint)
             .expect("registration should succeed");
 
         let snapshot = registry.catalog_snapshot();
         assert_eq!(snapshot.version, 2);
         assert_eq!(snapshot.entries.len(), 2);
-        assert_eq!(snapshot.entries[0].route.affordance_key, "a.affordance");
-        assert_eq!(snapshot.entries[1].route.affordance_key, "z.affordance");
+        assert_eq!(snapshot.entries[0].route.endpoint_id, "endpoint.a");
+        assert_eq!(snapshot.entries[1].route.endpoint_id, "endpoint.z");
     }
 }

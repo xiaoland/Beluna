@@ -83,31 +83,23 @@ final class ChatViewModel: ObservableObject {
 
     private func handleServerMessage(_ message: ServerWireMessage) async {
         switch message {
-        case let .endpointInvoke(requestID, action):
-            await handleEndpointInvoke(requestID: requestID, action: action)
+        case let .act(action):
+            await handleAct(action)
         }
     }
 
-    private func handleEndpointInvoke(requestID: String, action: AdmittedActionWire) async {
-        guard action.affordanceKey == appleAffordanceKey,
-              action.capabilityHandle == appleCapabilityHandle
+    private func handleAct(_ action: AdmittedActionWire) async {
+        guard action.endpointID == appleEndpointID,
+              action.capabilityID == appleCapabilityID
         else {
-            await rejectInvoke(
-                requestID: requestID,
-                actionID: action.actionID,
-                reasonCode: "unsupported_route"
-            )
+            await rejectInvoke(action: action, reasonCode: "unsupported_route")
             return
         }
 
         do {
             let texts = try extractAssistantTexts(from: action.normalizedPayload)
             if texts.isEmpty {
-                await rejectInvoke(
-                    requestID: requestID,
-                    actionID: action.actionID,
-                    reasonCode: "invalid_payload"
-                )
+                await rejectInvoke(action: action, reasonCode: "invalid_payload")
                 appendSystemMessage("Received chat invoke with empty assistant output.")
                 return
             }
@@ -116,34 +108,27 @@ final class ChatViewModel: ObservableObject {
                 messages.append(ChatMessage(role: .assistant, text: text))
             }
 
-            try await spineBodyEndpoint.sendEndpointResult(
-                requestID: requestID,
-                outcome: .applied(
-                    actualCostMicro: max(0, action.reservedCost.survivalMicro),
-                    referenceID: "apple-universal:chat:\(action.actionID)"
-                )
+            try await spineBodyEndpoint.sendActResultSense(
+                action: action,
+                status: "applied",
+                referenceID: "apple-universal:chat:\(action.neuralSignalID)"
             )
         } catch {
-            await rejectInvoke(
-                requestID: requestID,
-                actionID: action.actionID,
-                reasonCode: "invalid_payload"
-            )
+            await rejectInvoke(action: action, reasonCode: "invalid_payload")
             appendSystemMessage("Failed to decode assistant payload: \(error.localizedDescription)")
         }
     }
 
-    private func rejectInvoke(requestID: String, actionID: String, reasonCode: String) async {
+    private func rejectInvoke(action: AdmittedActionWire, reasonCode: String) async {
         do {
-            try await spineBodyEndpoint.sendEndpointResult(
-                requestID: requestID,
-                outcome: .rejected(
-                    reasonCode: reasonCode,
-                    referenceID: "apple-universal:chat:reject:\(actionID)"
-                )
+            try await spineBodyEndpoint.sendActResultSense(
+                action: action,
+                status: "rejected",
+                referenceID: "apple-universal:chat:reject:\(action.neuralSignalID)",
+                reasonCode: reasonCode
             )
         } catch {
-            appendSystemMessage("Failed to send body_endpoint_result: \(error.localizedDescription)")
+            appendSystemMessage("Failed to send invoke result sense: \(error.localizedDescription)")
         }
     }
 

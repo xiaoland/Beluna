@@ -77,8 +77,18 @@ actor SpineUnixSocketBodyEndpoint {
         try await sendLine(envelope)
     }
 
-    func sendEndpointResult(requestID: String, outcome: EndpointResultOutcome) async throws {
-        let envelope = EndpointResultWire(requestID: requestID, outcome: outcome)
+    func sendActResultSense(
+        action: AdmittedActionWire,
+        status: String,
+        referenceID: String,
+        reasonCode: String? = nil
+    ) async throws {
+        let envelope = makeActResultSenseEnvelope(
+            action: action,
+            status: status,
+            referenceID: referenceID,
+            reasonCode: reasonCode
+        )
         try await sendLine(envelope)
     }
 

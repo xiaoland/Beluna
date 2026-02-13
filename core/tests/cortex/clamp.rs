@@ -7,8 +7,8 @@ fn catalog() -> CapabilityCatalog {
     CapabilityCatalog {
         version: "v1".to_string(),
         affordances: vec![beluna::cortex::AffordanceCapability {
-            affordance_key: "deliberate.plan".to_string(),
-            allowed_capability_handles: vec!["cap.core".to_string()],
+            endpoint_id: "deliberate.plan".to_string(),
+            allowed_capability_ids: vec!["cap.core".to_string()],
             payload_schema: serde_json::json!({"type":"object","required":["ok"],"properties":{"ok":{"type":"boolean"}}}),
             max_payload_bytes: 2048,
             default_resources: Default::default(),
@@ -20,8 +20,8 @@ fn catalog_with_empty_capability_list() -> CapabilityCatalog {
     CapabilityCatalog {
         version: "v1".to_string(),
         affordances: vec![beluna::cortex::AffordanceCapability {
-            affordance_key: "deliberate.plan".to_string(),
-            allowed_capability_handles: vec![],
+            endpoint_id: "deliberate.plan".to_string(),
+            allowed_capability_ids: vec![],
             payload_schema: serde_json::json!({"type":"object"}),
             max_payload_bytes: 2048,
             default_resources: Default::default(),
@@ -33,8 +33,8 @@ fn catalog_with_invalid_schema() -> CapabilityCatalog {
     CapabilityCatalog {
         version: "v1".to_string(),
         affordances: vec![beluna::cortex::AffordanceCapability {
-            affordance_key: "deliberate.plan".to_string(),
-            allowed_capability_handles: vec!["cap.core".to_string()],
+            endpoint_id: "deliberate.plan".to_string(),
+            allowed_capability_ids: vec!["cap.core".to_string()],
             payload_schema: serde_json::json!({"type":"does-not-exist"}),
             max_payload_bytes: 2048,
             default_resources: Default::default(),
@@ -55,8 +55,9 @@ fn valid_draft() -> AttemptDraft {
         intent_span: "analyze and plan".to_string(),
         based_on: vec!["s1".to_string()],
         attention_tags: vec!["plan".to_string()],
-        affordance_key: "deliberate.plan".to_string(),
-        capability_handle: "cap.core".to_string(),
+        endpoint_id: "deliberate.plan".to_string(),
+        capability_id: "cap.core".to_string(),
+        capability_instance_id: "instance:plan".to_string(),
         payload_draft: serde_json::json!({"ok": true}),
         requested_resources: Default::default(),
         commitment_hint: Some("c1".to_string()),
@@ -86,7 +87,7 @@ fn given_valid_draft_when_clamped_then_attempt_contains_attempt_id_and_based_on(
 fn given_unknown_affordance_when_clamped_then_attempt_is_dropped() {
     let clamp = DeterministicAttemptClamp;
     let mut draft = valid_draft();
-    draft.affordance_key = "unknown.affordance".to_string();
+    draft.endpoint_id = "unknown.affordance".to_string();
 
     let result = clamp
         .clamp(AttemptClampRequest {

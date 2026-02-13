@@ -28,7 +28,10 @@ pub async fn handle_shell_invoke(
             return ShellHandlerOutput {
                 outcome: EndpointExecutionOutcome::Rejected {
                     reason_code: "invalid_payload".to_string(),
-                    reference_id: format!("body.std.shell:invalid_payload:{}", action.action_id),
+                    reference_id: format!(
+                        "body.std.shell:invalid_payload:{}",
+                        action.neural_signal_id
+                    ),
                 },
                 sense: None,
             };
@@ -39,7 +42,7 @@ pub async fn handle_shell_invoke(
         return ShellHandlerOutput {
             outcome: EndpointExecutionOutcome::Rejected {
                 reason_code: "invalid_payload".to_string(),
-                reference_id: format!("body.std.shell:missing_argv:{}", action.action_id),
+                reference_id: format!("body.std.shell:missing_argv:{}", action.neural_signal_id),
             },
             sense: None,
         };
@@ -73,7 +76,10 @@ pub async fn handle_shell_invoke(
                 return ShellHandlerOutput {
                     outcome: EndpointExecutionOutcome::Rejected {
                         reason_code: "exec_failure".to_string(),
-                        reference_id: format!("body.std.shell:wait_failure:{}", action.action_id),
+                        reference_id: format!(
+                            "body.std.shell:wait_failure:{}",
+                            action.neural_signal_id
+                        ),
                     },
                     sense: None,
                 };
@@ -82,7 +88,7 @@ pub async fn handle_shell_invoke(
                 return ShellHandlerOutput {
                     outcome: EndpointExecutionOutcome::Rejected {
                         reason_code: "timeout".to_string(),
-                        reference_id: format!("body.std.shell:timeout:{}", action.action_id),
+                        reference_id: format!("body.std.shell:timeout:{}", action.neural_signal_id),
                     },
                     sense: None,
                 };
@@ -92,7 +98,10 @@ pub async fn handle_shell_invoke(
             return ShellHandlerOutput {
                 outcome: EndpointExecutionOutcome::Rejected {
                     reason_code: "exec_failure".to_string(),
-                    reference_id: format!("body.std.shell:spawn_failure:{}", action.action_id),
+                    reference_id: format!(
+                        "body.std.shell:spawn_failure:{}",
+                        action.neural_signal_id
+                    ),
                 },
                 sense: None,
             };
@@ -109,7 +118,7 @@ pub async fn handle_shell_invoke(
                 reason_code: "non_zero_exit".to_string(),
                 reference_id: format!(
                     "body.std.shell:non_zero_exit:{}:{}",
-                    exit_code, action.action_id
+                    exit_code, action.neural_signal_id
                 ),
             },
             sense: Some(SenseDelta {
@@ -117,7 +126,10 @@ pub async fn handle_shell_invoke(
                 source: "body.std.shell".to_string(),
                 payload: serde_json::json!({
                     "kind": "shell_result",
-                    "action_id": action.action_id,
+                    "neural_signal_id": action.neural_signal_id,
+                    "capability_instance_id": action.capability_instance_id,
+                    "endpoint_id": action.endpoint_id,
+                    "capability_id": action.capability_id,
                     "exit_code": exit_code,
                     "stdout_text": stdout_text,
                     "stderr_text": stderr_text,
@@ -132,14 +144,17 @@ pub async fn handle_shell_invoke(
     ShellHandlerOutput {
         outcome: EndpointExecutionOutcome::Applied {
             actual_cost_micro: action.reserved_cost.survival_micro.max(0),
-            reference_id: format!("body.std.shell:applied:{}", action.action_id),
+            reference_id: format!("body.std.shell:applied:{}", action.neural_signal_id),
         },
         sense: Some(SenseDelta {
             sense_id: format!("sense:shell:{request_id}"),
             source: "body.std.shell".to_string(),
             payload: serde_json::json!({
                 "kind": "shell_result",
-                "action_id": action.action_id,
+                "neural_signal_id": action.neural_signal_id,
+                "capability_instance_id": action.capability_instance_id,
+                "endpoint_id": action.endpoint_id,
+                "capability_id": action.capability_id,
                 "exit_code": exit_code,
                 "stdout_text": stdout_text,
                 "stderr_text": stderr_text,
@@ -165,14 +180,15 @@ mod tests {
 
     use super::{ShellLimits, handle_shell_invoke};
 
-    fn build_action(action_id: &str, payload: serde_json::Value) -> AdmittedAction {
+    fn build_action(neural_signal_id: &str, payload: serde_json::Value) -> AdmittedAction {
         AdmittedAction {
-            action_id: action_id.to_string(),
+            neural_signal_id: neural_signal_id.to_string(),
+            capability_instance_id: "shell.instance".to_string(),
             source_attempt_id: "att:1".to_string(),
             reserve_entry_id: "res:1".to_string(),
             cost_attribution_id: "cost:1".to_string(),
-            affordance_key: "tool.shell.exec".to_string(),
-            capability_handle: "cap.std.shell".to_string(),
+            endpoint_id: "ep:body:std:shell".to_string(),
+            capability_id: "tool.shell.exec".to_string(),
             normalized_payload: payload,
             reserved_cost: CostVector {
                 survival_micro: 123,

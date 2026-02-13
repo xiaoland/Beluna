@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::spine::types::ActionId;
+use crate::spine::types::{ActionId, CapabilityInstanceId, NeuralSignalId};
 
 pub type AttemptId = String;
 pub type SenseId = String;
@@ -30,8 +30,9 @@ pub struct IntentAttempt {
     pub planner_slot: u16,
     #[serde(default)]
     pub based_on: Vec<SenseId>,
-    pub affordance_key: String,
-    pub capability_handle: String,
+    pub endpoint_id: String,
+    pub capability_id: String,
+    pub capability_instance_id: CapabilityInstanceId,
     pub normalized_payload: serde_json::Value,
     pub requested_resources: RequestedResources,
     pub cost_attribution_id: CostAttributionId,
@@ -98,6 +99,8 @@ pub struct AdmissionReportItem {
     pub ledger_delta: Option<ReservationDelta>,
     #[serde(default)]
     pub admitted_action_id: Option<ActionId>,
+    #[serde(default)]
+    pub admitted_neural_signal_id: Option<NeuralSignalId>,
     #[serde(default)]
     pub degradation_profile_id: Option<String>,
 }

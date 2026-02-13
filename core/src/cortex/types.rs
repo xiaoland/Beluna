@@ -60,9 +60,9 @@ pub struct IntentContext {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AffordanceCapability {
-    pub affordance_key: String,
+    pub endpoint_id: String,
     #[serde(default)]
-    pub allowed_capability_handles: Vec<String>,
+    pub allowed_capability_ids: Vec<String>,
     pub payload_schema: serde_json::Value,
     pub max_payload_bytes: usize,
     #[serde(default)]
@@ -77,10 +77,10 @@ pub struct CapabilityCatalog {
 }
 
 impl CapabilityCatalog {
-    pub fn resolve(&self, affordance_key: &str) -> Option<&AffordanceCapability> {
+    pub fn resolve(&self, endpoint_id: &str) -> Option<&AffordanceCapability> {
         self.affordances
             .iter()
-            .find(|item| item.affordance_key == affordance_key)
+            .find(|item| item.endpoint_id == endpoint_id)
     }
 }
 
@@ -156,8 +156,10 @@ pub struct AttemptDraft {
     pub based_on: Vec<SenseId>,
     #[serde(default)]
     pub attention_tags: Vec<AttentionTag>,
-    pub affordance_key: String,
-    pub capability_handle: String,
+    pub endpoint_id: String,
+    pub capability_id: String,
+    #[serde(default)]
+    pub capability_instance_id: String,
     #[serde(default)]
     pub payload_draft: serde_json::Value,
     #[serde(default)]
@@ -174,8 +176,8 @@ pub enum ClampViolationCode {
     MissingIntentSpan,
     MissingBasedOn,
     UnknownSenseId,
-    UnknownAffordance,
-    UnsupportedCapabilityHandle,
+    UnknownEndpointId,
+    UnsupportedCapabilityId,
     PayloadTooLarge,
     PayloadSchemaViolation,
 }

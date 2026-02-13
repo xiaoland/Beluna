@@ -28,13 +28,10 @@ pub mod payloads;
 pub mod shell;
 pub mod web;
 
-pub const SHELL_AFFORDANCE_KEY: &str = "tool.shell.exec";
-pub const SHELL_CAPABILITY_HANDLE: &str = "cap.std.shell";
-pub const WEB_AFFORDANCE_KEY: &str = "tool.web.fetch";
-pub const WEB_CAPABILITY_HANDLE: &str = "cap.std.web.fetch";
-
 pub const SHELL_ENDPOINT_ID: &str = "ep:body:std:shell";
 pub const WEB_ENDPOINT_ID: &str = "ep:body:std:web";
+pub const SHELL_CAPABILITY_ID: &str = "tool.shell.exec";
+pub const WEB_CAPABILITY_ID: &str = "tool.web.fetch";
 
 pub fn register_std_body_endpoints(
     registry: Arc<dyn EndpointRegistryPort>,
@@ -142,7 +139,7 @@ impl EndpointPort for StdShellEndpoint {
         invocation: EndpointInvocation,
     ) -> Result<EndpointExecutionOutcome, SpineError> {
         let action = invocation.action;
-        let request_id = format!("builtin-shell:{}", action.action_id);
+        let request_id = format!("builtin-shell:{}", action.neural_signal_id);
         let output = handle_shell_invoke(&request_id, &action, &self.limits).await;
         if let Some(sense) = output.sense {
             let _ = self.sense_tx.send(sense);
@@ -160,7 +157,7 @@ impl EndpointPort for StdWebEndpoint {
         invocation: EndpointInvocation,
     ) -> Result<EndpointExecutionOutcome, SpineError> {
         let action = invocation.action;
-        let request_id = format!("builtin-web:{}", action.action_id);
+        let request_id = format!("builtin-web:{}", action.neural_signal_id);
         let output = handle_web_invoke(&request_id, &action, &self.limits).await;
         if let Some(sense) = output.sense {
             let _ = self.sense_tx.send(sense);
@@ -174,8 +171,8 @@ impl EndpointPort for StdWebEndpoint {
 fn shell_registration_descriptor() -> EndpointCapabilityDescriptor {
     EndpointCapabilityDescriptor {
         route: RouteKey {
-            affordance_key: SHELL_AFFORDANCE_KEY.to_string(),
-            capability_handle: SHELL_CAPABILITY_HANDLE.to_string(),
+            endpoint_id: SHELL_ENDPOINT_ID.to_string(),
+            capability_id: SHELL_CAPABILITY_ID.to_string(),
         },
         payload_schema: serde_json::json!({
             "type": "object",
@@ -204,8 +201,8 @@ fn shell_registration_descriptor() -> EndpointCapabilityDescriptor {
 fn web_registration_descriptor() -> EndpointCapabilityDescriptor {
     EndpointCapabilityDescriptor {
         route: RouteKey {
-            affordance_key: WEB_AFFORDANCE_KEY.to_string(),
-            capability_handle: WEB_CAPABILITY_HANDLE.to_string(),
+            endpoint_id: WEB_ENDPOINT_ID.to_string(),
+            capability_id: WEB_CAPABILITY_ID.to_string(),
         },
         payload_schema: serde_json::json!({
             "type": "object",

@@ -19,9 +19,10 @@ impl AttemptClampPort for DeterministicAttemptClamp {
     fn clamp(&self, req: AttemptClampRequest) -> Result<ClampResult, CortexError> {
         let mut drafts = req.drafts.clone();
         drafts.sort_by(|lhs, rhs| {
-            lhs.affordance_key
-                .cmp(&rhs.affordance_key)
-                .then_with(|| lhs.capability_handle.cmp(&rhs.capability_handle))
+            lhs.endpoint_id
+                .cmp(&rhs.endpoint_id)
+                .then_with(|| lhs.capability_id.cmp(&rhs.capability_id))
+                .then_with(|| lhs.capability_instance_id.cmp(&rhs.capability_instance_id))
                 .then_with(|| {
                     canonicalize_json(&lhs.payload_draft)
                         .to_string()
@@ -110,25 +111,25 @@ impl DeterministicAttemptClamp {
             return Ok(None);
         }
 
-        let Some(profile) = req.capability_catalog.resolve(&draft.affordance_key) else {
+        let Some(profile) = req.capability_catalog.resolve(&draft.endpoint_id) else {
             violations.push(ClampViolation {
-                code: ClampViolationCode::UnknownAffordance,
-                message: format!("unknown affordance '{}'", draft.affordance_key),
+                code: ClampViolationCode::UnknownEndpointId,
+                message: format!("unknown endpoint_id '{}'", draft.endpoint_id),
             });
             return Ok(None);
         };
 
-        if profile.allowed_capability_handles.is_empty()
+        if profile.allowed_capability_ids.is_empty()
             || !profile
-                .allowed_capability_handles
+                .allowed_capability_ids
                 .iter()
-                .any(|handle| handle == &draft.capability_handle)
+                .any(|id| id == &draft.capability_id)
         {
             violations.push(ClampViolation {
-                code: ClampViolationCode::UnsupportedCapabilityHandle,
+                code: ClampViolationCode::UnsupportedCapabilityId,
                 message: format!(
-                    "unsupported capability '{}' for affordance '{}'",
-                    draft.capability_handle, draft.affordance_key
+                    "unsupported capability_id '{}' for endpoint_id '{}'",
+                    draft.capability_id, draft.endpoint_id
                 ),
             });
             return Ok(None);
@@ -152,7 +153,7 @@ impl DeterministicAttemptClamp {
             Err(err) => {
                 violations.push(ClampViolation {
                     code: ClampViolationCode::PayloadSchemaViolation,
-                    message: format!("invalid schema for '{}': {}", profile.affordance_key, err),
+                    message: format!("invalid schema for '{}': {}", profile.endpoint_id, err),
                 });
                 return Ok(None);
             }
@@ -163,7 +164,7 @@ impl DeterministicAttemptClamp {
                 code: ClampViolationCode::PayloadSchemaViolation,
                 message: format!(
                     "payload does not conform to schema for '{}'",
-                    profile.affordance_key
+                    profile.endpoint_id
                 ),
             });
             return Ok(None);
@@ -173,16 +174,16 @@ impl DeterministicAttemptClamp {
         let based_on = stable_dedupe_sense_ids(&draft.based_on);
         let cost_attribution_id = derive_cost_attribution_id(
             reaction_id,
-            &draft.affordance_key,
-            &draft.capability_handle,
+            &draft.endpoint_id,
+            &draft.capability_id,
             &based_on,
             planner_slot,
         );
         let attempt_id = derive_attempt_id(
             reaction_id,
             &based_on,
-            &draft.affordance_key,
-            &draft.capability_handle,
+            &draft.endpoint_id,
+            &draft.capability_id,
             &payload,
             &resources,
             &cost_attribution_id,
@@ -204,8 +205,9 @@ impl DeterministicAttemptClamp {
             goal_id,
             planner_slot,
             based_on,
-            affordance_key: draft.affordance_key.clone(),
-            capability_handle: draft.capability_handle.clone(),
+            endpoint_id: draft.endpoint_id.clone(),
+            capability_id: draft.capability_id.clone(),
+            capability_instance_id: draft.capability_instance_id.clone(),
             normalized_payload: payload,
             requested_resources: resources,
             cost_attribution_id,
@@ -216,8 +218,8 @@ impl DeterministicAttemptClamp {
 pub fn derive_attempt_id(
     reaction_id: u64,
     based_on: &[SenseId],
-    affordance_key: &str,
-    capability_handle: &str,
+    endpoint_id: &str,
+    capability_id: &str,
     normalized_payload: &serde_json::Value,
     requested_resources: &RequestedResources,
     cost_attribution_id: &str,
@@ -225,8 +227,8 @@ pub fn derive_attempt_id(
     let canonical = canonicalize_json(&serde_json::json!({
         "reaction_id": reaction_id,
         "based_on": based_on,
-        "affordance_key": affordance_key,
-        "capability_handle": capability_handle,
+        "endpoint_id": endpoint_id,
+        "capability_id": capability_id,
         "normalized_payload": normalized_payload,
         "requested_resources": {
             "survival_micro": requested_resources.survival_micro,
@@ -246,15 +248,15 @@ pub fn derive_attempt_id(
 
 pub fn derive_cost_attribution_id(
     reaction_id: u64,
-    affordance_key: &str,
-    capability_handle: &str,
+    endpoint_id: &str,
+    capability_id: &str,
     based_on: &[SenseId],
     planner_slot: u16,
 ) -> String {
     let canonical = canonicalize_json(&serde_json::json!({
         "reaction_id": reaction_id,
-        "affordance_key": affordance_key,
-        "capability_handle": capability_handle,
+        "endpoint_id": endpoint_id,
+        "capability_id": capability_id,
         "based_on": based_on,
         "planner_slot": planner_slot,
     }));

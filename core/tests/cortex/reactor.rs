@@ -66,8 +66,8 @@ fn base_catalog() -> CapabilityCatalog {
     CapabilityCatalog {
         version: "v1".to_string(),
         affordances: vec![beluna::cortex::AffordanceCapability {
-            affordance_key: "deliberate.plan".to_string(),
-            allowed_capability_handles: vec!["cap.core".to_string()],
+            endpoint_id: "deliberate.plan".to_string(),
+            allowed_capability_ids: vec!["cap.core".to_string()],
             payload_schema: serde_json::json!({"type":"object"}),
             max_payload_bytes: 4096,
             default_resources: Default::default(),
@@ -107,8 +107,9 @@ fn valid_draft() -> AttemptDraft {
         intent_span: "plan a safe action".to_string(),
         based_on: vec!["s1".to_string()],
         attention_tags: vec!["planning".to_string()],
-        affordance_key: "deliberate.plan".to_string(),
-        capability_handle: "cap.core".to_string(),
+        endpoint_id: "deliberate.plan".to_string(),
+        capability_id: "cap.core".to_string(),
+        capability_instance_id: "instance:plan".to_string(),
         payload_draft: serde_json::json!({"task":"ok"}),
         requested_resources: Default::default(),
         commitment_hint: Some("c1".to_string()),
@@ -161,7 +162,7 @@ async fn given_first_clamp_empty_when_repair_allowed_then_filler_runs_once() {
     limits.max_repair_attempts = 1;
 
     let invalid_draft = AttemptDraft {
-        affordance_key: "unknown.affordance".to_string(),
+        endpoint_id: "unknown.affordance".to_string(),
         ..valid_draft()
     };
 
@@ -202,7 +203,7 @@ async fn given_subcall_budget_exhausted_when_repair_needed_then_cycle_falls_back
         Arc::new(StaticExtractor {
             calls: Arc::new(AtomicUsize::new(0)),
             drafts: vec![AttemptDraft {
-                affordance_key: "unknown.affordance".to_string(),
+                endpoint_id: "unknown.affordance".to_string(),
                 ..valid_draft()
             }],
         }),

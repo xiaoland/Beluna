@@ -1,6 +1,6 @@
 use std::{cmp::Ordering, collections::BTreeMap};
 
-use sha2::{Digest, Sha256};
+use uuid::Uuid;
 
 use crate::{
     admission::{
@@ -204,33 +204,38 @@ impl AdmissionResolver {
         sorted_attempts.sort_by(|lhs, rhs| lhs.attempt_id.cmp(&rhs.attempt_id));
 
         for attempt in sorted_attempts {
-            let Some(profile) = self.registry.resolve(&attempt.affordance_key) else {
+            let Some(profile) = self
+                .registry
+                .resolve(&attempt.endpoint_id, &attempt.capability_id)
+            else {
                 report.outcomes.push(AdmissionReportItem {
                     attempt_id: attempt.attempt_id,
                     disposition: AdmissionDisposition::DeniedHard {
-                        code: "unknown_affordance".to_string(),
+                        code: "unknown_endpoint_id".to_string(),
                     },
                     why: Some(AdmissionWhy::HardRule {
-                        code: "unknown_affordance".to_string(),
+                        code: "unknown_endpoint_id".to_string(),
                     }),
                     ledger_delta: None,
                     admitted_action_id: None,
+                    admitted_neural_signal_id: None,
                     degradation_profile_id: None,
                 });
                 continue;
             };
 
-            if attempt.capability_handle != profile.capability_handle {
+            if attempt.capability_id != profile.capability_id {
                 report.outcomes.push(AdmissionReportItem {
                     attempt_id: attempt.attempt_id,
                     disposition: AdmissionDisposition::DeniedHard {
-                        code: "unsupported_capability_handle".to_string(),
+                        code: "unsupported_capability_id".to_string(),
                     },
                     why: Some(AdmissionWhy::HardRule {
-                        code: "unsupported_capability_handle".to_string(),
+                        code: "unsupported_capability_id".to_string(),
                     }),
                     ledger_delta: None,
                     admitted_action_id: None,
+                    admitted_neural_signal_id: None,
                     degradation_profile_id: None,
                 });
                 continue;
@@ -250,6 +255,7 @@ impl AdmissionResolver {
                     }),
                     ledger_delta: None,
                     admitted_action_id: None,
+                    admitted_neural_signal_id: None,
                     degradation_profile_id: None,
                 });
                 continue;
@@ -312,6 +318,7 @@ impl AdmissionResolver {
                 }),
                 ledger_delta: None,
                 admitted_action_id: None,
+                admitted_neural_signal_id: None,
                 degradation_profile_id: None,
             });
         }
@@ -348,32 +355,39 @@ impl AdmissionResolver {
             context.policy_versions.clone(),
         )?;
 
-        let action_id = derive_action_id(cycle_id, &attempt.attempt_id, &reserve_entry_id);
+        let neural_signal_id = derive_neural_signal_id();
+
+        let capability_instance_id = if attempt.capability_instance_id.trim().is_empty() {
+            attempt.attempt_id.clone()
+        } else {
+            attempt.capability_instance_id.clone()
+        };
         context
             .ledger
-            .attach_action_id(&reserve_entry_id, action_id.clone())?;
+            .attach_action_id(&reserve_entry_id, neural_signal_id.clone())?;
 
         context
             .attribution_index
             .entry(attempt.cost_attribution_id.clone())
             .or_default()
             .push(AttributionRecord {
-                action_id: action_id.clone(),
+                action_id: neural_signal_id.clone(),
                 reserve_entry_id: reserve_entry_id.clone(),
                 cycle_id,
             });
 
-        let capability_handle = degradation_profile
-            .and_then(|candidate| candidate.capability_handle_override.clone())
-            .unwrap_or_else(|| profile.capability_handle.clone());
+        let capability_id = degradation_profile
+            .and_then(|candidate| candidate.capability_id_override.clone())
+            .unwrap_or_else(|| profile.capability_id.clone());
 
         let action = AdmittedAction {
-            action_id: action_id.clone(),
+            neural_signal_id: neural_signal_id.clone(),
+            capability_instance_id: capability_instance_id.clone(),
             source_attempt_id: attempt.attempt_id.clone(),
             reserve_entry_id: reserve_entry_id.clone(),
             cost_attribution_id: attempt.cost_attribution_id.clone(),
-            affordance_key: attempt.affordance_key.clone(),
-            capability_handle,
+            endpoint_id: attempt.endpoint_id.clone(),
+            capability_id,
             normalized_payload: attempt.normalized_payload.clone(),
             reserved_cost: CostVector {
                 survival_micro: reserve_survival_micro,
@@ -396,7 +410,8 @@ impl AdmissionResolver {
                 reserve_entry_id,
                 reserved_survival_micro: reserve_survival_micro,
             }),
-            admitted_action_id: Some(action_id),
+            admitted_action_id: Some(capability_instance_id),
+            admitted_neural_signal_id: Some(neural_signal_id),
             degradation_profile_id: degradation_profile
                 .map(|candidate| candidate.profile_id.clone()),
         };
@@ -485,36 +500,6 @@ impl AdmissionResolver {
     }
 }
 
-pub fn derive_action_id(cycle_id: u64, source_attempt_id: &str, reserve_entry_id: &str) -> String {
-    let canonical = serde_json::json!({
-        "cycle_id": cycle_id,
-        "source_attempt_id": source_attempt_id,
-        "reserve_entry_id": reserve_entry_id,
-    });
-
-    let mut hasher = Sha256::new();
-    hasher.update(canonicalize_json(&canonical).to_string().as_bytes());
-    let digest = hasher.finalize();
-    let hex = format!("{:x}", digest);
-    format!("act:{}", &hex[..24])
-}
-
-fn canonicalize_json(value: &serde_json::Value) -> serde_json::Value {
-    match value {
-        serde_json::Value::Object(map) => {
-            let mut keys = map.keys().cloned().collect::<Vec<_>>();
-            keys.sort();
-            let mut sorted = serde_json::Map::new();
-            for key in keys {
-                if let Some(item) = map.get(&key) {
-                    sorted.insert(key, canonicalize_json(item));
-                }
-            }
-            serde_json::Value::Object(sorted)
-        }
-        serde_json::Value::Array(items) => {
-            serde_json::Value::Array(items.iter().map(canonicalize_json).collect())
-        }
-        primitive => primitive.clone(),
-    }
+pub fn derive_neural_signal_id() -> String {
+    Uuid::now_v7().to_string()
 }

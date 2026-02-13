@@ -6,10 +6,10 @@ Minimal SwiftUI chat-style Body Endpoint for Beluna Spine UnixSocket.
 
 1. Connects to Spine Unix socket (`/tmp/beluna.sock` by default).
 2. Registers body endpoint route:
-- `chat.reply.emit` / `cap.apple.universal.chat`
+- `macos-app.01` / `present.message`
 3. Sends user messages as `sense` payloads aligned with the OpenAI Responses subset.
-4. Receives `body_endpoint_invoke` and renders assistant chat bubbles.
-5. Sends `body_endpoint_result` for every invoke.
+4. Receives `act` and renders assistant chat bubbles.
+5. Sends invoke outcome back as correlated `sense` (echoes `neural_signal_id` and route markers).
 
 ## Run
 

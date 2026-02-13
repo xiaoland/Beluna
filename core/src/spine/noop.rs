@@ -41,10 +41,10 @@ impl SpineExecutorPort for DeterministicNoopSpine {
         if admitted
             .actions
             .iter()
-            .any(|action| action.action_id.is_empty() || action.reserve_entry_id.is_empty())
+            .any(|action| action.neural_signal_id.is_empty() || action.reserve_entry_id.is_empty())
         {
             return Err(invalid_batch(
-                "admitted action is missing action_id or reserve_entry_id",
+                "admitted action is missing neural_signal_id or reserve_entry_id",
             ));
         }
 
@@ -56,11 +56,12 @@ impl SpineExecutorPort for DeterministicNoopSpine {
             .map(|(index, action)| OrderedSpineEvent {
                 seq_no: (index as u64) + 1,
                 event: SpineEvent::ActionApplied {
-                    action_id: action.action_id.clone(),
+                    neural_signal_id: action.neural_signal_id.clone(),
+                    capability_instance_id: action.capability_instance_id.clone(),
                     reserve_entry_id: action.reserve_entry_id.clone(),
                     cost_attribution_id: action.cost_attribution_id.clone(),
                     actual_cost_micro: action.reserved_cost.survival_micro,
-                    reference_id: format!("noop:settle:{}", action.action_id),
+                    reference_id: format!("noop:settle:{}", action.neural_signal_id),
                 },
             })
             .collect();

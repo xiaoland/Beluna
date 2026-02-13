@@ -1,75 +1,15 @@
 import Foundation
 
-let appleEndpointID = "ep:apple-universal:chat"
-let appleAffordanceKey = "chat.reply.emit"
-let appleCapabilityHandle = "cap.apple.universal.chat"
-
-enum EndpointResultOutcome: Codable, Equatable {
-    case applied(actualCostMicro: Int64, referenceID: String)
-    case rejected(reasonCode: String, referenceID: String)
-    case deferred(reasonCode: String)
-
-    enum CodingKeys: String, CodingKey {
-        case type
-        case actualCostMicro = "actual_cost_micro"
-        case reasonCode = "reason_code"
-        case referenceID = "reference_id"
-    }
-
-    enum Kind: String, Codable {
-        case applied
-        case rejected
-        case deferred
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        let kind = try container.decode(Kind.self, forKey: .type)
-
-        switch kind {
-        case .applied:
-            self = .applied(
-                actualCostMicro: try container.decode(Int64.self, forKey: .actualCostMicro),
-                referenceID: try container.decode(String.self, forKey: .referenceID)
-            )
-        case .rejected:
-            self = .rejected(
-                reasonCode: try container.decode(String.self, forKey: .reasonCode),
-                referenceID: try container.decode(String.self, forKey: .referenceID)
-            )
-        case .deferred:
-            self = .deferred(
-                reasonCode: try container.decode(String.self, forKey: .reasonCode)
-            )
-        }
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-
-        switch self {
-        case .applied(let actualCostMicro, let referenceID):
-            try container.encode(Kind.applied, forKey: .type)
-            try container.encode(actualCostMicro, forKey: .actualCostMicro)
-            try container.encode(referenceID, forKey: .referenceID)
-        case .rejected(let reasonCode, let referenceID):
-            try container.encode(Kind.rejected, forKey: .type)
-            try container.encode(reasonCode, forKey: .reasonCode)
-            try container.encode(referenceID, forKey: .referenceID)
-        case .deferred(let reasonCode):
-            try container.encode(Kind.deferred, forKey: .type)
-            try container.encode(reasonCode, forKey: .reasonCode)
-        }
-    }
-}
+let appleEndpointID = "macos-app.01"
+let appleCapabilityID = "present.message"
 
 struct RouteDescriptor: Codable, Equatable {
-    let affordanceKey: String
-    let capabilityHandle: String
+    let endpointID: String
+    let capabilityID: String
 
     enum CodingKeys: String, CodingKey {
-        case affordanceKey = "affordance_key"
-        case capabilityHandle = "capability_handle"
+        case endpointID = "endpoint_id"
+        case capabilityID = "capability_id"
     }
 }
 
@@ -115,18 +55,6 @@ struct EndpointRegisterWire: Codable {
     }
 }
 
-struct EndpointResultWire: Codable {
-    let type = "body_endpoint_result"
-    let requestID: String
-    let outcome: EndpointResultOutcome
-
-    enum CodingKeys: String, CodingKey {
-        case type
-        case requestID = "request_id"
-        case outcome
-    }
-}
-
 struct SenseWire: Codable {
     let type = "sense"
     let senseID: String
@@ -142,32 +70,33 @@ struct SenseWire: Codable {
 }
 
 struct AdmittedActionWire: Decodable, Equatable {
-    let actionID: String
-    let affordanceKey: String
-    let capabilityHandle: String
+    let neuralSignalID: String
+    let capabilityInstanceID: String
+    let endpointID: String
+    let capabilityID: String
     let normalizedPayload: JSONValue
     let reservedCost: CostVectorWire
 
     enum CodingKeys: String, CodingKey {
-        case actionID = "action_id"
-        case affordanceKey = "affordance_key"
-        case capabilityHandle = "capability_handle"
+        case neuralSignalID = "neural_signal_id"
+        case capabilityInstanceID = "capability_instance_id"
+        case endpointID = "endpoint_id"
+        case capabilityID = "capability_id"
         case normalizedPayload = "normalized_payload"
         case reservedCost = "reserved_cost"
     }
 }
 
 enum ServerWireMessage: Decodable, Equatable {
-    case endpointInvoke(requestID: String, action: AdmittedActionWire)
+    case act(action: AdmittedActionWire)
 
     enum CodingKeys: String, CodingKey {
         case type
-        case requestID = "request_id"
         case action
     }
 
     enum Kind: String, Decodable {
-        case endpointInvoke = "body_endpoint_invoke"
+        case act
     }
 
     init(from decoder: Decoder) throws {
@@ -175,11 +104,8 @@ enum ServerWireMessage: Decodable, Equatable {
         let kind = try container.decode(Kind.self, forKey: .type)
 
         switch kind {
-        case .endpointInvoke:
-            self = .endpointInvoke(
-                requestID: try container.decode(String.self, forKey: .requestID),
-                action: try container.decode(AdmittedActionWire.self, forKey: .action)
-            )
+        case .act:
+            self = .act(action: try container.decode(AdmittedActionWire.self, forKey: .action))
         }
     }
 }
@@ -216,8 +142,8 @@ func makeAppleEndpointRegisterEnvelope() -> EndpointRegisterWire {
         endpointID: appleEndpointID,
         descriptor: EndpointDescriptorWire(
             route: RouteDescriptor(
-                affordanceKey: appleAffordanceKey,
-                capabilityHandle: appleCapabilityHandle
+                endpointID: appleEndpointID,
+                capabilityID: appleCapabilityID
             ),
             payloadSchema: .object([
                 "type": .string("object"),
@@ -254,6 +180,32 @@ func makeUserSenseEnvelope(conversationID: String, text: String) -> SenseWire {
                 ])
             ])
         ])
+    )
+}
+
+func makeActResultSenseEnvelope(
+    action: AdmittedActionWire,
+    status: String,
+    referenceID: String,
+    reasonCode: String? = nil
+) -> SenseWire {
+    var payload: [String: JSONValue] = [
+        "kind": .string("present_message_result"),
+        "status": .string(status),
+        "neural_signal_id": .string(action.neuralSignalID),
+        "capability_instance_id": .string(action.capabilityInstanceID),
+        "endpoint_id": .string(action.endpointID),
+        "capability_id": .string(action.capabilityID),
+        "reference_id": .string(referenceID)
+    ]
+    if let reasonCode {
+        payload["reason_code"] = .string(reasonCode)
+    }
+
+    return SenseWire(
+        senseID: "sense:apple:\(UUID().uuidString.lowercased())",
+        source: "apple.universal.chat",
+        payload: .object(payload)
     )
 }
 

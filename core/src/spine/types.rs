@@ -3,6 +3,8 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 pub type ActionId = String;
+pub type NeuralSignalId = String;
+pub type CapabilityInstanceId = String;
 pub type AttemptId = String;
 pub type ReserveEntryId = String;
 pub type CostAttributionId = String;
@@ -25,8 +27,14 @@ pub struct CostVector {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct RouteKey {
-    pub affordance_key: String,
-    pub capability_handle: String,
+    pub endpoint_id: String,
+    pub capability_id: String,
+}
+
+impl RouteKey {
+    pub fn fq_capability_id(&self) -> String {
+        format!("{}/{}", self.endpoint_id, self.capability_id)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -55,12 +63,13 @@ pub struct SpineCapabilityCatalog {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AdmittedAction {
-    pub action_id: ActionId,
+    pub neural_signal_id: NeuralSignalId,
+    pub capability_instance_id: CapabilityInstanceId,
     pub source_attempt_id: AttemptId,
     pub reserve_entry_id: ReserveEntryId,
     pub cost_attribution_id: CostAttributionId,
-    pub affordance_key: String,
-    pub capability_handle: String,
+    pub endpoint_id: String,
+    pub capability_id: String,
     pub normalized_payload: serde_json::Value,
     pub reserved_cost: CostVector,
     pub degraded: bool,
@@ -102,21 +111,24 @@ pub enum EndpointExecutionOutcome {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SpineEvent {
     ActionApplied {
-        action_id: ActionId,
+        neural_signal_id: NeuralSignalId,
+        capability_instance_id: CapabilityInstanceId,
         reserve_entry_id: ReserveEntryId,
         cost_attribution_id: CostAttributionId,
         actual_cost_micro: i64,
         reference_id: String,
     },
     ActionRejected {
-        action_id: ActionId,
+        neural_signal_id: NeuralSignalId,
+        capability_instance_id: CapabilityInstanceId,
         reserve_entry_id: ReserveEntryId,
         cost_attribution_id: CostAttributionId,
         reason_code: String,
         reference_id: String,
     },
     ActionDeferred {
-        action_id: ActionId,
+        neural_signal_id: NeuralSignalId,
+        capability_instance_id: CapabilityInstanceId,
         reason_code: String,
     },
 }

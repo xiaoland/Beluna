@@ -12,25 +12,25 @@ pub fn to_cortex_catalog(source: &SpineCapabilityCatalog) -> CapabilityCatalog {
 
     for entry in &source.entries {
         grouped
-            .entry(entry.route.affordance_key.clone())
+            .entry(entry.route.endpoint_id.clone())
             .or_default()
             .push(entry);
     }
 
     let mut affordances = Vec::with_capacity(grouped.len());
-    for (affordance_key, entries) in grouped {
+    for (endpoint_id, entries) in grouped {
         let representative = entries
             .first()
             .expect("grouped affordance entries should never be empty");
 
         let mut handles = BTreeSet::new();
         for entry in &entries {
-            handles.insert(entry.route.capability_handle.clone());
+            handles.insert(entry.route.capability_id.clone());
         }
 
         affordances.push(AffordanceCapability {
-            affordance_key,
-            allowed_capability_handles: handles.into_iter().collect(),
+            endpoint_id,
+            allowed_capability_ids: handles.into_iter().collect(),
             payload_schema: representative.payload_schema.clone(),
             max_payload_bytes: representative.max_payload_bytes,
             default_resources: RequestedResources {
@@ -57,14 +57,14 @@ mod tests {
     use super::to_cortex_catalog;
 
     #[test]
-    fn groups_entries_by_affordance_and_dedupes_handles() {
+    fn groups_entries_by_endpoint_and_dedupes_capability_ids() {
         let source = SpineCapabilityCatalog {
             version: 7,
             entries: vec![
                 EndpointCapabilityDescriptor {
                     route: RouteKey {
-                        affordance_key: "deliberate.plan".to_string(),
-                        capability_handle: "cap.core".to_string(),
+                        endpoint_id: "core.mind".to_string(),
+                        capability_id: "deliberate.plan".to_string(),
                     },
                     payload_schema: serde_json::json!({"type":"object"}),
                     max_payload_bytes: 1024,
@@ -73,8 +73,8 @@ mod tests {
                 },
                 EndpointCapabilityDescriptor {
                     route: RouteKey {
-                        affordance_key: "deliberate.plan".to_string(),
-                        capability_handle: "cap.core.lite".to_string(),
+                        endpoint_id: "core.mind".to_string(),
+                        capability_id: "deliberate.plan.lite".to_string(),
                     },
                     payload_schema: serde_json::json!({"type":"object"}),
                     max_payload_bytes: 1024,
@@ -87,6 +87,6 @@ mod tests {
         let target = to_cortex_catalog(&source);
         assert_eq!(target.version, "spine:v7");
         assert_eq!(target.affordances.len(), 1);
-        assert_eq!(target.affordances[0].allowed_capability_handles.len(), 2);
+        assert_eq!(target.affordances[0].allowed_capability_ids.len(), 2);
     }
 }

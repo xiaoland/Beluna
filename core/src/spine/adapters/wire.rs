@@ -29,35 +29,10 @@ pub enum BodyIngressMessage {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum BodyEndpointResultOutcome {
-    Applied {
-        actual_cost_micro: i64,
-        reference_id: String,
-    },
-    Rejected {
-        reason_code: String,
-        reference_id: String,
-    },
-    Deferred {
-        reason_code: String,
-    },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct BodyEndpointResultMessage {
-    pub request_id: String,
-    pub outcome: BodyEndpointResultOutcome,
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum BodyEgressMessage {
-    BodyEndpointInvoke {
-        request_id: String,
-        action: AdmittedAction,
-    },
+    Act { action: AdmittedAction },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -75,7 +50,6 @@ pub enum InboundBodyMessage {
     BodyEndpointUnregister {
         route: RouteKey,
     },
-    BodyEndpointResult(BodyEndpointResultMessage),
 }
 
 #[derive(Debug, Deserialize)]
@@ -110,12 +84,8 @@ enum WireMessage {
         descriptor: EndpointCapabilityDescriptor,
     },
     BodyEndpointUnregister {
-        affordance_key: String,
-        capability_handle: String,
-    },
-    BodyEndpointResult {
-        request_id: String,
-        outcome: BodyEndpointResultOutcome,
+        endpoint_id: String,
+        capability_id: String,
     },
 }
 
@@ -126,11 +96,14 @@ pub fn parse_body_ingress_message(line: &str) -> Result<InboundBodyMessage, serd
             sense_id,
             source,
             payload,
-        } => InboundBodyMessage::Sense(SenseDelta {
-            sense_id,
-            source,
-            payload,
-        }),
+        } => {
+            validate_correlated_sense_payload(&payload)?;
+            InboundBodyMessage::Sense(SenseDelta {
+                sense_id,
+                source,
+                payload,
+            })
+        }
         WireMessage::EnvSnapshot {
             endpoint_key,
             blob,
@@ -166,23 +139,59 @@ pub fn parse_body_ingress_message(line: &str) -> Result<InboundBodyMessage, serd
             descriptor,
         },
         WireMessage::BodyEndpointUnregister {
-            affordance_key,
-            capability_handle,
+            endpoint_id,
+            capability_id,
         } => InboundBodyMessage::BodyEndpointUnregister {
             route: RouteKey {
-                affordance_key,
-                capability_handle,
+                endpoint_id,
+                capability_id,
             },
         },
-        WireMessage::BodyEndpointResult {
-            request_id,
-            outcome,
-        } => InboundBodyMessage::BodyEndpointResult(BodyEndpointResultMessage {
-            request_id,
-            outcome,
-        }),
     };
     Ok(message)
+}
+
+fn validate_correlated_sense_payload(payload: &serde_json::Value) -> Result<(), serde_json::Error> {
+    let Some(object) = payload.as_object() else {
+        return Ok(());
+    };
+
+    let Some(neural_signal_id) = object.get("neural_signal_id") else {
+        return Ok(());
+    };
+
+    if neural_signal_id
+        .as_str()
+        .map(|value| value.trim().is_empty())
+        .unwrap_or(true)
+    {
+        return Err(invalid_correlated_sense_error(
+            "neural_signal_id must be a non-empty string",
+        ));
+    }
+
+    for field in ["capability_instance_id", "endpoint_id", "capability_id"] {
+        let valid = object
+            .get(field)
+            .and_then(|value| value.as_str())
+            .map(|value| !value.trim().is_empty())
+            .unwrap_or(false);
+        if !valid {
+            return Err(invalid_correlated_sense_error(&format!(
+                "correlated sense missing required field '{}'",
+                field
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+fn invalid_correlated_sense_error(message: &str) -> serde_json::Error {
+    serde_json::Error::io(std::io::Error::new(
+        std::io::ErrorKind::InvalidData,
+        message.to_string(),
+    ))
 }
 
 pub fn encode_body_egress_message(
@@ -194,7 +203,12 @@ pub fn encode_body_egress_message(
 
 #[cfg(test)]
 mod tests {
-    use super::{InboundBodyMessage, parse_body_ingress_message};
+    use crate::spine::types::{AdmittedAction, CostVector};
+
+    use super::{
+        BodyEgressMessage, InboundBodyMessage, encode_body_egress_message,
+        parse_body_ingress_message,
+    };
 
     #[test]
     fn accepts_sense_message() {
@@ -206,13 +220,74 @@ mod tests {
     }
 
     #[test]
+    fn accepts_correlated_sense_message_with_required_echo_fields() {
+        let parsed = parse_body_ingress_message(
+            r#"{"type":"sense","sense_id":"s2","source":"body","payload":{"kind":"present_message_result","neural_signal_id":"018f94da-9f92-7bc5-bc58-b5f01b0406f5","capability_instance_id":"chat.1","endpoint_id":"macos-app.01","capability_id":"present.message"}}"#,
+        )
+        .expect("correlated sense should parse");
+        assert!(matches!(parsed, InboundBodyMessage::Sense(_)));
+    }
+
+    #[test]
+    fn rejects_correlated_sense_message_missing_echo_fields() {
+        assert!(
+            parse_body_ingress_message(
+                r#"{"type":"sense","sense_id":"s3","source":"body","payload":{"kind":"present_message_result","neural_signal_id":"018f94da-9f92-7bc5-bc58-b5f01b0406f5","endpoint_id":"macos-app.01","capability_id":"present.message"}}"#
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn act_encoding_contains_neural_signal_and_target_fields() {
+        let encoded = encode_body_egress_message(&BodyEgressMessage::Act {
+            action: AdmittedAction {
+                neural_signal_id: "018f94da-9f92-7bc5-bc58-b5f01b0406f5".to_string(),
+                capability_instance_id: "chat.instance".to_string(),
+                source_attempt_id: "att:1".to_string(),
+                reserve_entry_id: "res:1".to_string(),
+                cost_attribution_id: "cat:1".to_string(),
+                endpoint_id: "macos-app.01".to_string(),
+                capability_id: "present.message".to_string(),
+                normalized_payload: serde_json::json!({"ok": true}),
+                reserved_cost: CostVector::default(),
+                degraded: false,
+                degradation_profile_id: None,
+                admission_cycle: 1,
+                metadata: Default::default(),
+            },
+        })
+        .expect("act should encode");
+
+        let json: serde_json::Value =
+            serde_json::from_str(encoded.trim()).expect("encoded act should be valid JSON");
+        assert_eq!(json["type"], serde_json::json!("act"));
+        assert_eq!(
+            json["action"]["neural_signal_id"],
+            serde_json::json!("018f94da-9f92-7bc5-bc58-b5f01b0406f5")
+        );
+        assert_eq!(
+            json["action"]["capability_instance_id"],
+            serde_json::json!("chat.instance")
+        );
+        assert_eq!(
+            json["action"]["endpoint_id"],
+            serde_json::json!("macos-app.01")
+        );
+        assert_eq!(
+            json["action"]["capability_id"],
+            serde_json::json!("present.message")
+        );
+    }
+
+    #[test]
     fn accepts_body_endpoint_register_message() {
         let parsed = parse_body_ingress_message(
             r#"{
                 "type":"body_endpoint_register",
                 "endpoint_id":"ep:test",
                 "descriptor":{
-                    "route":{"affordance_key":"chat.reply.emit","capability_handle":"cap.apple"},
+                    "route":{"endpoint_id":"macos-app.01","capability_id":"present.message"},
                     "payload_schema":{"type":"object"},
                     "max_payload_bytes":1024,
                     "default_cost":{"survival_micro":1,"time_ms":1,"io_units":1,"token_units":1},
@@ -225,19 +300,6 @@ mod tests {
             parsed,
             InboundBodyMessage::BodyEndpointRegister { .. }
         ));
-    }
-
-    #[test]
-    fn accepts_body_endpoint_result_message() {
-        let parsed = parse_body_ingress_message(
-            r#"{
-                "type":"body_endpoint_result",
-                "request_id":"req:1",
-                "outcome":{"type":"applied","actual_cost_micro":1,"reference_id":"ref:1"}
-            }"#,
-        )
-        .expect("body endpoint result should parse");
-        assert!(matches!(parsed, InboundBodyMessage::BodyEndpointResult(_)));
     }
 
     #[test]
@@ -262,7 +324,7 @@ mod tests {
     fn rejects_legacy_endpoint_unregister_message() {
         assert!(
             parse_body_ingress_message(
-                r#"{"type":"endpoint_unregister","affordance_key":"chat.reply.emit","capability_handle":"cap.apple"}"#,
+                r#"{"type":"endpoint_unregister","endpoint_id":"macos-app.01","capability_id":"present.message"}"#,
             )
             .is_err()
         );

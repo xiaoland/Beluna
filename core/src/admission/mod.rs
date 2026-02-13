@@ -7,7 +7,7 @@ pub mod types;
 pub use affordance::{AffordanceProfile, AffordanceRegistry, DegradationProfile};
 pub use resolver::{
     AdmissionContext, AdmissionResolver, AdmissionResolverConfig, CostAdmissionPolicy,
-    DegradationPreference, derive_action_id,
+    DegradationPreference, derive_neural_signal_id,
 };
 pub use types::{
     AdmissionDisposition, AdmissionReport, AdmissionReportItem, AdmissionWhy,

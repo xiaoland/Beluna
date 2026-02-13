@@ -397,20 +397,20 @@ fn register_default_native_endpoints(registry: Arc<dyn EndpointRegistryPort>) ->
         let action = invocation.action;
         Ok(crate::spine::types::EndpointExecutionOutcome::Applied {
             actual_cost_micro: action.reserved_cost.survival_micro,
-            reference_id: format!("native:settle:{}", action.action_id),
+            reference_id: format!("native:settle:{}", action.neural_signal_id),
         })
     })));
 
     let register =
-        |affordance_key: &str, capability_handle: &str, default_cost: CostVector| -> Result<()> {
+        |endpoint_id: &str, capability_id: &str, default_cost: CostVector| -> Result<()> {
             registry
                 .register(
                     EndpointRegistration {
-                        endpoint_id: format!("ep:native:{}:{}", affordance_key, capability_handle),
+                        endpoint_id: format!("ep:native:{}:{}", endpoint_id, capability_id),
                         descriptor: EndpointCapabilityDescriptor {
                             route: RouteKey {
-                                affordance_key: affordance_key.to_string(),
-                                capability_handle: capability_handle.to_string(),
+                                endpoint_id: endpoint_id.to_string(),
+                                capability_id: capability_id.to_string(),
                             },
                             payload_schema: serde_json::json!({"type":"object"}),
                             max_payload_bytes: 16_384,
@@ -473,8 +473,8 @@ fn default_affordance_registry() -> AffordanceRegistry {
         AffordanceProfile::default(),
         AffordanceProfile {
             profile_id: "default-execution".to_string(),
-            affordance_key: "execute.tool".to_string(),
-            capability_handle: "cap.core".to_string(),
+            endpoint_id: "execute.tool".to_string(),
+            capability_id: "cap.core".to_string(),
             max_payload_bytes: 16_384,
             base_cost: CostVector {
                 survival_micro: 400,
@@ -486,8 +486,8 @@ fn default_affordance_registry() -> AffordanceRegistry {
         },
         AffordanceProfile {
             profile_id: "std-shell".to_string(),
-            affordance_key: "tool.shell.exec".to_string(),
-            capability_handle: "cap.std.shell".to_string(),
+            endpoint_id: "tool.shell.exec".to_string(),
+            capability_id: "cap.std.shell".to_string(),
             max_payload_bytes: 65_536,
             base_cost: CostVector {
                 survival_micro: 500,
@@ -499,8 +499,8 @@ fn default_affordance_registry() -> AffordanceRegistry {
         },
         AffordanceProfile {
             profile_id: "std-web-fetch".to_string(),
-            affordance_key: "tool.web.fetch".to_string(),
-            capability_handle: "cap.std.web.fetch".to_string(),
+            endpoint_id: "tool.web.fetch".to_string(),
+            capability_id: "cap.std.web.fetch".to_string(),
             max_payload_bytes: 65_536,
             base_cost: CostVector {
                 survival_micro: 450,
@@ -512,8 +512,8 @@ fn default_affordance_registry() -> AffordanceRegistry {
         },
         AffordanceProfile {
             profile_id: "apple-chat-reply".to_string(),
-            affordance_key: "chat.reply.emit".to_string(),
-            capability_handle: "cap.apple.universal.chat".to_string(),
+            endpoint_id: "chat.reply.emit".to_string(),
+            capability_id: "cap.apple.universal.chat".to_string(),
             max_payload_bytes: 32_768,
             base_cost: CostVector {
                 survival_micro: 120,
@@ -570,6 +570,7 @@ mod tests {
                     why: None,
                     ledger_delta: None,
                     admitted_action_id: None,
+                    admitted_neural_signal_id: None,
                     degradation_profile_id: None,
                 },
                 AdmissionReportItem {
@@ -578,6 +579,7 @@ mod tests {
                     why: None,
                     ledger_delta: None,
                     admitted_action_id: None,
+                    admitted_neural_signal_id: None,
                     degradation_profile_id: None,
                 },
                 AdmissionReportItem {
@@ -590,6 +592,7 @@ mod tests {
                     }),
                     ledger_delta: None,
                     admitted_action_id: None,
+                    admitted_neural_signal_id: None,
                     degradation_profile_id: None,
                 },
             ],

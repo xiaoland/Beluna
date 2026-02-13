@@ -161,7 +161,7 @@ async fn given_primary_adapter_when_called_then_request_limits_are_forwarded() {
 async fn given_extractor_adapter_when_json_output_then_attempts_are_parsed() {
     let adapter = Arc::new(CapturingAdapter {
         seen_requests: Arc::new(Mutex::new(Vec::new())),
-        response_text: r#"{"attempts":[{"intent_span":"x","based_on":["s1"],"attention_tags":["t"],"affordance_key":"a","capability_handle":"c","payload_draft":{},"requested_resources":{"survival_micro":0,"time_ms":0,"io_units":0,"token_units":0}}]}"#.to_string(),
+        response_text: r#"{"attempts":[{"intent_span":"x","based_on":["s1"],"attention_tags":["t"],"endpoint_id":"a","capability_id":"c","payload_draft":{},"requested_resources":{"survival_micro":0,"time_ms":0,"io_units":0,"token_units":0}}]}"#.to_string(),
         capabilities: BackendCapabilities {
             streaming: true,
             tool_calls: false,
@@ -252,7 +252,7 @@ async fn given_extractor_without_json_capability_when_called_then_error_is_retur
 async fn given_filler_adapter_when_called_then_json_attempts_are_parsed() {
     let adapter = Arc::new(CapturingAdapter {
         seen_requests: Arc::new(Mutex::new(Vec::new())),
-        response_text: r#"{"attempts":[{"intent_span":"fix","based_on":["s1"],"attention_tags":[],"affordance_key":"a","capability_handle":"c","payload_draft":{},"requested_resources":{"survival_micro":0,"time_ms":0,"io_units":0,"token_units":0}}]}"#.to_string(),
+        response_text: r#"{"attempts":[{"intent_span":"fix","based_on":["s1"],"attention_tags":[],"endpoint_id":"a","capability_id":"c","payload_draft":{},"requested_resources":{"survival_micro":0,"time_ms":0,"io_units":0,"token_units":0}}]}"#.to_string(),
         capabilities: BackendCapabilities {
             streaming: true,
             tool_calls: false,
@@ -279,8 +279,9 @@ async fn given_filler_adapter_when_called_then_json_attempts_are_parsed() {
                 intent_span: "x".to_string(),
                 based_on: vec!["s1".to_string()],
                 attention_tags: vec![],
-                affordance_key: "a".to_string(),
-                capability_handle: "c".to_string(),
+                endpoint_id: "a".to_string(),
+                capability_id: "c".to_string(),
+                capability_instance_id: "instance:fill".to_string(),
                 payload_draft: serde_json::json!({}),
                 requested_resources: Default::default(),
                 commitment_hint: None,
