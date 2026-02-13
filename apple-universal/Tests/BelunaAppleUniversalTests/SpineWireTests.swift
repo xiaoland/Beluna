@@ -1,5 +1,5 @@
 import XCTest
-@testable import BelunaAppleUniversalApp
+@testable import BelunaApp
 
 final class SpineWireTests: XCTestCase {
     func testRegisterEnvelopeRouteMatchesAppleChatEndpoint() throws {

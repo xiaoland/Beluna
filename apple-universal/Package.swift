@@ -7,15 +7,15 @@ let package = Package(
         .macOS(.v14)
     ],
     products: [
-        .executable(name: "BelunaAppleUniversalApp", targets: ["BelunaAppleUniversalApp"])
+        .executable(name: "BelunaApp", targets: ["BelunaApp"])
     ],
     targets: [
         .executableTarget(
-            name: "BelunaAppleUniversalApp"
+            name: "BelunaApp"
         ),
         .testTarget(
             name: "BelunaAppleUniversalTests",
-            dependencies: ["BelunaAppleUniversalApp"]
+            dependencies: ["BelunaApp"]
         )
     ]
 )
