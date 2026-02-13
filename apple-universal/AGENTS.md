@@ -1,11 +1,11 @@
-# AGENTS.md of Beluna Desktop
+# AGENTS.md of Beluna Apple Universal App
 
-Beluna Desktop is the macOS app that bridges human interaction with Beluna Core.
+Beluna Apple Universal App is the app that bridges human interaction with Beluna Core in Apple ecosystem.
 
 ## Tech Stacks
 
 - Language: Swift
-- Platform: macOS
+- Platform: macOS (for now), iOS, iPadOS
 - UI: SwiftUI (use AppKit bridge only when necessary)
 
 ## Current Focus
@@ -25,6 +25,12 @@ Beluna Desktop is the macOS app that bridges human interaction with Beluna Core.
 - Shared glossary: `../docs/glossary.md`
 - Contracts and protocol context: `../docs/contracts/README.md`
 
-## Last Updated
+## Current State
 
-> 2026-02-09
+> Last Updated At: 2026-02-09T00:00Z+08:00
+
+### Live Capabilities
+
+### Known Limitations & Mocks
+
+### Immediate Next Focus

@@ -1,38 +1,24 @@
 import Foundation
-import Network
+import Darwin
 
 enum SpineBodyEndpointError: Error {
     case notConnected
     case connectionFailed(String)
 }
 
-private final class ResumeOnce {
-    private let lock = NSLock()
-    private var resumed = false
-
-    func run(_ body: () -> Void) {
-        lock.lock()
-        defer { lock.unlock() }
-
-        guard !resumed else {
-            return
-        }
-
-        resumed = true
-        body()
-    }
+private func osErrorDescription(_ code: Int32) -> String {
+    String(cString: strerror(code))
 }
 
 actor SpineUnixSocketBodyEndpoint {
     typealias StateHandler = @Sendable (ConnectionState) -> Void
     typealias MessageHandler = @Sendable (ServerWireMessage) -> Void
 
-    private let socketPath: String
-    private let readQueue = DispatchQueue(label: "beluna.apple-universal.spine")
+    private var socketPath: String
     private let reconnectDelayNanos: UInt64 = 800_000_000
     private let missingSocketRetryDelayNanos: UInt64 = 1_500_000_000
 
-    private var connection: NWConnection?
+    private var socketFD: Int32?
     private var readerBuffer = Data()
     private var stopped = true
     private var runTask: Task<Void, Never>?
@@ -41,6 +27,10 @@ actor SpineUnixSocketBodyEndpoint {
     var onServerMessage: MessageHandler?
 
     init(socketPath: String) {
+        self.socketPath = socketPath
+    }
+
+    func updateSocketPath(_ socketPath: String) {
         self.socketPath = socketPath
     }
 
@@ -64,8 +54,7 @@ actor SpineUnixSocketBodyEndpoint {
         stopped = true
         runTask?.cancel()
         runTask = nil
-        connection?.cancel()
-        connection = nil
+        cleanupConnection()
     }
 
     func sendRegister() async throws {
@@ -129,72 +118,148 @@ actor SpineUnixSocketBodyEndpoint {
     }
 
     private func connectAndReadLoop() async throws {
-        let connection = NWConnection(to: .unix(path: socketPath), using: .tcp)
-        self.connection = connection
-
-        try await waitUntilConnectionReady(connection)
+        let fd = try openUnixSocket(path: socketPath)
+        socketFD = fd
         onStateChange?(.connected)
         try await sendRegister()
 
-        while !stopped && !Task.isCancelled {
-            let chunk = try await receiveChunk(connection)
-            guard let chunk else {
-                throw SpineBodyEndpointError.connectionFailed("connection closed")
+        for try await chunk in makeReadStream(for: fd) {
+            if stopped || Task.isCancelled {
+                return
             }
-
             if chunk.isEmpty {
                 continue
             }
-
             try parseIncomingData(chunk)
         }
+
+        throw SpineBodyEndpointError.connectionFailed("connection closed")
     }
 
-    private func waitUntilConnectionReady(_ connection: NWConnection) async throws {
-        try await withCheckedThrowingContinuation { continuation in
-            let resumeOnce = ResumeOnce()
+    private func openUnixSocket(path: String) throws -> Int32 {
+        let fd = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
+        guard fd >= 0 else {
+            throw SpineBodyEndpointError.connectionFailed(
+                "socket failed: \(osErrorDescription(errno)) (\(errno))"
+            )
+        }
 
-            connection.stateUpdateHandler = { state in
-                switch state {
-                case .ready:
-                    resumeOnce.run {
-                        continuation.resume(returning: ())
-                    }
-                case .failed(let error):
-                    resumeOnce.run {
-                        continuation.resume(
-                            throwing: SpineBodyEndpointError.connectionFailed(error.localizedDescription)
-                        )
-                    }
-                case .cancelled:
-                    resumeOnce.run {
-                        continuation.resume(
-                            throwing: SpineBodyEndpointError.connectionFailed("cancelled")
-                        )
-                    }
-                default:
-                    break
+        do {
+            var address = sockaddr_un()
+            #if os(macOS)
+            address.sun_len = UInt8(MemoryLayout<sockaddr_un>.size)
+            #endif
+            address.sun_family = sa_family_t(AF_UNIX)
+
+            let pathBytes = Array(path.utf8)
+            let maxPathLength = MemoryLayout.size(ofValue: address.sun_path)
+            guard pathBytes.count < maxPathLength else {
+                throw SpineBodyEndpointError.connectionFailed(
+                    "socket path too long for AF_UNIX: \(path)"
+                )
+            }
+
+            withUnsafeMutableBytes(of: &address.sun_path) { rawBytes in
+                rawBytes.initializeMemory(as: UInt8.self, repeating: 0)
+                rawBytes.copyBytes(from: pathBytes)
+            }
+
+            let connectResult = withUnsafePointer(to: &address) {
+                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPtr in
+                    Darwin.connect(fd, sockaddrPtr, socklen_t(MemoryLayout<sockaddr_un>.size))
                 }
             }
 
-            connection.start(queue: readQueue)
+            if connectResult != 0 {
+                let code = errno
+                throw SpineBodyEndpointError.connectionFailed(
+                    "connect failed: \(osErrorDescription(code)) (\(code))"
+                )
+            }
+
+            return fd
+        } catch {
+            Darwin.close(fd)
+            throw error
         }
     }
 
-    private func receiveChunk(_ connection: NWConnection) async throws -> Data? {
-        try await withCheckedThrowingContinuation { continuation in
-            connection.receive(minimumIncompleteLength: 1, maximumLength: 4096) { data, _, isComplete, error in
-                if let error {
-                    continuation.resume(throwing: SpineBodyEndpointError.connectionFailed(error.localizedDescription))
+    private func makeReadStream(for fd: Int32) -> AsyncThrowingStream<Data, Error> {
+        AsyncThrowingStream { continuation in
+            let readerTask = Task.detached(priority: .background) {
+                var buffer = [UInt8](repeating: 0, count: 4096)
+
+                while !Task.isCancelled {
+                    let readCount: Int = buffer.withUnsafeMutableBytes { rawBuffer in
+                        guard let baseAddress = rawBuffer.baseAddress else {
+                            return -1
+                        }
+                        return Darwin.read(fd, baseAddress, rawBuffer.count)
+                    }
+
+                    if readCount > 0 {
+                        continuation.yield(Data(buffer[0..<readCount]))
+                        continue
+                    }
+
+                    if readCount == 0 {
+                        continuation.finish()
+                        return
+                    }
+
+                    let code = errno
+                    if code == EINTR {
+                        continue
+                    }
+                    if code == EAGAIN || code == EWOULDBLOCK {
+                        usleep(10_000)
+                        continue
+                    }
+
+                    continuation.finish(
+                        throwing: SpineBodyEndpointError.connectionFailed(
+                            "read failed: \(osErrorDescription(code)) (\(code))"
+                        )
+                    )
                     return
                 }
 
-                if isComplete, (data?.isEmpty ?? true) {
-                    continuation.resume(returning: nil)
-                    return
+                continuation.finish()
+            }
+
+            continuation.onTermination = { _ in
+                readerTask.cancel()
+            }
+        }
+    }
+
+    private func writeAll(fd: Int32, data: Data) throws {
+        try data.withUnsafeBytes { rawBuffer in
+            guard let baseAddress = rawBuffer.baseAddress else {
+                return
+            }
+
+            var offset = 0
+            while offset < rawBuffer.count {
+                let writeCount = Darwin.write(
+                    fd,
+                    baseAddress.advanced(by: offset),
+                    rawBuffer.count - offset
+                )
+
+                if writeCount > 0 {
+                    offset += writeCount
+                    continue
                 }
 
-                continuation.resume(returning: data ?? Data())
+                let code = errno
+                if code == EINTR {
+                    continue
+                }
+
+                throw SpineBodyEndpointError.connectionFailed(
+                    "write failed: \(osErrorDescription(code)) (\(code))"
+                )
             }
         }
     }
@@ -216,25 +281,19 @@ actor SpineUnixSocketBodyEndpoint {
     }
 
     private func sendLine<T: Encodable>(_ envelope: T) async throws {
-        guard let connection else {
+        guard let socketFD else {
             throw SpineBodyEndpointError.notConnected
         }
 
         let data = try encodeLine(envelope)
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            connection.send(content: data, completion: .contentProcessed { error in
-                if let error {
-                    continuation.resume(throwing: SpineBodyEndpointError.connectionFailed(error.localizedDescription))
-                } else {
-                    continuation.resume(returning: ())
-                }
-            })
-        }
+        try writeAll(fd: socketFD, data: data)
     }
 
     private func cleanupConnection() {
-        connection?.cancel()
-        connection = nil
+        if let fd = socketFD {
+            Darwin.close(fd)
+            socketFD = nil
+        }
         readerBuffer.removeAll(keepingCapacity: false)
     }
 }

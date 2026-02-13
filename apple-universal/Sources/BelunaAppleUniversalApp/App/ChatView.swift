@@ -6,6 +6,7 @@ struct ChatView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            connectionControls
             if viewModel.isSleeping {
                 sleepingNotice
             }
@@ -22,18 +23,44 @@ struct ChatView: View {
 
     private var sleepingNotice: some View {
         HStack(spacing: 8) {
-            Image(systemName: "moon.stars.fill")
+            Image(systemName: viewModel.isConnectionEnabled ? "moon.stars.fill" : "bolt.slash.fill")
                 .foregroundStyle(.orange)
-            Text("Beluna is sleeping")
+            Text(viewModel.sleepingTitle)
                 .font(.subheadline.weight(.semibold))
             Spacer()
-            Text("Start Beluna Core to wake it up.")
+            Text(viewModel.sleepingHint)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(Color.orange.opacity(0.12))
+    }
+
+    private var connectionControls: some View {
+        HStack(spacing: 8) {
+            Text("Socket")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            TextField("/tmp/beluna.sock", text: $viewModel.socketPathDraft)
+                .textFieldStyle(.roundedBorder)
+                .font(.caption.monospaced())
+
+            Button("Apply") {
+                viewModel.applySocketPathDraft()
+            }
+            .buttonStyle(.bordered)
+            .disabled(!viewModel.canApplySocketPath)
+
+            Button(viewModel.connectButtonTitle) {
+                viewModel.toggleConnection()
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .padding(.horizontal, 12)
+        .padding(.bottom, 10)
+        .background(Color(NSColor.windowBackgroundColor))
     }
 
     private var header: some View {

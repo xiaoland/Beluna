@@ -20,7 +20,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 use crate::spine::{
-    error::{SpineError, backend_failure, route_conflict, route_not_found},
+    error::{SpineError, backend_failure, route_not_found},
     ports::EndpointPort,
     types::{AdmittedAction, EndpointExecutionOutcome, EndpointInvocation, RouteKey},
 };
@@ -76,14 +76,19 @@ impl BodyEndpointBroker {
             )));
         }
 
-        if let Some(owner) = state.route_owner.get(route) {
-            if *owner != body_endpoint_id {
-                return Err(route_conflict(format!(
-                    "route already owned by another body endpoint: {}::{}",
-                    route.endpoint_id, route.capability_id
-                )));
+        if let Some(owner) = state.route_owner.get(route).copied() {
+            if owner == body_endpoint_id {
+                return Ok(());
             }
-            return Ok(());
+
+            // Newer registrations take ownership. This prevents stale client
+            // connections from permanently blocking route recovery.
+            if let Some(routes) = state.routes_by_body_endpoint.get_mut(&owner) {
+                routes.remove(route);
+                if routes.is_empty() {
+                    state.routes_by_body_endpoint.remove(&owner);
+                }
+            }
         }
 
         state.route_owner.insert(route.clone(), body_endpoint_id);
@@ -360,4 +365,78 @@ async fn handle_body_endpoint(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use tokio::sync::mpsc;
+
+    use super::*;
+    use crate::spine::types::CostVector;
+
+    fn test_route() -> RouteKey {
+        RouteKey {
+            endpoint_id: "macos-app.01".to_string(),
+            capability_id: "present.message".to_string(),
+        }
+    }
+
+    fn test_action(route: &RouteKey) -> AdmittedAction {
+        AdmittedAction {
+            neural_signal_id: "ns_test_01".to_string(),
+            capability_instance_id: "cap_inst_test_01".to_string(),
+            source_attempt_id: "attempt_test_01".to_string(),
+            reserve_entry_id: "reserve_test_01".to_string(),
+            cost_attribution_id: "cost_test_01".to_string(),
+            endpoint_id: route.endpoint_id.clone(),
+            capability_id: route.capability_id.clone(),
+            normalized_payload: serde_json::json!({"type":"noop"}),
+            reserved_cost: CostVector::default(),
+            degraded: false,
+            degradation_profile_id: None,
+            admission_cycle: 1,
+            metadata: BTreeMap::new(),
+        }
+    }
+
+    #[tokio::test]
+    async fn route_registration_transfers_to_newest_endpoint() {
+        let broker = BodyEndpointBroker::new(30_000);
+
+        let endpoint_a = broker.allocate_body_endpoint_id();
+        let (tx_a, mut rx_a) = mpsc::unbounded_channel();
+        broker.attach_body_endpoint(endpoint_a, tx_a);
+
+        let endpoint_b = broker.allocate_body_endpoint_id();
+        let (tx_b, mut rx_b) = mpsc::unbounded_channel();
+        broker.attach_body_endpoint(endpoint_b, tx_b);
+
+        let route = test_route();
+        broker.register_route(endpoint_a, &route).expect("register A");
+        broker.register_route(endpoint_b, &route).expect("register B");
+
+        // Disconnecting the old endpoint must not remove the route after handoff.
+        let detached_routes = broker.detach_body_endpoint(endpoint_a);
+        assert!(
+            detached_routes.is_empty(),
+            "old owner should not still own route after transfer"
+        );
+
+        broker
+            .invoke_route(&route, test_action(&route))
+            .await
+            .expect("route invoke");
+
+        let sent_to_b = rx_b.try_recv().expect("new owner should receive act");
+        assert!(
+            matches!(sent_to_b, BodyEgressMessage::Act { .. }),
+            "expected act message to be delivered"
+        );
+        assert!(
+            rx_a.try_recv().is_err(),
+            "old owner should not receive act after transfer"
+        );
+    }
 }

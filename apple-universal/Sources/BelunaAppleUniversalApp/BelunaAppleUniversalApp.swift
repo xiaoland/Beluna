@@ -3,12 +3,12 @@ import AppKit
 
 @main
 struct BelunaAppleUniversalApp: App {
-    // init() {
-    //     // `swift run` launches a plain executable (not an .app bundle).
-    //     // Force regular app activation so WindowGroup becomes visible.
-    //     NSApplication.shared.setActivationPolicy(.regular)
-    //     NSApplication.shared.activate(ignoringOtherApps: true)
-    // }
+    init() {
+        // `swift run` launches a plain executable (not an .app bundle).
+        // Force regular app activation so WindowGroup becomes visible.
+        NSApplication.shared.setActivationPolicy(.regular)
+        NSApplication.shared.activate(ignoringOtherApps: true)
+    }
 
     @StateObject private var viewModel = ChatViewModel()
 
