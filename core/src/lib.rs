@@ -4,7 +4,7 @@ pub mod body;
 pub mod cli;
 pub mod config;
 pub mod continuity;
-pub mod core_loop;
+pub mod brainstem;
 pub mod cortex;
 pub mod ledger;
 pub mod spine;

@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 
-use beluna::{cli::config_path_from_args, config::Config, core_loop};
+use beluna::{brainstem, cli::config_path_from_args, config::Config};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -8,5 +8,5 @@ async fn main() -> Result<()> {
     let config = Config::load(&config_path)
         .with_context(|| format!("failed to load config from {}", config_path.display()))?;
 
-    core_loop::run(config).await
+    brainstem::run(config).await
 }

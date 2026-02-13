@@ -18,7 +18,7 @@ Beluna Core is the runnable runtime and domain agent implementation.
 └── src/
     ├── main.rs
     ├── cli.rs
-    ├── core_loop.rs
+    ├── brainstem.rs
     ├── body/
     ├── config.rs
     ├── cortex/
@@ -42,7 +42,7 @@ Beluna Core is the runnable runtime and domain agent implementation.
 
 - Core runs as a foreground binary: `beluna [--config <path>]`.
 - Config defaults to `./beluna.jsonc` and validates against `core/beluna.schema.json`.
-- Start the core loop listening on a Unix Socket (NDJSON), exit on SIGTERM/SIGINT.
+- Start the brainstem loop listening on a Unix Socket (NDJSON), exit on SIGTERM/SIGINT.
 - Ingest runtime event messages (`sense`, `env_snapshot`, `admission_feedback`, catalog/limits/context updates).
 - Run Cortex as an event loop using Continuity ephemeral Sense and Neural Signal queues.
 - Batch trigger: sense queue length >= 2 or 1s timeout, max 8 senses per cycle.
