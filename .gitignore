@@ -23,3 +23,6 @@ beluna.jsonc
 .firecrawl
 
 /core/target/
+/runtime/target/
+/std-body/target/
+/apple-universal/.build/

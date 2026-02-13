@@ -144,6 +144,59 @@
         "sub_backend_id": { "type": ["string", "null"] }
       },
       "additionalProperties": false
+    },
+    "loop": {
+      "type": "object",
+      "properties": {
+        "sense_queue_capacity": { "type": "integer", "minimum": 1 },
+        "neural_signal_queue_capacity": { "type": "integer", "minimum": 1 },
+        "batch_window_ms": { "type": "integer", "minimum": 1 },
+        "batch_flush_sense_count": { "type": "integer", "minimum": 1 },
+        "batch_max_sense_count": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "body": {
+      "type": "object",
+      "properties": {
+        "std_shell": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "limits": {
+              "type": "object",
+              "properties": {
+                "default_timeout_ms": { "type": "integer", "minimum": 1 },
+                "max_timeout_ms": { "type": "integer", "minimum": 1 },
+                "default_stdout_max_bytes": { "type": "integer", "minimum": 1 },
+                "max_stdout_max_bytes": { "type": "integer", "minimum": 1 },
+                "default_stderr_max_bytes": { "type": "integer", "minimum": 1 },
+                "max_stderr_max_bytes": { "type": "integer", "minimum": 1 }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "std_web": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "limits": {
+              "type": "object",
+              "properties": {
+                "default_timeout_ms": { "type": "integer", "minimum": 1 },
+                "max_timeout_ms": { "type": "integer", "minimum": 1 },
+                "default_response_max_bytes": { "type": "integer", "minimum": 1 },
+                "max_response_max_bytes": { "type": "integer", "minimum": 1 }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
     }
   },
   "required": ["ai_gateway"],

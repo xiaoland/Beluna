@@ -12,5 +12,6 @@ Index:
 - [Admission](./admission/README.md)
 - [Ledger](./ledger/README.md)
 - [Spine](./spine/README.md)
+- [Body](./body/README.md)
 - [Non-cortex (deprecated)](./non-cortex/README.md)
 - [Mind (deprecated)](./mind/README.md)

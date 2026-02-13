@@ -14,6 +14,10 @@ Beluna is a survival-oriented digital life runtime, not a chatbot.
 
 ## Runtime Topology
 
+Beluna runtime process:
+1. `core` runnable binary (`beluna`) with embedded std body endpoints.
+2. Optional external Body Endpoints (for example Apple Universal App) connect over UnixSocket.
+
 Beluna Core top-level components:
 1. Cortex (cognition)
 2. Continuity (operational state)
@@ -27,9 +31,9 @@ Operational flow:
 Sense + EnvSnapshot stream -> CortexInbox
 CortexReactor consumes ReactionInput
 Primary IR + sub-compile + deterministic clamp -> IntentAttempt[]
-IntentAttempt[] -> Admission
+IntentAttempt[] (Neural Signal queue) -> Admission
 Admission + Ledger -> AdmittedActionBatch
-AdmittedActionBatch -> Spine (route lookup + endpoint dispatch)
+AdmittedActionBatch -> Spine (route lookup + endpoint dispatch over body endpoints)
 SpineExecutionReport -> Continuity + Ledger settlement
 ```
 
@@ -37,4 +41,6 @@ SpineExecutionReport -> Continuity + Ledger settlement
 
 1. Cortex/Continuity/Admission/Ledger/Spine contracts are implemented in `core/src/*`.
 2. Spine ships async routing kernel + in-memory registry.
-3. UnixSocket adapter is the active Spine shell for ingress.
+3. UnixSocket adapter is the active Spine shell for ingress and body endpoint lifecycle (`body_endpoint_register`/`body_endpoint_invoke`/`body_endpoint_result`).
+4. Core embeds Shell and Web standard body endpoints (config-gated).
+5. Apple Universal App acts as an independent chat Body Endpoint and self-registers with Spine UnixSocket.

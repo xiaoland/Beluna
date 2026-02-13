@@ -141,8 +141,16 @@ async fn given_primary_adapter_when_called_then_request_limits_are_forwarded() {
     let (gateway, seen) = gateway_with(adapter, BackendCapabilities::default());
     let primary = AIGatewayPrimaryReasoner::new(gateway, Some("b1".to_string()), None);
 
-    let ir = primary.infer_ir(primary_req()).await.expect("primary should pass");
-    assert_eq!(ir, ProseIr { text: "prose ir".to_string() });
+    let ir = primary
+        .infer_ir(primary_req())
+        .await
+        .expect("primary should pass");
+    assert_eq!(
+        ir,
+        ProseIr {
+            text: "prose ir".to_string()
+        }
+    );
 
     let requests = seen.lock().expect("lock");
     assert_eq!(requests.len(), 1);
@@ -234,7 +242,10 @@ async fn given_extractor_without_json_capability_when_called_then_error_is_retur
         })
         .await
         .expect_err("extract should fail");
-    assert_eq!(err.kind, beluna::cortex::CortexErrorKind::ExtractorInferenceFailed);
+    assert_eq!(
+        err.kind,
+        beluna::cortex::CortexErrorKind::ExtractorInferenceFailed
+    );
 }
 
 #[tokio::test]

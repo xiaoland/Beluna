@@ -15,7 +15,7 @@
 ## Dependency Direction
 
 - `src/mind/*` depends only on local mind modules and shared primitives.
-- `src/mind/*` must not depend on `src/server.rs`, `src/protocol.rs`, or `src/ai_gateway/*`.
+- `src/mind/*` must not depend on `src/spine/adapters/unix_socket_runtime.rs`, `src/spine/adapters/wire.rs`, or `src/ai_gateway/*`.
 
 ## Determinism Rules
 

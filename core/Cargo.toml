@@ -3,6 +3,11 @@ name = "beluna"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = ["std-shell", "std-web"]
+std-shell = []
+std-web = []
+
 [dependencies]
 anyhow = "1.0.97"
 async-trait = "0.1.88"

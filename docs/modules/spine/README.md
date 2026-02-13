@@ -9,4 +9,10 @@ Code:
 Current scope:
 1. async routing executor with in-memory endpoint registry
 2. capability catalog snapshot owned by Spine
-3. UnixSocket adapter shell (`sense` ingress)
+3. UnixSocket adapter shell (`sense` ingress + body endpoint lifecycle)
+
+Body endpoint lifecycle envelopes supported by UnixSocket adapter:
+1. `body_endpoint_register`
+2. `body_endpoint_invoke`
+3. `body_endpoint_result`
+4. `body_endpoint_unregister`

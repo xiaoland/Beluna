@@ -1,5 +1,3 @@
 pub mod ai_gateway;
 
-pub use ai_gateway::{
-    AIGatewayAttemptExtractor, AIGatewayPayloadFiller, AIGatewayPrimaryReasoner,
-};
+pub use ai_gateway::{AIGatewayAttemptExtractor, AIGatewayPayloadFiller, AIGatewayPrimaryReasoner};

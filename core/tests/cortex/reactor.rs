@@ -19,7 +19,10 @@ struct StaticPrimary {
 
 #[async_trait]
 impl PrimaryReasonerPort for StaticPrimary {
-    async fn infer_ir(&self, _req: PrimaryReasonerRequest) -> Result<ProseIr, beluna::cortex::CortexError> {
+    async fn infer_ir(
+        &self,
+        _req: PrimaryReasonerRequest,
+    ) -> Result<ProseIr, beluna::cortex::CortexError> {
         self.calls.fetch_add(1, Ordering::SeqCst);
         Ok(ProseIr {
             text: "intent: plan action".to_string(),
@@ -136,7 +139,9 @@ async fn given_valid_input_when_reacting_then_primary_is_called_once_and_attempt
     );
     let reactor = CortexReactor::new(pipeline);
 
-    let result = reactor.react_once(base_input(1, ReactionLimits::default())).await;
+    let result = reactor
+        .react_once(base_input(1, ReactionLimits::default()))
+        .await;
 
     assert_eq!(primary_calls.load(Ordering::SeqCst), 1);
     assert_eq!(extractor_calls.load(Ordering::SeqCst), 1);

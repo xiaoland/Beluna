@@ -50,7 +50,8 @@ pub trait PrimaryReasonerPort: Send + Sync {
 
 #[async_trait]
 pub trait AttemptExtractorPort: Send + Sync {
-    async fn extract(&self, req: AttemptExtractorRequest) -> Result<Vec<AttemptDraft>, CortexError>;
+    async fn extract(&self, req: AttemptExtractorRequest)
+    -> Result<Vec<AttemptDraft>, CortexError>;
 }
 
 #[async_trait]

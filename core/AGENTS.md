@@ -1,6 +1,6 @@
 # AGENTS.md of Beluna Core
 
-Beluna Core is the runtime and domain agent implementation.
+Beluna Core is the runnable runtime and domain agent implementation.
 
 ## Tech Stacks
 
@@ -13,20 +13,19 @@ Beluna Core is the runtime and domain agent implementation.
 ├── target/
 ├── Cargo.toml
 ├── Cargo.lock
-├── beluna.jsonc
 ├── beluna.schema.json
 ├── tests/
 └── src/
     ├── main.rs
     ├── cli.rs
+    ├── core_loop.rs
+    ├── body/
     ├── config.rs
     ├── cortex/
     ├── continuity/
     ├── admission/
     ├── ledger/
     ├── spine/
-    ├── protocol.rs
-    ├── server.rs
     └── ai_gateway/
 ```
 
@@ -37,23 +36,20 @@ Beluna Core is the runtime and domain agent implementation.
 
 ## Current State
 
-> Last Updated At: 2026-02-12T20:30Z+08:00
+> Last Updated At: 2026-02-13T11:00Z+08:00
 
 ### Live Capabilities
 
-- Load config (jsonc, with JSONSchema support).
-- Start the core loop listening on a Unix Socket (NDJSON), exit on SIGTERM or exit message.
+- Core runs as a foreground binary: `beluna [--config <path>]`.
+- Config defaults to `./beluna.jsonc` and validates against `core/beluna.schema.json`.
+- Start the core loop listening on a Unix Socket (NDJSON), exit on SIGTERM/SIGINT.
 - Ingest runtime event messages (`sense`, `env_snapshot`, `admission_feedback`, catalog/limits/context updates).
-- Run Cortex as an always-on reactor task with bounded inbox/outbox channels.
+- Run Cortex as an event loop using Continuity ephemeral Sense and Neural Signal queues.
+- Batch trigger: sense queue length >= 2 or 1s timeout, max 8 senses per cycle.
+- Spine consumes Neural Signals immediately via admission + execution.
+- Built-in standard body endpoints (shell/web) run in-process, gated by config and cargo features.
+- External body endpoints (for example Apple Universal) register over UnixSocket with `body_endpoint_*` protocol envelopes.
 - AI Gateway MVP with deterministic routing, strict normalization, reliability controls, and budget enforcement.
-- Cortex + Continuity + Admission + Ledger + Spine contracts:
-  - Cortex consumes `ReactionInput` and emits deterministic, non-binding `IntentAttempt[]`.
-  - Cortex requires `based_on` grounding and deterministic `attempt_id` derivation.
-  - Continuity ingests feedback and builds non-semantic `SituationView`.
-  - Admission performs deterministic effectuation gating.
-  - Ledger enforces survival resource accounting and settlement terminality.
-  - Spine executes admitted actions only via mechanical route lookup and returns ordered, replayable execution events.
-  - Spine capability catalog snapshots are bridged into Cortex capability input.
 
 ### Known Limitations & Mocks
 

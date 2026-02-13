@@ -3,7 +3,8 @@ use std::collections::VecDeque;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    admission::types::{AdmissionReport, AttributionRecord, CostAttributionId},
+    admission::types::{AdmissionReport, AttributionRecord, CostAttributionId, IntentAttempt},
+    cortex::SenseDelta,
     ledger::types::CycleId,
     spine::types::{ActionId, SpineExecutionReport},
 };
@@ -50,3 +51,16 @@ pub struct AttributionJournal(
 
 #[derive(Debug, Clone, Default)]
 pub struct RecentSense(pub VecDeque<SenseSample>);
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct NeuralSignalBatch {
+    pub reaction_id: u64,
+    #[serde(default)]
+    pub attempts: Vec<IntentAttempt>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct SenseQueue(pub VecDeque<SenseDelta>);
+
+#[derive(Debug, Clone, Default)]
+pub struct NeuralSignalQueue(pub VecDeque<NeuralSignalBatch>);

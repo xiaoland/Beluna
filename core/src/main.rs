@@ -1,11 +1,12 @@
-use anyhow::Context;
-use beluna::{cli::config_path_from_args, config::Config, server};
+use anyhow::{Context, Result};
+
+use beluna::{cli::config_path_from_args, config::Config, core_loop};
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<()> {
     let config_path = config_path_from_args()?;
     let config = Config::load(&config_path)
         .with_context(|| format!("failed to load config from {}", config_path.display()))?;
 
-    server::run(config).await
+    core_loop::run(config).await
 }

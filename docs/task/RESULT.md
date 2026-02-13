@@ -2,5 +2,5 @@
 
 Latest completed task:
 
-- `spine-implementation`
-- Result: `/Users/lanzhijiang/Development/Beluna/docs/task/spine-implementation/RESULT.md`
+- `body-endpoints-mvp`
+- Result: `/Users/lanzhijiang/Development/Beluna/docs/task/body-endpoints-mvp/RESULT.md`

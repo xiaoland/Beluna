@@ -4,20 +4,23 @@ use anyhow::{Result, anyhow};
 
 pub fn config_path_from_args() -> Result<PathBuf> {
     let mut args = env::args().skip(1);
-    let first = args.next();
+    let mut config_path = None;
 
-    if args.next().is_some() {
-        return Err(anyhow!(
-            "expected at most one argument: <config-path>. Example: cargo run -- ./beluna.jsonc"
-        ));
-    }
-
-    match first {
-        Some(path) => Ok(PathBuf::from(path)),
-        None => {
-            let mut path = env::current_dir()?;
-            path.push("beluna.jsonc");
-            Ok(path)
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--config" => {
+                let value = args
+                    .next()
+                    .ok_or_else(|| anyhow!("missing value for --config"))?;
+                config_path = Some(PathBuf::from(value));
+            }
+            other => {
+                return Err(anyhow!(
+                    "unknown argument: {other}. usage: beluna [--config <path>]"
+                ));
+            }
         }
     }
+
+    Ok(config_path.unwrap_or_else(|| PathBuf::from("./beluna.jsonc")))
 }

@@ -16,4 +16,7 @@ pub use invariants::assert_settlement_consistency;
 pub use noop::{NoopDebitSource, SpinePortAdapter};
 pub use ports::SpinePort;
 pub use state::ContinuityState;
-pub use types::{ContinuityCycleOutput, ExternalDebitObservation, SenseSample, SituationView};
+pub use types::{
+    ContinuityCycleOutput, ExternalDebitObservation, NeuralSignalBatch, SenseQueue, SenseSample,
+    SituationView,
+};

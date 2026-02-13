@@ -3,27 +3,28 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::{ai_gateway::types::AIGatewayConfig, cortex::ReactionLimits};
 use anyhow::{Context, Result, anyhow};
 use jsonschema::{JSONSchema, ValidationError};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-#[derive(Debug, Clone)]
-pub struct Config {
-    pub socket_path: PathBuf,
-    #[allow(dead_code)]
-    pub ai_gateway: AIGatewayConfig,
-    pub cortex: CortexRuntimeConfig,
-}
+use crate::{
+    ai_gateway::types::AIGatewayConfig,
+    body::std::payloads::{ShellLimits, WebLimits},
+    cortex::ReactionLimits,
+};
 
-#[derive(Debug, Deserialize)]
-struct RawConfig {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Config {
     #[serde(default = "default_socket_path")]
-    socket_path: PathBuf,
-    ai_gateway: AIGatewayConfig,
+    pub socket_path: PathBuf,
+    pub ai_gateway: AIGatewayConfig,
     #[serde(default)]
-    cortex: CortexRuntimeConfig,
+    pub cortex: CortexRuntimeConfig,
+    #[serde(default)]
+    pub r#loop: CoreLoopConfig,
+    #[serde(default)]
+    pub body: BodyRuntimeConfig,
 }
 
 fn default_socket_path() -> PathBuf {
@@ -38,7 +39,11 @@ fn default_cortex_outbox_capacity() -> usize {
     32
 }
 
-#[derive(Debug, Clone, Deserialize)]
+fn default_enabled_true() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CortexRuntimeConfig {
     #[serde(default = "default_cortex_inbox_capacity")]
     pub inbox_capacity: usize,
@@ -64,57 +69,158 @@ impl Default for CortexRuntimeConfig {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CoreLoopConfig {
+    #[serde(default = "default_sense_queue_capacity")]
+    pub sense_queue_capacity: usize,
+    #[serde(default = "default_neural_signal_queue_capacity")]
+    pub neural_signal_queue_capacity: usize,
+    #[serde(default = "default_batch_window_ms")]
+    pub batch_window_ms: u64,
+    #[serde(default = "default_batch_flush_sense_count")]
+    pub batch_flush_sense_count: usize,
+    #[serde(default = "default_batch_max_sense_count")]
+    pub batch_max_sense_count: usize,
+}
+
+impl Default for CoreLoopConfig {
+    fn default() -> Self {
+        Self {
+            sense_queue_capacity: default_sense_queue_capacity(),
+            neural_signal_queue_capacity: default_neural_signal_queue_capacity(),
+            batch_window_ms: default_batch_window_ms(),
+            batch_flush_sense_count: default_batch_flush_sense_count(),
+            batch_max_sense_count: default_batch_max_sense_count(),
+        }
+    }
+}
+
+fn default_sense_queue_capacity() -> usize {
+    32
+}
+
+fn default_neural_signal_queue_capacity() -> usize {
+    32
+}
+
+fn default_batch_window_ms() -> u64 {
+    1_000
+}
+
+fn default_batch_flush_sense_count() -> usize {
+    2
+}
+
+fn default_batch_max_sense_count() -> usize {
+    8
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct BodyRuntimeConfig {
+    #[serde(default)]
+    pub std_shell: StdShellRuntimeConfig,
+    #[serde(default)]
+    pub std_web: StdWebRuntimeConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StdShellRuntimeConfig {
+    #[serde(default = "default_enabled_true")]
+    pub enabled: bool,
+    #[serde(default)]
+    pub limits: ShellLimits,
+}
+
+impl Default for StdShellRuntimeConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            limits: ShellLimits::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StdWebRuntimeConfig {
+    #[serde(default = "default_enabled_true")]
+    pub enabled: bool,
+    #[serde(default)]
+    pub limits: WebLimits,
+}
+
+impl Default for StdWebRuntimeConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            limits: WebLimits::default(),
+        }
+    }
+}
+
 impl Config {
     pub fn load(config_path: &Path) -> Result<Self> {
-        let base_dir = config_path.parent().unwrap_or_else(|| Path::new("."));
+        let config_content = fs::read_to_string(config_path)
+            .with_context(|| format!("failed to read {}", config_path.display()))?;
+        let config_value: Value = json5::from_str(&config_content)
+            .with_context(|| format!("failed to parse {}", config_path.display()))?;
 
-        // Load schema
-        let schema_path = base_dir.join("beluna.schema.json");
-        let schema_content = fs::read_to_string(&schema_path)
-            .with_context(|| format!("unable to read schema {}", schema_path.display()))?;
-        let schema: Value = serde_json::from_str(&schema_content)
-            .with_context(|| format!("unable to parse schema {}", schema_path.display()))?;
+        let config_base = config_path.parent().unwrap_or_else(|| Path::new("."));
+        let schema_path = resolve_schema_path(config_base, &config_value)?;
+        validate_against_schema(&config_value, &schema_path)?;
 
-        let raw_config = fs::read_to_string(config_path)
-            .with_context(|| format!("unable to read {}", config_path.display()))?;
+        let mut config: Config =
+            serde_json::from_value(config_value).context("failed to deserialize core config")?;
 
-        // Parse to Value for validation
-        let config_value: Value = json5::from_str(&raw_config)
-            .with_context(|| format!("unable to parse {}", config_path.display()))?;
-
-        // Validate against schema
-        let compiled_schema =
-            JSONSchema::compile(&schema).map_err(|e| anyhow!("unable to compile schema: {}", e))?;
-
-        match compiled_schema.validate(&config_value) {
-            Ok(()) => {}
-            Err(errors_iter) => {
-                let validation_errors: Vec<ValidationError> = errors_iter.collect();
-                let error_messages: Vec<String> = validation_errors
-                    .into_iter()
-                    .map(|e| e.to_string())
-                    .collect();
-                return Err(anyhow::anyhow!(
-                    "config validation failed: {}",
-                    error_messages.join("; ")
-                ));
-            }
+        if !config.socket_path.is_absolute() {
+            config.socket_path = config_base.join(&config.socket_path);
         }
 
-        // Now parse to RawConfig
-        let parsed: RawConfig = serde_json::from_value(config_value)
-            .with_context(|| format!("unable to deserialize {}", config_path.display()))?;
+        Ok(config)
+    }
+}
 
-        let socket_path = if parsed.socket_path.is_absolute() {
-            parsed.socket_path
-        } else {
-            base_dir.join(parsed.socket_path)
-        };
+fn resolve_schema_path(config_base: &Path, config_value: &Value) -> Result<PathBuf> {
+    if let Some(path_text) = config_value.get("$schema").and_then(|value| value.as_str()) {
+        let configured = PathBuf::from(path_text);
+        if configured.is_absolute() {
+            return Ok(configured);
+        }
+        return Ok(config_base.join(configured));
+    }
 
-        Ok(Self {
-            socket_path,
-            ai_gateway: parsed.ai_gateway,
-            cortex: parsed.cortex,
-        })
+    let root_default = config_base.join("core/beluna.schema.json");
+    if root_default.exists() {
+        return Ok(root_default);
+    }
+
+    let local_default = config_base.join("beluna.schema.json");
+    if local_default.exists() {
+        return Ok(local_default);
+    }
+
+    Err(anyhow!(
+        "unable to resolve schema path: expected $schema in config, core/beluna.schema.json, or beluna.schema.json"
+    ))
+}
+
+fn validate_against_schema(config_value: &Value, schema_path: &Path) -> Result<()> {
+    let schema_content = fs::read_to_string(schema_path)
+        .with_context(|| format!("failed to read schema {}", schema_path.display()))?;
+    let schema: Value = serde_json::from_str(&schema_content)
+        .with_context(|| format!("failed to parse schema {}", schema_path.display()))?;
+
+    let compiled =
+        JSONSchema::compile(&schema).map_err(|e| anyhow!("failed to compile schema: {e}"))?;
+
+    match compiled.validate(config_value) {
+        Ok(()) => Ok(()),
+        Err(errors_iter) => {
+            let validation_errors: Vec<ValidationError> = errors_iter.collect();
+            let messages: Vec<String> = validation_errors
+                .into_iter()
+                .map(|error| error.to_string())
+                .collect();
+            Err(anyhow!("config validation failed: {}", messages.join("; ")))
+        }
     }
 }

@@ -1,6 +1,6 @@
 use beluna::cortex::{
-    AttemptClampPort, AttemptClampRequest, AttemptDraft, CapabilityCatalog, DeterministicAttemptClamp,
-    ReactionLimits, SenseDelta, derive_attempt_id,
+    AttemptClampPort, AttemptClampRequest, AttemptDraft, CapabilityCatalog,
+    DeterministicAttemptClamp, ReactionLimits, SenseDelta, derive_attempt_id,
 };
 
 fn catalog() -> CapabilityCatalog {

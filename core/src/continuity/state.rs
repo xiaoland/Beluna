@@ -2,7 +2,8 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use crate::{
     admission::types::{AttributionRecord, CostAttributionId},
-    continuity::types::{SenseSample, SituationView},
+    continuity::types::{NeuralSignalBatch, SenseSample, SituationView},
+    cortex::SenseDelta,
     ledger::{
         SurvivalLedger,
         types::{CycleId, PolicyVersionTuple},
@@ -21,6 +22,8 @@ pub struct ContinuityState {
     pub cost_policy_version: String,
     pub admission_ruleset_version: String,
     pub recent_sense: VecDeque<SenseSample>,
+    pub sense_queue: VecDeque<SenseDelta>,
+    pub neural_signal_queue: VecDeque<NeuralSignalBatch>,
 }
 
 impl ContinuityState {
@@ -34,6 +37,8 @@ impl ContinuityState {
             cost_policy_version: "v1".to_string(),
             admission_ruleset_version: "v1".to_string(),
             recent_sense: VecDeque::new(),
+            sense_queue: VecDeque::new(),
+            neural_signal_queue: VecDeque::new(),
         }
     }
 
@@ -69,6 +74,56 @@ impl ContinuityState {
                 .count(),
             recent_sense_count: self.recent_sense.len(),
         }
+    }
+
+    pub fn enqueue_sense_delta(&mut self, sense: SenseDelta, capacity: usize) -> bool {
+        self.ingest_sense(SenseSample {
+            source: sense.source.clone(),
+            payload: sense.payload.clone(),
+        });
+
+        let mut dropped_oldest = false;
+        if self.sense_queue.len() >= capacity.max(1) {
+            self.sense_queue.pop_front();
+            dropped_oldest = true;
+        }
+
+        self.sense_queue.push_back(sense);
+        dropped_oldest
+    }
+
+    pub fn sense_queue_len(&self) -> usize {
+        self.sense_queue.len()
+    }
+
+    pub fn dequeue_sense_batch(&mut self, max_items: usize) -> Vec<SenseDelta> {
+        let mut batch = Vec::new();
+        for _ in 0..max_items.max(1) {
+            let Some(sense) = self.sense_queue.pop_front() else {
+                break;
+            };
+            batch.push(sense);
+        }
+        batch
+    }
+
+    pub fn enqueue_neural_signal_batch(
+        &mut self,
+        signal_batch: NeuralSignalBatch,
+        capacity: usize,
+    ) -> bool {
+        let mut dropped_oldest = false;
+        if self.neural_signal_queue.len() >= capacity.max(1) {
+            self.neural_signal_queue.pop_front();
+            dropped_oldest = true;
+        }
+
+        self.neural_signal_queue.push_back(signal_batch);
+        dropped_oldest
+    }
+
+    pub fn pop_neural_signal_batch(&mut self) -> Option<NeuralSignalBatch> {
+        self.neural_signal_queue.pop_front()
     }
 }
 

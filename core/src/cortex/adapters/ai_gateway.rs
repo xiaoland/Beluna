@@ -105,7 +105,10 @@ struct AttemptDraftEnvelope {
 
 #[async_trait]
 impl AttemptExtractorPort for AIGatewayAttemptExtractor {
-    async fn extract(&self, req: AttemptExtractorRequest) -> Result<Vec<AttemptDraft>, CortexError> {
+    async fn extract(
+        &self,
+        req: AttemptExtractorRequest,
+    ) -> Result<Vec<AttemptDraft>, CortexError> {
         let schema_hint = serde_json::json!({
             "attempts": [
                 {
@@ -207,7 +210,8 @@ fn build_text_request(
             BelunaMessage {
                 role: BelunaRole::System,
                 parts: vec![BelunaContentPart::Text {
-                    text: "You are a Cortex cognition organ. Return only what is asked.".to_string(),
+                    text: "You are a Cortex cognition organ. Return only what is asked."
+                        .to_string(),
                 }],
                 tool_call_id: None,
                 tool_name: None,

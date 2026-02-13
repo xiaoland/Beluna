@@ -30,8 +30,11 @@ impl AttemptClampPort for DeterministicAttemptClamp {
                 .then_with(|| lhs.intent_span.cmp(&rhs.intent_span))
         });
 
-        let known_sense_ids: std::collections::BTreeSet<String> =
-            req.sense_window.iter().map(|s| s.sense_id.clone()).collect();
+        let known_sense_ids: std::collections::BTreeSet<String> = req
+            .sense_window
+            .iter()
+            .map(|s| s.sense_id.clone())
+            .collect();
 
         let mut attempts = Vec::new();
         let mut violations = Vec::new();
@@ -149,10 +152,7 @@ impl DeterministicAttemptClamp {
             Err(err) => {
                 violations.push(ClampViolation {
                     code: ClampViolationCode::PayloadSchemaViolation,
-                    message: format!(
-                        "invalid schema for '{}': {}",
-                        profile.affordance_key, err
-                    ),
+                    message: format!("invalid schema for '{}': {}", profile.affordance_key, err),
                 });
                 return Ok(None);
             }
@@ -171,8 +171,13 @@ impl DeterministicAttemptClamp {
 
         let resources = clamp_resources(&draft.requested_resources);
         let based_on = stable_dedupe_sense_ids(&draft.based_on);
-        let cost_attribution_id =
-            derive_cost_attribution_id(reaction_id, &draft.affordance_key, &draft.capability_handle, &based_on, planner_slot);
+        let cost_attribution_id = derive_cost_attribution_id(
+            reaction_id,
+            &draft.affordance_key,
+            &draft.capability_handle,
+            &based_on,
+            planner_slot,
+        );
         let attempt_id = derive_attempt_id(
             reaction_id,
             &based_on,

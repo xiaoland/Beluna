@@ -11,8 +11,12 @@ use crate::{
         invariants::assert_settlement_consistency,
         ports::SpinePort,
         state::ContinuityState,
-        types::{ContinuityCycleOutput, ExternalDebitObservation, SenseSample, SituationView},
+        types::{
+            ContinuityCycleOutput, ExternalDebitObservation, NeuralSignalBatch, SenseSample,
+            SituationView,
+        },
     },
+    cortex::SenseDelta,
     spine::{
         EndpointCapabilityDescriptor, EndpointExecutionOutcome, EndpointRegistration,
         EndpointRegistryPort, InMemoryEndpointRegistry, NativeFunctionEndpoint, RouteKey,
@@ -154,6 +158,31 @@ impl ContinuityEngine {
 
     pub fn state(&self) -> &ContinuityState {
         &self.state
+    }
+
+    pub fn enqueue_sense_delta(&mut self, sense: SenseDelta, capacity: usize) -> bool {
+        self.state.enqueue_sense_delta(sense, capacity)
+    }
+
+    pub fn sense_queue_len(&self) -> usize {
+        self.state.sense_queue_len()
+    }
+
+    pub fn dequeue_sense_batch(&mut self, max_items: usize) -> Vec<SenseDelta> {
+        self.state.dequeue_sense_batch(max_items)
+    }
+
+    pub fn enqueue_neural_signal_batch(
+        &mut self,
+        signal_batch: NeuralSignalBatch,
+        capacity: usize,
+    ) -> bool {
+        self.state
+            .enqueue_neural_signal_batch(signal_batch, capacity)
+    }
+
+    pub fn pop_neural_signal_batch(&mut self) -> Option<NeuralSignalBatch> {
+        self.state.pop_neural_signal_batch()
     }
 
     pub fn ingest_sense(&mut self, sample: SenseSample) {

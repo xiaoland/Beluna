@@ -1,6 +1,9 @@
 use tokio::sync::mpsc;
 
-use crate::cortex::{pipeline::CortexPipeline, types::{ReactionInput, ReactionResult}};
+use crate::cortex::{
+    pipeline::CortexPipeline,
+    types::{ReactionInput, ReactionResult},
+};
 
 pub struct CortexReactor {
     pipeline: CortexPipeline,

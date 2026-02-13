@@ -21,5 +21,5 @@ Spine is split into:
 
 ## MVP Adapter
 
-1. UnixSocket adapter receives NDJSON envelopes and forwards normalized `ClientMessage`.
+1. UnixSocket adapter receives NDJSON envelopes and forwards normalized `BodyIngressMessage`.
 2. `Sense` is first-class ingress for reaction triggers.

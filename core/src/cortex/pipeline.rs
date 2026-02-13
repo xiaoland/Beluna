@@ -38,9 +38,10 @@ impl CortexPipeline {
     }
 
     pub async fn react_once(&self, input: ReactionInput) -> ReactionResult {
-        self.telemetry.on_event(CortexTelemetryEvent::ReactionStarted {
-            reaction_id: input.reaction_id,
-        });
+        self.telemetry
+            .on_event(CortexTelemetryEvent::ReactionStarted {
+                reaction_id: input.reaction_id,
+            });
 
         if let Err(err) = validate_input_bounds(&input) {
             self.telemetry.on_event(CortexTelemetryEvent::StageFailed {
@@ -60,7 +61,12 @@ impl CortexPipeline {
             limits: input.limits.clone(),
         };
         if let Err(err) = budget.record_primary_call() {
-            return noop_result(&input, "primary_budget_exceeded", Some(err), &*self.telemetry);
+            return noop_result(
+                &input,
+                "primary_budget_exceeded",
+                Some(err),
+                &*self.telemetry,
+            );
         }
         let ir = match timeout(deadline, self.primary.infer_ir(primary_req)).await {
             Ok(Ok(ir)) => ir,
@@ -137,10 +143,11 @@ impl CortexPipeline {
                 attention_tags: clamped_1.attention_tags,
                 attempts: clamped_1.attempts,
             };
-            self.telemetry.on_event(CortexTelemetryEvent::ReactionCompleted {
-                reaction_id: input.reaction_id,
-                attempt_count: result.attempts.len(),
-            });
+            self.telemetry
+                .on_event(CortexTelemetryEvent::ReactionCompleted {
+                    reaction_id: input.reaction_id,
+                    attempt_count: result.attempts.len(),
+                });
             return result;
         }
 
@@ -150,7 +157,12 @@ impl CortexPipeline {
         }
 
         if let Err(err) = budget.record_repair_call() {
-            return noop_result(&input, "repair_budget_exceeded", Some(err), &*self.telemetry);
+            return noop_result(
+                &input,
+                "repair_budget_exceeded",
+                Some(err),
+                &*self.telemetry,
+            );
         }
 
         let fill_req = PayloadFillerRequest {
@@ -204,10 +216,11 @@ impl CortexPipeline {
             attention_tags: clamped_2.attention_tags,
             attempts: clamped_2.attempts,
         };
-        self.telemetry.on_event(CortexTelemetryEvent::ReactionCompleted {
-            reaction_id: input.reaction_id,
-            attempt_count: result.attempts.len(),
-        });
+        self.telemetry
+            .on_event(CortexTelemetryEvent::ReactionCompleted {
+                reaction_id: input.reaction_id,
+                attempt_count: result.attempts.len(),
+            });
         result
     }
 }
@@ -280,7 +293,9 @@ fn validate_input_bounds(input: &ReactionInput) -> Result<(), CortexError> {
         .iter()
         .any(|snap| snap.blob_bytes > input.limits.max_snapshot_bytes_per_item)
     {
-        return Err(invalid_input("env snapshot blob exceeds max_snapshot_bytes_per_item"));
+        return Err(invalid_input(
+            "env snapshot blob exceeds max_snapshot_bytes_per_item",
+        ));
     }
     let mut seen = BTreeSet::new();
     for sense in &input.sense_window {
