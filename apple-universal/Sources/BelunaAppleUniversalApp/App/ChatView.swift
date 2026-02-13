@@ -6,6 +6,9 @@ struct ChatView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            if viewModel.isSleeping {
+                sleepingNotice
+            }
             Divider()
             messageList
             Divider()
@@ -15,6 +18,22 @@ struct ChatView: View {
         .onAppear {
             viewModel.startIfNeeded()
         }
+    }
+
+    private var sleepingNotice: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "moon.stars.fill")
+                .foregroundStyle(.orange)
+            Text("Beluna is sleeping")
+                .font(.subheadline.weight(.semibold))
+            Spacer()
+            Text("Start Beluna Core to wake it up.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color.orange.opacity(0.12))
     }
 
     private var header: some View {
@@ -69,7 +88,7 @@ struct ChatView: View {
 
     private var composer: some View {
         HStack(spacing: 8) {
-            TextField("Message Beluna...", text: $viewModel.draft, axis: .vertical)
+            TextField(viewModel.isSleeping ? "Beluna is sleeping..." : "Message Beluna...", text: $viewModel.draft, axis: .vertical)
                 .lineLimit(1...4)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit {
@@ -83,7 +102,7 @@ struct ChatView: View {
                     .fontWeight(.semibold)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .disabled(viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !viewModel.canSend)
         }
         .padding(12)
         .background(Color(NSColor.windowBackgroundColor))

@@ -26,3 +26,4 @@ beluna.jsonc
 /runtime/target/
 /std-body/target/
 /apple-universal/.build/
+/apple-universal/.swiftpm/

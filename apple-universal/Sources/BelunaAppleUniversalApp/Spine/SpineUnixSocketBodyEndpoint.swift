@@ -30,6 +30,7 @@ actor SpineUnixSocketBodyEndpoint {
     private let socketPath: String
     private let readQueue = DispatchQueue(label: "beluna.apple-universal.spine")
     private let reconnectDelayNanos: UInt64 = 800_000_000
+    private let missingSocketRetryDelayNanos: UInt64 = 1_500_000_000
 
     private var connection: NWConnection?
     private var readerBuffer = Data()
@@ -94,6 +95,18 @@ actor SpineUnixSocketBodyEndpoint {
 
     private func runLoop() async {
         while !stopped && !Task.isCancelled {
+            if !socketFileExists() {
+                onStateChange?(.disconnected)
+                cleanupConnection()
+
+                if stopped || Task.isCancelled {
+                    break
+                }
+
+                try? await Task.sleep(nanoseconds: missingSocketRetryDelayNanos)
+                continue
+            }
+
             do {
                 onStateChange?(.connecting)
                 try await connectAndReadLoop()
@@ -109,6 +122,10 @@ actor SpineUnixSocketBodyEndpoint {
 
         onStateChange?(.disconnected)
         cleanupConnection()
+    }
+
+    private func socketFileExists() -> Bool {
+        FileManager.default.fileExists(atPath: socketPath)
     }
 
     private func connectAndReadLoop() async throws {

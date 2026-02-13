@@ -6,20 +6,25 @@ final class ChatViewModel: ObservableObject {
     @Published var draft: String = ""
     @Published var connectionState: ConnectionState = .disconnected
 
+    var isSleeping: Bool {
+        connectionState != .connected
+    }
+
+    var canSend: Bool {
+        connectionState == .connected
+    }
+
     private let conversationID: String
     private let spineBodyEndpoint: SpineUnixSocketBodyEndpoint
+    private let sleepingNoticeText = "Beluna is sleeping."
+    private let sleepingHelpText = "Beluna is sleeping. Start Beluna Core to wake it up."
     private var started = false
 
     init(socketPath: String = "/tmp/beluna.sock") {
         self.conversationID = "conv_\(UUID().uuidString.lowercased())"
         self.spineBodyEndpoint = SpineUnixSocketBodyEndpoint(socketPath: socketPath)
 
-        messages.append(
-            ChatMessage(
-                role: .system,
-                text: "Connected app endpoint will register as chat body over Spine UnixSocket."
-            )
-        )
+        messages.append(ChatMessage(role: .system, text: sleepingHelpText))
 
         bindSocketHandlers()
     }
@@ -48,6 +53,11 @@ final class ChatViewModel: ObservableObject {
             return
         }
 
+        guard canSend else {
+            appendSystemMessage(sleepingHelpText)
+            return
+        }
+
         draft = ""
         messages.append(ChatMessage(role: .user, text: text))
 
@@ -69,7 +79,7 @@ final class ChatViewModel: ObservableObject {
             await spineBodyEndpoint.setHandlers(
                 onStateChange: { [weak self] state in
                     Task { @MainActor in
-                        self?.connectionState = state
+                        self?.handleConnectionStateChange(state)
                     }
                 },
                 onServerMessage: { [weak self] message in
@@ -132,7 +142,25 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
+    private func handleConnectionStateChange(_ state: ConnectionState) {
+        let previousState = connectionState
+        connectionState = state
+
+        if previousState != .connected, state == .connected {
+            appendSystemMessage("Beluna is awake.")
+            return
+        }
+
+        if previousState != .disconnected, state == .disconnected {
+            appendSystemMessage(sleepingNoticeText)
+        }
+    }
+
     private func appendSystemMessage(_ text: String) {
+        if let last = messages.last, last.role == .system, last.text == text {
+            return
+        }
+
         messages.append(ChatMessage(role: .system, text: text))
     }
 }
