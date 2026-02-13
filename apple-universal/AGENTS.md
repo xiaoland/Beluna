@@ -14,7 +14,7 @@ Beluna Desktop is the macOS app that bridges human interaction with Beluna Core.
 
 ## Boundary and Quality Rules
 
-- Keep desktop logic as a client of Core; do not re-implement Core domain logic in desktop.
+- Keep desktop logic as a Body Endpoint of Core; do not re-implement Core domain logic in desktop.
 - Treat socket protocol compatibility as a contract; prefer explicit typed request/response mapping.
 - Keep UI responsive: socket I/O and parsing must not block the main thread.
 - Add tests for protocol decoding/encoding and connection lifecycle behavior where practical.
