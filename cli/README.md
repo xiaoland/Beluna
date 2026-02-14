@@ -1,4 +1,4 @@
-# beluna-cli
+# Beluna CLI
 
 `beluna-cli` is a standalone Beluna body endpoint client.
 
