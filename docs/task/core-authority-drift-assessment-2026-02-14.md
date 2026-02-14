@@ -45,7 +45,7 @@ This note compares current `core/` behavior with the provided authority statemen
 
 - **Authority (revised)**:
   - Body endpoint registration is **not** a sense.
-  - After auth, adapter transforms auth-carried registration info and calls Spine `new_body_endpoint`.
+  - Authentication can carry capabilities declaration; adapter transforms auth payload (including optional capabilities) and calls Spine `new_body_endpoint`.
   - Endpoint unplug request is sent by body endpoint; adapter then calls Spine `remove_body_endpoint`.
   - Only capability changes go through sense flow.
 - **Current**:
@@ -53,11 +53,16 @@ This note compares current `core/` behavior with the provided authority statemen
   - Control boundaries are mixed; registration is coupled with wire ingress message parsing format instead of explicit post-auth API call contract.
 - **Assessment**: **Major drift**.
 
-### 6) Adapter role and lifecycle
+### 6) Adapter role, session ownership, and lifecycle
 
-- **Authority**: Adapter is Spine API transport conversion layer; adapter lifecycle and dispatch responsibilities are explicit.
-- **Current**: Unix adapter is implemented as monolithic `run` loop with implicit protocol contract.
-- **Assessment**: **Drift** (contract insufficiently explicit for target architecture).
+- **Authority (revised)**:
+  - Adapter is Spine API transport conversion layer.
+  - Adapter manages endpoint sessions/connections; Spine does **not** manage body endpoint session internals and only tracks endpoint-to-adapter ownership mapping.
+  - Spine `start` should start all adapters from `config.spine.adapters[]`, where each entry is `{ type, config }` (e.g. `unix-socket-ndjson` + `socket_path`).
+- **Current**:
+  - Unix adapter is a monolithic `run` loop and endpoint session state is mixed into Spine registry internals.
+  - Adapter boot is hardcoded in `main` as a single unix adapter instead of adapter-array-driven Spine startup.
+- **Assessment**: **Major drift**.
 
 ### 7) NDJSON over Unix Socket frame shape
 
@@ -65,7 +70,13 @@ This note compares current `core/` behavior with the provided authority statemen
 - **Current**: Tagged `type` model is used; envelope lacks required `id` + `timestamp`; `auth` method absent.
 - **Assessment**: **Major drift**.
 
-### 8) In-core body endpoint startup sequence
+### 8) Auth payload capability declaration handling
+
+- **Authority (revised)**: Body endpoint authentication may include capabilities declaration; `new_body_endpoint` can consume it directly.
+- **Current**: Capability declarations are primarily modeled as separate registration/capability messages, not auth-coupled endpoint bootstrap input.
+- **Assessment**: **Drift**.
+
+### 9) In-core body endpoint startup sequence
 
 - **Authority**: In-core body endpoints start conditionally in `main`, after Spine starts and before Stem starts.
 - **Current**: Endpoint registration currently occurs before spine singleton installation.
