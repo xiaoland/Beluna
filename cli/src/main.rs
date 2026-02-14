@@ -50,7 +50,7 @@ where
             }
             other => {
                 return Err(anyhow!(
-                    "unknown argument: {other}. usage: cli --socket-path <path> [--endpoint-id <id>]"
+                    "unknown argument: {other}. usage: beluna-cli --socket-path <path> [--endpoint-id <id>]"
                 ));
             }
         }
@@ -61,7 +61,7 @@ where
     }
 
     let socket_path = socket_path.ok_or_else(|| {
-        anyhow!("missing required argument --socket-path. usage: cli --socket-path <path> [--endpoint-id <id>]")
+        anyhow!("missing required argument --socket-path. usage: beluna-cli --socket-path <path> [--endpoint-id <id>]")
     })?;
 
     Ok(CliOptions {
@@ -130,7 +130,7 @@ async fn main() -> Result<()> {
         .await
         .with_context(|| {
             format!(
-                "failed to connect to socket {}",
+                "failed to connect to Beluna socket {}",
                 options.socket_path.display()
             )
         })?;
@@ -145,7 +145,7 @@ async fn main() -> Result<()> {
     send_message(&mut write_half, &registration).await?;
 
     eprintln!(
-        "cli connected: socket={} endpoint={} capability={}",
+        "beluna-cli connected: socket={} endpoint={} capability={}",
         options.socket_path.display(),
         options.endpoint_id,
         PRESENT_PLAIN_TEXT_CAPABILITY_ID

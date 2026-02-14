@@ -1,8 +1,8 @@
-# cli
+# Beluna CLI
 
-`cli` is a standalone body endpoint client.
+`beluna-cli` is a standalone Beluna body endpoint client.
 
-- Connects to a running Core over Unix socket NDJSON.
+- Connects to a running Beluna Core over Unix socket NDJSON.
 - Registers capability `present.plain_text`.
 - Sends stdin lines as `user_message` senses.
 - Prints plain-text acts from `normalized_payload.text`.
