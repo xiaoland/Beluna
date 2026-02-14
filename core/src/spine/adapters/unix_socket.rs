@@ -234,11 +234,15 @@ fn encode_body_egress_act_message(act: &Act) -> Result<String, serde_json::Error
 
 pub struct UnixSocketAdapter {
     pub socket_path: PathBuf,
+    pub adapter_id: u64,
 }
 
 impl UnixSocketAdapter {
-    pub fn new(socket_path: PathBuf) -> Self {
-        Self { socket_path }
+    pub fn new(socket_path: PathBuf, adapter_id: u64) -> Self {
+        Self {
+            socket_path,
+            adapter_id,
+        }
     }
 
     pub async fn run(
@@ -261,8 +265,12 @@ impl UnixSocketAdapter {
                         Ok((stream, _)) => {
                             let ingress = ingress.clone();
                             let registry = Arc::clone(&registry);
+                            let adapter_id = self.adapter_id;
                             tokio::spawn(async move {
-                                if let Err(err) = handle_body_endpoint(stream, ingress, registry).await {
+                                if let Err(err) =
+                                    handle_body_endpoint(stream, ingress, registry, adapter_id)
+                                        .await
+                                {
                                     eprintln!("body endpoint handling failed: {err:#}");
                                 }
                             });
@@ -320,8 +328,9 @@ async fn handle_body_endpoint(
     stream: UnixStream,
     ingress: SenseIngress,
     registry: Arc<InMemoryEndpointRegistry>,
+    adapter_id: u64,
 ) -> Result<()> {
-    let session_id = registry.allocate_remote_session_id();
+    let session_id = registry.allocate_remote_session_id(adapter_id);
     let (read_half, mut write_half) = stream.into_split();
 
     let (outbound_tx, mut outbound_rx) = mpsc::unbounded_channel::<Act>();

@@ -53,8 +53,12 @@ impl InMemoryEndpointRegistry {
         self.state.read().expect("lock poisoned").version
     }
 
-    pub fn allocate_remote_session_id(&self) -> u64 {
-        self.next_remote_session_id.fetch_add(1, Ordering::Relaxed)
+    pub fn allocate_remote_session_id(&self, adapter_id: u64) -> u64 {
+        let sequence = self
+            .next_remote_session_id
+            .fetch_add(1, Ordering::Relaxed)
+            .saturating_add(1);
+        (adapter_id << 32) | (sequence & 0xFFFF_FFFF)
     }
 
     pub fn attach_remote_session(&self, session_id: u64, tx: mpsc::UnboundedSender<Act>) {
@@ -347,6 +351,18 @@ mod tests {
             types::CostVector,
         },
     };
+
+    #[test]
+    fn remote_session_id_encodes_adapter_identity() {
+        let registry = InMemoryEndpointRegistry::new();
+
+        let a1 = registry.allocate_remote_session_id(1);
+        let a2 = registry.allocate_remote_session_id(2);
+
+        assert_eq!(a1 >> 32, 1);
+        assert_eq!(a2 >> 32, 2);
+        assert!(a2 > a1);
+    }
 
     struct StubEndpoint;
 

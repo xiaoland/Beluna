@@ -16,11 +16,11 @@ use crate::{
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
-    #[serde(default = "default_socket_path")]
-    pub socket_path: PathBuf,
     pub ai_gateway: AIGatewayConfig,
     #[serde(default)]
     pub cortex: CortexRuntimeConfig,
+    #[serde(default)]
+    pub spine: SpineRuntimeConfig,
     #[serde(default)]
     pub r#loop: CoreLoopConfig,
     #[serde(default)]
@@ -41,6 +41,41 @@ fn default_cortex_outbox_capacity() -> usize {
 
 fn default_enabled_true() -> bool {
     true
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpineRuntimeConfig {
+    #[serde(default = "default_spine_adapters")]
+    pub adapters: Vec<SpineAdapterConfig>,
+}
+
+impl Default for SpineRuntimeConfig {
+    fn default() -> Self {
+        Self {
+            adapters: default_spine_adapters(),
+        }
+    }
+}
+
+fn default_spine_adapters() -> Vec<SpineAdapterConfig> {
+    vec![SpineAdapterConfig::UnixSocketNdjson {
+        config: UnixSocketNdjsonAdapterConfig {
+            socket_path: default_socket_path(),
+        },
+    }]
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "kebab-case")]
+pub enum SpineAdapterConfig {
+    UnixSocketNdjson {
+        config: UnixSocketNdjsonAdapterConfig,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UnixSocketNdjsonAdapterConfig {
+    pub socket_path: PathBuf,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -143,8 +178,11 @@ impl Config {
         let mut config: Config =
             serde_json::from_value(config_value).context("failed to deserialize core config")?;
 
-        if !config.socket_path.is_absolute() {
-            config.socket_path = config_base.join(&config.socket_path);
+        for adapter in &mut config.spine.adapters {
+            let SpineAdapterConfig::UnixSocketNdjson { config } = adapter;
+            if !config.socket_path.is_absolute() {
+                config.socket_path = config_base.join(&config.socket_path);
+            }
         }
 
         Ok(config)
@@ -157,7 +195,7 @@ fn resolve_schema_path(config_base: &Path, config_value: &Value) -> Result<PathB
         if configured.is_absolute() {
             return Ok(configured);
         }
-        return Ok(config_base.join(configured));
+        return Ok(config_base.join(&configured));
     }
 
     let root_default = config_base.join("core/beluna.schema.json");

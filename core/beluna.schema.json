@@ -6,11 +6,6 @@
       "type": "string",
       "description": "The schema URL for this configuration file."
     },
-    "socket_path": {
-      "type": "string",
-      "description": "Unix socket path for NDJSON control messages.",
-      "default": "beluna.sock"
-    },
     "ai_gateway": {
       "type": "object",
       "properties": {
@@ -20,26 +15,65 @@
         "reliability": {
           "type": "object",
           "properties": {
-            "request_timeout_ms": { "type": "integer", "minimum": 1 },
-            "max_retries": { "type": "integer", "minimum": 0 },
-            "backoff_base_ms": { "type": "integer", "minimum": 1 },
-            "backoff_max_ms": { "type": "integer", "minimum": 1 },
+            "request_timeout_ms": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_retries": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "backoff_base_ms": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "backoff_max_ms": {
+              "type": "integer",
+              "minimum": 1
+            },
             "retry_policy": {
               "type": "string",
-              "enum": ["before_first_event_only", "adapter_resumable"]
+              "enum": [
+                "before_first_event_only",
+                "adapter_resumable"
+              ]
             },
-            "breaker_failure_threshold": { "type": "integer", "minimum": 1 },
-            "breaker_open_ms": { "type": "integer", "minimum": 1 }
+            "breaker_failure_threshold": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "breaker_open_ms": {
+              "type": "integer",
+              "minimum": 1
+            }
           },
           "additionalProperties": false
         },
         "budget": {
           "type": "object",
           "properties": {
-            "max_request_time_ms": { "type": "integer", "minimum": 1 },
-            "max_usage_tokens_per_request": { "type": ["integer", "null"], "minimum": 1 },
-            "max_concurrency_per_backend": { "type": "integer", "minimum": 1 },
-            "rate_smoothing_per_second": { "type": ["integer", "null"], "minimum": 1 }
+            "max_request_time_ms": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_usage_tokens_per_request": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1
+            },
+            "max_concurrency_per_backend": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "rate_smoothing_per_second": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1
+            }
           },
           "additionalProperties": false
         },
@@ -49,106 +83,224 @@
           "items": {
             "type": "object",
             "properties": {
-              "id": { "type": "string" },
+              "id": {
+                "type": "string"
+              },
               "dialect": {
                 "type": "string",
-                "enum": ["openai_compatible", "ollama", "github_copilot_sdk"]
+                "enum": [
+                  "openai_compatible",
+                  "ollama",
+                  "github_copilot_sdk"
+                ]
               },
-              "endpoint": { "type": ["string", "null"] },
+              "endpoint": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
               "credential": {
                 "oneOf": [
                   {
                     "type": "object",
                     "properties": {
-                      "type": { "const": "env" },
-                      "var": { "type": "string", "minLength": 1 }
+                      "type": {
+                        "const": "env"
+                      },
+                      "var": {
+                        "type": "string",
+                        "minLength": 1
+                      }
                     },
-                    "required": ["type", "var"],
+                    "required": [
+                      "type",
+                      "var"
+                    ],
                     "additionalProperties": false
                   },
                   {
                     "type": "object",
                     "properties": {
-                      "type": { "const": "inline_token" },
-                      "token": { "type": "string", "minLength": 1 }
+                      "type": {
+                        "const": "inline_token"
+                      },
+                      "token": {
+                        "type": "string",
+                        "minLength": 1
+                      }
                     },
-                    "required": ["type", "token"],
+                    "required": [
+                      "type",
+                      "token"
+                    ],
                     "additionalProperties": false
                   },
                   {
                     "type": "object",
                     "properties": {
-                      "type": { "const": "none" }
+                      "type": {
+                        "const": "none"
+                      }
                     },
-                    "required": ["type"],
+                    "required": [
+                      "type"
+                    ],
                     "additionalProperties": false
                   }
                 ]
               },
-              "default_model": { "type": "string", "minLength": 1 },
+              "default_model": {
+                "type": "string",
+                "minLength": 1
+              },
               "capabilities": {
-                "type": ["object", "null"],
+                "type": [
+                  "object",
+                  "null"
+                ],
                 "properties": {
-                  "streaming": { "type": "boolean" },
-                  "tool_calls": { "type": "boolean" },
-                  "json_mode": { "type": "boolean" },
-                  "vision": { "type": "boolean" },
-                  "resumable_streaming": { "type": "boolean" }
+                  "streaming": {
+                    "type": "boolean"
+                  },
+                  "tool_calls": {
+                    "type": "boolean"
+                  },
+                  "json_mode": {
+                    "type": "boolean"
+                  },
+                  "vision": {
+                    "type": "boolean"
+                  },
+                  "resumable_streaming": {
+                    "type": "boolean"
+                  }
                 },
                 "additionalProperties": false
               },
               "copilot": {
-                "type": ["object", "null"],
+                "type": [
+                  "object",
+                  "null"
+                ],
                 "properties": {
-                  "command": { "type": "string", "minLength": 1 },
+                  "command": {
+                    "type": "string",
+                    "minLength": 1
+                  },
                   "args": {
                     "type": "array",
-                    "items": { "type": "string" }
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 },
-                "required": ["command"],
+                "required": [
+                  "command"
+                ],
                 "additionalProperties": false
               }
             },
-            "required": ["id", "dialect", "credential", "default_model"],
+            "required": [
+              "id",
+              "dialect",
+              "credential",
+              "default_model"
+            ],
             "additionalProperties": false
           }
         }
       },
-      "required": ["default_backend", "backends"],
+      "required": [
+        "default_backend",
+        "backends"
+      ],
       "additionalProperties": false
     },
     "cortex": {
       "type": "object",
       "properties": {
-        "inbox_capacity": { "type": "integer", "minimum": 1 },
-        "outbox_capacity": { "type": "integer", "minimum": 1 },
+        "inbox_capacity": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "outbox_capacity": {
+          "type": "integer",
+          "minimum": 1
+        },
         "default_limits": {
           "type": "object",
           "properties": {
-            "max_sense_items": { "type": "integer", "minimum": 1 },
-            "max_snapshot_items": { "type": "integer", "minimum": 1 },
-            "max_snapshot_bytes_per_item": { "type": "integer", "minimum": 1 },
-            "max_attempts": { "type": "integer", "minimum": 1 },
-            "max_payload_bytes": { "type": "integer", "minimum": 1 },
-            "max_cycle_time_ms": { "type": "integer", "minimum": 1 },
-            "max_primary_calls": { "type": "integer", "const": 1 },
-            "max_sub_calls": { "type": "integer", "minimum": 1 },
-            "max_repair_attempts": { "type": "integer", "minimum": 0, "maximum": 1 },
-            "max_primary_output_tokens": { "type": "integer", "minimum": 1 },
-            "max_sub_output_tokens": { "type": "integer", "minimum": 1 }
+            "max_sense_items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_snapshot_items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_snapshot_bytes_per_item": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_attempts": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_payload_bytes": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_cycle_time_ms": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_primary_calls": {
+              "type": "integer",
+              "const": 1
+            },
+            "max_sub_calls": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_repair_attempts": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "max_primary_output_tokens": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_sub_output_tokens": {
+              "type": "integer",
+              "minimum": 1
+            }
           },
           "additionalProperties": false
         },
-        "primary_backend_id": { "type": ["string", "null"] },
-        "sub_backend_id": { "type": ["string", "null"] }
+        "primary_backend_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sub_backend_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       },
       "additionalProperties": false
     },
     "loop": {
       "type": "object",
       "properties": {
-        "sense_queue_capacity": { "type": "integer", "minimum": 1 }
+        "sense_queue_capacity": {
+          "type": "integer",
+          "minimum": 1
+        }
       },
       "additionalProperties": false
     },
@@ -158,16 +310,36 @@
         "std_shell": {
           "type": "object",
           "properties": {
-            "enabled": { "type": "boolean" },
+            "enabled": {
+              "type": "boolean"
+            },
             "limits": {
               "type": "object",
               "properties": {
-                "default_timeout_ms": { "type": "integer", "minimum": 1 },
-                "max_timeout_ms": { "type": "integer", "minimum": 1 },
-                "default_stdout_max_bytes": { "type": "integer", "minimum": 1 },
-                "max_stdout_max_bytes": { "type": "integer", "minimum": 1 },
-                "default_stderr_max_bytes": { "type": "integer", "minimum": 1 },
-                "max_stderr_max_bytes": { "type": "integer", "minimum": 1 }
+                "default_timeout_ms": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "max_timeout_ms": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "default_stdout_max_bytes": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "max_stdout_max_bytes": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "default_stderr_max_bytes": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "max_stderr_max_bytes": {
+                  "type": "integer",
+                  "minimum": 1
+                }
               },
               "additionalProperties": false
             }
@@ -177,14 +349,28 @@
         "std_web": {
           "type": "object",
           "properties": {
-            "enabled": { "type": "boolean" },
+            "enabled": {
+              "type": "boolean"
+            },
             "limits": {
               "type": "object",
               "properties": {
-                "default_timeout_ms": { "type": "integer", "minimum": 1 },
-                "max_timeout_ms": { "type": "integer", "minimum": 1 },
-                "default_response_max_bytes": { "type": "integer", "minimum": 1 },
-                "max_response_max_bytes": { "type": "integer", "minimum": 1 }
+                "default_timeout_ms": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "max_timeout_ms": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "default_response_max_bytes": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "max_response_max_bytes": {
+                  "type": "integer",
+                  "minimum": 1
+                }
               },
               "additionalProperties": false
             }
@@ -193,8 +379,49 @@
         }
       },
       "additionalProperties": false
+    },
+    "spine": {
+      "type": "object",
+      "properties": {
+        "adapters": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "unix-socket-ndjson"
+                ]
+              },
+              "config": {
+                "type": "object",
+                "properties": {
+                  "socket_path": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "socket_path"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "type",
+              "config"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
     }
   },
-  "required": ["ai_gateway"],
+  "required": [
+    "ai_gateway"
+  ],
   "additionalProperties": false
 }
