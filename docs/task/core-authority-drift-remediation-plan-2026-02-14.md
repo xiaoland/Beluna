@@ -12,9 +12,10 @@ Align Core with the provided authority statements, with ruthless refactor allowe
 4. Body endpoint may send unplug request; adapter calls Spine `remove_body_endpoint`.
 5. Adapter owns endpoint session/connection lifecycle; Spine tracks endpoint-to-adapter ownership only.
 6. Spine `start` boots all configured adapters from `config.spine.adapters[]`, each entry shaped as `{type, config}`.
-7. Only capability changes flow through sense queue.
-8. No capability-singleton enforcement in catalog; Act includes fully-qualified endpoint name and capability routing is completed within body endpoint.
-9. No compatibility mode required.
+7. Spine assigns incremental integer sequence adapter identities (`adapter_id`) during adapter startup.
+8. Only capability changes flow through sense queue.
+9. No capability-singleton enforcement in catalog; Act includes fully-qualified endpoint name and capability routing is completed within body endpoint.
+10. No compatibility mode required.
 
 ## Workstreams
 
@@ -31,7 +32,7 @@ Align Core with the provided authority statements, with ruthless refactor allowe
 Add explicit Spine APIs:
 
 - `new_body_endpoint(authenticated_registration) -> BodyEndpointHandle`
-  - Input includes semantic base name declared by endpoint + adapter identity.
+  - Input includes semantic base name declared by endpoint + Spine-assigned `adapter_id`.
   - Auth payload may include initial capabilities declaration for immediate bootstrap.
   - Spine allocates UUID and monotonic suffix, then records fully-qualified endpoint name.
 - `remove_body_endpoint(body_endpoint_id | fully_qualified_name)`
@@ -87,6 +88,7 @@ Rules:
 
 - Add `config.spine.adapters[]` and adapter factory wiring.
 - `Spine.start` boots all configured adapters (`{type, config}`), e.g. `unix-socket-ndjson` with `{socket_path}`.
+- While booting adapters, Spine assigns monotonic incremental `adapter_id` values (e.g. `1, 2, 3...`) and uses them for endpoint ownership mapping.
 - Start in-core body endpoints via inline adapter after Spine starts.
 - Start Stem after adapter and endpoint startup stage.
 
@@ -98,6 +100,7 @@ Add/adjust tests for:
 - Auth (with/without capabilities declaration) -> `new_body_endpoint` transform contract.
 - Unplug -> `remove_body_endpoint` contract.
 - Spine does not hold adapter session/socket state; only endpoint-to-adapter ownership mapping is asserted.
+- Adapter identity assignment is incremental integer sequence and stable for runtime lifetime.
 - Directional protocol enforcement for NDJSON v2 methods.
 - Capability-change-only sense path.
 - Dispatch by fully-qualified endpoint name.
@@ -119,4 +122,5 @@ Add/adjust tests for:
 - Registration/removal are not emitted as senses.
 - Capability changes are the only endpoint-related events in sense flow.
 - Spine startup is adapter-array-driven via `config.spine.adapters[]`.
+- Adapter identities are Spine-assigned incremental integers and are used in endpoint ownership tracking.
 - Wire protocol conforms to required NDJSON v2 envelope and direction rules.

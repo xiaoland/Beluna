@@ -58,10 +58,12 @@ This note compares current `core/` behavior with the provided authority statemen
 - **Authority (revised)**:
   - Adapter is Spine API transport conversion layer.
   - Adapter manages endpoint sessions/connections; Spine does **not** manage body endpoint session internals and only tracks endpoint-to-adapter ownership mapping.
+  - Adapter identity is Spine-assigned incremental integer sequence (`adapter_id`) at Spine startup.
   - Spine `start` should start all adapters from `config.spine.adapters[]`, where each entry is `{ type, config }` (e.g. `unix-socket-ndjson` + `socket_path`).
 - **Current**:
   - Unix adapter is a monolithic `run` loop and endpoint session state is mixed into Spine registry internals.
   - Adapter boot is hardcoded in `main` as a single unix adapter instead of adapter-array-driven Spine startup.
+  - No explicit Spine-assigned incremental `adapter_id` model exists.
 - **Assessment**: **Major drift**.
 
 ### 7) NDJSON over Unix Socket frame shape
