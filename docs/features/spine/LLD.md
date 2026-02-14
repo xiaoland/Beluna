@@ -2,27 +2,30 @@
 
 ## Data Model
 
-1. `RouteKey { affordance_key, capability_handle }`
-2. `EndpointRegistration { endpoint_id, descriptor }`
-3. `SpineCapabilityCatalog { version, entries[] }`
-4. `EndpointInvocation { action }`
-5. `EndpointExecutionOutcome` -> `SpineEvent` mapping
+1. `Act` dispatch input (from `runtime_types`).
+2. `RouteKey { endpoint_id, capability_id }` for capability catalog/drop bookkeeping.
+3. `EndpointCapabilityDescriptor` and `SpineCapabilityCatalog { version, entries[] }`.
+4. `EndpointExecutionOutcome` returned by Spine dispatch.
+5. `SpineEvent` settlement mapping performed by Stem.
 
 ## Registry Rules
 
-1. duplicate route registration is rejected (`RouteConflict`).
-2. same affordance must keep consistent descriptor shape and defaults (`RegistrationInvalid`).
-3. catalog snapshots are sorted by route key.
+1. duplicate route registration (`endpoint_id` + `capability_id`) is rejected (`RouteConflict`).
+2. same endpoint must keep consistent descriptor shape/defaults (`RegistrationInvalid`).
+3. endpoint resolution is keyed by `endpoint_id` only.
+4. catalog snapshots are sorted by route key.
+5. registry owns remote session channels, route ownership, and endpoint ownership maps.
 
 ## Router Rules
 
-1. serialized mode preserves original batch order.
-2. best-effort mode executes concurrently but report order remains by `seq_no`.
-3. route miss -> `ActionRejected(reason_code = "route_not_found")`.
-4. endpoint invoke error -> `ActionRejected(reason_code = "endpoint_error")`.
+1. `dispatch_act(act)` validates required act fields.
+2. missing endpoint -> `Rejected(reason_code = "endpoint_not_found")`.
+3. endpoint invoke error -> `Rejected(reason_code = "endpoint_error")`.
+4. returned outcome is forwarded unchanged to Stem.
 
-## Adapter Shell Rules
+## Adapter Dialect Rules
 
-1. UnixSocket adapter owns bind/accept/read lifecycle.
-2. wire parser (`spine/adapters/wire.rs`) validates envelope schema.
-3. `Sense` ingress triggers reaction input assembly in runtime.
+1. UnixSocket+NDJSON adapter owns bind/accept/read/write lifecycle.
+2. NDJSON framing/parser is part of `spine/adapters/unix_socket.rs` dialect implementation.
+3. `sense`, capability patch/drop, and endpoint register/unregister ingress are validated and forwarded.
+4. adapter does not own route/session dispatch policy state.

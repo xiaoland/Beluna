@@ -20,8 +20,8 @@ Current runtime Body Endpoints:
 
 1. Body Endpoint connects to Spine UnixSocket (if external).
 2. Body Endpoint sends `body_endpoint_register`.
-3. Spine sends `body_endpoint_invoke`.
-4. Body Endpoint executes action and returns `body_endpoint_result`.
+3. Spine sends `act` envelope.
+4. Body Endpoint routes capability internally and executes action.
 5. Body Endpoint can emit `sense` for execution observations.
 
 ## Safety Controls

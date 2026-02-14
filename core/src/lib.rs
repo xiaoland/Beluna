@@ -6,6 +6,6 @@ pub mod continuity;
 pub mod cortex;
 pub mod ingress;
 pub mod ledger;
-pub mod spine;
 pub mod runtime_types;
+pub mod spine;
 pub mod stem;

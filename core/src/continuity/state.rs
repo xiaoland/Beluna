@@ -3,7 +3,10 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use crate::{
     continuity::types::{ContinuityDispatchRecord, DispatchContext},
     cortex::{AffordanceCapability, CapabilityCatalog},
-    runtime_types::{Act, CapabilityDropPatch, CapabilityPatch, CognitionState, DispatchDecision, RequestedResources},
+    runtime_types::{
+        Act, CapabilityDropPatch, CapabilityPatch, CognitionState, DispatchDecision,
+        RequestedResources,
+    },
     spine::types::{EndpointCapabilityDescriptor, RouteKey, SpineEvent},
 };
 
@@ -88,15 +91,26 @@ impl ContinuityState {
         }
     }
 
-    pub fn pre_dispatch(&self, _act: &Act, _cognition_state: &CognitionState, _ctx: &DispatchContext) -> DispatchDecision {
+    pub fn pre_dispatch(
+        &self,
+        _act: &Act,
+        _cognition_state: &CognitionState,
+        _ctx: &DispatchContext,
+    ) -> DispatchDecision {
         DispatchDecision::Continue
     }
 
     pub fn on_spine_event(&mut self, act: &Act, event: &SpineEvent, ctx: &DispatchContext) {
         let (event_name, reference_id) = match event {
-            SpineEvent::ActApplied { reference_id, .. } => ("act_applied".to_string(), Some(reference_id.clone())),
-            SpineEvent::ActRejected { reference_id, .. } => ("act_rejected".to_string(), Some(reference_id.clone())),
-            SpineEvent::ActDeferred { reference_id, .. } => ("act_deferred".to_string(), Some(reference_id.clone())),
+            SpineEvent::ActApplied { reference_id, .. } => {
+                ("act_applied".to_string(), Some(reference_id.clone()))
+            }
+            SpineEvent::ActRejected { reference_id, .. } => {
+                ("act_rejected".to_string(), Some(reference_id.clone()))
+            }
+            SpineEvent::ActDeferred { reference_id, .. } => {
+                ("act_deferred".to_string(), Some(reference_id.clone()))
+            }
         };
 
         self.dispatch_records.push_back(ContinuityDispatchRecord {

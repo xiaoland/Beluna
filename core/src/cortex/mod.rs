@@ -12,9 +12,9 @@ pub use clamp::{DeterministicAttemptClamp, derive_act_id};
 pub use error::{CortexError, CortexErrorKind};
 pub use pipeline::CortexPipeline;
 pub use ports::{
-    AttemptClampPort, AttemptClampRequest, AttemptExtractorPort, AttemptExtractorRequest, CortexPort,
-    CortexTelemetryEvent, CortexTelemetryPort, NoopTelemetryPort, PayloadFillerPort, PayloadFillerRequest,
-    PrimaryReasonerPort, PrimaryReasonerRequest,
+    AttemptClampPort, AttemptClampRequest, AttemptExtractorPort, AttemptExtractorRequest,
+    CortexPort, CortexTelemetryEvent, CortexTelemetryPort, NoopTelemetryPort, PayloadFillerPort,
+    PayloadFillerRequest, PrimaryReasonerPort, PrimaryReasonerRequest,
 };
 pub use types::{
     AffordanceCapability, AttemptDraft, AttentionTag, CapabilityCatalog, ClampResult,

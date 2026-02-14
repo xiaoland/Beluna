@@ -3,7 +3,7 @@
 ## Test Surfaces
 
 - Unit tests under `tests/ai_gateway/*`
-- Runtime wire protocol tests under `src/spine/adapters/wire.rs`
+- Runtime dialect protocol tests under `src/spine/adapters/unix_socket.rs`
 
 ## Contract Set
 

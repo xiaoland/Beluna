@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::Instant};
 
 use futures_util::StreamExt;
 use tokio::{sync::mpsc, time::sleep};
@@ -14,7 +14,7 @@ use crate::ai_gateway::{
     request_normalizer::RequestNormalizer,
     response_normalizer::ResponseNormalizer,
     router::BackendRouter,
-    telemetry::{GatewayTelemetryEvent, TelemetrySink},
+    telemetry::{GatewayTelemetryEvent, TelemetrySink, debug_log},
     types::{
         AIGatewayConfig, AdapterContext, BackendCapabilities, BackendDialect,
         BelunaInferenceRequest, CanonicalFinalResponse, CanonicalRequest, FinishReason,
@@ -101,6 +101,23 @@ impl AIGateway {
             .budget_enforcer
             .pre_dispatch(&canonical_request, &selected.backend_id)
             .await?;
+
+        debug_log(format!(
+            "infer_stream_prepared request_id={} backend_id={} dialect={:?} model={} stream={} stage={} max_output_tokens={:?} requested_timeout_ms={:?} effective_timeout_ms={}",
+            canonical_request.request_id,
+            selected.backend_id,
+            selected.profile.dialect,
+            selected.resolved_model,
+            canonical_request.stream,
+            canonical_request
+                .metadata
+                .get("cortex_stage")
+                .map(String::as_str)
+                .unwrap_or("primary"),
+            canonical_request.limits.max_output_tokens,
+            canonical_request.limits.max_request_time_ms,
+            budget_lease.effective_timeout.as_millis(),
+        ));
 
         self.telemetry
             .on_event(GatewayTelemetryEvent::RequestStarted {
@@ -221,6 +238,7 @@ async fn run_stream_task(
 ) {
     let request_id = canonical_request.request_id.clone();
     let cost_attribution_id = canonical_request.cost_attribution_id.clone();
+    let request_started_at = Instant::now();
     let mut attempt = 0_u32;
     let mut usage_emitted = false;
     let mut last_usage: Option<UsageStats> = None;
@@ -242,6 +260,10 @@ async fn run_stream_task(
         });
         return;
     }
+    debug_log(format!(
+        "run_stream_task_started request_id={} backend_id={} model={}",
+        request_id, selected.backend_id, selected.resolved_model
+    ));
 
     loop {
         if tx.is_closed() {
@@ -253,6 +275,7 @@ async fn run_stream_task(
             return;
         }
 
+        let attempt_started_at = Instant::now();
         telemetry.on_event(GatewayTelemetryEvent::AttemptStarted {
             request_id: request_id.clone(),
             attempt,
@@ -293,9 +316,24 @@ async fn run_stream_task(
             request_id: request_id.clone(),
         };
 
+        let timeout_ms = adapter_ctx.timeout.as_millis();
+        debug_log(format!(
+            "attempt_invoke_start request_id={} attempt={} backend_id={} timeout_ms={}",
+            request_id, attempt, selected.backend_id, timeout_ms
+        ));
+        let invoke_started_at = Instant::now();
+
         let invocation = adapter
             .invoke_stream(adapter_ctx, canonical_request.clone())
             .await;
+        debug_log(format!(
+            "attempt_invoke_result request_id={} attempt={} backend_id={} elapsed_ms={} success={}",
+            request_id,
+            attempt,
+            selected.backend_id,
+            invoke_started_at.elapsed().as_millis(),
+            invocation.is_ok()
+        ));
 
         let mut emitted_output = false;
         let mut emitted_tool = false;
@@ -311,6 +349,17 @@ async fn run_stream_task(
                     &capabilities,
                     adapter.supports_tool_retry(),
                 );
+                debug_log(format!(
+                    "attempt_invoke_failed request_id={} attempt={} backend_id={} elapsed_ms={} kind={:?} retryable={} can_retry={} error={}",
+                    request_id,
+                    attempt,
+                    selected.backend_id,
+                    attempt_started_at.elapsed().as_millis(),
+                    err.kind,
+                    err.retryable,
+                    can_retry,
+                    err.message
+                ));
 
                 telemetry.on_event(GatewayTelemetryEvent::AttemptFailed {
                     request_id: request_id.clone(),
@@ -360,11 +409,20 @@ async fn run_stream_task(
                 return;
             }
         };
+        debug_log(format!(
+            "attempt_stream_started request_id={} attempt={} backend_id={} dialect={:?} model={}",
+            request_id,
+            attempt,
+            invocation.backend_identity.backend_id,
+            invocation.backend_identity.dialect,
+            invocation.backend_identity.model
+        ));
 
         let mut terminal_error: Option<GatewayError> = None;
         let mut terminal_success: Option<FinishReason> = None;
         let mut stream = invocation.stream;
         let cancel = invocation.cancel.clone();
+        let mut saw_first_stream_event = false;
 
         loop {
             tokio::select! {
@@ -379,6 +437,15 @@ async fn run_stream_task(
                     });
                     return;
                 }
+                _ = sleep(std::time::Duration::from_secs(5)), if !saw_first_stream_event => {
+                    debug_log(format!(
+                        "attempt_waiting_first_event request_id={} attempt={} backend_id={} elapsed_ms={}",
+                        request_id,
+                        attempt,
+                        selected.backend_id,
+                        attempt_started_at.elapsed().as_millis(),
+                    ));
+                }
                 next_item = stream.next() => {
                     let Some(item) = next_item else {
                         if terminal_success.is_none() && terminal_error.is_none() {
@@ -390,6 +457,13 @@ async fn run_stream_task(
                                 .with_retryable(false)
                                 .with_backend_id(selected.backend_id.clone())
                             );
+                            debug_log(format!(
+                                "attempt_stream_ended_without_terminal request_id={} attempt={} backend_id={} elapsed_ms={}",
+                                request_id,
+                                attempt,
+                                selected.backend_id,
+                                attempt_started_at.elapsed().as_millis(),
+                            ));
                         }
                         break;
                     };
@@ -409,6 +483,21 @@ async fn run_stream_task(
                             break;
                         }
                     };
+
+                    if !saw_first_stream_event {
+                        saw_first_stream_event = true;
+                        telemetry.on_event(GatewayTelemetryEvent::StreamFirstEvent {
+                            request_id: request_id.clone(),
+                        });
+                        debug_log(format!(
+                            "attempt_first_event request_id={} attempt={} backend_id={} event={} elapsed_ms={}",
+                            request_id,
+                            attempt,
+                            selected.backend_id,
+                            gateway_event_name(&event),
+                            attempt_started_at.elapsed().as_millis(),
+                        ));
+                    }
 
                     if ResponseNormalizer::is_output_event(&event) {
                         emitted_output = true;
@@ -476,6 +565,14 @@ async fn run_stream_task(
         }
 
         if let Some(finish_reason) = terminal_success {
+            debug_log(format!(
+                "attempt_completed request_id={} attempt={} backend_id={} finish_reason={:?} elapsed_ms={}",
+                request_id,
+                attempt,
+                selected.backend_id,
+                finish_reason,
+                attempt_started_at.elapsed().as_millis(),
+            ));
             reliability.record_success(&selected.backend_id).await;
             let _ = tx
                 .send(Ok(GatewayEvent::Completed {
@@ -490,6 +587,13 @@ async fn run_stream_task(
                 usage: last_usage,
                 cost_attribution_id,
             });
+            debug_log(format!(
+                "request_completed request_id={} backend_id={} attempts={} total_elapsed_ms={}",
+                canonical_request.request_id,
+                selected.backend_id,
+                attempt + 1,
+                request_started_at.elapsed().as_millis(),
+            ));
             return;
         }
 
@@ -510,6 +614,19 @@ async fn run_stream_task(
             &capabilities,
             adapter.supports_tool_retry(),
         );
+        debug_log(format!(
+            "attempt_terminal_error request_id={} attempt={} backend_id={} kind={:?} retryable={} can_retry={} emitted_output={} emitted_tool={} elapsed_ms={} error={}",
+            request_id,
+            attempt,
+            selected.backend_id,
+            err.kind,
+            err.retryable,
+            can_retry,
+            emitted_output,
+            emitted_tool,
+            attempt_started_at.elapsed().as_millis(),
+            err.message
+        ));
 
         telemetry.on_event(GatewayTelemetryEvent::AttemptFailed {
             request_id: request_id.clone(),
@@ -559,7 +676,27 @@ async fn run_stream_task(
             error_kind: err.kind,
             cost_attribution_id,
         });
+        debug_log(format!(
+            "request_failed request_id={} backend_id={} attempts={} total_elapsed_ms={} error_kind={:?}",
+            canonical_request.request_id,
+            selected.backend_id,
+            attempt + 1,
+            request_started_at.elapsed().as_millis(),
+            err.kind
+        ));
         return;
+    }
+}
+
+fn gateway_event_name(event: &GatewayEvent) -> &'static str {
+    match event {
+        GatewayEvent::Started { .. } => "started",
+        GatewayEvent::OutputTextDelta { .. } => "output_text_delta",
+        GatewayEvent::ToolCallDelta { .. } => "tool_call_delta",
+        GatewayEvent::ToolCallReady { .. } => "tool_call_ready",
+        GatewayEvent::Usage { .. } => "usage",
+        GatewayEvent::Completed { .. } => "completed",
+        GatewayEvent::Failed { .. } => "failed",
     }
 }
 

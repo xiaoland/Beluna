@@ -9,10 +9,9 @@ use crate::{
     ledger::{DispatchContext as LedgerDispatchContext, LedgerDispatchTicket, LedgerStage},
     runtime_types::{Act, CognitionState, DispatchDecision, PhysicalState, Sense},
     spine::{
-        ActDispatchRequest, EndpointCapabilityDescriptor, EndpointRegistration, EndpointRegistryPort,
+        EndpointCapabilityDescriptor, EndpointExecutionOutcome, EndpointRegistryPort,
         NativeFunctionEndpoint, RouteKey, SpineEvent, SpineExecutorPort,
-        adapters::catalog_bridge::to_cortex_catalog,
-        types::CostVector,
+        adapters::catalog_bridge::to_cortex_catalog, types::CostVector,
     },
 };
 
@@ -69,7 +68,10 @@ impl StemRuntime {
                         self.continuity.lock().await.apply_capability_patch(patch);
                     }
                     Sense::DropCapabilities(drop_patch) => {
-                        self.continuity.lock().await.apply_capability_drop(drop_patch);
+                        self.continuity
+                            .lock()
+                            .await
+                            .apply_capability_drop(drop_patch);
                     }
                     Sense::Domain(_) | Sense::Sleep => {}
                 }
@@ -96,6 +98,11 @@ impl StemRuntime {
                 .lock()
                 .await
                 .persist_cognition_state(output.new_cognition_state.clone())?;
+            eprintln!(
+                "[stem] cycle={} generated_acts={}",
+                self.cycle_id,
+                output.acts.len()
+            );
 
             for (index, act) in output.acts.into_iter().enumerate() {
                 self.dispatch_one_act_serial(
@@ -120,7 +127,8 @@ impl StemRuntime {
         let spine_catalog = to_cortex_catalog(&self.spine.capability_catalog_snapshot());
         let continuity_catalog = self.continuity.lock().await.capabilities_snapshot();
         let ledger_catalog = CapabilityCatalog::default();
-        let merged = merge_capability_catalogs(cycle_id, spine_catalog, continuity_catalog, ledger_catalog);
+        let merged =
+            merge_capability_catalogs(cycle_id, spine_catalog, continuity_catalog, ledger_catalog);
 
         Ok(PhysicalState {
             cycle_id,
@@ -136,6 +144,10 @@ impl StemRuntime {
         act: Act,
         cognition_state: &CognitionState,
     ) -> Result<()> {
+        eprintln!(
+            "[stem] dispatch_attempt cycle={} seq={} act_id={} endpoint_id={} capability_id={}",
+            cycle_id, seq_no, act.act_id, act.endpoint_id, act.capability_id
+        );
         let ledger_ctx = LedgerDispatchContext {
             cycle_id,
             act_seq_no: seq_no,
@@ -145,18 +157,27 @@ impl StemRuntime {
             act_seq_no: seq_no,
         };
 
-        let (ledger_decision, ticket_opt) = self.ledger.lock().await.pre_dispatch(&act, &ledger_ctx)?;
+        let (ledger_decision, ticket_opt) =
+            self.ledger.lock().await.pre_dispatch(&act, &ledger_ctx)?;
         if matches!(ledger_decision, DispatchDecision::Break) {
+            eprintln!(
+                "[stem] dispatch_break cycle={} seq={} reason=ledger_break",
+                cycle_id, seq_no
+            );
             return Ok(());
         }
         let ticket = ticket_opt.expect("ledger continue must return ticket");
 
-        let continuity_decision = self
-            .continuity
-            .lock()
-            .await
-            .pre_dispatch(&act, cognition_state, &continuity_ctx)?;
+        let continuity_decision =
+            self.continuity
+                .lock()
+                .await
+                .pre_dispatch(&act, cognition_state, &continuity_ctx)?;
         if matches!(continuity_decision, DispatchDecision::Break) {
+            eprintln!(
+                "[stem] dispatch_break cycle={} seq={} reason=continuity_break",
+                cycle_id, seq_no
+            );
             let event = synthetic_continuity_break_event(cycle_id, seq_no, &act, &ticket);
             self.ledger
                 .lock()
@@ -169,18 +190,22 @@ impl StemRuntime {
             return Ok(());
         }
 
-        let request = ActDispatchRequest {
-            cycle_id,
-            seq_no,
-            act: act.clone(),
-            reserve_entry_id: ticket.reserve_entry_id.clone(),
-            cost_attribution_id: ticket.cost_attribution_id.clone(),
-        };
-
-        let event = match self.spine.dispatch_act(request).await {
-            Ok(event) => event,
+        let event = match self.spine.dispatch_act(act.clone()).await {
+            Ok(outcome) => {
+                map_endpoint_outcome_to_spine_event(cycle_id, seq_no, &act, &ticket, outcome)
+            }
             Err(err) => map_spine_error_to_rejected_event(cycle_id, seq_no, &act, &ticket, err),
         };
+        eprintln!(
+            "[stem] dispatch_event cycle={} seq={} kind={}",
+            cycle_id,
+            seq_no,
+            match &event {
+                SpineEvent::ActApplied { .. } => "act_applied",
+                SpineEvent::ActRejected { .. } => "act_rejected",
+                SpineEvent::ActDeferred { .. } => "act_deferred",
+            }
+        );
 
         self.ledger
             .lock()
@@ -228,7 +253,60 @@ fn map_spine_error_to_rejected_event(
         reserve_entry_id: ticket.reserve_entry_id.clone(),
         cost_attribution_id: ticket.cost_attribution_id.clone(),
         reason_code: "spine_error".to_string(),
-        reference_id: format!("stem:spine_error:{}:{}:{}:{}", cycle_id, seq_no, act.act_id, err.kind as u8),
+        reference_id: format!(
+            "stem:spine_error:{}:{}:{}:{}",
+            cycle_id, seq_no, act.act_id, err.kind as u8
+        ),
+    }
+}
+
+fn map_endpoint_outcome_to_spine_event(
+    cycle_id: u64,
+    seq_no: u64,
+    act: &Act,
+    ticket: &LedgerDispatchTicket,
+    outcome: EndpointExecutionOutcome,
+) -> SpineEvent {
+    match outcome {
+        EndpointExecutionOutcome::Applied {
+            actual_cost_micro,
+            reference_id,
+        } => SpineEvent::ActApplied {
+            cycle_id,
+            seq_no,
+            act_id: act.act_id.clone(),
+            capability_instance_id: act.capability_instance_id.clone(),
+            reserve_entry_id: ticket.reserve_entry_id.clone(),
+            cost_attribution_id: ticket.cost_attribution_id.clone(),
+            actual_cost_micro,
+            reference_id,
+        },
+        EndpointExecutionOutcome::Rejected {
+            reason_code,
+            reference_id,
+        } => SpineEvent::ActRejected {
+            cycle_id,
+            seq_no,
+            act_id: act.act_id.clone(),
+            capability_instance_id: act.capability_instance_id.clone(),
+            reserve_entry_id: ticket.reserve_entry_id.clone(),
+            cost_attribution_id: ticket.cost_attribution_id.clone(),
+            reason_code,
+            reference_id,
+        },
+        EndpointExecutionOutcome::Deferred {
+            reason_code,
+            reference_id,
+        } => SpineEvent::ActDeferred {
+            cycle_id,
+            seq_no,
+            act_id: act.act_id.clone(),
+            capability_instance_id: act.capability_instance_id.clone(),
+            reserve_entry_id: ticket.reserve_entry_id.clone(),
+            cost_attribution_id: ticket.cost_attribution_id.clone(),
+            reason_code,
+            reference_id,
+        },
     }
 }
 
@@ -260,20 +338,18 @@ fn merge_capability_catalogs(
 }
 
 pub fn register_default_native_endpoints(registry: Arc<dyn EndpointRegistryPort>) -> Result<()> {
-    let native_endpoint = Arc::new(NativeFunctionEndpoint::new(Arc::new(|invocation| {
-        let request = invocation.request;
+    let native_endpoint = Arc::new(NativeFunctionEndpoint::new(Arc::new(|act| {
         Ok(crate::spine::types::EndpointExecutionOutcome::Applied {
-            actual_cost_micro: request.act.requested_resources.survival_micro.max(0),
-            reference_id: format!("native:settle:{}", request.act.act_id),
+            actual_cost_micro: act.requested_resources.survival_micro.max(0),
+            reference_id: format!("native:settle:{}", act.act_id),
         })
     })));
 
-    let register = |endpoint_id: &str, capability_id: &str, default_cost: CostVector| -> Result<()> {
-        registry
-            .register(
-                EndpointRegistration {
-                    endpoint_id: format!("ep:native:{}:{}", endpoint_id, capability_id),
-                    descriptor: EndpointCapabilityDescriptor {
+    let register =
+        |endpoint_id: &str, capability_id: &str, default_cost: CostVector| -> Result<()> {
+            registry
+                .register(
+                    EndpointCapabilityDescriptor {
                         route: RouteKey {
                             endpoint_id: endpoint_id.to_string(),
                             capability_id: capability_id.to_string(),
@@ -283,12 +359,11 @@ pub fn register_default_native_endpoints(registry: Arc<dyn EndpointRegistryPort>
                         default_cost,
                         metadata: Default::default(),
                     },
-                },
-                native_endpoint.clone(),
-            )
-            .map_err(|err| anyhow::anyhow!(err.to_string()))?;
-        Ok(())
-    };
+                    native_endpoint.clone(),
+                )
+                .map_err(|err| anyhow::anyhow!(err.to_string()))?;
+            Ok(())
+        };
 
     register(
         "deliberate.plan",

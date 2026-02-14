@@ -9,26 +9,28 @@ use tokio_util::sync::CancellationToken;
 
 use beluna::{
     ai_gateway::{
-        credentials::EnvCredentialProvider, gateway::AIGateway, telemetry::NoopTelemetrySink,
+        credentials::EnvCredentialProvider,
+        gateway::AIGateway,
+        telemetry::{
+            NoopTelemetrySink, StderrTelemetrySink, TelemetrySink, ai_gateway_debug_enabled,
+        },
     },
     body::std::register_std_body_endpoints,
     cli::config_path_from_args,
     config::Config,
     continuity::ContinuityEngine,
     cortex::{
-        AIGatewayAttemptExtractor, AIGatewayPayloadFiller, AIGatewayPrimaryReasoner,
-        CortexPipeline, DeterministicAttemptClamp, NoopTelemetryPort,
+        AIGatewayAttemptExtractor, AIGatewayPrimaryReasoner, CortexPipeline, NoopTelemetryPort,
     },
     ingress::SenseIngress,
     ledger::LedgerStage,
     spine::{
         EndpointRegistryPort, InMemoryEndpointRegistry, RoutingSpineExecutor, SpineExecutionMode,
-        adapters::unix_socket::{BodyEndpointBroker, UnixSocketAdapter},
+        SpineExecutorPort, adapters::unix_socket::UnixSocketAdapter, global_executor,
+        install_global_executor,
     },
     stem::{StemRuntime, register_default_native_endpoints},
 };
-
-const REMOTE_ENDPOINT_TIMEOUT_MS: u64 = 30_000;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -39,11 +41,23 @@ async fn main() -> Result<()> {
     let (sense_tx, sense_rx) = mpsc::channel(config.r#loop.sense_queue_capacity.max(1));
     let ingress = SenseIngress::new(sense_tx);
 
+    let gateway_debug_enabled = ai_gateway_debug_enabled();
+    let gateway_telemetry: Arc<dyn TelemetrySink> = if gateway_debug_enabled {
+        Arc::new(StderrTelemetrySink)
+    } else {
+        Arc::new(NoopTelemetrySink)
+    };
+    if gateway_debug_enabled {
+        eprintln!(
+            "[ai_gateway] verbose debug logging enabled (set BELUNA_DEBUG_AI_GATEWAY=0/false to disable)"
+        );
+    }
+
     let gateway = Arc::new(
         AIGateway::new(
             config.ai_gateway.clone(),
             Arc::new(EnvCredentialProvider),
-            Arc::new(NoopTelemetrySink),
+            gateway_telemetry,
         )
         .context("failed to construct ai gateway for cortex")?,
     );
@@ -58,26 +72,19 @@ async fn main() -> Result<()> {
         config.cortex.sub_backend_id.clone(),
         None,
     ));
-    let filler = Arc::new(AIGatewayPayloadFiller::new(
-        Arc::clone(&gateway),
-        config.cortex.sub_backend_id.clone(),
-        None,
-    ));
-    let clamp = Arc::new(DeterministicAttemptClamp);
     let telemetry = Arc::new(NoopTelemetryPort);
     let cortex = Arc::new(CortexPipeline::new(
         primary,
         extractor,
-        filler,
-        clamp,
         telemetry,
         config.cortex.default_limits.clone(),
     ));
 
-    let registry: Arc<dyn EndpointRegistryPort> = Arc::new(InMemoryEndpointRegistry::new());
-    register_default_native_endpoints(Arc::clone(&registry))?;
+    let registry = Arc::new(InMemoryEndpointRegistry::new());
+    let registry_port: Arc<dyn EndpointRegistryPort> = registry.clone();
+    register_default_native_endpoints(Arc::clone(&registry_port))?;
     register_std_body_endpoints(
-        Arc::clone(&registry),
+        Arc::clone(&registry_port),
         ingress.clone(),
         config.body.std_shell.enabled,
         config.body.std_shell.limits.clone(),
@@ -85,10 +92,14 @@ async fn main() -> Result<()> {
         config.body.std_web.limits.clone(),
     )?;
 
-    let spine = Arc::new(RoutingSpineExecutor::new(
+    let spine: Arc<dyn SpineExecutorPort> = Arc::new(RoutingSpineExecutor::new(
         SpineExecutionMode::SerializedDeterministic,
-        Arc::clone(&registry),
+        Arc::clone(&registry_port),
     ));
+    install_global_executor(Arc::clone(&spine))
+        .context("failed to initialize process-wide spine singleton")?;
+    let spine = global_executor().context("spine singleton is not initialized")?;
+
     let continuity = Arc::new(Mutex::new(ContinuityEngine::with_defaults()));
     let ledger = Arc::new(Mutex::new(LedgerStage::new(1_000_000)));
 
@@ -96,14 +107,12 @@ async fn main() -> Result<()> {
     let stem_task = tokio::spawn(async move { stem_runtime.run().await });
 
     let shutdown = CancellationToken::new();
-    let broker = Arc::new(BodyEndpointBroker::new(REMOTE_ENDPOINT_TIMEOUT_MS));
     let adapter = UnixSocketAdapter::new(config.socket_path.clone());
     let adapter_shutdown = shutdown.clone();
     let adapter_task = tokio::spawn({
         let ingress = ingress.clone();
         let registry = Arc::clone(&registry);
-        let broker = Arc::clone(&broker);
-        async move { adapter.run(ingress, registry, broker, adapter_shutdown).await }
+        async move { adapter.run(ingress, registry, adapter_shutdown).await }
     });
 
     eprintln!(

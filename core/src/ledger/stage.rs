@@ -162,12 +162,12 @@ impl LedgerStage {
         &mut self.ledger
     }
 
-    pub fn expire_open_reservations(&mut self, cycle_id: u64) -> Result<Vec<String>, ContinuityError> {
-        self.ledger.expire_open_reservations(
-            cycle_id,
-            "expiry",
-            self.policy_versions.clone(),
-        )
+    pub fn expire_open_reservations(
+        &mut self,
+        cycle_id: u64,
+    ) -> Result<Vec<String>, ContinuityError> {
+        self.ledger
+            .expire_open_reservations(cycle_id, "expiry", self.policy_versions.clone())
     }
 
     pub fn ensure_reservation_open(&self, reserve_entry_id: &str) -> Result<(), ContinuityError> {

@@ -7,8 +7,8 @@ use tokio::{
 
 use crate::{
     body::std::payloads::{ShellExecRequest, ShellLimits},
-    runtime_types::SenseDatum,
-    spine::types::{ActDispatchRequest, EndpointExecutionOutcome},
+    runtime_types::{Act, SenseDatum},
+    spine::types::EndpointExecutionOutcome,
 };
 
 pub struct ShellHandlerOutput {
@@ -18,11 +18,11 @@ pub struct ShellHandlerOutput {
 
 pub async fn handle_shell_invoke(
     request_id: &str,
-    request: &ActDispatchRequest,
+    act: &Act,
     limits: &ShellLimits,
 ) -> ShellHandlerOutput {
-    let act = &request.act;
-    let parse_result: Result<ShellExecRequest, _> = serde_json::from_value(act.normalized_payload.clone());
+    let parse_result: Result<ShellExecRequest, _> =
+        serde_json::from_value(act.normalized_payload.clone());
     let command_request = match parse_result {
         Ok(request) => request,
         Err(_) => {
@@ -66,28 +66,29 @@ pub async fn handle_shell_invoke(
     command.kill_on_drop(true);
 
     let output = match command.spawn() {
-        Ok(child) => match timeout(Duration::from_millis(timeout_ms), child.wait_with_output()).await
-        {
-            Ok(Ok(output)) => output,
-            Ok(Err(_)) => {
-                return ShellHandlerOutput {
-                    outcome: EndpointExecutionOutcome::Rejected {
-                        reason_code: "exec_failure".to_string(),
-                        reference_id: format!("body.std.shell:wait_failure:{}", act.act_id),
-                    },
-                    sense: None,
-                };
+        Ok(child) => {
+            match timeout(Duration::from_millis(timeout_ms), child.wait_with_output()).await {
+                Ok(Ok(output)) => output,
+                Ok(Err(_)) => {
+                    return ShellHandlerOutput {
+                        outcome: EndpointExecutionOutcome::Rejected {
+                            reason_code: "exec_failure".to_string(),
+                            reference_id: format!("body.std.shell:wait_failure:{}", act.act_id),
+                        },
+                        sense: None,
+                    };
+                }
+                Err(_) => {
+                    return ShellHandlerOutput {
+                        outcome: EndpointExecutionOutcome::Rejected {
+                            reason_code: "timeout".to_string(),
+                            reference_id: format!("body.std.shell:timeout:{}", act.act_id),
+                        },
+                        sense: None,
+                    };
+                }
             }
-            Err(_) => {
-                return ShellHandlerOutput {
-                    outcome: EndpointExecutionOutcome::Rejected {
-                        reason_code: "timeout".to_string(),
-                        reference_id: format!("body.std.shell:timeout:{}", act.act_id),
-                    },
-                    sense: None,
-                };
-            }
-        },
+        }
         Err(_) => {
             return ShellHandlerOutput {
                 outcome: EndpointExecutionOutcome::Rejected {
@@ -166,37 +167,34 @@ fn truncate_to_text(bytes: &[u8], cap: usize) -> (String, bool) {
 mod tests {
     use crate::{
         runtime_types::{Act, RequestedResources},
-        spine::types::{ActDispatchRequest, EndpointExecutionOutcome},
+        spine::types::EndpointExecutionOutcome,
     };
 
     use super::{ShellLimits, handle_shell_invoke};
 
-    fn build_request(act_id: &str, payload: serde_json::Value) -> ActDispatchRequest {
-        ActDispatchRequest {
-            cycle_id: 1,
-            seq_no: 1,
-            act: Act {
-                act_id: act_id.to_string(),
-                based_on: vec!["sense:1".to_string()],
-                endpoint_id: "ep:body:std:shell".to_string(),
-                capability_id: "tool.shell.exec".to_string(),
-                capability_instance_id: "shell.instance".to_string(),
-                normalized_payload: payload,
-                requested_resources: RequestedResources {
-                    survival_micro: 123,
-                    time_ms: 1,
-                    io_units: 1,
-                    token_units: 0,
-                },
+    fn build_request(act_id: &str, payload: serde_json::Value) -> Act {
+        Act {
+            act_id: act_id.to_string(),
+            based_on: vec!["sense:1".to_string()],
+            endpoint_id: "ep:body:std:shell".to_string(),
+            capability_id: "tool.shell.exec".to_string(),
+            capability_instance_id: "shell.instance".to_string(),
+            normalized_payload: payload,
+            requested_resources: RequestedResources {
+                survival_micro: 123,
+                time_ms: 1,
+                io_units: 1,
+                token_units: 0,
             },
-            reserve_entry_id: "res:1".to_string(),
-            cost_attribution_id: "cost:1".to_string(),
         }
     }
 
     #[tokio::test]
     async fn rejects_invalid_payload() {
-        let request = build_request("act:invalid", serde_json::json!({"url": "https://example.com"}));
+        let request = build_request(
+            "act:invalid",
+            serde_json::json!({"url": "https://example.com"}),
+        );
         let output = handle_shell_invoke("req:1", &request, &ShellLimits::default()).await;
 
         assert!(matches!(

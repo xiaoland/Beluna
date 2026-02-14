@@ -3,7 +3,7 @@ use std::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use async_trait::async_trait;
@@ -16,6 +16,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use crate::ai_gateway::{
     adapters::{BackendAdapter, http_common},
     error::{GatewayError, GatewayErrorKind},
+    telemetry::debug_log,
     types::{
         AdapterContext, AdapterInvocation, BackendCapabilities, BackendDialect, BackendIdentity,
         BackendRawEvent, CanonicalOutputMode, CanonicalRequest, CanonicalToolCall, ToolCallStatus,
@@ -79,8 +80,14 @@ impl BackendAdapter for OpenAiCompatibleAdapter {
         let model = ctx.model.clone();
         let request_id = ctx.request_id.clone();
         let credential = ctx.credential.clone();
+        let timeout_ms = ctx.timeout.as_millis();
 
         tokio::spawn(async move {
+            let request_started_at = Instant::now();
+            debug_log(format!(
+                "openai_dispatch_start request_id={} backend_id={} model={} stream={} timeout_ms={} url={}",
+                request_id, backend_id, model, req.stream, timeout_ms, url
+            ));
             let mut body = json!({
                 "model": model,
                 "messages": http_common::canonical_messages_to_openai(&req.messages),
@@ -104,7 +111,7 @@ impl BackendAdapter for OpenAiCompatibleAdapter {
                 .post(url)
                 .timeout(ctx.timeout)
                 .header(header::CONTENT_TYPE, "application/json")
-                .header("x-request-id", request_id)
+                .header("x-request-id", request_id.clone())
                 .json(&body);
 
             if let Some(auth_header) = credential.auth_header {
@@ -114,9 +121,21 @@ impl BackendAdapter for OpenAiCompatibleAdapter {
                 req_builder = req_builder.header(k, v);
             }
 
+            let send_started_at = Instant::now();
+            debug_log(format!(
+                "openai_http_send request_id={} backend_id={} timeout_ms={}",
+                request_id, backend_id, timeout_ms
+            ));
             let response = match req_builder.send().await {
                 Ok(response) => response,
                 Err(err) => {
+                    debug_log(format!(
+                        "openai_http_error request_id={} backend_id={} elapsed_ms={} error={}",
+                        request_id,
+                        backend_id,
+                        send_started_at.elapsed().as_millis(),
+                        err
+                    ));
                     let _ = tx
                         .send(Err(GatewayError::new(
                             GatewayErrorKind::BackendTransient,
@@ -128,10 +147,25 @@ impl BackendAdapter for OpenAiCompatibleAdapter {
                     return;
                 }
             };
+            debug_log(format!(
+                "openai_http_headers request_id={} backend_id={} status={} elapsed_ms={}",
+                request_id,
+                backend_id,
+                response.status().as_u16(),
+                send_started_at.elapsed().as_millis()
+            ));
 
             if !response.status().is_success() {
                 let status = response.status().as_u16();
                 let body = response.text().await.unwrap_or_default();
+                debug_log(format!(
+                    "openai_http_non_success request_id={} backend_id={} status={} elapsed_ms={} body_bytes={}",
+                    request_id,
+                    backend_id,
+                    status,
+                    request_started_at.elapsed().as_millis(),
+                    body.len()
+                ));
                 let _ = tx
                     .send(Err(http_common::map_http_error(status, &backend_id, &body)))
                     .await;
@@ -142,15 +176,29 @@ impl BackendAdapter for OpenAiCompatibleAdapter {
                 let mut stream = response.bytes_stream();
                 let mut buffer = String::new();
                 let mut saw_terminal = false;
+                let mut saw_first_chunk = false;
 
                 while let Some(item) = stream.next().await {
                     if cancel_flag_task.load(Ordering::SeqCst) {
+                        debug_log(format!(
+                            "openai_stream_cancelled request_id={} backend_id={} elapsed_ms={}",
+                            request_id,
+                            backend_id,
+                            request_started_at.elapsed().as_millis()
+                        ));
                         return;
                     }
 
                     let chunk = match item {
                         Ok(chunk) => chunk,
                         Err(err) => {
+                            debug_log(format!(
+                                "openai_stream_chunk_error request_id={} backend_id={} elapsed_ms={} error={}",
+                                request_id,
+                                backend_id,
+                                request_started_at.elapsed().as_millis(),
+                                err
+                            ));
                             let _ = tx
                                 .send(Err(GatewayError::new(
                                     GatewayErrorKind::BackendTransient,
@@ -162,6 +210,16 @@ impl BackendAdapter for OpenAiCompatibleAdapter {
                             return;
                         }
                     };
+                    if !saw_first_chunk {
+                        saw_first_chunk = true;
+                        debug_log(format!(
+                            "openai_stream_first_chunk request_id={} backend_id={} elapsed_ms={} chunk_bytes={}",
+                            request_id,
+                            backend_id,
+                            request_started_at.elapsed().as_millis(),
+                            chunk.len()
+                        ));
+                    }
 
                     buffer.push_str(&String::from_utf8_lossy(&chunk));
                     while let Some(idx) = buffer.find('\n') {
@@ -177,6 +235,13 @@ impl BackendAdapter for OpenAiCompatibleAdapter {
                             continue;
                         }
                         if data == "[DONE]" {
+                            debug_log(format!(
+                                "openai_stream_done request_id={} backend_id={} elapsed_ms={} saw_terminal={}",
+                                request_id,
+                                backend_id,
+                                request_started_at.elapsed().as_millis(),
+                                saw_terminal
+                            ));
                             if !saw_terminal {
                                 let _ = tx
                                     .send(Ok(BackendRawEvent::Completed {
@@ -225,18 +290,39 @@ impl BackendAdapter for OpenAiCompatibleAdapter {
                 }
 
                 if !saw_terminal {
+                    debug_log(format!(
+                        "openai_stream_end_without_terminal request_id={} backend_id={} elapsed_ms={}",
+                        request_id,
+                        backend_id,
+                        request_started_at.elapsed().as_millis()
+                    ));
                     let _ = tx
                         .send(Ok(BackendRawEvent::Completed {
                             finish_reason: crate::ai_gateway::types::FinishReason::Stop,
                         }))
                         .await;
                 }
+                debug_log(format!(
+                    "openai_stream_end request_id={} backend_id={} elapsed_ms={} saw_first_chunk={} saw_terminal={}",
+                    request_id,
+                    backend_id,
+                    request_started_at.elapsed().as_millis(),
+                    saw_first_chunk,
+                    saw_terminal
+                ));
                 return;
             }
 
             let payload = match response.json::<Value>().await {
                 Ok(payload) => payload,
                 Err(err) => {
+                    debug_log(format!(
+                        "openai_body_decode_error request_id={} backend_id={} elapsed_ms={} error={}",
+                        request_id,
+                        backend_id,
+                        request_started_at.elapsed().as_millis(),
+                        err
+                    ));
                     let _ = tx
                         .send(Err(GatewayError::new(
                             GatewayErrorKind::ProtocolViolation,
@@ -248,6 +334,12 @@ impl BackendAdapter for OpenAiCompatibleAdapter {
                     return;
                 }
             };
+            debug_log(format!(
+                "openai_non_stream_payload_ready request_id={} backend_id={} elapsed_ms={}",
+                request_id,
+                backend_id,
+                request_started_at.elapsed().as_millis()
+            ));
 
             match parse_non_stream_payload(&payload, &backend_id) {
                 Ok(events) => {

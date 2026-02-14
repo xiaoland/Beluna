@@ -71,7 +71,10 @@ impl SenseIngress {
         if !self.gate_open.load(Ordering::Acquire) {
             return Err(IngressError::closed());
         }
-        self.tx.send(sense).await.map_err(|_| IngressError::queue_closed())
+        self.tx
+            .send(sense)
+            .await
+            .map_err(|_| IngressError::queue_closed())
     }
 
     pub async fn close_gate(&self) {

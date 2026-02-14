@@ -25,7 +25,10 @@ impl CortexPort for CaptureCortex {
         physical_state: &PhysicalState,
         cognition_state: &CognitionState,
     ) -> Result<CortexOutput, CortexError> {
-        self.physical_states.lock().await.push(physical_state.clone());
+        self.physical_states
+            .lock()
+            .await
+            .push(physical_state.clone());
         Ok(CortexOutput {
             acts: Vec::new(),
             new_cognition_state: cognition_state.clone(),
@@ -71,8 +74,10 @@ async fn new_capabilities_patch_takes_effect_before_cortex() {
         .capabilities
         .resolve("ep.patch")
         .expect("patched capability should be visible to cortex");
-    assert!(affordance
-        .allowed_capability_ids
-        .iter()
-        .any(|value| value == "cap.patch"));
+    assert!(
+        affordance
+            .allowed_capability_ids
+            .iter()
+            .any(|value| value == "cap.patch")
+    );
 }

@@ -33,7 +33,10 @@ impl ContinuityEngine {
         self.state.cognition_state_snapshot()
     }
 
-    pub fn persist_cognition_state(&mut self, state: CognitionState) -> Result<(), ContinuityError> {
+    pub fn persist_cognition_state(
+        &mut self,
+        state: CognitionState,
+    ) -> Result<(), ContinuityError> {
         self.state.persist_cognition_state(state);
         Ok(())
     }

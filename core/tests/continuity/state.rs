@@ -6,7 +6,11 @@ use beluna::{
     spine::types::{EndpointCapabilityDescriptor, RouteKey, SpineEvent},
 };
 
-fn descriptor(endpoint_id: &str, capability_id: &str, max_payload_bytes: usize) -> EndpointCapabilityDescriptor {
+fn descriptor(
+    endpoint_id: &str,
+    capability_id: &str,
+    max_payload_bytes: usize,
+) -> EndpointCapabilityDescriptor {
     EndpointCapabilityDescriptor {
         route: RouteKey {
             endpoint_id: endpoint_id.to_string(),

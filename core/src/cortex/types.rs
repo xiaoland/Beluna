@@ -47,7 +47,7 @@ impl Default for ReactionLimits {
         Self {
             max_attempts: 4,
             max_payload_bytes: 16_384,
-            max_cycle_time_ms: 5_000,
+            max_cycle_time_ms: 60_000,
             max_primary_calls: 1,
             max_sub_calls: 2,
             max_repair_attempts: 1,

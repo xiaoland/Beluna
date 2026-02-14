@@ -6,8 +6,8 @@ use tokio::time::{Duration, timeout};
 
 use crate::{
     body::std::payloads::{WebFetchRequest, WebLimits},
-    runtime_types::SenseDatum,
-    spine::types::{ActDispatchRequest, EndpointExecutionOutcome},
+    runtime_types::{Act, SenseDatum},
+    spine::types::EndpointExecutionOutcome,
 };
 
 pub struct WebHandlerOutput {
@@ -17,11 +17,11 @@ pub struct WebHandlerOutput {
 
 pub async fn handle_web_invoke(
     request_id: &str,
-    request: &ActDispatchRequest,
+    act: &Act,
     limits: &WebLimits,
 ) -> WebHandlerOutput {
-    let act = &request.act;
-    let web_request: WebFetchRequest = match serde_json::from_value(act.normalized_payload.clone()) {
+    let web_request: WebFetchRequest = match serde_json::from_value(act.normalized_payload.clone())
+    {
         Ok(request) => request,
         Err(_) => {
             return WebHandlerOutput {
@@ -194,31 +194,25 @@ mod tests {
 
     use crate::{
         runtime_types::{Act, RequestedResources},
-        spine::types::{ActDispatchRequest, EndpointExecutionOutcome},
+        spine::types::EndpointExecutionOutcome,
     };
 
     use super::{WebLimits, handle_web_invoke};
 
-    fn build_request(act_id: &str, payload: serde_json::Value) -> ActDispatchRequest {
-        ActDispatchRequest {
-            cycle_id: 1,
-            seq_no: 1,
-            act: Act {
-                act_id: act_id.to_string(),
-                based_on: vec!["sense:1".to_string()],
-                endpoint_id: "ep:body:std:web".to_string(),
-                capability_id: "tool.web.fetch".to_string(),
-                capability_instance_id: "web.instance".to_string(),
-                normalized_payload: payload,
-                requested_resources: RequestedResources {
-                    survival_micro: 321,
-                    time_ms: 1,
-                    io_units: 1,
-                    token_units: 0,
-                },
+    fn build_request(act_id: &str, payload: serde_json::Value) -> Act {
+        Act {
+            act_id: act_id.to_string(),
+            based_on: vec!["sense:1".to_string()],
+            endpoint_id: "ep:body:std:web".to_string(),
+            capability_id: "tool.web.fetch".to_string(),
+            capability_instance_id: "web.instance".to_string(),
+            normalized_payload: payload,
+            requested_resources: RequestedResources {
+                survival_micro: 321,
+                time_ms: 1,
+                io_units: 1,
+                token_units: 0,
             },
-            reserve_entry_id: "res:1".to_string(),
-            cost_attribution_id: "cost:1".to_string(),
         }
     }
 
@@ -249,7 +243,10 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_unsupported_scheme() {
-        let request = build_request("act:unsupported", serde_json::json!({"url": "ftp://example.com/file.txt"}));
+        let request = build_request(
+            "act:unsupported",
+            serde_json::json!({"url": "ftp://example.com/file.txt"}),
+        );
 
         let output = handle_web_invoke("req:unsupported", &request, &WebLimits::default()).await;
 

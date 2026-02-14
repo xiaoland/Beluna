@@ -9,8 +9,8 @@ use beluna::{
     ledger::LedgerStage,
     runtime_types::{Act, CognitionState, PhysicalState, RequestedResources, Sense, SenseDatum},
     spine::{
-        ActDispatchRequest, SpineCapabilityCatalog, SpineEvent, SpineExecutionMode,
-        SpineExecutorPort,
+        SpineCapabilityCatalog, SpineExecutionMode, SpineExecutorPort,
+        types::EndpointExecutionOutcome,
     },
     stem::StemRuntime,
 };
@@ -63,7 +63,7 @@ impl CortexPort for TwoActCortex {
 
 #[derive(Default)]
 struct SpySpine {
-    requests: Mutex<Vec<ActDispatchRequest>>,
+    requests: Mutex<Vec<Act>>,
 }
 
 #[async_trait]
@@ -72,17 +72,14 @@ impl SpineExecutorPort for SpySpine {
         SpineExecutionMode::SerializedDeterministic
     }
 
-    async fn dispatch_act(&self, request: ActDispatchRequest) -> Result<SpineEvent, beluna::spine::SpineError> {
-        self.requests.lock().await.push(request.clone());
-        Ok(SpineEvent::ActApplied {
-            cycle_id: request.cycle_id,
-            seq_no: request.seq_no,
-            act_id: request.act.act_id.clone(),
-            capability_instance_id: request.act.capability_instance_id.clone(),
-            reserve_entry_id: request.reserve_entry_id.clone(),
-            cost_attribution_id: request.cost_attribution_id.clone(),
-            actual_cost_micro: request.act.requested_resources.survival_micro.max(0),
-            reference_id: format!("spy:settle:{}", request.act.act_id),
+    async fn dispatch_act(
+        &self,
+        act: Act,
+    ) -> Result<EndpointExecutionOutcome, beluna::spine::SpineError> {
+        self.requests.lock().await.push(act.clone());
+        Ok(EndpointExecutionOutcome::Applied {
+            actual_cost_micro: act.requested_resources.survival_micro.max(0),
+            reference_id: format!("spy:settle:{}", act.act_id),
         })
     }
 
@@ -122,6 +119,5 @@ async fn break_stops_current_act_only_and_keeps_next_act() {
 
     let requests = spy_spine.requests.lock().await;
     assert_eq!(requests.len(), 1, "only second act should be dispatched");
-    assert_eq!(requests[0].act.act_id, "act:2");
-    assert_eq!(requests[0].seq_no, 2, "sequence should preserve output order");
+    assert_eq!(requests[0].act_id, "act:2");
 }

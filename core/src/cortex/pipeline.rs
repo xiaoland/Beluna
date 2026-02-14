@@ -5,22 +5,20 @@ use tokio::time::{Duration, timeout};
 
 use crate::{
     cortex::{
+        clamp::derive_act_id,
         error::{CortexError, budget_exceeded, cycle_timeout, invalid_input},
         ports::{
-            AttemptClampPort, AttemptClampRequest, AttemptExtractorPort, AttemptExtractorRequest,
-            CortexPort, CortexTelemetryEvent, CortexTelemetryPort, PayloadFillerPort,
-            PayloadFillerRequest, PrimaryReasonerPort, PrimaryReasonerRequest,
+            AttemptExtractorPort, AttemptExtractorRequest, CortexPort, CortexTelemetryEvent,
+            CortexTelemetryPort, PrimaryReasonerPort, PrimaryReasonerRequest,
         },
         types::{CortexOutput, ReactionLimits},
     },
-    runtime_types::{CognitionState, GoalFrame, PhysicalState, Sense},
+    runtime_types::{Act, CognitionState, GoalFrame, PhysicalState, RequestedResources, Sense},
 };
 
 pub struct CortexPipeline {
     primary: Arc<dyn PrimaryReasonerPort>,
     extractor: Arc<dyn AttemptExtractorPort>,
-    filler: Arc<dyn PayloadFillerPort>,
-    clamp: Arc<dyn AttemptClampPort>,
     telemetry: Arc<dyn CortexTelemetryPort>,
     limits: ReactionLimits,
 }
@@ -29,16 +27,12 @@ impl CortexPipeline {
     pub fn new(
         primary: Arc<dyn PrimaryReasonerPort>,
         extractor: Arc<dyn AttemptExtractorPort>,
-        filler: Arc<dyn PayloadFillerPort>,
-        clamp: Arc<dyn AttemptClampPort>,
         telemetry: Arc<dyn CortexTelemetryPort>,
         limits: ReactionLimits,
     ) -> Self {
         Self {
             primary,
             extractor,
-            filler,
-            clamp,
             telemetry,
             limits,
         }
@@ -73,7 +67,6 @@ impl CortexPort for CortexPipeline {
             return Err(err);
         }
 
-        let known_sense_ids = known_sense_ids(senses);
         let deadline = Duration::from_millis(self.limits.max_cycle_time_ms.max(1));
         let mut budget = CycleBudgetGuard::new(&self.limits);
 
@@ -102,6 +95,12 @@ impl CortexPort for CortexPipeline {
                     cycle_id: physical_state.cycle_id,
                     stage: "primary_timeout",
                 });
+                eprintln!(
+                    "[cortex] primary_timeout cycle_id={} deadline_ms={} max_cycle_time_ms={}",
+                    physical_state.cycle_id,
+                    deadline.as_millis(),
+                    self.limits.max_cycle_time_ms
+                );
                 return Err(cycle_timeout("primary call timed out"));
             }
         };
@@ -132,63 +131,28 @@ impl CortexPort for CortexPipeline {
                     cycle_id: physical_state.cycle_id,
                     stage: "extractor_timeout",
                 });
+                eprintln!(
+                    "[cortex] extractor_timeout cycle_id={} deadline_ms={} max_cycle_time_ms={}",
+                    physical_state.cycle_id,
+                    deadline.as_millis(),
+                    self.limits.max_cycle_time_ms
+                );
                 return Err(cycle_timeout("extractor call timed out"));
             }
         };
 
-        let clamped_first = self.clamp.clamp(AttemptClampRequest {
-            cycle_id: physical_state.cycle_id,
-            drafts: drafts.clone(),
-            capability_catalog: physical_state.capabilities.clone(),
-            known_sense_ids: known_sense_ids.clone(),
-            limits: self.limits.clone(),
-        })?;
-
-        let acts = if !clamped_first.acts.is_empty() {
-            clamped_first.acts
-        } else if self.limits.max_repair_attempts == 0 || !budget.can_attempt_repair() {
+        let acts = drafts_to_acts(physical_state.cycle_id, drafts, &self.limits);
+        eprintln!(
+            "[cortex] drafts_to_acts cycle_id={} act_count={}",
+            physical_state.cycle_id,
+            acts.len()
+        );
+        if acts.is_empty() {
             self.telemetry.on_event(CortexTelemetryEvent::NoopFallback {
                 cycle_id: physical_state.cycle_id,
-                reason: "no_repair_budget",
+                reason: "extractor_no_drafts",
             });
-            Vec::new()
-        } else {
-            budget.record_repair_call()?;
-            let fill_req = PayloadFillerRequest {
-                cycle_id: physical_state.cycle_id,
-                drafts,
-                capability_catalog: physical_state.capabilities.clone(),
-                clamp_violations: clamped_first.violations,
-                limits: self.limits.clone(),
-            };
-            let repaired = match timeout(deadline, self.filler.fill(fill_req)).await {
-                Ok(Ok(repaired)) => repaired,
-                Ok(Err(err)) => {
-                    self.telemetry.on_event(CortexTelemetryEvent::StageFailed {
-                        cycle_id: physical_state.cycle_id,
-                        stage: "filler",
-                    });
-                    return Err(err);
-                }
-                Err(_) => {
-                    self.telemetry.on_event(CortexTelemetryEvent::StageFailed {
-                        cycle_id: physical_state.cycle_id,
-                        stage: "filler_timeout",
-                    });
-                    return Err(cycle_timeout("filler call timed out"));
-                }
-            };
-
-            self.clamp
-                .clamp(AttemptClampRequest {
-                    cycle_id: physical_state.cycle_id,
-                    drafts: repaired,
-                    capability_catalog: physical_state.capabilities.clone(),
-                    known_sense_ids,
-                    limits: self.limits.clone(),
-                })?
-                .acts
-        };
+        }
 
         let new_cognition_state = evolve_cognition_state(cognition_state, senses);
         self.telemetry
@@ -207,10 +171,8 @@ impl CortexPort for CortexPipeline {
 struct CycleBudgetGuard {
     primary_calls: u8,
     sub_calls: u8,
-    repair_calls: u8,
     max_primary_calls: u8,
     max_sub_calls: u8,
-    max_repair_attempts: u8,
 }
 
 impl CycleBudgetGuard {
@@ -218,10 +180,8 @@ impl CycleBudgetGuard {
         Self {
             primary_calls: 0,
             sub_calls: 0,
-            repair_calls: 0,
             max_primary_calls: limits.max_primary_calls,
             max_sub_calls: limits.max_sub_calls,
-            max_repair_attempts: limits.max_repair_attempts,
         }
     }
 
@@ -240,49 +200,70 @@ impl CycleBudgetGuard {
         self.sub_calls = self.sub_calls.saturating_add(1);
         Ok(())
     }
-
-    fn can_attempt_repair(&self) -> bool {
-        self.repair_calls < self.max_repair_attempts && self.sub_calls < self.max_sub_calls
-    }
-
-    fn record_repair_call(&mut self) -> Result<(), CortexError> {
-        if self.repair_calls >= self.max_repair_attempts {
-            return Err(budget_exceeded("repair budget exceeded"));
-        }
-        self.repair_calls = self.repair_calls.saturating_add(1);
-        self.record_sub_call()
-    }
 }
 
 fn validate_input_bounds(limits: &ReactionLimits) -> Result<(), CortexError> {
     if limits.max_primary_calls != 1 {
         return Err(invalid_input("max_primary_calls must be exactly 1"));
     }
-    if limits.max_repair_attempts > 1 {
-        return Err(invalid_input("max_repair_attempts must be <= 1"));
-    }
     Ok(())
 }
 
-fn known_sense_ids(senses: &[Sense]) -> Vec<String> {
-    let mut known = std::collections::BTreeSet::new();
-    for (index, sense) in senses.iter().enumerate() {
-        match sense {
-            Sense::Domain(item) => {
-                known.insert(item.sense_id.clone());
-            }
-            Sense::NewCapabilities(_) => {
-                known.insert(format!("control:new_capabilities:{index}"));
-            }
-            Sense::DropCapabilities(_) => {
-                known.insert(format!("control:drop_capabilities:{index}"));
-            }
-            Sense::Sleep => {
-                known.insert(format!("control:sleep:{index}"));
-            }
-        }
+fn drafts_to_acts(
+    cycle_id: u64,
+    drafts: Vec<crate::cortex::types::AttemptDraft>,
+    limits: &ReactionLimits,
+) -> Vec<Act> {
+    let mut acts = Vec::with_capacity(drafts.len());
+    for draft in drafts {
+        let crate::cortex::types::AttemptDraft {
+            based_on,
+            endpoint_id,
+            capability_id,
+            capability_instance_id,
+            payload_draft,
+            requested_resources,
+            ..
+        } = draft;
+
+        let requested_resources = clamp_resources(requested_resources);
+        let act_id = derive_act_id(
+            cycle_id,
+            &based_on,
+            &endpoint_id,
+            &capability_id,
+            &payload_draft,
+            &requested_resources,
+        );
+        let capability_instance_id = if capability_instance_id.trim().is_empty() {
+            act_id.clone()
+        } else {
+            capability_instance_id
+        };
+
+        acts.push(Act {
+            act_id,
+            based_on,
+            endpoint_id,
+            capability_id,
+            capability_instance_id,
+            normalized_payload: payload_draft,
+            requested_resources,
+        });
     }
-    known.into_iter().collect()
+
+    acts.sort_by(|lhs, rhs| lhs.act_id.cmp(&rhs.act_id));
+    acts.truncate(limits.max_attempts);
+    acts
+}
+
+fn clamp_resources(resources: RequestedResources) -> RequestedResources {
+    RequestedResources {
+        survival_micro: resources.survival_micro.max(0),
+        time_ms: resources.time_ms,
+        io_units: resources.io_units,
+        token_units: resources.token_units,
+    }
 }
 
 fn evolve_cognition_state(previous: &CognitionState, senses: &[Sense]) -> CognitionState {

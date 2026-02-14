@@ -5,7 +5,7 @@ use anyhow::{Result, anyhow};
 use crate::{
     body::std::payloads::{ShellLimits, WebLimits},
     ingress::SenseIngress,
-    runtime_types::Sense,
+    runtime_types::{Act, Sense},
     spine::EndpointRegistryPort,
 };
 
@@ -20,8 +20,8 @@ use crate::body::std::web::handle_web_invoke;
 
 #[cfg(any(feature = "std-shell", feature = "std-web"))]
 use crate::spine::{
-    EndpointCapabilityDescriptor, EndpointExecutionOutcome, EndpointInvocation,
-    EndpointRegistration, RouteKey, error::SpineError, ports::EndpointPort, types::CostVector,
+    EndpointCapabilityDescriptor, EndpointExecutionOutcome, RouteKey, error::SpineError,
+    ports::EndpointPort, types::CostVector,
 };
 
 pub mod payloads;
@@ -68,13 +68,7 @@ fn register_shell_endpoint(
             sense_ingress,
         });
         registry
-            .register(
-                EndpointRegistration {
-                    endpoint_id: SHELL_ENDPOINT_ID.to_string(),
-                    descriptor: shell_registration_descriptor(),
-                },
-                endpoint,
-            )
+            .register(shell_registration_descriptor(), endpoint)
             .map_err(|err| anyhow!(err.to_string()))?;
         return Ok(());
     }
@@ -105,13 +99,7 @@ fn register_web_endpoint(
             sense_ingress,
         });
         registry
-            .register(
-                EndpointRegistration {
-                    endpoint_id: WEB_ENDPOINT_ID.to_string(),
-                    descriptor: web_registration_descriptor(),
-                },
-                endpoint,
-            )
+            .register(web_registration_descriptor(), endpoint)
             .map_err(|err| anyhow!(err.to_string()))?;
         return Ok(());
     }
@@ -140,13 +128,9 @@ struct StdWebEndpoint {
 #[cfg(feature = "std-shell")]
 #[async_trait]
 impl EndpointPort for StdShellEndpoint {
-    async fn invoke(
-        &self,
-        invocation: EndpointInvocation,
-    ) -> Result<EndpointExecutionOutcome, SpineError> {
-        let request = invocation.request;
-        let request_id = format!("builtin-shell:{}", request.act.act_id);
-        let output = handle_shell_invoke(&request_id, &request, &self.limits).await;
+    async fn invoke(&self, act: Act) -> Result<EndpointExecutionOutcome, SpineError> {
+        let request_id = format!("builtin-shell:{}", act.act_id);
+        let output = handle_shell_invoke(&request_id, &act, &self.limits).await;
         if let Some(sense) = output.sense {
             let _ = self.sense_ingress.send(Sense::Domain(sense)).await;
         }
@@ -158,13 +142,9 @@ impl EndpointPort for StdShellEndpoint {
 #[cfg(feature = "std-web")]
 #[async_trait]
 impl EndpointPort for StdWebEndpoint {
-    async fn invoke(
-        &self,
-        invocation: EndpointInvocation,
-    ) -> Result<EndpointExecutionOutcome, SpineError> {
-        let request = invocation.request;
-        let request_id = format!("builtin-web:{}", request.act.act_id);
-        let output = handle_web_invoke(&request_id, &request, &self.limits).await;
+    async fn invoke(&self, act: Act) -> Result<EndpointExecutionOutcome, SpineError> {
+        let request_id = format!("builtin-web:{}", act.act_id);
+        let output = handle_web_invoke(&request_id, &act, &self.limits).await;
         if let Some(sense) = output.sense {
             let _ = self.sense_ingress.send(Sense::Domain(sense)).await;
         }

@@ -5,11 +5,11 @@ use async_trait::async_trait;
 use beluna::{
     cortex::{
         AttemptDraft, AttemptExtractorPort, AttemptExtractorRequest, CortexPipeline, CortexPort,
-        DeterministicAttemptClamp, NoopTelemetryPort, PayloadFillerPort, PayloadFillerRequest,
-        PrimaryReasonerPort, PrimaryReasonerRequest, ProseIr, ReactionLimits,
+        NoopTelemetryPort, PrimaryReasonerPort, PrimaryReasonerRequest, ProseIr, ReactionLimits,
     },
     runtime_types::{
-        CognitionState, PhysicalLedgerSnapshot, PhysicalState, RequestedResources, Sense, SenseDatum,
+        CognitionState, PhysicalLedgerSnapshot, PhysicalState, RequestedResources, Sense,
+        SenseDatum,
     },
 };
 
@@ -18,7 +18,10 @@ struct StaticPrimary;
 
 #[async_trait]
 impl PrimaryReasonerPort for StaticPrimary {
-    async fn infer_ir(&self, _req: PrimaryReasonerRequest) -> Result<ProseIr, beluna::cortex::CortexError> {
+    async fn infer_ir(
+        &self,
+        _req: PrimaryReasonerRequest,
+    ) -> Result<ProseIr, beluna::cortex::CortexError> {
         Ok(ProseIr {
             text: "ir".to_string(),
         })
@@ -37,19 +40,6 @@ impl AttemptExtractorPort for StaticExtractor {
         _req: AttemptExtractorRequest,
     ) -> Result<Vec<AttemptDraft>, beluna::cortex::CortexError> {
         Ok(self.drafts.clone())
-    }
-}
-
-#[derive(Clone)]
-struct StaticFiller;
-
-#[async_trait]
-impl PayloadFillerPort for StaticFiller {
-    async fn fill(
-        &self,
-        _req: PayloadFillerRequest,
-    ) -> Result<Vec<AttemptDraft>, beluna::cortex::CortexError> {
-        Ok(Vec::new())
     }
 }
 
@@ -96,8 +86,6 @@ async fn cortex_pipeline_emits_acts_and_new_cognition() {
         Arc::new(StaticExtractor {
             drafts: vec![valid_draft()],
         }),
-        Arc::new(StaticFiller),
-        Arc::new(DeterministicAttemptClamp),
         Arc::new(NoopTelemetryPort),
         ReactionLimits::default(),
     );
@@ -124,8 +112,6 @@ async fn cortex_pipeline_rejects_sleep_sense() {
     let pipeline = CortexPipeline::new(
         Arc::new(StaticPrimary),
         Arc::new(StaticExtractor { drafts: vec![] }),
-        Arc::new(StaticFiller),
-        Arc::new(DeterministicAttemptClamp),
         Arc::new(NoopTelemetryPort),
         ReactionLimits::default(),
     );
@@ -138,24 +124,18 @@ async fn cortex_pipeline_rejects_sleep_sense() {
         )
         .await
         .expect_err("sleep should not reach cortex");
-    assert_eq!(err.kind, beluna::cortex::CortexErrorKind::InvalidReactionInput);
+    assert_eq!(
+        err.kind,
+        beluna::cortex::CortexErrorKind::InvalidReactionInput
+    );
 }
 
 #[tokio::test]
-async fn cortex_pipeline_allows_noop_when_clamp_empty() {
-    let bad_draft = AttemptDraft {
-        based_on: vec!["unknown".to_string()],
-        ..valid_draft()
-    };
-    let mut limits = ReactionLimits::default();
-    limits.max_repair_attempts = 0;
+async fn cortex_pipeline_allows_noop_when_extractor_empty() {
+    let limits = ReactionLimits::default();
     let pipeline = CortexPipeline::new(
         Arc::new(StaticPrimary),
-        Arc::new(StaticExtractor {
-            drafts: vec![bad_draft],
-        }),
-        Arc::new(StaticFiller),
-        Arc::new(DeterministicAttemptClamp),
+        Arc::new(StaticExtractor { drafts: vec![] }),
         Arc::new(NoopTelemetryPort),
         limits,
     );

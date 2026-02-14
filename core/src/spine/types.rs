@@ -44,31 +44,11 @@ pub struct EndpointCapabilityDescriptor {
     pub metadata: BTreeMap<String, String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct EndpointRegistration {
-    pub endpoint_id: String,
-    pub descriptor: EndpointCapabilityDescriptor,
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SpineCapabilityCatalog {
     pub version: u64,
     #[serde(default)]
     pub entries: Vec<EndpointCapabilityDescriptor>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ActDispatchRequest {
-    pub cycle_id: CycleId,
-    pub seq_no: u64,
-    pub act: crate::runtime_types::Act,
-    pub reserve_entry_id: ReserveEntryId,
-    pub cost_attribution_id: CostAttributionId,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct EndpointInvocation {
-    pub request: ActDispatchRequest,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

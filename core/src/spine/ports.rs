@@ -5,8 +5,8 @@ use async_trait::async_trait;
 use crate::spine::{
     error::SpineError,
     types::{
-        ActDispatchRequest, EndpointExecutionOutcome, EndpointInvocation, EndpointRegistration,
-        RouteKey, SpineCapabilityCatalog, SpineEvent, SpineExecutionMode,
+        EndpointCapabilityDescriptor, EndpointExecutionOutcome, RouteKey, SpineCapabilityCatalog,
+        SpineExecutionMode,
     },
 };
 
@@ -14,20 +14,20 @@ use crate::spine::{
 pub trait EndpointPort: Send + Sync {
     async fn invoke(
         &self,
-        invocation: EndpointInvocation,
+        act: crate::runtime_types::Act,
     ) -> Result<EndpointExecutionOutcome, SpineError>;
 }
 
 pub trait EndpointRegistryPort: Send + Sync {
     fn register(
         &self,
-        registration: EndpointRegistration,
+        registration: EndpointCapabilityDescriptor,
         endpoint: Arc<dyn EndpointPort>,
     ) -> Result<(), SpineError>;
 
-    fn unregister(&self, route: &RouteKey) -> Option<EndpointRegistration>;
+    fn unregister(&self, route: &RouteKey) -> Option<EndpointCapabilityDescriptor>;
 
-    fn resolve(&self, route: &RouteKey) -> Option<Arc<dyn EndpointPort>>;
+    fn resolve(&self, endpoint_id: &str) -> Option<Arc<dyn EndpointPort>>;
 
     fn catalog_snapshot(&self) -> SpineCapabilityCatalog;
 }
@@ -36,7 +36,10 @@ pub trait EndpointRegistryPort: Send + Sync {
 pub trait SpineExecutorPort: Send + Sync {
     fn mode(&self) -> SpineExecutionMode;
 
-    async fn dispatch_act(&self, request: ActDispatchRequest) -> Result<SpineEvent, SpineError>;
+    async fn dispatch_act(
+        &self,
+        act: crate::runtime_types::Act,
+    ) -> Result<EndpointExecutionOutcome, SpineError>;
 
     fn capability_catalog_snapshot(&self) -> SpineCapabilityCatalog;
 }

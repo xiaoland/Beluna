@@ -44,7 +44,10 @@ async fn shutdown_gate_rejects_new_senses_and_sleep_send_blocks_until_space() {
         .is_err()
     );
 
-    let first = sense_rx.recv().await.expect("first queued sense should exist");
+    let first = sense_rx
+        .recv()
+        .await
+        .expect("first queued sense should exist");
     assert!(matches!(first, Sense::Domain(_)));
 
     ingress
