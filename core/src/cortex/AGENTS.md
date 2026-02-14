@@ -1,10 +1,10 @@
 # AGENTS.md for core/src/cortex
 
-Cortex is an always-on reactor that consumes bounded `ReactionInput` and emits non-binding `IntentAttempt[]`.
+Cortex is a stateless cognition boundary that consumes a drained sense batch plus physical/cognition snapshots and emits `Act[]` + next cognition state.
 
 ## Invariants
-- Reactor progression is inbox-event driven only.
-- Cortex does not durably persist goals/commitments.
-- Primary output is prose IR; sub-stages compile to structured attempts.
-- Deterministic clamp is final authority before attempt emission.
-- `attempt_id` and `cost_attribution_id` derivation is deterministic.
+- Progression is input-event driven only.
+- Cortex does not durably persist cognition/goal state internally.
+- Primary output is prose IR; sub-stages compile to structured drafts.
+- Deterministic clamp is final authority before act emission.
+- `act_id` derivation is deterministic.

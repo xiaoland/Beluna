@@ -148,6 +148,7 @@ mod tests {
         ) -> Result<EndpointExecutionOutcome, SpineError> {
             Ok(EndpointExecutionOutcome::Deferred {
                 reason_code: "stub".to_string(),
+                reference_id: "stub:deferred".to_string(),
             })
         }
     }

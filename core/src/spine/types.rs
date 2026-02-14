@@ -2,10 +2,6 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-pub type ActionId = String;
-pub type NeuralSignalId = String;
-pub type CapabilityInstanceId = String;
-pub type AttemptId = String;
 pub type ReserveEntryId = String;
 pub type CostAttributionId = String;
 pub type CycleId = u64;
@@ -62,33 +58,17 @@ pub struct SpineCapabilityCatalog {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct AdmittedAction {
-    pub neural_signal_id: NeuralSignalId,
-    pub capability_instance_id: CapabilityInstanceId,
-    pub source_attempt_id: AttemptId,
+pub struct ActDispatchRequest {
+    pub cycle_id: CycleId,
+    pub seq_no: u64,
+    pub act: crate::runtime_types::Act,
     pub reserve_entry_id: ReserveEntryId,
     pub cost_attribution_id: CostAttributionId,
-    pub endpoint_id: String,
-    pub capability_id: String,
-    pub normalized_payload: serde_json::Value,
-    pub reserved_cost: CostVector,
-    pub degraded: bool,
-    #[serde(default)]
-    pub degradation_profile_id: Option<String>,
-    pub admission_cycle: CycleId,
-    #[serde(default)]
-    pub metadata: BTreeMap<String, String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct AdmittedActionBatch {
-    pub cycle_id: CycleId,
-    pub actions: Vec<AdmittedAction>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EndpointInvocation {
-    pub action: AdmittedAction,
+    pub request: ActDispatchRequest,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -104,45 +84,82 @@ pub enum EndpointExecutionOutcome {
     },
     Deferred {
         reason_code: String,
+        reference_id: String,
     },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SpineEvent {
-    ActionApplied {
-        neural_signal_id: NeuralSignalId,
-        capability_instance_id: CapabilityInstanceId,
+    ActApplied {
+        cycle_id: CycleId,
+        seq_no: u64,
+        act_id: String,
+        capability_instance_id: String,
         reserve_entry_id: ReserveEntryId,
         cost_attribution_id: CostAttributionId,
         actual_cost_micro: i64,
         reference_id: String,
     },
-    ActionRejected {
-        neural_signal_id: NeuralSignalId,
-        capability_instance_id: CapabilityInstanceId,
+    ActRejected {
+        cycle_id: CycleId,
+        seq_no: u64,
+        act_id: String,
+        capability_instance_id: String,
         reserve_entry_id: ReserveEntryId,
         cost_attribution_id: CostAttributionId,
         reason_code: String,
         reference_id: String,
     },
-    ActionDeferred {
-        neural_signal_id: NeuralSignalId,
-        capability_instance_id: CapabilityInstanceId,
+    ActDeferred {
+        cycle_id: CycleId,
+        seq_no: u64,
+        act_id: String,
+        capability_instance_id: String,
+        reserve_entry_id: ReserveEntryId,
+        cost_attribution_id: CostAttributionId,
         reason_code: String,
+        reference_id: String,
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct OrderedSpineEvent {
-    pub seq_no: u64,
-    pub event: SpineEvent,
-}
+impl SpineEvent {
+    pub fn reserve_entry_id(&self) -> &str {
+        match self {
+            SpineEvent::ActApplied {
+                reserve_entry_id, ..
+            }
+            | SpineEvent::ActRejected {
+                reserve_entry_id, ..
+            }
+            | SpineEvent::ActDeferred {
+                reserve_entry_id, ..
+            } => reserve_entry_id,
+        }
+    }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SpineExecutionReport {
-    pub mode: SpineExecutionMode,
-    pub events: Vec<OrderedSpineEvent>,
-    #[serde(default)]
-    pub replay_cursor: Option<String>,
+    pub fn reference_id(&self) -> &str {
+        match self {
+            SpineEvent::ActApplied { reference_id, .. }
+            | SpineEvent::ActRejected { reference_id, .. }
+            | SpineEvent::ActDeferred { reference_id, .. } => reference_id,
+        }
+    }
+
+    pub fn cost_attribution_id(&self) -> &str {
+        match self {
+            SpineEvent::ActApplied {
+                cost_attribution_id,
+                ..
+            }
+            | SpineEvent::ActRejected {
+                cost_attribution_id,
+                ..
+            }
+            | SpineEvent::ActDeferred {
+                cost_attribution_id,
+                ..
+            } => cost_attribution_id,
+        }
+    }
 }

@@ -148,11 +148,7 @@
     "loop": {
       "type": "object",
       "properties": {
-        "sense_queue_capacity": { "type": "integer", "minimum": 1 },
-        "neural_signal_queue_capacity": { "type": "integer", "minimum": 1 },
-        "batch_window_ms": { "type": "integer", "minimum": 1 },
-        "batch_flush_sense_count": { "type": "integer", "minimum": 1 },
-        "batch_max_sense_count": { "type": "integer", "minimum": 1 }
+        "sense_queue_capacity": { "type": "integer", "minimum": 1 }
       },
       "additionalProperties": false
     },

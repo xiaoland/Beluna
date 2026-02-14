@@ -1,15 +1,13 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use futures_util::future::join_all;
 
 use crate::spine::{
-    error::{SpineError, invalid_batch},
+    error::SpineError,
     ports::{EndpointPort, EndpointRegistryPort, SpineExecutorPort},
     types::{
-        AdmittedAction, AdmittedActionBatch, EndpointExecutionOutcome, EndpointInvocation,
-        OrderedSpineEvent, RouteKey, SpineCapabilityCatalog, SpineEvent, SpineExecutionMode,
-        SpineExecutionReport,
+        ActDispatchRequest, EndpointExecutionOutcome, EndpointInvocation, SpineCapabilityCatalog,
+        SpineEvent, SpineExecutionMode,
     },
 };
 
@@ -46,123 +44,81 @@ impl RoutingSpineExecutor {
         Self { mode, registry }
     }
 
-    async fn execute_serialized(
-        &self,
-        admitted: AdmittedActionBatch,
-    ) -> Result<SpineExecutionReport, SpineError> {
-        let cycle_id = admitted.cycle_id;
-        let mut events = Vec::with_capacity(admitted.actions.len());
-
-        for (index, action) in admitted.actions.into_iter().enumerate() {
-            let event = self.invoke_one(action).await;
-            events.push(OrderedSpineEvent {
-                seq_no: (index as u64) + 1,
-                event,
-            });
-        }
-
-        Ok(SpineExecutionReport {
-            mode: self.mode,
-            replay_cursor: Some(self.replay_cursor(cycle_id, events.len())),
-            events,
-        })
-    }
-
-    async fn execute_best_effort(
-        &self,
-        admitted: AdmittedActionBatch,
-    ) -> Result<SpineExecutionReport, SpineError> {
-        let cycle_id = admitted.cycle_id;
-
-        let futures = admitted
-            .actions
-            .into_iter()
-            .enumerate()
-            .map(|(index, action)| async move {
-                let event = self.invoke_one(action).await;
-                OrderedSpineEvent {
-                    seq_no: (index as u64) + 1,
-                    event,
-                }
-            });
-
-        let mut events = join_all(futures).await;
-        events.sort_by_key(|item| item.seq_no);
-
-        Ok(SpineExecutionReport {
-            mode: self.mode,
-            replay_cursor: Some(self.replay_cursor(cycle_id, events.len())),
-            events,
-        })
-    }
-
-    async fn invoke_one(&self, action: AdmittedAction) -> SpineEvent {
-        let neural_signal_id = action.neural_signal_id.clone();
-        let capability_instance_id = action.capability_instance_id.clone();
-        let reserve_entry_id = action.reserve_entry_id.clone();
-        let cost_attribution_id = action.cost_attribution_id.clone();
-
-        let route = RouteKey {
-            endpoint_id: action.endpoint_id.clone(),
-            capability_id: action.capability_id.clone(),
+    async fn invoke_one(&self, request: ActDispatchRequest) -> SpineEvent {
+        let route = crate::spine::types::RouteKey {
+            endpoint_id: request.act.endpoint_id.clone(),
+            capability_id: request.act.capability_id.clone(),
         };
 
         let Some(endpoint) = self.registry.resolve(&route) else {
-            return SpineEvent::ActionRejected {
-                neural_signal_id,
-                capability_instance_id,
-                reserve_entry_id,
-                cost_attribution_id,
+            return SpineEvent::ActRejected {
+                cycle_id: request.cycle_id,
+                seq_no: request.seq_no,
+                act_id: request.act.act_id.clone(),
+                capability_instance_id: request.act.capability_instance_id.clone(),
+                reserve_entry_id: request.reserve_entry_id.clone(),
+                cost_attribution_id: request.cost_attribution_id.clone(),
                 reason_code: "route_not_found".to_string(),
-                reference_id: format!("spine:missing_route:{}", action.neural_signal_id),
+                reference_id: format!("spine:missing_route:{}", request.act.act_id),
             };
         };
 
-        match endpoint.invoke(EndpointInvocation { action }).await {
+        match endpoint
+            .invoke(EndpointInvocation {
+                request: request.clone(),
+            })
+            .await
+        {
             Ok(EndpointExecutionOutcome::Applied {
                 actual_cost_micro,
                 reference_id,
-            }) => SpineEvent::ActionApplied {
-                neural_signal_id,
-                capability_instance_id,
-                reserve_entry_id,
-                cost_attribution_id,
+            }) => SpineEvent::ActApplied {
+                cycle_id: request.cycle_id,
+                seq_no: request.seq_no,
+                act_id: request.act.act_id,
+                capability_instance_id: request.act.capability_instance_id,
+                reserve_entry_id: request.reserve_entry_id,
+                cost_attribution_id: request.cost_attribution_id,
                 actual_cost_micro,
                 reference_id,
             },
             Ok(EndpointExecutionOutcome::Rejected {
                 reason_code,
                 reference_id,
-            }) => SpineEvent::ActionRejected {
-                neural_signal_id,
-                capability_instance_id,
-                reserve_entry_id,
-                cost_attribution_id,
+            }) => SpineEvent::ActRejected {
+                cycle_id: request.cycle_id,
+                seq_no: request.seq_no,
+                act_id: request.act.act_id,
+                capability_instance_id: request.act.capability_instance_id,
+                reserve_entry_id: request.reserve_entry_id,
+                cost_attribution_id: request.cost_attribution_id,
                 reason_code,
                 reference_id,
             },
-            Ok(EndpointExecutionOutcome::Deferred { reason_code }) => SpineEvent::ActionDeferred {
-                neural_signal_id,
-                capability_instance_id,
+            Ok(EndpointExecutionOutcome::Deferred {
                 reason_code,
+                reference_id,
+            }) => SpineEvent::ActDeferred {
+                cycle_id: request.cycle_id,
+                seq_no: request.seq_no,
+                act_id: request.act.act_id,
+                capability_instance_id: request.act.capability_instance_id,
+                reserve_entry_id: request.reserve_entry_id,
+                cost_attribution_id: request.cost_attribution_id,
+                reason_code,
+                reference_id,
             },
-            Err(_) => {
-                let reference_id = format!("spine:error:{}", cost_attribution_id);
-                SpineEvent::ActionRejected {
-                    neural_signal_id,
-                    capability_instance_id,
-                    reserve_entry_id,
-                    cost_attribution_id,
-                    reason_code: "endpoint_error".to_string(),
-                    reference_id,
-                }
-            }
+            Err(_) => SpineEvent::ActRejected {
+                cycle_id: request.cycle_id,
+                seq_no: request.seq_no,
+                act_id: request.act.act_id,
+                capability_instance_id: request.act.capability_instance_id,
+                reserve_entry_id: request.reserve_entry_id,
+                cost_attribution_id: request.cost_attribution_id.clone(),
+                reason_code: "endpoint_error".to_string(),
+                reference_id: format!("spine:error:{}", request.cost_attribution_id),
+            },
         }
-    }
-
-    fn replay_cursor(&self, cycle_id: u64, event_count: usize) -> String {
-        let version = self.registry.catalog_snapshot().version;
-        format!("route:{}:{}:{}", cycle_id, event_count, version)
     }
 }
 
@@ -172,24 +128,17 @@ impl SpineExecutorPort for RoutingSpineExecutor {
         self.mode
     }
 
-    async fn execute_admitted(
-        &self,
-        admitted: AdmittedActionBatch,
-    ) -> Result<SpineExecutionReport, SpineError> {
-        if admitted
-            .actions
-            .iter()
-            .any(|action| action.neural_signal_id.is_empty() || action.reserve_entry_id.is_empty())
+    async fn dispatch_act(&self, request: ActDispatchRequest) -> Result<SpineEvent, SpineError> {
+        if request.act.act_id.trim().is_empty()
+            || request.reserve_entry_id.trim().is_empty()
+            || request.cost_attribution_id.trim().is_empty()
         {
-            return Err(invalid_batch(
-                "admitted action is missing neural_signal_id or reserve_entry_id",
+            return Err(crate::spine::error::invalid_batch(
+                "act dispatch request is missing act_id/reserve_entry_id/cost_attribution_id",
             ));
         }
 
-        match self.mode {
-            SpineExecutionMode::SerializedDeterministic => self.execute_serialized(admitted).await,
-            SpineExecutionMode::BestEffortReplayable => self.execute_best_effort(admitted).await,
-        }
+        Ok(self.invoke_one(request).await)
     }
 
     fn capability_catalog_snapshot(&self) -> SpineCapabilityCatalog {
@@ -203,13 +152,16 @@ mod tests {
 
     use async_trait::async_trait;
 
-    use crate::spine::{
-        EndpointCapabilityDescriptor, EndpointExecutionOutcome, EndpointInvocation,
-        EndpointRegistration, InMemoryEndpointRegistry, RouteKey, RoutingSpineExecutor,
-        SpineExecutionMode,
-        error::{SpineError, backend_failure},
-        ports::{EndpointPort, EndpointRegistryPort, SpineExecutorPort},
-        types::{AdmittedAction, AdmittedActionBatch, CostVector, SpineEvent},
+    use crate::{
+        runtime_types::{Act, RequestedResources},
+        spine::{
+            EndpointCapabilityDescriptor, EndpointExecutionOutcome, EndpointInvocation,
+            EndpointRegistration, InMemoryEndpointRegistry, RouteKey, RoutingSpineExecutor,
+            SpineExecutionMode,
+            error::{SpineError, backend_failure},
+            ports::{EndpointPort, EndpointRegistryPort, SpineExecutorPort},
+            types::{ActDispatchRequest, CostVector, SpineEvent},
+        },
     };
 
     struct FailingEndpoint;
@@ -224,21 +176,21 @@ mod tests {
         }
     }
 
-    fn make_action(endpoint_id: &str, capability_id: &str) -> AdmittedAction {
-        AdmittedAction {
-            neural_signal_id: "ns:1".to_string(),
-            capability_instance_id: "plan.instance".to_string(),
-            source_attempt_id: "att:1".to_string(),
+    fn make_request(endpoint_id: &str, capability_id: &str) -> ActDispatchRequest {
+        ActDispatchRequest {
+            cycle_id: 1,
+            seq_no: 1,
+            act: Act {
+                act_id: "act:1".to_string(),
+                based_on: vec!["sense:1".to_string()],
+                endpoint_id: endpoint_id.to_string(),
+                capability_id: capability_id.to_string(),
+                capability_instance_id: "instance:1".to_string(),
+                normalized_payload: serde_json::json!({"ok":true}),
+                requested_resources: RequestedResources::default(),
+            },
             reserve_entry_id: "res:1".to_string(),
             cost_attribution_id: "cost:1".to_string(),
-            endpoint_id: endpoint_id.to_string(),
-            capability_id: capability_id.to_string(),
-            normalized_payload: serde_json::json!({"ok":true}),
-            reserved_cost: CostVector::default(),
-            degraded: false,
-            degradation_profile_id: None,
-            admission_cycle: 1,
-            metadata: Default::default(),
         }
     }
 
@@ -248,18 +200,14 @@ mod tests {
         let executor =
             RoutingSpineExecutor::new(SpineExecutionMode::SerializedDeterministic, registry);
 
-        let report = executor
-            .execute_admitted(AdmittedActionBatch {
-                cycle_id: 1,
-                actions: vec![make_action("core.mind", "missing.capability")],
-            })
+        let event = executor
+            .dispatch_act(make_request("core.mind", "missing.capability"))
             .await
-            .expect("execution should succeed with per-action rejection");
+            .expect("execution should succeed with per-act rejection");
 
-        assert_eq!(report.events.len(), 1);
         assert!(matches!(
-            &report.events[0].event,
-            SpineEvent::ActionRejected { reason_code, .. } if reason_code == "route_not_found"
+            event,
+            SpineEvent::ActRejected { ref reason_code, .. } if reason_code == "route_not_found"
         ));
     }
 
@@ -287,18 +235,14 @@ mod tests {
 
         let executor =
             RoutingSpineExecutor::new(SpineExecutionMode::SerializedDeterministic, registry);
-        let report = executor
-            .execute_admitted(AdmittedActionBatch {
-                cycle_id: 1,
-                actions: vec![make_action("core.mind", "observe.state")],
-            })
+        let event = executor
+            .dispatch_act(make_request("core.mind", "observe.state"))
             .await
-            .expect("execution should succeed with per-action rejection");
+            .expect("execution should succeed with per-act rejection");
 
-        assert_eq!(report.events.len(), 1);
         assert!(matches!(
-            &report.events[0].event,
-            SpineEvent::ActionRejected { reason_code, .. } if reason_code == "endpoint_error"
+            event,
+            SpineEvent::ActRejected { ref reason_code, .. } if reason_code == "endpoint_error"
         ));
     }
 }

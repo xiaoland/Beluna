@@ -76,7 +76,7 @@ impl AIGatewayPayloadFiller {
 impl PrimaryReasonerPort for AIGatewayPrimaryReasoner {
     async fn infer_ir(&self, req: PrimaryReasonerRequest) -> Result<ProseIr, CortexError> {
         let request = build_text_request(
-            format!("cortex-primary-{}", req.reaction_id),
+            format!("cortex-primary-{}", req.cycle_id),
             self.backend_id.clone(),
             self.model.clone(),
             req.limits.max_primary_output_tokens,
@@ -125,21 +125,22 @@ impl AttemptExtractorPort for AIGatewayAttemptExtractor {
                         "io_units": 0,
                         "token_units": 0
                     },
-                    "commitment_hint": "optional string",
                     "goal_hint": "optional string"
                 }
             ]
         });
         let prompt = format!(
-            "Compile this prose IR into attempt drafts JSON.\nReturn strictly one JSON object matching this shape: {}\nAllowed endpoint capabilities: {}\nIR: {}",
+            "Compile this prose IR into attempt drafts JSON.\nReturn strictly one JSON object matching this shape: {}\nAllowed endpoint capabilities: {}\nSenses: {}\nCognition: {}\nIR: {}",
             schema_hint,
             serde_json::to_string(&req.capability_catalog.affordances)
                 .unwrap_or_else(|_| "[]".to_string()),
+            serde_json::to_string(&req.senses).unwrap_or_else(|_| "[]".to_string()),
+            serde_json::to_string(&req.cognition_state).unwrap_or_else(|_| "{}".to_string()),
             req.prose_ir.text
         );
 
         let request = build_text_request(
-            format!("cortex-extractor-{}", req.reaction_id),
+            format!("cortex-extractor-{}", req.cycle_id),
             self.backend_id.clone(),
             self.model.clone(),
             req.limits.max_sub_output_tokens,
@@ -169,7 +170,7 @@ impl PayloadFillerPort for AIGatewayPayloadFiller {
             serde_json::to_string(&req.clamp_violations).unwrap_or_else(|_| "[]".to_string()),
         );
         let request = build_text_request(
-            format!("cortex-filler-{}", req.reaction_id),
+            format!("cortex-filler-{}", req.cycle_id),
             self.backend_id.clone(),
             self.model.clone(),
             req.limits.max_sub_output_tokens,
@@ -239,13 +240,10 @@ fn build_text_request(
 
 fn build_primary_prompt(req: &PrimaryReasonerRequest) -> String {
     format!(
-        "Generate prose IR describing intent, attention, and action sketches.\nContext: {}\nSense IDs: {}",
-        req.prompt_context,
-        req.sense_window
-            .iter()
-            .map(|sense| sense.sense_id.as_str())
-            .collect::<Vec<_>>()
-            .join(",")
+        "Generate prose IR describing intent, attention, and action sketches.\nSenses: {}\nPhysical state: {}\nCognition state: {}",
+        serde_json::to_string(&req.senses).unwrap_or_else(|_| "[]".to_string()),
+        serde_json::to_string(&req.physical_state).unwrap_or_else(|_| "{}".to_string()),
+        serde_json::to_string(&req.cognition_state).unwrap_or_else(|_| "{}".to_string()),
     )
 }
 

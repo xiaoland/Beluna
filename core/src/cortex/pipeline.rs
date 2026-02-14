@@ -1,15 +1,19 @@
-use std::{collections::BTreeSet, sync::Arc, time::Duration};
+use std::sync::Arc;
 
-use tokio::time::timeout;
+use async_trait::async_trait;
+use tokio::time::{Duration, timeout};
 
-use crate::cortex::{
-    error::{CortexError, budget_exceeded, cycle_timeout, invalid_input},
-    ports::{
-        AttemptClampPort, AttemptClampRequest, AttemptExtractorPort, AttemptExtractorRequest,
-        CortexTelemetryEvent, CortexTelemetryPort, PayloadFillerPort, PayloadFillerRequest,
-        PrimaryReasonerPort, PrimaryReasonerRequest,
+use crate::{
+    cortex::{
+        error::{CortexError, budget_exceeded, cycle_timeout, invalid_input},
+        ports::{
+            AttemptClampPort, AttemptClampRequest, AttemptExtractorPort, AttemptExtractorRequest,
+            CortexPort, CortexTelemetryEvent, CortexTelemetryPort, PayloadFillerPort,
+            PayloadFillerRequest, PrimaryReasonerPort, PrimaryReasonerRequest,
+        },
+        types::{CortexOutput, ReactionLimits},
     },
-    types::{ReactionInput, ReactionResult},
+    runtime_types::{CognitionState, GoalFrame, PhysicalState, Sense},
 };
 
 pub struct CortexPipeline {
@@ -18,6 +22,7 @@ pub struct CortexPipeline {
     filler: Arc<dyn PayloadFillerPort>,
     clamp: Arc<dyn AttemptClampPort>,
     telemetry: Arc<dyn CortexTelemetryPort>,
+    limits: ReactionLimits,
 }
 
 impl CortexPipeline {
@@ -27,6 +32,7 @@ impl CortexPipeline {
         filler: Arc<dyn PayloadFillerPort>,
         clamp: Arc<dyn AttemptClampPort>,
         telemetry: Arc<dyn CortexTelemetryPort>,
+        limits: ReactionLimits,
     ) -> Self {
         Self {
             primary,
@@ -34,194 +40,167 @@ impl CortexPipeline {
             filler,
             clamp,
             telemetry,
+            limits,
         }
     }
+}
 
-    pub async fn react_once(&self, input: ReactionInput) -> ReactionResult {
+#[async_trait]
+impl CortexPort for CortexPipeline {
+    async fn cortex(
+        &self,
+        senses: &[Sense],
+        physical_state: &PhysicalState,
+        cognition_state: &CognitionState,
+    ) -> Result<CortexOutput, CortexError> {
+        if senses.is_empty() {
+            return Err(invalid_input("sense batch cannot be empty"));
+        }
+        if senses.iter().any(|sense| matches!(sense, Sense::Sleep)) {
+            return Err(invalid_input("sleep sense should not be sent to cortex"));
+        }
+
         self.telemetry
             .on_event(CortexTelemetryEvent::ReactionStarted {
-                reaction_id: input.reaction_id,
+                cycle_id: physical_state.cycle_id,
             });
 
-        if let Err(err) = validate_input_bounds(&input) {
+        if let Err(err) = validate_input_bounds(&self.limits) {
             self.telemetry.on_event(CortexTelemetryEvent::StageFailed {
-                reaction_id: input.reaction_id,
+                cycle_id: physical_state.cycle_id,
                 stage: "input_validation",
             });
-            return noop_result(&input, "invalid_input", Some(err), &*self.telemetry);
+            return Err(err);
         }
 
-        let mut budget = CycleBudgetGuard::new(&input.limits);
-        let deadline = Duration::from_millis(input.limits.max_cycle_time_ms.max(1));
+        let known_sense_ids = known_sense_ids(senses);
+        let deadline = Duration::from_millis(self.limits.max_cycle_time_ms.max(1));
+        let mut budget = CycleBudgetGuard::new(&self.limits);
+
+        if let Err(err) = budget.record_primary_call() {
+            return Err(err);
+        }
 
         let primary_req = PrimaryReasonerRequest {
-            reaction_id: input.reaction_id,
-            prompt_context: build_primary_prompt_context(&input),
-            sense_window: input.sense_window.clone(),
-            limits: input.limits.clone(),
+            cycle_id: physical_state.cycle_id,
+            senses: senses.to_vec(),
+            physical_state: physical_state.clone(),
+            cognition_state: cognition_state.clone(),
+            limits: self.limits.clone(),
         };
-        if let Err(err) = budget.record_primary_call() {
-            return noop_result(
-                &input,
-                "primary_budget_exceeded",
-                Some(err),
-                &*self.telemetry,
-            );
-        }
         let ir = match timeout(deadline, self.primary.infer_ir(primary_req)).await {
             Ok(Ok(ir)) => ir,
             Ok(Err(err)) => {
                 self.telemetry.on_event(CortexTelemetryEvent::StageFailed {
-                    reaction_id: input.reaction_id,
+                    cycle_id: physical_state.cycle_id,
                     stage: "primary",
                 });
-                return noop_result(&input, "primary_failed", Some(err), &*self.telemetry);
+                return Err(err);
             }
             Err(_) => {
                 self.telemetry.on_event(CortexTelemetryEvent::StageFailed {
-                    reaction_id: input.reaction_id,
+                    cycle_id: physical_state.cycle_id,
                     stage: "primary_timeout",
                 });
-                return noop_result(
-                    &input,
-                    "primary_timeout",
-                    Some(cycle_timeout("primary call timed out")),
-                    &*self.telemetry,
-                );
+                return Err(cycle_timeout("primary call timed out"));
             }
         };
 
         if let Err(err) = budget.record_sub_call() {
-            return noop_result(&input, "sub_budget_exceeded", Some(err), &*self.telemetry);
+            return Err(err);
         }
 
         let extract_req = AttemptExtractorRequest {
-            reaction_id: input.reaction_id,
+            cycle_id: physical_state.cycle_id,
             prose_ir: ir,
-            capability_catalog: input.capability_catalog.clone(),
-            sense_window: input.sense_window.clone(),
-            limits: input.limits.clone(),
+            capability_catalog: physical_state.capabilities.clone(),
+            senses: senses.to_vec(),
+            cognition_state: cognition_state.clone(),
+            limits: self.limits.clone(),
         };
         let drafts = match timeout(deadline, self.extractor.extract(extract_req)).await {
             Ok(Ok(drafts)) => drafts,
             Ok(Err(err)) => {
                 self.telemetry.on_event(CortexTelemetryEvent::StageFailed {
-                    reaction_id: input.reaction_id,
+                    cycle_id: physical_state.cycle_id,
                     stage: "extractor",
                 });
-                return noop_result(&input, "extractor_failed", Some(err), &*self.telemetry);
+                return Err(err);
             }
             Err(_) => {
                 self.telemetry.on_event(CortexTelemetryEvent::StageFailed {
-                    reaction_id: input.reaction_id,
+                    cycle_id: physical_state.cycle_id,
                     stage: "extractor_timeout",
                 });
-                return noop_result(
-                    &input,
-                    "extractor_timeout",
-                    Some(cycle_timeout("extractor call timed out")),
-                    &*self.telemetry,
-                );
+                return Err(cycle_timeout("extractor call timed out"));
             }
         };
 
-        let clamped_1 = match self.clamp.clamp(AttemptClampRequest {
-            reaction_id: input.reaction_id,
+        let clamped_first = self.clamp.clamp(AttemptClampRequest {
+            cycle_id: physical_state.cycle_id,
             drafts: drafts.clone(),
-            capability_catalog: input.capability_catalog.clone(),
-            sense_window: input.sense_window.clone(),
-            limits: input.limits.clone(),
-        }) {
-            Ok(result) => result,
-            Err(err) => return noop_result(&input, "clamp_failed", Some(err), &*self.telemetry),
-        };
+            capability_catalog: physical_state.capabilities.clone(),
+            known_sense_ids: known_sense_ids.clone(),
+            limits: self.limits.clone(),
+        })?;
 
-        if !clamped_1.attempts.is_empty() {
-            let result = ReactionResult {
-                reaction_id: input.reaction_id,
-                based_on: clamped_1.based_on,
-                attention_tags: clamped_1.attention_tags,
-                attempts: clamped_1.attempts,
+        let acts = if !clamped_first.acts.is_empty() {
+            clamped_first.acts
+        } else if self.limits.max_repair_attempts == 0 || !budget.can_attempt_repair() {
+            self.telemetry.on_event(CortexTelemetryEvent::NoopFallback {
+                cycle_id: physical_state.cycle_id,
+                reason: "no_repair_budget",
+            });
+            Vec::new()
+        } else {
+            budget.record_repair_call()?;
+            let fill_req = PayloadFillerRequest {
+                cycle_id: physical_state.cycle_id,
+                drafts,
+                capability_catalog: physical_state.capabilities.clone(),
+                clamp_violations: clamped_first.violations,
+                limits: self.limits.clone(),
             };
-            self.telemetry
-                .on_event(CortexTelemetryEvent::ReactionCompleted {
-                    reaction_id: input.reaction_id,
-                    attempt_count: result.attempts.len(),
-                });
-            return result;
-        }
+            let repaired = match timeout(deadline, self.filler.fill(fill_req)).await {
+                Ok(Ok(repaired)) => repaired,
+                Ok(Err(err)) => {
+                    self.telemetry.on_event(CortexTelemetryEvent::StageFailed {
+                        cycle_id: physical_state.cycle_id,
+                        stage: "filler",
+                    });
+                    return Err(err);
+                }
+                Err(_) => {
+                    self.telemetry.on_event(CortexTelemetryEvent::StageFailed {
+                        cycle_id: physical_state.cycle_id,
+                        stage: "filler_timeout",
+                    });
+                    return Err(cycle_timeout("filler call timed out"));
+                }
+            };
 
-        let can_repair = input.limits.max_repair_attempts > 0 && budget.can_attempt_repair();
-        if !can_repair {
-            return noop_result(&input, "no_repair_budget", None, &*self.telemetry);
-        }
-
-        if let Err(err) = budget.record_repair_call() {
-            return noop_result(
-                &input,
-                "repair_budget_exceeded",
-                Some(err),
-                &*self.telemetry,
-            );
-        }
-
-        let fill_req = PayloadFillerRequest {
-            reaction_id: input.reaction_id,
-            drafts: drafts.clone(),
-            capability_catalog: input.capability_catalog.clone(),
-            clamp_violations: clamped_1.violations,
-            limits: input.limits.clone(),
-        };
-        let repaired = match timeout(deadline, self.filler.fill(fill_req)).await {
-            Ok(Ok(repaired)) => repaired,
-            Ok(Err(err)) => {
-                self.telemetry.on_event(CortexTelemetryEvent::StageFailed {
-                    reaction_id: input.reaction_id,
-                    stage: "filler",
-                });
-                return noop_result(&input, "filler_failed", Some(err), &*self.telemetry);
-            }
-            Err(_) => {
-                self.telemetry.on_event(CortexTelemetryEvent::StageFailed {
-                    reaction_id: input.reaction_id,
-                    stage: "filler_timeout",
-                });
-                return noop_result(
-                    &input,
-                    "filler_timeout",
-                    Some(cycle_timeout("filler call timed out")),
-                    &*self.telemetry,
-                );
-            }
+            self.clamp
+                .clamp(AttemptClampRequest {
+                    cycle_id: physical_state.cycle_id,
+                    drafts: repaired,
+                    capability_catalog: physical_state.capabilities.clone(),
+                    known_sense_ids,
+                    limits: self.limits.clone(),
+                })?
+                .acts
         };
 
-        let clamped_2 = match self.clamp.clamp(AttemptClampRequest {
-            reaction_id: input.reaction_id,
-            drafts: repaired,
-            capability_catalog: input.capability_catalog.clone(),
-            sense_window: input.sense_window.clone(),
-            limits: input.limits.clone(),
-        }) {
-            Ok(result) => result,
-            Err(err) => return noop_result(&input, "clamp_failed", Some(err), &*self.telemetry),
-        };
-
-        if clamped_2.attempts.is_empty() {
-            return noop_result(&input, "repaired_clamp_empty", None, &*self.telemetry);
-        }
-
-        let result = ReactionResult {
-            reaction_id: input.reaction_id,
-            based_on: clamped_2.based_on,
-            attention_tags: clamped_2.attention_tags,
-            attempts: clamped_2.attempts,
-        };
+        let new_cognition_state = evolve_cognition_state(cognition_state, senses);
         self.telemetry
             .on_event(CortexTelemetryEvent::ReactionCompleted {
-                reaction_id: input.reaction_id,
-                attempt_count: result.attempts.len(),
+                cycle_id: physical_state.cycle_id,
+                act_count: acts.len(),
             });
-        result
+
+        Ok(CortexOutput {
+            acts,
+            new_cognition_state,
+        })
     }
 }
 
@@ -235,7 +214,7 @@ struct CycleBudgetGuard {
 }
 
 impl CycleBudgetGuard {
-    fn new(limits: &crate::cortex::types::ReactionLimits) -> Self {
+    fn new(limits: &ReactionLimits) -> Self {
         Self {
             primary_calls: 0,
             sub_calls: 0,
@@ -275,93 +254,67 @@ impl CycleBudgetGuard {
     }
 }
 
-fn validate_input_bounds(input: &ReactionInput) -> Result<(), CortexError> {
-    if input.limits.max_primary_calls != 1 {
+fn validate_input_bounds(limits: &ReactionLimits) -> Result<(), CortexError> {
+    if limits.max_primary_calls != 1 {
         return Err(invalid_input("max_primary_calls must be exactly 1"));
     }
-    if input.limits.max_repair_attempts > 1 {
+    if limits.max_repair_attempts > 1 {
         return Err(invalid_input("max_repair_attempts must be <= 1"));
-    }
-    if input.sense_window.len() > input.limits.max_sense_items {
-        return Err(invalid_input("sense window exceeds max_sense_items"));
-    }
-    if input.env_snapshots.len() > input.limits.max_snapshot_items {
-        return Err(invalid_input("env snapshots exceed max_snapshot_items"));
-    }
-    if input
-        .env_snapshots
-        .iter()
-        .any(|snap| snap.blob_bytes > input.limits.max_snapshot_bytes_per_item)
-    {
-        return Err(invalid_input(
-            "env snapshot blob exceeds max_snapshot_bytes_per_item",
-        ));
-    }
-    let mut seen = BTreeSet::new();
-    for sense in &input.sense_window {
-        if !seen.insert(sense.sense_id.clone()) {
-            return Err(invalid_input("duplicate sense_id in sense window"));
-        }
     }
     Ok(())
 }
 
-fn build_primary_prompt_context(input: &ReactionInput) -> String {
-    let constitutional = input
-        .context
-        .constitutional
-        .iter()
-        .map(|item| item.intent_key.clone())
-        .collect::<Vec<_>>();
-    let environmental = input
-        .context
-        .environmental
-        .iter()
-        .map(|item| item.signal_key.clone())
-        .collect::<Vec<_>>();
-    let emergent = input
-        .context
-        .emergent_candidates
-        .iter()
-        .map(|item| item.candidate_key.clone())
-        .collect::<Vec<_>>();
-
-    serde_json::json!({
-        "reaction_id": input.reaction_id,
-        "constitutional": constitutional,
-        "environmental": environmental,
-        "emergent": emergent,
-        "senses": input.sense_window.iter().map(|sense| &sense.sense_id).collect::<Vec<_>>(),
-        "feedback_codes": input.admission_feedback.iter().map(|signal| &signal.code).collect::<Vec<_>>(),
-    })
-    .to_string()
+fn known_sense_ids(senses: &[Sense]) -> Vec<String> {
+    let mut known = std::collections::BTreeSet::new();
+    for (index, sense) in senses.iter().enumerate() {
+        match sense {
+            Sense::Domain(item) => {
+                known.insert(item.sense_id.clone());
+            }
+            Sense::NewCapabilities(_) => {
+                known.insert(format!("control:new_capabilities:{index}"));
+            }
+            Sense::DropCapabilities(_) => {
+                known.insert(format!("control:drop_capabilities:{index}"));
+            }
+            Sense::Sleep => {
+                known.insert(format!("control:sleep:{index}"));
+            }
+        }
+    }
+    known.into_iter().collect()
 }
 
-fn noop_result(
-    input: &ReactionInput,
-    reason: &'static str,
-    err: Option<CortexError>,
-    telemetry: &dyn CortexTelemetryPort,
-) -> ReactionResult {
-    if err.is_some() {
-        telemetry.on_event(CortexTelemetryEvent::StageFailed {
-            reaction_id: input.reaction_id,
-            stage: reason,
-        });
+fn evolve_cognition_state(previous: &CognitionState, senses: &[Sense]) -> CognitionState {
+    let mut next = previous.clone();
+    next.revision = next.revision.saturating_add(1);
+
+    for sense in senses {
+        if let Sense::Domain(datum) = sense {
+            if let Some(goal_push) = datum.payload.get("goal_push") {
+                let goal_id = goal_push
+                    .get("goal_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("goal:auto")
+                    .to_string();
+                let summary = goal_push
+                    .get("summary")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("auto goal")
+                    .to_string();
+                next.goal_stack.push(GoalFrame { goal_id, summary });
+            }
+
+            if datum
+                .payload
+                .get("goal_pop")
+                .and_then(|value| value.as_bool())
+                .unwrap_or(false)
+            {
+                next.goal_stack.pop();
+            }
+        }
     }
-    telemetry.on_event(CortexTelemetryEvent::NoopFallback {
-        reaction_id: input.reaction_id,
-        reason,
-    });
-    let based_on = input
-        .sense_window
-        .iter()
-        .map(|sense| sense.sense_id.clone())
-        .collect();
-    ReactionResult {
-        reaction_id: input.reaction_id,
-        based_on,
-        attention_tags: Vec::new(),
-        attempts: Vec::new(),
-    }
+
+    next
 }

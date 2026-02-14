@@ -1,13 +1,13 @@
 # Cortex Module
 
-Cortex is the always-on deliberative reactor module.
+Cortex is the stateless deliberative cognition module.
 
 Code:
 - `core/src/cortex/*`
 
 Key properties:
-- inbox-event driven `react` loop
-- stateless durable boundary (no internal goal/commitment persistence)
+- pure runtime boundary: `cortex(senses, physical_state, cognition_state) -> (acts, new_cognition_state)`
+- no internal durable persistence of cognition state
 - primary prose IR + sub-compile pipeline
-- deterministic clamp final authority
-- attempts are deterministic and non-binding
+- deterministic clamp as final authority
+- emitted `Act[]` is deterministic and non-binding

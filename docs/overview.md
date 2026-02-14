@@ -5,42 +5,44 @@ Beluna is a survival-oriented digital life runtime, not a chatbot.
 ## Core Invariants
 
 1. Natural language is the protocol across cognition and body affordances.
-2. Cortex is the mind and is stateless per reaction tick.
-3. Cortex can intend anything and emits non-binding intentions.
-4. Continuity is the persisted operational memory and policy anchor.
-5. Ledger is metabolism and survival pressure.
-6. Spine is the transport-ignorant channel between Mind and Body.
-7. Body (Endpoints) is Beluna's interface to the world.
+2. Cortex is stateless and pure at runtime boundary.
+3. Cortex emits non-binding `Act[]`.
+4. Continuity persists cognition state (goal stack today).
+5. Ledger enforces survival resources.
+6. Spine executes acts and emits ordered settlement events.
+7. Body endpoints are Beluna's world interfaces.
 
 ## Runtime Topology
 
 Beluna runtime process:
-1. `core` runnable binary (`beluna`) with embedded std body endpoints.
-2. Optional external Body Endpoints (for example Apple Universal App) connect over UnixSocket.
+1. `core` runnable binary (`beluna`) with embedded standard body endpoints.
+2. Optional external body endpoints (for example Apple Universal App) connect over UnixSocket.
 
 Beluna Core top-level components:
 1. Cortex (cognition)
-2. Continuity (operational state)
-3. Admission (effectuation gate)
+2. Stem (runtime loop/orchestrator)
+3. Continuity (operational memory + capability overlay)
 4. Ledger (resource control)
-5. Spine (mechanical execution routing)
+5. Spine (execution routing)
 
 Operational flow:
 
 ```text
-Sense + EnvSnapshot stream -> CortexInbox
-CortexReactor consumes ReactionInput
-Primary IR + sub-compile + deterministic clamp -> IntentAttempt[]
-IntentAttempt[] (Neural Signal queue) -> Admission
-Admission + Ledger -> AdmittedActionBatch
-AdmittedActionBatch -> Spine (route lookup + endpoint dispatch over body endpoints)
-SpineExecutionReport -> Continuity + Ledger settlement
+[BodyEndpoint, Spine, Continuity, Ledger] -> SenseQueue (bounded mpsc) -> Stem
+Stem:
+  drained senses -> compose(physical_state + cognition_state) -> Cortex
+  Cortex -> (acts, new_cognition_state)
+  new_cognition_state -> Continuity persist
+  acts -> serial dispatch: Ledger -> Continuity -> Spine
 ```
 
-## Current MVP Status
+Control senses:
+1. `sleep`: stops Stem loop; Cortex is not called.
+2. `new_capabilities`: applies patch before same-cycle Cortex call.
+3. `drop_capabilities`: applies drop patch before same-cycle Cortex call.
 
-1. Cortex/Continuity/Admission/Ledger/Spine contracts are implemented in `core/src/*`.
-2. Spine ships async routing kernel + in-memory registry.
-3. UnixSocket adapter is the active Spine shell for ingress and body endpoint lifecycle (`body_endpoint_register`/`body_endpoint_invoke`/`body_endpoint_result`).
-4. Core embeds Shell and Web standard body endpoints (config-gated).
-5. Apple Universal App acts as an independent chat Body Endpoint and self-registers with Spine UnixSocket.
+Shutdown flow:
+1. `main` catches SIGINT/SIGTERM.
+2. closes ingress gate (rejects producer sends).
+3. blocks until `sleep` is enqueued.
+4. waits for Stem completion and runs cleanup.

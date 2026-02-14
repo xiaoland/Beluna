@@ -3,34 +3,27 @@
 ## Module Boundary
 
 Inputs:
-- `ReactionInput`
-  - ordered `sense_window` with stable `sense_id`,
-  - latest endpoint snapshots,
-  - admission feedback signals correlated by `attempt_id`,
-  - capability catalog,
-  - bounded cycle limits,
-  - distributed intent context.
+- `Sense[]` (drained from queue for current cycle)
+- `PhysicalState`
+- `CognitionState`
 
 Outputs:
-- `ReactionResult`
-  - `attempts: IntentAttempt[]` (or empty noop),
-  - `based_on: [sense_id...]`,
-  - `attention_tags`.
+- `CortexOutput`
+  - `acts: Act[]` (or empty noop)
+  - `new_cognition_state`
 
 ## Key Components
 
-- `CortexReactor`: always-on async inbox loop.
 - `CortexPipeline`: single-cycle cognition orchestration.
 - Cognition ports:
-  - `PrimaryReasonerPort`,
-  - `AttemptExtractorPort`,
-  - `PayloadFillerPort`.
-- `DeterministicAttemptClamp`: final schema/catalog/capability/cap authority.
+  - `PrimaryReasonerPort`
+  - `AttemptExtractorPort`
+  - `PayloadFillerPort`
+- `DeterministicAttemptClamp`: final schema/catalog/capability authority.
 
 ## Invariants
 
-- Reactor progression is inbox-event driven.
-- Cortex is stateless for durable goal/commitment storage.
-- `IntentAttempt` remains non-binding and world-relative.
-- feedback to Cortex includes `attempt_id` correlation.
-- business output remains clean (telemetry is out-of-band).
+- Cortex state is externalized; no durable internal persistence.
+- `Act` remains non-binding and world-relative.
+- deterministic clamp guards all emitted acts.
+- business output remains clean (telemetry out-of-band).

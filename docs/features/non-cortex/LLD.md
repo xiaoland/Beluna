@@ -1,23 +1,27 @@
-# Non-Cortex LLD
+# Stem Runtime LLD
 
-## Determinism Rules
+## Queue + Shutdown Rules
 
-Admission purity:
-- No wall clock.
-- No randomness.
-- No unordered iteration.
-- Inputs limited to runtime state, attempt mechanical fields, and deterministic policies.
+- One bounded `tokio::mpsc::channel<Sense>`.
+- Producer sends go through `SenseIngress::send`.
+- `close_gate()` rejects future producer sends.
+- `send_sleep_blocking()` bypasses gate check and blocks on queue backpressure.
 
-## Reservation Clock
+## Control Sense Rules
 
-- `expires_at_cycle = created_cycle + reservation_ttl_cycles`
-- Expiration checked only against cycle clock.
+- `sleep`: immediate loop break; Cortex not called.
+- `new_capabilities`: apply patch before same-cycle Cortex call.
+- `drop_capabilities`: apply drop before same-cycle Cortex call.
 
-## Settlement Idempotency
+## Dispatch Rules
 
-- Same `(reserve_entry_id, reference_id, terminal-op)` replay: no-op.
-- Different reference on terminal reservation: invariant error.
+- Serial dispatch order: Ledger -> Continuity -> Spine.
+- Pipeline decision contract: `Continue` / `Break`.
+- `Break` aborts current act only.
+- Spine errors map to deterministic synthetic rejection events.
 
-## Attribution Chain
+## Ledger Settlement Rules
 
-`cost_attribution_id` is carried from attempt -> admitted action -> spine event -> gateway telemetry -> external debit observation.
+- Deterministic `cost_attribution_id` from `(cycle_id, act_id)`.
+- Reservation terminality enforced by ledger (`settle|refund|expire` exactly one).
+- Settlement idempotent by `(reserve_entry_id, reference_id, terminal-op)`.

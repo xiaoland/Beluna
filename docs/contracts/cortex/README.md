@@ -1,14 +1,13 @@
 # Cortex Contracts
 
 Boundary:
-1. input: `ReactionInput`
-2. output: `ReactionResult` with `IntentAttempt[]`
+1. input: `Sense[]`, `PhysicalState`, `CognitionState`
+2. output: `CortexOutput { acts, new_cognition_state }`
 
 Must hold:
-1. reactor progression is inbox-event driven
-2. deterministic attempt derivation
-3. `IntentAttempt` is non-binding and world-relative
-4. non-noop attempts include `attempt_id` and `based_on: [sense_id...]`
-5. feedback path preserves `attempt_id` correlation
-6. one-primary/N-subcall/one-repair/noop bounded cycle policy
-7. capability catalog consumed by Cortex is sourced from Spine capability snapshot bridge
+1. Cortex is stateless and has no direct side effects on external components.
+2. Same input + same model outputs + same clamp config => deterministic `Act[]`.
+3. `Act` is non-binding; execution decisions remain in Stem pipeline.
+4. Deterministic clamp is final authority before act emission.
+5. `sleep` sense is never processed by Cortex.
+6. Capability catalog consumed by Cortex is the merged physical capability view from Stem.

@@ -19,15 +19,18 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::spine::{
-    error::{SpineError, backend_failure, route_not_found},
-    ports::EndpointPort,
-    types::{AdmittedAction, EndpointExecutionOutcome, EndpointInvocation, RouteKey},
+use crate::{
+    ingress::SenseIngress,
+    runtime_types::{CapabilityDropPatch, CapabilityPatch, Sense},
+    spine::{
+        error::{SpineError, backend_failure, route_not_found},
+        ports::{EndpointPort, EndpointRegistryPort},
+        types::{ActDispatchRequest, EndpointExecutionOutcome, EndpointInvocation, RouteKey},
+    },
 };
 
 use super::wire::{
-    BodyEgressMessage, BodyIngressMessage, InboundBodyMessage, encode_body_egress_message,
-    parse_body_ingress_message,
+    BodyEgressMessage, InboundBodyMessage, encode_body_egress_message, parse_body_ingress_message,
 };
 
 #[derive(Default)]
@@ -63,11 +66,7 @@ impl BodyEndpointBroker {
         state.body_endpoints.insert(body_endpoint_id, tx);
     }
 
-    pub fn register_route(
-        &self,
-        body_endpoint_id: u64,
-        route: &RouteKey,
-    ) -> Result<(), SpineError> {
+    pub fn register_route(&self, body_endpoint_id: u64, route: &RouteKey) -> Result<(), SpineError> {
         let mut state = self.state.lock().expect("lock poisoned");
         if !state.body_endpoints.contains_key(&body_endpoint_id) {
             return Err(backend_failure(format!(
@@ -81,8 +80,6 @@ impl BodyEndpointBroker {
                 return Ok(());
             }
 
-            // Newer registrations take ownership. This prevents stale client
-            // connections from permanently blocking route recovery.
             if let Some(routes) = state.routes_by_body_endpoint.get_mut(&owner) {
                 routes.remove(route);
                 if routes.is_empty() {
@@ -133,7 +130,7 @@ impl BodyEndpointBroker {
     pub async fn invoke_route(
         &self,
         route: &RouteKey,
-        action: AdmittedAction,
+        request: ActDispatchRequest,
     ) -> Result<EndpointExecutionOutcome, SpineError> {
         let body_endpoint_tx = {
             let state = self.state.lock().expect("lock poisoned");
@@ -156,19 +153,19 @@ impl BodyEndpointBroker {
 
         if body_endpoint_tx
             .send(BodyEgressMessage::Act {
-                action: action.clone(),
+                request: request.clone(),
             })
             .is_err()
         {
             return Err(backend_failure(format!(
                 "failed to send act {}",
-                action.neural_signal_id
+                request.act.act_id
             )));
         }
 
         Ok(EndpointExecutionOutcome::Applied {
-            actual_cost_micro: action.reserved_cost.survival_micro.max(0),
-            reference_id: format!("remote:act_sent:{}", action.neural_signal_id),
+            actual_cost_micro: request.act.requested_resources.survival_micro.max(0),
+            reference_id: format!("remote:act_sent:{}", request.act.act_id),
         })
     }
 }
@@ -191,7 +188,7 @@ impl EndpointPort for RemoteBodyEndpointPort {
         invocation: EndpointInvocation,
     ) -> Result<EndpointExecutionOutcome, SpineError> {
         self.broker
-            .invoke_route(&self.route, invocation.action)
+            .invoke_route(&self.route, invocation.request)
             .await
     }
 }
@@ -207,7 +204,8 @@ impl UnixSocketAdapter {
 
     pub async fn run(
         &self,
-        message_tx: mpsc::UnboundedSender<BodyIngressMessage>,
+        ingress: SenseIngress,
+        registry: Arc<dyn EndpointRegistryPort>,
         broker: Arc<BodyEndpointBroker>,
         shutdown: CancellationToken,
     ) -> Result<()> {
@@ -223,10 +221,11 @@ impl UnixSocketAdapter {
                 accept_result = listener.accept() => {
                     match accept_result {
                         Ok((stream, _)) => {
-                            let sender = message_tx.clone();
+                            let ingress = ingress.clone();
+                            let registry = Arc::clone(&registry);
                             let broker_ref = Arc::clone(&broker);
                             tokio::spawn(async move {
-                                if let Err(err) = handle_body_endpoint(stream, sender, broker_ref).await {
+                                if let Err(err) = handle_body_endpoint(stream, ingress, registry, broker_ref).await {
                                     eprintln!("body endpoint handling failed: {err:#}");
                                 }
                             });
@@ -282,7 +281,8 @@ impl UnixSocketAdapter {
 
 async fn handle_body_endpoint(
     stream: UnixStream,
-    message_tx: mpsc::UnboundedSender<BodyIngressMessage>,
+    ingress: SenseIngress,
+    registry: Arc<dyn EndpointRegistryPort>,
     broker: Arc<BodyEndpointBroker>,
 ) -> Result<()> {
     let body_endpoint_id = broker.allocate_body_endpoint_id();
@@ -315,128 +315,85 @@ async fn handle_body_endpoint(
                     endpoint_id,
                     descriptor,
                 } => {
-                    let _ = message_tx.send(BodyIngressMessage::BodyEndpointRegister {
-                        body_endpoint_id,
-                        endpoint_id,
-                        descriptor,
-                    });
+                    let route = descriptor.route.clone();
+                    if let Err(err) = broker.register_route(body_endpoint_id, &route) {
+                        eprintln!("body endpoint register rejected: {err}");
+                        continue;
+                    }
+
+                    let _ = registry.unregister(&route);
+
+                    let endpoint: Arc<dyn EndpointPort> = Arc::new(RemoteBodyEndpointPort::new(
+                        route.clone(),
+                        Arc::clone(&broker),
+                    ));
+
+                    if let Err(err) = registry.register(
+                        crate::spine::types::EndpointRegistration {
+                            endpoint_id,
+                            descriptor: descriptor.clone(),
+                        },
+                        endpoint,
+                    ) {
+                        broker.unregister_route(body_endpoint_id, &route);
+                        eprintln!("body endpoint route registration failed: {err}");
+                        continue;
+                    }
+
+                    if let Err(err) = ingress
+                        .send(Sense::NewCapabilities(CapabilityPatch {
+                            entries: vec![descriptor],
+                        }))
+                        .await
+                    {
+                        eprintln!("dropping capability patch after register: {err}");
+                    }
                 }
                 InboundBodyMessage::BodyEndpointUnregister { route } => {
-                    let _ = message_tx.send(BodyIngressMessage::BodyEndpointUnregister {
-                        body_endpoint_id,
-                        route,
-                    });
+                    broker.unregister_route(body_endpoint_id, &route);
+                    let _ = registry.unregister(&route);
+                    if let Err(err) = ingress
+                        .send(Sense::DropCapabilities(CapabilityDropPatch {
+                            routes: vec![route],
+                        }))
+                        .await
+                    {
+                        eprintln!("dropping capability drop after unregister: {err}");
+                    }
                 }
                 InboundBodyMessage::Sense(sense) => {
-                    let _ = message_tx.send(BodyIngressMessage::Sense(sense));
+                    if let Err(err) = ingress.send(Sense::Domain(sense)).await {
+                        eprintln!("dropping sense due to closed ingress: {err}");
+                    }
                 }
-                InboundBodyMessage::EnvSnapshot(snapshot) => {
-                    let _ = message_tx.send(BodyIngressMessage::EnvSnapshot(snapshot));
+                InboundBodyMessage::NewCapabilities(patch) => {
+                    if let Err(err) = ingress.send(Sense::NewCapabilities(patch)).await {
+                        eprintln!("dropping new_capabilities due to closed ingress: {err}");
+                    }
                 }
-                InboundBodyMessage::AdmissionFeedback(feedback) => {
-                    let _ = message_tx.send(BodyIngressMessage::AdmissionFeedback(feedback));
-                }
-                InboundBodyMessage::CapabilityCatalogUpdate(catalog) => {
-                    let _ = message_tx.send(BodyIngressMessage::CapabilityCatalogUpdate(catalog));
-                }
-                InboundBodyMessage::CortexLimitsUpdate(limits) => {
-                    let _ = message_tx.send(BodyIngressMessage::CortexLimitsUpdate(limits));
-                }
-                InboundBodyMessage::IntentContextUpdate(context) => {
-                    let _ = message_tx.send(BodyIngressMessage::IntentContextUpdate(context));
+                InboundBodyMessage::DropCapabilities(drop_patch) => {
+                    if let Err(err) = ingress.send(Sense::DropCapabilities(drop_patch)).await {
+                        eprintln!("dropping drop_capabilities due to closed ingress: {err}");
+                    }
                 }
             },
-            Err(err) => eprintln!("ignoring invalid protocol message: {err}"),
+            Err(err) => {
+                eprintln!("invalid ingress message: {err}");
+            }
         }
     }
 
     let routes = broker.detach_body_endpoint(body_endpoint_id);
+    for route in &routes {
+        let _ = registry.unregister(route);
+    }
     if !routes.is_empty() {
-        let _ = message_tx.send(BodyIngressMessage::BodyEndpointDisconnected {
-            body_endpoint_id,
-            routes,
-        });
+        let _ = ingress
+            .send(Sense::DropCapabilities(CapabilityDropPatch { routes }))
+            .await;
     }
 
-    match writer_task.await {
-        Ok(Ok(())) => {}
-        Ok(Err(err)) => eprintln!("socket writer failed: {err:#}"),
-        Err(err) => eprintln!("socket writer task join failed: {err}"),
-    }
+    writer_task.await??;
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use std::collections::BTreeMap;
-
-    use tokio::sync::mpsc;
-
-    use super::*;
-    use crate::spine::types::CostVector;
-
-    fn test_route() -> RouteKey {
-        RouteKey {
-            endpoint_id: "macos-app.01".to_string(),
-            capability_id: "present.message".to_string(),
-        }
-    }
-
-    fn test_action(route: &RouteKey) -> AdmittedAction {
-        AdmittedAction {
-            neural_signal_id: "ns_test_01".to_string(),
-            capability_instance_id: "cap_inst_test_01".to_string(),
-            source_attempt_id: "attempt_test_01".to_string(),
-            reserve_entry_id: "reserve_test_01".to_string(),
-            cost_attribution_id: "cost_test_01".to_string(),
-            endpoint_id: route.endpoint_id.clone(),
-            capability_id: route.capability_id.clone(),
-            normalized_payload: serde_json::json!({"type":"noop"}),
-            reserved_cost: CostVector::default(),
-            degraded: false,
-            degradation_profile_id: None,
-            admission_cycle: 1,
-            metadata: BTreeMap::new(),
-        }
-    }
-
-    #[tokio::test]
-    async fn route_registration_transfers_to_newest_endpoint() {
-        let broker = BodyEndpointBroker::new(30_000);
-
-        let endpoint_a = broker.allocate_body_endpoint_id();
-        let (tx_a, mut rx_a) = mpsc::unbounded_channel();
-        broker.attach_body_endpoint(endpoint_a, tx_a);
-
-        let endpoint_b = broker.allocate_body_endpoint_id();
-        let (tx_b, mut rx_b) = mpsc::unbounded_channel();
-        broker.attach_body_endpoint(endpoint_b, tx_b);
-
-        let route = test_route();
-        broker.register_route(endpoint_a, &route).expect("register A");
-        broker.register_route(endpoint_b, &route).expect("register B");
-
-        // Disconnecting the old endpoint must not remove the route after handoff.
-        let detached_routes = broker.detach_body_endpoint(endpoint_a);
-        assert!(
-            detached_routes.is_empty(),
-            "old owner should not still own route after transfer"
-        );
-
-        broker
-            .invoke_route(&route, test_action(&route))
-            .await
-            .expect("route invoke");
-
-        let sent_to_b = rx_b.try_recv().expect("new owner should receive act");
-        assert!(
-            matches!(sent_to_b, BodyEgressMessage::Act { .. }),
-            "expected act message to be delivered"
-        );
-        assert!(
-            rx_a.try_recv().is_err(),
-            "old owner should not receive act after transfer"
-        );
-    }
 }

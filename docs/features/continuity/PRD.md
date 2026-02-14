@@ -1,13 +1,16 @@
 # Continuity PRD
 
-Continuity owns operational state, sensing ingestion, and non-semantic situation construction.
+Continuity owns persisted operational state for runtime orchestration.
 
-Invairants:
+Invariants:
 
-- `SituationView` is non-semantic; cortex is where meaning happens.
+- Cognition persistence is deterministic and side-effect free outside Continuity boundaries.
+- Capability patch/drop state is deterministic and replay-safe.
+- Continuity does not perform semantic planning.
 
 Requirements:
 
-- Ingest sense/feedback signals deterministically.
-- Build `SituationView` without semantic interpretation.
-- Maintain attribution journals and replay-safe state.
+- Persist/retrieve `CognitionState`.
+- Apply `new_capabilities` and `drop_capabilities` with arrival-order-wins policy.
+- Provide capability snapshot contribution for physical state composition.
+- Provide pre-dispatch gate decision (`Continue` / `Break`) and consume spine events.

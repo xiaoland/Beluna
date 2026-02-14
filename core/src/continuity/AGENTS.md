@@ -1,7 +1,9 @@
 # AGENTS.md for core/src/continuity
 
-Continuity holds operational state and builds non-semantic situation views.
+Continuity persists operational runtime state for Stem orchestration.
 
 ## Invariants
-- SituationView is non-semantic.
-- Feedback ingestion and attribution matching are deterministic.
+- Cognition state snapshot/persist must be deterministic.
+- Capability patch/drop application follows arrival order.
+- Dispatch gate decision contract is strictly `Continue` or `Break`.
+- Spine event ingestion is deterministic and non-semantic.

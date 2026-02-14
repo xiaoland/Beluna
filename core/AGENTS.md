@@ -18,14 +18,15 @@ Beluna Core is the runnable runtime and domain agent implementation.
 └── src/
     ├── main.rs
     ├── cli.rs
-    ├── brainstem.rs
     ├── body/
     ├── config.rs
     ├── cortex/
     ├── continuity/
-    ├── admission/
+    ├── ingress.rs
     ├── ledger/
+    ├── runtime_types.rs
     ├── spine/
+    ├── stem.rs
     └── ai_gateway/
 ```
 
@@ -36,28 +37,30 @@ Beluna Core is the runnable runtime and domain agent implementation.
 
 ## Current State
 
-> Last Updated At: 2026-02-13T11:00Z+08:00
+> Last Updated At: 2026-02-14T13:30Z+08:00
 
 ### Live Capabilities
 
 - Core runs as a foreground binary: `beluna [--config <path>]`.
 - Config defaults to `./beluna.jsonc` and validates against `core/beluna.schema.json`.
-- Start the brainstem loop listening on a Unix Socket (NDJSON), exit on SIGTERM/SIGINT.
-- Ingest runtime event messages (`sense`, `env_snapshot`, `admission_feedback`, catalog/limits/context updates).
-- Run Cortex as an event loop using Continuity ephemeral Sense and Neural Signal queues.
-- Batch trigger: sense queue length >= 2 or 1s timeout, max 8 senses per cycle.
-- Spine consumes Neural Signals immediately via admission + execution.
+- Runtime uses one bounded Rust MPSC sense queue with native sender backpressure.
+- `main` boots continuity/ledger/spine/cortex, starts the Stem loop, and listens for SIGTERM/SIGINT.
+- Shutdown closes ingress gate first, then blocks until `sleep` sense is enqueued.
+- Stem consumes one sense at a time, composes physical+cognition state, invokes pure cortex boundary, then dispatches acts serially through Ledger -> Continuity -> Spine.
+- Control senses:
+  - `sleep` breaks loop without calling Cortex.
+  - `new_capabilities` / `drop_capabilities` mutate capability state before same-cycle Cortex call.
 - Built-in standard body endpoints (shell/web) run in-process, gated by config and cargo features.
-- External body endpoints (for example Apple Universal) register over UnixSocket with `body_endpoint_*` protocol envelopes.
-- AI Gateway MVP with deterministic routing, strict normalization, reliability controls, and budget enforcement.
+- External body endpoints register over UnixSocket and publish senses/capability patches.
+- AI Gateway MVP provides deterministic routing, strict normalization, reliability controls, and budget enforcement.
 
 ### Known Limitations & Mocks
 
-- WebSocket/HTTP Spine adapters are not implemented in current MVP (UnixSocket adapter only).
+- WebSocket/HTTP spine adapters are not implemented in current MVP (UnixSocket adapter only).
 - Economic debits from AI Gateway are approximate and currently token-based.
 - AI Gateway adapters for cortex extraction/fill rely on model JSON compliance; deterministic clamp remains final authority.
 
 ### Immediate Next Focus
 
 - Increase debit fidelity and add persistent ledger storage.
-- Continue building macOS Desktop App bridge over Unix Socket.
+- Continue building macOS Desktop App bridge over UnixSocket.

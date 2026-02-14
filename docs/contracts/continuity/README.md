@@ -1,6 +1,8 @@
 # Continuity Contracts
 
 Must hold:
-- `SituationView` is non-semantic
-- deterministic sensing ingestion and attribution matching
-- bounded-cycle settlement consistency checks
+- cognition state snapshot/persist operations are deterministic.
+- capability patch/drop semantics are arrival-order-wins.
+- dropped route can be reintroduced by later patch.
+- pre-dispatch gate decision contract is `Continue` or `Break`.
+- spine event ingestion is deterministic for same input sequence.

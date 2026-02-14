@@ -1,0 +1,127 @@
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use tokio::sync::{Mutex, mpsc};
+
+use beluna::{
+    continuity::ContinuityEngine,
+    cortex::{CortexError, CortexOutput, CortexPort},
+    ledger::LedgerStage,
+    runtime_types::{Act, CognitionState, PhysicalState, RequestedResources, Sense, SenseDatum},
+    spine::{
+        ActDispatchRequest, SpineCapabilityCatalog, SpineEvent, SpineExecutionMode,
+        SpineExecutorPort,
+    },
+    stem::StemRuntime,
+};
+
+struct TwoActCortex;
+
+#[async_trait]
+impl CortexPort for TwoActCortex {
+    async fn cortex(
+        &self,
+        _senses: &[Sense],
+        _physical_state: &PhysicalState,
+        cognition_state: &CognitionState,
+    ) -> Result<CortexOutput, CortexError> {
+        Ok(CortexOutput {
+            acts: vec![
+                Act {
+                    act_id: "act:1".to_string(),
+                    based_on: vec!["sense:1".to_string()],
+                    endpoint_id: "ep.demo".to_string(),
+                    capability_id: "cap.demo".to_string(),
+                    capability_instance_id: "instance:1".to_string(),
+                    normalized_payload: serde_json::json!({}),
+                    requested_resources: RequestedResources {
+                        survival_micro: 2_000_000,
+                        time_ms: 1,
+                        io_units: 1,
+                        token_units: 0,
+                    },
+                },
+                Act {
+                    act_id: "act:2".to_string(),
+                    based_on: vec!["sense:1".to_string()],
+                    endpoint_id: "ep.demo".to_string(),
+                    capability_id: "cap.demo".to_string(),
+                    capability_instance_id: "instance:2".to_string(),
+                    normalized_payload: serde_json::json!({}),
+                    requested_resources: RequestedResources {
+                        survival_micro: 10,
+                        time_ms: 1,
+                        io_units: 1,
+                        token_units: 0,
+                    },
+                },
+            ],
+            new_cognition_state: cognition_state.clone(),
+        })
+    }
+}
+
+#[derive(Default)]
+struct SpySpine {
+    requests: Mutex<Vec<ActDispatchRequest>>,
+}
+
+#[async_trait]
+impl SpineExecutorPort for SpySpine {
+    fn mode(&self) -> SpineExecutionMode {
+        SpineExecutionMode::SerializedDeterministic
+    }
+
+    async fn dispatch_act(&self, request: ActDispatchRequest) -> Result<SpineEvent, beluna::spine::SpineError> {
+        self.requests.lock().await.push(request.clone());
+        Ok(SpineEvent::ActApplied {
+            cycle_id: request.cycle_id,
+            seq_no: request.seq_no,
+            act_id: request.act.act_id.clone(),
+            capability_instance_id: request.act.capability_instance_id.clone(),
+            reserve_entry_id: request.reserve_entry_id.clone(),
+            cost_attribution_id: request.cost_attribution_id.clone(),
+            actual_cost_micro: request.act.requested_resources.survival_micro.max(0),
+            reference_id: format!("spy:settle:{}", request.act.act_id),
+        })
+    }
+
+    fn capability_catalog_snapshot(&self) -> SpineCapabilityCatalog {
+        SpineCapabilityCatalog::default()
+    }
+}
+
+#[tokio::test]
+async fn break_stops_current_act_only_and_keeps_next_act() {
+    let (sense_tx, sense_rx) = mpsc::channel(4);
+    sense_tx
+        .send(Sense::Domain(SenseDatum {
+            sense_id: "sense:1".to_string(),
+            source: "test".to_string(),
+            payload: serde_json::json!({}),
+        }))
+        .await
+        .expect("domain sense should enqueue");
+    sense_tx
+        .send(Sense::Sleep)
+        .await
+        .expect("sleep should enqueue");
+    drop(sense_tx);
+
+    let spy_spine = Arc::new(SpySpine::default());
+    let continuity = Arc::new(Mutex::new(ContinuityEngine::with_defaults()));
+    let ledger = Arc::new(Mutex::new(LedgerStage::new(1_000)));
+    let runtime = StemRuntime::new(
+        Arc::new(TwoActCortex),
+        continuity,
+        ledger,
+        spy_spine.clone(),
+        sense_rx,
+    );
+    runtime.run().await.expect("stem should run");
+
+    let requests = spy_spine.requests.lock().await;
+    assert_eq!(requests.len(), 1, "only second act should be dispatched");
+    assert_eq!(requests[0].act.act_id, "act:2");
+    assert_eq!(requests[0].seq_no, 2, "sequence should preserve output order");
+}

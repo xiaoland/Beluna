@@ -73,46 +73,18 @@ impl Default for CortexRuntimeConfig {
 pub struct CoreLoopConfig {
     #[serde(default = "default_sense_queue_capacity")]
     pub sense_queue_capacity: usize,
-    #[serde(default = "default_neural_signal_queue_capacity")]
-    pub neural_signal_queue_capacity: usize,
-    #[serde(default = "default_batch_window_ms")]
-    pub batch_window_ms: u64,
-    #[serde(default = "default_batch_flush_sense_count")]
-    pub batch_flush_sense_count: usize,
-    #[serde(default = "default_batch_max_sense_count")]
-    pub batch_max_sense_count: usize,
 }
 
 impl Default for CoreLoopConfig {
     fn default() -> Self {
         Self {
             sense_queue_capacity: default_sense_queue_capacity(),
-            neural_signal_queue_capacity: default_neural_signal_queue_capacity(),
-            batch_window_ms: default_batch_window_ms(),
-            batch_flush_sense_count: default_batch_flush_sense_count(),
-            batch_max_sense_count: default_batch_max_sense_count(),
         }
     }
 }
 
 fn default_sense_queue_capacity() -> usize {
     32
-}
-
-fn default_neural_signal_queue_capacity() -> usize {
-    32
-}
-
-fn default_batch_window_ms() -> u64 {
-    1_000
-}
-
-fn default_batch_flush_sense_count() -> usize {
-    2
-}
-
-fn default_batch_max_sense_count() -> usize {
-    8
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

@@ -5,8 +5,8 @@ use async_trait::async_trait;
 use crate::spine::{
     error::SpineError,
     types::{
-        AdmittedActionBatch, EndpointExecutionOutcome, EndpointInvocation, EndpointRegistration,
-        RouteKey, SpineCapabilityCatalog, SpineExecutionMode, SpineExecutionReport,
+        ActDispatchRequest, EndpointExecutionOutcome, EndpointInvocation, EndpointRegistration,
+        RouteKey, SpineCapabilityCatalog, SpineEvent, SpineExecutionMode,
     },
 };
 
@@ -36,10 +36,7 @@ pub trait EndpointRegistryPort: Send + Sync {
 pub trait SpineExecutorPort: Send + Sync {
     fn mode(&self) -> SpineExecutionMode;
 
-    async fn execute_admitted(
-        &self,
-        admitted: AdmittedActionBatch,
-    ) -> Result<SpineExecutionReport, SpineError>;
+    async fn dispatch_act(&self, request: ActDispatchRequest) -> Result<SpineEvent, SpineError>;
 
     fn capability_catalog_snapshot(&self) -> SpineCapabilityCatalog;
 }

@@ -7,60 +7,58 @@ use tokio::{
 
 use crate::{
     body::std::payloads::{ShellExecRequest, ShellLimits},
-    cortex::SenseDelta,
-    spine::types::{AdmittedAction, EndpointExecutionOutcome},
+    runtime_types::SenseDatum,
+    spine::types::{ActDispatchRequest, EndpointExecutionOutcome},
 };
 
 pub struct ShellHandlerOutput {
     pub outcome: EndpointExecutionOutcome,
-    pub sense: Option<SenseDelta>,
+    pub sense: Option<SenseDatum>,
 }
 
 pub async fn handle_shell_invoke(
     request_id: &str,
-    action: &AdmittedAction,
+    request: &ActDispatchRequest,
     limits: &ShellLimits,
 ) -> ShellHandlerOutput {
-    let request: ShellExecRequest = match serde_json::from_value(action.normalized_payload.clone())
-    {
+    let act = &request.act;
+    let parse_result: Result<ShellExecRequest, _> = serde_json::from_value(act.normalized_payload.clone());
+    let command_request = match parse_result {
         Ok(request) => request,
         Err(_) => {
             return ShellHandlerOutput {
                 outcome: EndpointExecutionOutcome::Rejected {
                     reason_code: "invalid_payload".to_string(),
-                    reference_id: format!(
-                        "body.std.shell:invalid_payload:{}",
-                        action.neural_signal_id
-                    ),
+                    reference_id: format!("body.std.shell:invalid_payload:{}", act.act_id),
                 },
                 sense: None,
             };
         }
     };
 
-    if request.argv.is_empty() || request.argv[0].trim().is_empty() {
+    if command_request.argv.is_empty() || command_request.argv[0].trim().is_empty() {
         return ShellHandlerOutput {
             outcome: EndpointExecutionOutcome::Rejected {
                 reason_code: "invalid_payload".to_string(),
-                reference_id: format!("body.std.shell:missing_argv:{}", action.neural_signal_id),
+                reference_id: format!("body.std.shell:missing_argv:{}", act.act_id),
             },
             sense: None,
         };
     }
 
-    let timeout_ms = request.timeout_ms(limits);
-    let stdout_cap = request.stdout_max_bytes(limits);
-    let stderr_cap = request.stderr_max_bytes(limits);
+    let timeout_ms = command_request.timeout_ms(limits);
+    let stdout_cap = command_request.stdout_max_bytes(limits);
+    let stderr_cap = command_request.stderr_max_bytes(limits);
 
-    let mut command = Command::new(&request.argv[0]);
-    if request.argv.len() > 1 {
-        command.args(&request.argv[1..]);
+    let mut command = Command::new(&command_request.argv[0]);
+    if command_request.argv.len() > 1 {
+        command.args(&command_request.argv[1..]);
     }
-    if let Some(cwd) = &request.cwd {
+    if let Some(cwd) = &command_request.cwd {
         command.current_dir(cwd);
     }
-    if !request.env.is_empty() {
-        command.envs(&request.env);
+    if !command_request.env.is_empty() {
+        command.envs(&command_request.env);
     }
 
     command.stdout(Stdio::piped());
@@ -68,18 +66,14 @@ pub async fn handle_shell_invoke(
     command.kill_on_drop(true);
 
     let output = match command.spawn() {
-        Ok(child) => match timeout(Duration::from_millis(timeout_ms), child.wait_with_output())
-            .await
+        Ok(child) => match timeout(Duration::from_millis(timeout_ms), child.wait_with_output()).await
         {
             Ok(Ok(output)) => output,
             Ok(Err(_)) => {
                 return ShellHandlerOutput {
                     outcome: EndpointExecutionOutcome::Rejected {
                         reason_code: "exec_failure".to_string(),
-                        reference_id: format!(
-                            "body.std.shell:wait_failure:{}",
-                            action.neural_signal_id
-                        ),
+                        reference_id: format!("body.std.shell:wait_failure:{}", act.act_id),
                     },
                     sense: None,
                 };
@@ -88,7 +82,7 @@ pub async fn handle_shell_invoke(
                 return ShellHandlerOutput {
                     outcome: EndpointExecutionOutcome::Rejected {
                         reason_code: "timeout".to_string(),
-                        reference_id: format!("body.std.shell:timeout:{}", action.neural_signal_id),
+                        reference_id: format!("body.std.shell:timeout:{}", act.act_id),
                     },
                     sense: None,
                 };
@@ -98,10 +92,7 @@ pub async fn handle_shell_invoke(
             return ShellHandlerOutput {
                 outcome: EndpointExecutionOutcome::Rejected {
                     reason_code: "exec_failure".to_string(),
-                    reference_id: format!(
-                        "body.std.shell:spawn_failure:{}",
-                        action.neural_signal_id
-                    ),
+                    reference_id: format!("body.std.shell:spawn_failure:{}", act.act_id),
                 },
                 sense: None,
             };
@@ -116,20 +107,17 @@ pub async fn handle_shell_invoke(
         return ShellHandlerOutput {
             outcome: EndpointExecutionOutcome::Rejected {
                 reason_code: "non_zero_exit".to_string(),
-                reference_id: format!(
-                    "body.std.shell:non_zero_exit:{}:{}",
-                    exit_code, action.neural_signal_id
-                ),
+                reference_id: format!("body.std.shell:non_zero_exit:{}:{}", exit_code, act.act_id),
             },
-            sense: Some(SenseDelta {
+            sense: Some(SenseDatum {
                 sense_id: format!("sense:shell:{request_id}"),
                 source: "body.std.shell".to_string(),
                 payload: serde_json::json!({
                     "kind": "shell_result",
-                    "neural_signal_id": action.neural_signal_id,
-                    "capability_instance_id": action.capability_instance_id,
-                    "endpoint_id": action.endpoint_id,
-                    "capability_id": action.capability_id,
+                    "act_id": act.act_id,
+                    "capability_instance_id": act.capability_instance_id,
+                    "endpoint_id": act.endpoint_id,
+                    "capability_id": act.capability_id,
                     "exit_code": exit_code,
                     "stdout_text": stdout_text,
                     "stderr_text": stderr_text,
@@ -143,18 +131,18 @@ pub async fn handle_shell_invoke(
 
     ShellHandlerOutput {
         outcome: EndpointExecutionOutcome::Applied {
-            actual_cost_micro: action.reserved_cost.survival_micro.max(0),
-            reference_id: format!("body.std.shell:applied:{}", action.neural_signal_id),
+            actual_cost_micro: act.requested_resources.survival_micro.max(0),
+            reference_id: format!("body.std.shell:applied:{}", act.act_id),
         },
-        sense: Some(SenseDelta {
+        sense: Some(SenseDatum {
             sense_id: format!("sense:shell:{request_id}"),
             source: "body.std.shell".to_string(),
             payload: serde_json::json!({
                 "kind": "shell_result",
-                "neural_signal_id": action.neural_signal_id,
-                "capability_instance_id": action.capability_instance_id,
-                "endpoint_id": action.endpoint_id,
-                "capability_id": action.capability_id,
+                "act_id": act.act_id,
+                "capability_instance_id": act.capability_instance_id,
+                "endpoint_id": act.endpoint_id,
+                "capability_id": act.capability_id,
                 "exit_code": exit_code,
                 "stdout_text": stdout_text,
                 "stderr_text": stderr_text,
@@ -176,40 +164,40 @@ fn truncate_to_text(bytes: &[u8], cap: usize) -> (String, bool) {
 
 #[cfg(test)]
 mod tests {
-    use crate::spine::types::{AdmittedAction, CostVector, EndpointExecutionOutcome};
+    use crate::{
+        runtime_types::{Act, RequestedResources},
+        spine::types::{ActDispatchRequest, EndpointExecutionOutcome},
+    };
 
     use super::{ShellLimits, handle_shell_invoke};
 
-    fn build_action(neural_signal_id: &str, payload: serde_json::Value) -> AdmittedAction {
-        AdmittedAction {
-            neural_signal_id: neural_signal_id.to_string(),
-            capability_instance_id: "shell.instance".to_string(),
-            source_attempt_id: "att:1".to_string(),
+    fn build_request(act_id: &str, payload: serde_json::Value) -> ActDispatchRequest {
+        ActDispatchRequest {
+            cycle_id: 1,
+            seq_no: 1,
+            act: Act {
+                act_id: act_id.to_string(),
+                based_on: vec!["sense:1".to_string()],
+                endpoint_id: "ep:body:std:shell".to_string(),
+                capability_id: "tool.shell.exec".to_string(),
+                capability_instance_id: "shell.instance".to_string(),
+                normalized_payload: payload,
+                requested_resources: RequestedResources {
+                    survival_micro: 123,
+                    time_ms: 1,
+                    io_units: 1,
+                    token_units: 0,
+                },
+            },
             reserve_entry_id: "res:1".to_string(),
             cost_attribution_id: "cost:1".to_string(),
-            endpoint_id: "ep:body:std:shell".to_string(),
-            capability_id: "tool.shell.exec".to_string(),
-            normalized_payload: payload,
-            reserved_cost: CostVector {
-                survival_micro: 123,
-                time_ms: 1,
-                io_units: 1,
-                token_units: 0,
-            },
-            degraded: false,
-            degradation_profile_id: None,
-            admission_cycle: 1,
-            metadata: Default::default(),
         }
     }
 
     #[tokio::test]
     async fn rejects_invalid_payload() {
-        let action = build_action(
-            "action:invalid",
-            serde_json::json!({"url": "https://example.com"}),
-        );
-        let output = handle_shell_invoke("req:1", &action, &ShellLimits::default()).await;
+        let request = build_request("act:invalid", serde_json::json!({"url": "https://example.com"}));
+        let output = handle_shell_invoke("req:1", &request, &ShellLimits::default()).await;
 
         assert!(matches!(
             output.outcome,
@@ -220,8 +208,8 @@ mod tests {
 
     #[tokio::test]
     async fn applies_on_zero_exit() {
-        let action = build_action(
-            "action:ok",
+        let request = build_request(
+            "act:ok",
             serde_json::json!({
                 "argv": ["/bin/sh", "-c", "printf 'hello'"],
                 "stdout_max_bytes": 32,
@@ -229,7 +217,7 @@ mod tests {
             }),
         );
 
-        let output = handle_shell_invoke("req:ok", &action, &ShellLimits::default()).await;
+        let output = handle_shell_invoke("req:ok", &request, &ShellLimits::default()).await;
 
         assert!(matches!(
             output.outcome,
@@ -247,8 +235,8 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_non_zero_exit_with_sense() {
-        let action = build_action(
-            "action:bad",
+        let request = build_request(
+            "act:bad",
             serde_json::json!({
                 "argv": ["/bin/sh", "-c", "echo oops 1>&2; exit 7"],
                 "stdout_max_bytes": 32,
@@ -256,7 +244,7 @@ mod tests {
             }),
         );
 
-        let output = handle_shell_invoke("req:bad", &action, &ShellLimits::default()).await;
+        let output = handle_shell_invoke("req:bad", &request, &ShellLimits::default()).await;
 
         assert!(matches!(
             output.outcome,

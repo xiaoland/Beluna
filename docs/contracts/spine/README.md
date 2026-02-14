@@ -1,16 +1,14 @@
 # Spine Contracts
 
 Boundary:
-1. input: `AdmittedActionBatch`
-2. output: `SpineExecutionReport`
+1. input: `ActDispatchRequest`
+2. output: single `SpineEvent` per dispatch
 
 Must hold:
-1. admitted-action-only execution contract
-2. explicit execution mode semantics
-3. ordered/replayable events by `seq_no`
-4. settlement linkage via `reserve_entry_id` and `cost_attribution_id`
-5. deterministic per-action rejection mapping for route miss and endpoint error
-
-Routing semantics:
-1. route key is composite of `affordance_key` and `capability_handle`
-2. routing behavior is mechanical table lookup (no transport logic)
+1. dispatch contract is act-based (admission-free).
+2. events are ordered/replayable by Stem-provided `seq_no`.
+3. settlement linkage fields are always present:
+   - `reserve_entry_id`
+   - `cost_attribution_id`
+4. route-miss and endpoint-failure map to deterministic rejection events.
+5. routing behavior is mechanical table lookup over route key (`endpoint_id`, `capability_id`).

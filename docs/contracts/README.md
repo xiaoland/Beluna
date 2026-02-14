@@ -17,8 +17,7 @@ Index:
 - docs/contracts/ai-gateway/README.md
 - docs/contracts/cortex/README.md
 - docs/contracts/continuity/README.md
-- docs/contracts/admission/README.md
 - docs/contracts/ledger/README.md
 - docs/contracts/spine/README.md
-- docs/contracts/non-cortex/README.md (deprecated)
+- docs/contracts/non-cortex/README.md (stem runtime contracts)
 - docs/contracts/mind/README.md (deprecated)

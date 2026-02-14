@@ -2,14 +2,12 @@ use jsonschema::JSONSchema;
 use sha2::{Digest, Sha256};
 
 use crate::{
-    admission::types::{IntentAttempt, RequestedResources},
     cortex::{
         error::{CortexError, internal_error},
         ports::{AttemptClampPort, AttemptClampRequest},
-        types::{
-            AttemptDraft, ClampResult, ClampViolation, ClampViolationCode, ReactionId, SenseId,
-        },
+        types::{AttemptDraft, ClampResult, ClampViolation, ClampViolationCode},
     },
+    runtime_types::{Act, RequestedResources, SenseId},
 };
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -31,19 +29,15 @@ impl AttemptClampPort for DeterministicAttemptClamp {
                 .then_with(|| lhs.intent_span.cmp(&rhs.intent_span))
         });
 
-        let known_sense_ids: std::collections::BTreeSet<String> = req
-            .sense_window
-            .iter()
-            .map(|s| s.sense_id.clone())
-            .collect();
+        let known_sense_ids: std::collections::BTreeSet<String> =
+            req.known_sense_ids.iter().cloned().collect();
 
-        let mut attempts = Vec::new();
+        let mut acts = Vec::new();
         let mut violations = Vec::new();
 
         for draft in drafts {
-            let Some(attempt) = self.validate_and_build_attempt(
-                req.reaction_id,
-                attempts.len() as u16,
+            let Some(act) = self.validate_and_build_act(
+                req.cycle_id,
                 &draft,
                 &req,
                 &known_sense_ids,
@@ -53,17 +47,17 @@ impl AttemptClampPort for DeterministicAttemptClamp {
                 continue;
             };
 
-            attempts.push(attempt);
+            acts.push(act);
         }
 
-        attempts.sort_by(|lhs, rhs| lhs.attempt_id.cmp(&rhs.attempt_id));
-        attempts.truncate(req.limits.max_attempts);
+        acts.sort_by(|lhs, rhs| lhs.act_id.cmp(&rhs.act_id));
+        acts.truncate(req.limits.max_attempts);
 
-        let based_on = stable_union_based_on(&attempts);
+        let based_on = stable_union_based_on(&acts);
         let attention_tags = stable_attention_tags(&req.drafts);
 
         Ok(ClampResult {
-            attempts,
+            acts,
             based_on,
             attention_tags,
             violations,
@@ -73,16 +67,14 @@ impl AttemptClampPort for DeterministicAttemptClamp {
 }
 
 impl DeterministicAttemptClamp {
-    #[allow(clippy::too_many_arguments)]
-    fn validate_and_build_attempt(
+    fn validate_and_build_act(
         &self,
-        reaction_id: ReactionId,
-        planner_slot: u16,
+        cycle_id: u64,
         draft: &AttemptDraft,
         req: &AttemptClampRequest,
         known_sense_ids: &std::collections::BTreeSet<String>,
         violations: &mut Vec<ClampViolation>,
-    ) -> Result<Option<IntentAttempt>, CortexError> {
+    ) -> Result<Option<Act>, CortexError> {
         if draft.intent_span.trim().is_empty() {
             violations.push(ClampViolation {
                 code: ClampViolationCode::MissingIntentSpan,
@@ -172,60 +164,43 @@ impl DeterministicAttemptClamp {
 
         let resources = clamp_resources(&draft.requested_resources);
         let based_on = stable_dedupe_sense_ids(&draft.based_on);
-        let cost_attribution_id = derive_cost_attribution_id(
-            reaction_id,
-            &draft.endpoint_id,
-            &draft.capability_id,
-            &based_on,
-            planner_slot,
-        );
-        let attempt_id = derive_attempt_id(
-            reaction_id,
+        let act_id = derive_act_id(
+            cycle_id,
             &based_on,
             &draft.endpoint_id,
             &draft.capability_id,
             &payload,
             &resources,
-            &cost_attribution_id,
         );
 
-        let commitment_id = draft
-            .commitment_hint
-            .clone()
-            .unwrap_or_else(|| format!("com:reaction:{}", reaction_id));
-        let goal_id = draft
-            .goal_hint
-            .clone()
-            .unwrap_or_else(|| format!("goal:{}", short_hash(&draft.intent_span)));
+        let capability_instance_id = if draft.capability_instance_id.trim().is_empty() {
+            act_id.clone()
+        } else {
+            draft.capability_instance_id.clone()
+        };
 
-        Ok(Some(IntentAttempt {
-            attempt_id,
-            cycle_id: reaction_id,
-            commitment_id,
-            goal_id,
-            planner_slot,
+        Ok(Some(Act {
+            act_id,
             based_on,
             endpoint_id: draft.endpoint_id.clone(),
             capability_id: draft.capability_id.clone(),
-            capability_instance_id: draft.capability_instance_id.clone(),
+            capability_instance_id,
             normalized_payload: payload,
             requested_resources: resources,
-            cost_attribution_id,
         }))
     }
 }
 
-pub fn derive_attempt_id(
-    reaction_id: u64,
+pub fn derive_act_id(
+    cycle_id: u64,
     based_on: &[SenseId],
     endpoint_id: &str,
     capability_id: &str,
     normalized_payload: &serde_json::Value,
     requested_resources: &RequestedResources,
-    cost_attribution_id: &str,
 ) -> String {
     let canonical = canonicalize_json(&serde_json::json!({
-        "reaction_id": reaction_id,
+        "cycle_id": cycle_id,
         "based_on": based_on,
         "endpoint_id": endpoint_id,
         "capability_id": capability_id,
@@ -235,45 +210,14 @@ pub fn derive_attempt_id(
             "time_ms": requested_resources.time_ms,
             "io_units": requested_resources.io_units,
             "token_units": requested_resources.token_units,
-        },
-        "cost_attribution_id": cost_attribution_id,
+        }
     }));
 
     let mut hasher = Sha256::new();
     hasher.update(canonical.to_string().as_bytes());
     let digest = hasher.finalize();
     let hex = format!("{:x}", digest);
-    format!("att:{}", &hex[..24])
-}
-
-pub fn derive_cost_attribution_id(
-    reaction_id: u64,
-    endpoint_id: &str,
-    capability_id: &str,
-    based_on: &[SenseId],
-    planner_slot: u16,
-) -> String {
-    let canonical = canonicalize_json(&serde_json::json!({
-        "reaction_id": reaction_id,
-        "endpoint_id": endpoint_id,
-        "capability_id": capability_id,
-        "based_on": based_on,
-        "planner_slot": planner_slot,
-    }));
-
-    let mut hasher = Sha256::new();
-    hasher.update(canonical.to_string().as_bytes());
-    let digest = hasher.finalize();
-    let hex = format!("{:x}", digest);
-    format!("cat:{}", &hex[..24])
-}
-
-fn short_hash(input: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(input.as_bytes());
-    let digest = hasher.finalize();
-    let hex = format!("{:x}", digest);
-    hex[..12].to_string()
+    format!("act:{}", &hex[..24])
 }
 
 fn clamp_resources(resources: &RequestedResources) -> RequestedResources {
@@ -293,10 +237,10 @@ fn stable_dedupe_sense_ids(ids: &[SenseId]) -> Vec<SenseId> {
     seen.into_iter().collect()
 }
 
-fn stable_union_based_on(attempts: &[IntentAttempt]) -> Vec<SenseId> {
+fn stable_union_based_on(acts: &[Act]) -> Vec<SenseId> {
     let mut union = std::collections::BTreeSet::new();
-    for attempt in attempts {
-        for sense_id in &attempt.based_on {
+    for act in acts {
+        for sense_id in &act.based_on {
             union.insert(sense_id.clone());
         }
     }
@@ -318,17 +262,17 @@ fn canonicalize_json(value: &serde_json::Value) -> serde_json::Value {
         serde_json::Value::Object(map) => {
             let mut keys = map.keys().cloned().collect::<Vec<_>>();
             keys.sort();
-            let mut sorted = serde_json::Map::new();
+            let mut normalized = serde_json::Map::new();
             for key in keys {
-                if let Some(item) = map.get(&key) {
-                    sorted.insert(key, canonicalize_json(item));
+                if let Some(inner) = map.get(&key) {
+                    normalized.insert(key, canonicalize_json(inner));
                 }
             }
-            serde_json::Value::Object(sorted)
+            serde_json::Value::Object(normalized)
         }
         serde_json::Value::Array(items) => {
             serde_json::Value::Array(items.iter().map(canonicalize_json).collect())
         }
-        primitive => primitive.clone(),
+        _ => value.clone(),
     }
 }

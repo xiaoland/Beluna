@@ -14,8 +14,7 @@ pub use ports::{EndpointPort, EndpointRegistryPort, SpineExecutorPort};
 pub use registry::InMemoryEndpointRegistry;
 pub use router::{NativeFunctionEndpoint, RoutingSpineExecutor};
 pub use types::{
-    ActionId, AdmittedAction, AdmittedActionBatch, CostAttributionId, CostVector,
-    EndpointCapabilityDescriptor, EndpointExecutionOutcome, EndpointInvocation,
-    EndpointRegistration, OrderedSpineEvent, ReserveEntryId, RouteKey, SpineCapabilityCatalog,
-    SpineEvent, SpineExecutionMode, SpineExecutionReport,
+    ActDispatchRequest, CostAttributionId, CostVector, EndpointCapabilityDescriptor,
+    EndpointExecutionOutcome, EndpointInvocation, EndpointRegistration, ReserveEntryId, RouteKey,
+    SpineCapabilityCatalog, SpineEvent, SpineExecutionMode,
 };

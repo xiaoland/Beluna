@@ -1,19 +1,23 @@
-# Non-Cortex HLD
+# Stem Runtime HLD
 
 ## Pipeline
 
-1. Sort attempts deterministically by `attempt_id`.
-2. Resolve affordance profile.
-3. Evaluate hard constraints.
-4. Evaluate economic affordability.
-5. Reserve budget and materialize admitted action or deny with code.
-6. Dispatch admitted actions to Spine.
-7. Reconcile ordered spine events into ledger settlements.
-8. Ingest external debit observations by attribution.
+1. Receive next sense from bounded queue.
+2. Handle control senses (`sleep`, `new_capabilities`, `drop_capabilities`).
+3. Compose `PhysicalState` (ledger snapshot + merged capabilities).
+4. Load `CognitionState` snapshot from Continuity.
+5. Invoke Cortex.
+6. Persist returned cognition state.
+7. Dispatch acts serially through:
+   - Ledger pre-dispatch
+   - Continuity gate
+   - Spine dispatch
+8. Settle ledger and notify continuity with resulting spine event.
 
 ## Components
 
-- `AdmissionResolver`
-- `SurvivalLedger`
-- `NonCortexFacade`
-- `ExternalDebitSourcePort`
+- `SenseIngress` (gate + bounded sender wrapper)
+- `StemRuntime`
+- `LedgerStage`
+- `ContinuityEngine`
+- `SpineExecutorPort`

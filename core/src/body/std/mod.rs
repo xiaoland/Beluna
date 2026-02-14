@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
 use anyhow::{Result, anyhow};
-use tokio::sync::mpsc;
 
 use crate::{
     body::std::payloads::{ShellLimits, WebLimits},
-    cortex::SenseDelta,
+    ingress::SenseIngress,
+    runtime_types::Sense,
     spine::EndpointRegistryPort,
 };
 
@@ -35,7 +35,7 @@ pub const WEB_CAPABILITY_ID: &str = "tool.web.fetch";
 
 pub fn register_std_body_endpoints(
     registry: Arc<dyn EndpointRegistryPort>,
-    sense_tx: mpsc::UnboundedSender<SenseDelta>,
+    sense_ingress: SenseIngress,
     shell_enabled: bool,
     shell_limits: ShellLimits,
     web_enabled: bool,
@@ -43,17 +43,17 @@ pub fn register_std_body_endpoints(
 ) -> Result<()> {
     register_shell_endpoint(
         registry.clone(),
-        sense_tx.clone(),
+        sense_ingress.clone(),
         shell_enabled,
         shell_limits,
     )?;
-    register_web_endpoint(registry, sense_tx, web_enabled, web_limits)?;
+    register_web_endpoint(registry, sense_ingress, web_enabled, web_limits)?;
     Ok(())
 }
 
 fn register_shell_endpoint(
     registry: Arc<dyn EndpointRegistryPort>,
-    sense_tx: mpsc::UnboundedSender<SenseDelta>,
+    sense_ingress: SenseIngress,
     enabled: bool,
     limits: ShellLimits,
 ) -> Result<()> {
@@ -63,7 +63,10 @@ fn register_shell_endpoint(
 
     #[cfg(feature = "std-shell")]
     {
-        let endpoint: Arc<dyn EndpointPort> = Arc::new(StdShellEndpoint { limits, sense_tx });
+        let endpoint: Arc<dyn EndpointPort> = Arc::new(StdShellEndpoint {
+            limits,
+            sense_ingress,
+        });
         registry
             .register(
                 EndpointRegistration {
@@ -78,7 +81,7 @@ fn register_shell_endpoint(
 
     #[cfg(not(feature = "std-shell"))]
     {
-        let _ = (registry, sense_tx, limits);
+        let _ = (registry, sense_ingress, limits);
         Err(anyhow!(
             "body.std_shell.enabled=true but core is built without feature std-shell"
         ))
@@ -87,7 +90,7 @@ fn register_shell_endpoint(
 
 fn register_web_endpoint(
     registry: Arc<dyn EndpointRegistryPort>,
-    sense_tx: mpsc::UnboundedSender<SenseDelta>,
+    sense_ingress: SenseIngress,
     enabled: bool,
     limits: WebLimits,
 ) -> Result<()> {
@@ -97,7 +100,10 @@ fn register_web_endpoint(
 
     #[cfg(feature = "std-web")]
     {
-        let endpoint: Arc<dyn EndpointPort> = Arc::new(StdWebEndpoint { limits, sense_tx });
+        let endpoint: Arc<dyn EndpointPort> = Arc::new(StdWebEndpoint {
+            limits,
+            sense_ingress,
+        });
         registry
             .register(
                 EndpointRegistration {
@@ -112,7 +118,7 @@ fn register_web_endpoint(
 
     #[cfg(not(feature = "std-web"))]
     {
-        let _ = (registry, sense_tx, limits);
+        let _ = (registry, sense_ingress, limits);
         Err(anyhow!(
             "body.std_web.enabled=true but core is built without feature std-web"
         ))
@@ -122,13 +128,13 @@ fn register_web_endpoint(
 #[cfg(feature = "std-shell")]
 struct StdShellEndpoint {
     limits: ShellLimits,
-    sense_tx: mpsc::UnboundedSender<SenseDelta>,
+    sense_ingress: SenseIngress,
 }
 
 #[cfg(feature = "std-web")]
 struct StdWebEndpoint {
     limits: WebLimits,
-    sense_tx: mpsc::UnboundedSender<SenseDelta>,
+    sense_ingress: SenseIngress,
 }
 
 #[cfg(feature = "std-shell")]
@@ -138,11 +144,11 @@ impl EndpointPort for StdShellEndpoint {
         &self,
         invocation: EndpointInvocation,
     ) -> Result<EndpointExecutionOutcome, SpineError> {
-        let action = invocation.action;
-        let request_id = format!("builtin-shell:{}", action.neural_signal_id);
-        let output = handle_shell_invoke(&request_id, &action, &self.limits).await;
+        let request = invocation.request;
+        let request_id = format!("builtin-shell:{}", request.act.act_id);
+        let output = handle_shell_invoke(&request_id, &request, &self.limits).await;
         if let Some(sense) = output.sense {
-            let _ = self.sense_tx.send(sense);
+            let _ = self.sense_ingress.send(Sense::Domain(sense)).await;
         }
 
         Ok(output.outcome)
@@ -156,11 +162,11 @@ impl EndpointPort for StdWebEndpoint {
         &self,
         invocation: EndpointInvocation,
     ) -> Result<EndpointExecutionOutcome, SpineError> {
-        let action = invocation.action;
-        let request_id = format!("builtin-web:{}", action.neural_signal_id);
-        let output = handle_web_invoke(&request_id, &action, &self.limits).await;
+        let request = invocation.request;
+        let request_id = format!("builtin-web:{}", request.act.act_id);
+        let output = handle_web_invoke(&request_id, &request, &self.limits).await;
         if let Some(sense) = output.sense {
-            let _ = self.sense_tx.send(sense);
+            let _ = self.sense_ingress.send(Sense::Domain(sense)).await;
         }
 
         Ok(output.outcome)

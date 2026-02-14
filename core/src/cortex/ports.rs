@@ -1,33 +1,38 @@
 use async_trait::async_trait;
 
-use crate::cortex::{
-    error::CortexError,
-    types::{
-        AttemptDraft, CapabilityCatalog, ClampResult, ClampViolation, ProseIr, ReactionId,
-        ReactionLimits, SenseDelta,
+use crate::{
+    cortex::{
+        error::CortexError,
+        types::{
+            AttemptDraft, CapabilityCatalog, ClampResult, ClampViolation, CortexOutput, ProseIr,
+            ReactionLimits,
+        },
     },
+    runtime_types::{CognitionState, PhysicalState, Sense, SenseId},
 };
 
 #[derive(Debug, Clone)]
 pub struct PrimaryReasonerRequest {
-    pub reaction_id: ReactionId,
-    pub prompt_context: String,
-    pub sense_window: Vec<SenseDelta>,
+    pub cycle_id: u64,
+    pub senses: Vec<Sense>,
+    pub physical_state: PhysicalState,
+    pub cognition_state: CognitionState,
     pub limits: ReactionLimits,
 }
 
 #[derive(Debug, Clone)]
 pub struct AttemptExtractorRequest {
-    pub reaction_id: ReactionId,
+    pub cycle_id: u64,
     pub prose_ir: ProseIr,
     pub capability_catalog: CapabilityCatalog,
-    pub sense_window: Vec<SenseDelta>,
+    pub senses: Vec<Sense>,
+    pub cognition_state: CognitionState,
     pub limits: ReactionLimits,
 }
 
 #[derive(Debug, Clone)]
 pub struct PayloadFillerRequest {
-    pub reaction_id: ReactionId,
+    pub cycle_id: u64,
     pub drafts: Vec<AttemptDraft>,
     pub capability_catalog: CapabilityCatalog,
     pub clamp_violations: Vec<ClampViolation>,
@@ -36,10 +41,10 @@ pub struct PayloadFillerRequest {
 
 #[derive(Debug, Clone)]
 pub struct AttemptClampRequest {
-    pub reaction_id: ReactionId,
+    pub cycle_id: u64,
     pub drafts: Vec<AttemptDraft>,
     pub capability_catalog: CapabilityCatalog,
-    pub sense_window: Vec<SenseDelta>,
+    pub known_sense_ids: Vec<SenseId>,
     pub limits: ReactionLimits,
 }
 
@@ -50,8 +55,7 @@ pub trait PrimaryReasonerPort: Send + Sync {
 
 #[async_trait]
 pub trait AttemptExtractorPort: Send + Sync {
-    async fn extract(&self, req: AttemptExtractorRequest)
-    -> Result<Vec<AttemptDraft>, CortexError>;
+    async fn extract(&self, req: AttemptExtractorRequest) -> Result<Vec<AttemptDraft>, CortexError>;
 }
 
 #[async_trait]
@@ -63,23 +67,22 @@ pub trait AttemptClampPort: Send + Sync {
     fn clamp(&self, req: AttemptClampRequest) -> Result<ClampResult, CortexError>;
 }
 
+#[async_trait]
+pub trait CortexPort: Send + Sync {
+    async fn cortex(
+        &self,
+        senses: &[Sense],
+        physical_state: &PhysicalState,
+        cognition_state: &CognitionState,
+    ) -> Result<CortexOutput, CortexError>;
+}
+
 #[derive(Debug, Clone)]
 pub enum CortexTelemetryEvent {
-    ReactionStarted {
-        reaction_id: ReactionId,
-    },
-    StageFailed {
-        reaction_id: ReactionId,
-        stage: &'static str,
-    },
-    ReactionCompleted {
-        reaction_id: ReactionId,
-        attempt_count: usize,
-    },
-    NoopFallback {
-        reaction_id: ReactionId,
-        reason: &'static str,
-    },
+    ReactionStarted { cycle_id: u64 },
+    StageFailed { cycle_id: u64, stage: &'static str },
+    ReactionCompleted { cycle_id: u64, act_count: usize },
+    NoopFallback { cycle_id: u64, reason: &'static str },
 }
 
 pub trait CortexTelemetryPort: Send + Sync {

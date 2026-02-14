@@ -2,5 +2,5 @@
 
 Latest completed task:
 
-- `body-endpoints-mvp`
-- Result: `/Users/lanzhijiang/Development/Beluna/docs/task/body-endpoints-mvp/RESULT.md`
+- `core-cortex-act-stem-refactor`
+- Result: `/Users/lanzhijiang/Development/Beluna/docs/task/core-cortex-act-stem-refactor/RESULT.md`

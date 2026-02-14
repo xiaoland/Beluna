@@ -3,10 +3,7 @@ use async_trait::async_trait;
 use crate::spine::{
     error::{SpineError, invalid_batch},
     ports::SpineExecutorPort,
-    types::{
-        AdmittedActionBatch, OrderedSpineEvent, SpineCapabilityCatalog, SpineEvent,
-        SpineExecutionMode, SpineExecutionReport,
-    },
+    types::{ActDispatchRequest, SpineCapabilityCatalog, SpineEvent, SpineExecutionMode},
 };
 
 #[derive(Debug, Clone)]
@@ -34,42 +31,25 @@ impl SpineExecutorPort for DeterministicNoopSpine {
         self.mode
     }
 
-    async fn execute_admitted(
-        &self,
-        admitted: AdmittedActionBatch,
-    ) -> Result<SpineExecutionReport, SpineError> {
-        if admitted
-            .actions
-            .iter()
-            .any(|action| action.neural_signal_id.is_empty() || action.reserve_entry_id.is_empty())
+    async fn dispatch_act(&self, request: ActDispatchRequest) -> Result<SpineEvent, SpineError> {
+        if request.act.act_id.trim().is_empty()
+            || request.reserve_entry_id.trim().is_empty()
+            || request.cost_attribution_id.trim().is_empty()
         {
             return Err(invalid_batch(
-                "admitted action is missing neural_signal_id or reserve_entry_id",
+                "act dispatch request is missing act_id/reserve_entry_id/cost_attribution_id",
             ));
         }
 
-        let action_count = admitted.actions.len();
-        let events = admitted
-            .actions
-            .into_iter()
-            .enumerate()
-            .map(|(index, action)| OrderedSpineEvent {
-                seq_no: (index as u64) + 1,
-                event: SpineEvent::ActionApplied {
-                    neural_signal_id: action.neural_signal_id.clone(),
-                    capability_instance_id: action.capability_instance_id.clone(),
-                    reserve_entry_id: action.reserve_entry_id.clone(),
-                    cost_attribution_id: action.cost_attribution_id.clone(),
-                    actual_cost_micro: action.reserved_cost.survival_micro,
-                    reference_id: format!("noop:settle:{}", action.neural_signal_id),
-                },
-            })
-            .collect();
-
-        Ok(SpineExecutionReport {
-            mode: self.mode,
-            events,
-            replay_cursor: Some(format!("noop:{}:{}", admitted.cycle_id, action_count)),
+        Ok(SpineEvent::ActApplied {
+            cycle_id: request.cycle_id,
+            seq_no: request.seq_no,
+            act_id: request.act.act_id.clone(),
+            capability_instance_id: request.act.capability_instance_id.clone(),
+            reserve_entry_id: request.reserve_entry_id.clone(),
+            cost_attribution_id: request.cost_attribution_id.clone(),
+            actual_cost_micro: request.act.requested_resources.survival_micro.max(0),
+            reference_id: format!("noop:settle:{}", request.act.act_id),
         })
     }
 

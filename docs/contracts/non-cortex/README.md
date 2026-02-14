@@ -1,12 +1,16 @@
-# Non-Cortex Contracts
+# Stem Runtime Contracts
 
 Boundary:
-- input: `IntentAttempt[]`
-- output: `AdmissionReport` and admitted action dispatch to Spine
+- input: `Sense` queue (bounded mpsc)
+- output: serial act dispatch and settlement side effects across Ledger -> Continuity -> Spine
 
 Must hold:
-- deterministic, semantic-free admission
-- complete disposition set
-- strict reservation terminality and idempotency
-- attribution-matched external debit only
-- versioned policy tuple in ledger audit entries
+- one bounded sense queue; no act queue.
+- producer backpressure follows native bounded-channel blocking semantics.
+- `sleep` breaks loop immediately and skips Cortex.
+- `new_capabilities` / `drop_capabilities` are applied before same-cycle Cortex call.
+- dispatch stage order is deterministic: Ledger pre-dispatch -> Continuity gate -> Spine dispatch -> settlement callbacks.
+- pipeline decision contract is only `Continue` / `Break`.
+- `Break` applies to current act only; next act continues.
+- shutdown path closes ingress gate first and then blocks until `sleep` is enqueued.
+- ledger reservation terminality and idempotent settlement by reference are preserved.

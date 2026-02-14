@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
-    admission::types::RequestedResources,
     cortex::{AffordanceCapability, CapabilityCatalog},
+    runtime_types::RequestedResources,
     spine::types::SpineCapabilityCatalog,
 };
 
