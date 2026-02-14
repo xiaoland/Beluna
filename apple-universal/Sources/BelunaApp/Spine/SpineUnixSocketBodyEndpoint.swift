@@ -13,18 +13,23 @@ private func osErrorDescription(_ code: Int32) -> String {
 actor SpineUnixSocketBodyEndpoint {
     typealias StateHandler = @Sendable (ConnectionState) -> Void
     typealias MessageHandler = @Sendable (ServerWireMessage) -> Void
+    typealias DebugHandler = @Sendable (String) -> Void
 
     private var socketPath: String
-    private let reconnectDelayNanos: UInt64 = 800_000_000
-    private let missingSocketRetryDelayNanos: UInt64 = 1_500_000_000
+    private let maxReconnectAttempts = 5
+    private let initialReconnectDelayNanos: UInt64 = 500_000_000
+    private let maxReconnectDelayNanos: UInt64 = 8_000_000_000
 
     private var socketFD: Int32?
     private var readerBuffer = Data()
     private var stopped = true
     private var runTask: Task<Void, Never>?
+    private var runLoopGeneration: UInt64 = 0
+    private var connectionWasEstablished = false
 
     var onStateChange: StateHandler?
     var onServerMessage: MessageHandler?
+    var onDebug: DebugHandler?
 
     init(socketPath: String) {
         self.socketPath = socketPath
@@ -34,9 +39,14 @@ actor SpineUnixSocketBodyEndpoint {
         self.socketPath = socketPath
     }
 
-    func setHandlers(onStateChange: StateHandler?, onServerMessage: MessageHandler?) {
+    func setHandlers(
+        onStateChange: StateHandler?,
+        onServerMessage: MessageHandler?,
+        onDebug: DebugHandler?
+    ) {
         self.onStateChange = onStateChange
         self.onServerMessage = onServerMessage
+        self.onDebug = onDebug
     }
 
     func start() {
@@ -45,13 +55,22 @@ actor SpineUnixSocketBodyEndpoint {
         }
 
         stopped = false
+        connectionWasEstablished = false
+        runLoopGeneration &+= 1
+        let generation = runLoopGeneration
         runTask = Task {
-            await self.runLoop()
+            await self.runLoop(generation: generation)
         }
+    }
+
+    func restart() {
+        stop()
+        start()
     }
 
     func stop() {
         stopped = true
+        runLoopGeneration &+= 1
         runTask?.cancel()
         runTask = nil
         cleanupConnection()
@@ -82,20 +101,16 @@ actor SpineUnixSocketBodyEndpoint {
         try await sendLine(envelope)
     }
 
-    private func runLoop() async {
-        while !stopped && !Task.isCancelled {
-            if !socketFileExists() {
-                onStateChange?(.disconnected)
-                cleanupConnection()
-
-                if stopped || Task.isCancelled {
-                    break
-                }
-
-                try? await Task.sleep(nanoseconds: missingSocketRetryDelayNanos)
-                continue
+    private func runLoop(generation: UInt64) async {
+        defer {
+            if runLoopGeneration == generation {
+                runTask = nil
             }
+        }
 
+        var retryAttempt = 0
+
+        while !stopped && !Task.isCancelled && runLoopGeneration == generation {
             do {
                 onStateChange?(.connecting)
                 try await connectAndReadLoop()
@@ -105,7 +120,24 @@ actor SpineUnixSocketBodyEndpoint {
                 if stopped || Task.isCancelled {
                     break
                 }
-                try? await Task.sleep(nanoseconds: reconnectDelayNanos)
+
+                if connectionWasEstablished {
+                    retryAttempt = 0
+                    connectionWasEstablished = false
+                }
+
+                retryAttempt += 1
+                guard retryAttempt <= maxReconnectAttempts else {
+                    onDebug?("Reconnect stopped after \(maxReconnectAttempts) retries. You can retry manually.")
+                    break
+                }
+
+                let delayNanos = reconnectDelayNanos(forAttempt: retryAttempt)
+                let delaySeconds = Double(delayNanos) / 1_000_000_000
+                onDebug?(
+                    "Reconnect \(retryAttempt)/\(maxReconnectAttempts) in \(String(format: "%.1f", delaySeconds))s (\(error.localizedDescription))"
+                )
+                try? await Task.sleep(nanoseconds: delayNanos)
             }
         }
 
@@ -113,13 +145,10 @@ actor SpineUnixSocketBodyEndpoint {
         cleanupConnection()
     }
 
-    private func socketFileExists() -> Bool {
-        FileManager.default.fileExists(atPath: socketPath)
-    }
-
     private func connectAndReadLoop() async throws {
         let fd = try openUnixSocket(path: socketPath)
         socketFD = fd
+        connectionWasEstablished = true
         onStateChange?(.connected)
         try await sendRegister()
 
@@ -130,7 +159,7 @@ actor SpineUnixSocketBodyEndpoint {
             if chunk.isEmpty {
                 continue
             }
-            try parseIncomingData(chunk)
+            parseIncomingData(chunk)
         }
 
         throw SpineBodyEndpointError.connectionFailed("connection closed")
@@ -264,7 +293,7 @@ actor SpineUnixSocketBodyEndpoint {
         }
     }
 
-    private func parseIncomingData(_ chunk: Data) throws {
+    private func parseIncomingData(_ chunk: Data) {
         readerBuffer.append(chunk)
 
         while let newlineIndex = readerBuffer.firstIndex(of: 0x0A) {
@@ -275,8 +304,17 @@ actor SpineUnixSocketBodyEndpoint {
                 continue
             }
 
-            let message = try decodeServerMessage(from: Data(line))
-            onServerMessage?(message)
+            do {
+                let message = try decodeServerMessage(from: Data(line))
+                switch message {
+                case .act:
+                    onServerMessage?(message)
+                case let .ignored(type):
+                    onDebug?("Ignored inbound \(type) message.")
+                }
+            } catch {
+                onDebug?("Ignored malformed inbound message: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -295,5 +333,20 @@ actor SpineUnixSocketBodyEndpoint {
             socketFD = nil
         }
         readerBuffer.removeAll(keepingCapacity: false)
+    }
+
+    private func reconnectDelayNanos(forAttempt attempt: Int) -> UInt64 {
+        let cappedAttempt = max(1, attempt)
+        let exponent = min(cappedAttempt - 1, 16)
+        let factor = UInt64(1) << UInt64(exponent)
+        let delay = initialReconnectDelayNanos.saturatingMultiply(by: factor)
+        return min(delay, maxReconnectDelayNanos)
+    }
+}
+
+private extension UInt64 {
+    func saturatingMultiply(by value: UInt64) -> UInt64 {
+        let (result, overflow) = multipliedReportingOverflow(by: value)
+        return overflow ? UInt64.max : result
     }
 }

@@ -5,16 +5,17 @@ final class ChatViewModel: ObservableObject {
     @Published var messages: [ChatMessage] = []
     @Published var draft: String = ""
     @Published var connectionState: ConnectionState = .disconnected
+    @Published var belunaState: BelunaState = .unknown
     @Published var socketPathDraft: String
     @Published private(set) var socketPath: String
     @Published private(set) var isConnectionEnabled: Bool
 
     var isSleeping: Bool {
-        connectionState != .connected
+        belunaState == .sleeping
     }
 
     var canSend: Bool {
-        connectionState == .connected
+        isConnectionEnabled && connectionState == .connected
     }
 
     var canApplySocketPath: Bool {
@@ -26,14 +27,34 @@ final class ChatViewModel: ObservableObject {
         isConnectionEnabled ? "Disconnect" : "Connect"
     }
 
+    var canRetry: Bool {
+        isConnectionEnabled && connectionState != .connected
+    }
+
     var sleepingTitle: String {
-        isConnectionEnabled ? "Beluna is sleeping" : "Beluna is disconnected"
+        switch belunaState {
+        case .awake:
+            return "Beluna is awake"
+        case .sleeping:
+            return "Beluna is sleeping"
+        case .unknown:
+            return isConnectionEnabled ? "Beluna status unknown" : "Beluna is disconnected"
+        }
     }
 
     var sleepingHint: String {
-        isConnectionEnabled
-            ? "Start Beluna Core to wake it up."
-            : "Click Connect to reconnect."
+        if !isConnectionEnabled {
+            return "Click Connect to reconnect."
+        }
+
+        switch connectionState {
+        case .connected:
+            return "Beluna Core is connected."
+        case .connecting:
+            return "Connecting..."
+        case .disconnected:
+            return "Retry to reconnect."
+        }
     }
 
     private let conversationID: String
@@ -41,6 +62,10 @@ final class ChatViewModel: ObservableObject {
     private let sleepingNoticeText = "Beluna is sleeping."
     private let disconnectedNoticeText = "Beluna is disconnected. Click Connect to reconnect."
     private var started = false
+    private var hasEverConnected = false
+    private var handledActionIDs = Set<String>()
+    private var handledActionOrder: [String] = []
+    private let handledActionLimit = 256
     private static let defaultSocketPath = "/tmp/beluna.sock"
     private static let socketPathDefaultsKey = "beluna.apple-universal.socket_path"
     private static let autoConnectDefaultsKey = "beluna.apple-universal.auto_connect"
@@ -56,8 +81,10 @@ final class ChatViewModel: ObservableObject {
         let initialSocketPath = resolvedSocketPath.isEmpty
             ? Self.defaultSocketPath
             : resolvedSocketPath
-        let initialAutoConnect = UserDefaults.standard.object(forKey: Self.autoConnectDefaultsKey)
-            as? Bool ?? true
+        let persistedAutoConnect = UserDefaults.standard.object(forKey: Self.autoConnectDefaultsKey)
+            as? Bool
+        let initialAutoConnect = persistedAutoConnect
+            ?? !AppRuntimeEnvironment.isXcodeSession
 
         self.conversationID = "conv_\(UUID().uuidString.lowercased())"
         self.spineBodyEndpoint = SpineUnixSocketBodyEndpoint(socketPath: initialSocketPath)
@@ -68,11 +95,10 @@ final class ChatViewModel: ObservableObject {
         messages.append(
             ChatMessage(
                 role: .system,
-                text: initialAutoConnect ? sleepingHelpText() : disconnectedNoticeText
+                text: initialMessageText(initialAutoConnect: initialAutoConnect)
             )
         )
 
-        persistConnectionSettings()
         bindSocketHandlers()
     }
 
@@ -113,7 +139,7 @@ final class ChatViewModel: ObservableObject {
         persistConnectionSettings()
         appendSystemMessage("Socket path set to \(normalized)")
         log("socket path updated to \(normalized)")
-        reconnectForCurrentSettings()
+        reconnectForCurrentSettings(announce: true)
     }
 
     func toggleConnection() {
@@ -146,7 +172,19 @@ final class ChatViewModel: ObservableObject {
         disconnectInternal(announce: true)
     }
 
+    func retryConnection() {
+        guard isConnectionEnabled else {
+            connect()
+            return
+        }
+
+        appendSystemMessage("Manual retry...")
+        log("manual retry")
+        reconnectForCurrentSettings(announce: false)
+    }
+
     private func connectInternal(announce: Bool) {
+        belunaState = .unknown
         if announce {
             appendSystemMessage("Connecting to \(socketPath)...")
         }
@@ -158,6 +196,7 @@ final class ChatViewModel: ObservableObject {
 
     private func disconnectInternal(announce: Bool) {
         connectionState = .disconnected
+        belunaState = .unknown
         if announce {
             appendSystemMessage(disconnectedNoticeText)
         }
@@ -167,15 +206,19 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
-    private func reconnectForCurrentSettings() {
+    private func reconnectForCurrentSettings(announce: Bool) {
         let shouldConnect = isConnectionEnabled
         let updatedSocketPath = socketPath
         connectionState = .disconnected
+        belunaState = .unknown
 
         Task {
             await spineBodyEndpoint.stop()
             await spineBodyEndpoint.updateSocketPath(updatedSocketPath)
             if shouldConnect {
+                if announce {
+                    appendSystemMessage("Connecting to \(updatedSocketPath)...")
+                }
                 await spineBodyEndpoint.start()
             }
         }
@@ -199,7 +242,7 @@ final class ChatViewModel: ObservableObject {
             do {
                 try await spineBodyEndpoint.sendUserSense(conversationID: conversationID, text: text)
             } catch {
-                appendSystemMessage("Failed to send user message to core: \(error.localizedDescription)")
+                appendSystemMessage("Failed to send user message to core: \(describeError(error))")
             }
         }
     }
@@ -220,6 +263,11 @@ final class ChatViewModel: ObservableObject {
                     Task { @MainActor in
                         await self?.handleServerMessage(message)
                     }
+                },
+                onDebug: { [weak self] debugText in
+                    Task { @MainActor in
+                        self?.appendDebugMessage(debugText)
+                    }
                 }
             )
         }
@@ -229,6 +277,8 @@ final class ChatViewModel: ObservableObject {
         switch message {
         case let .act(action):
             await handleAct(action)
+        case .ignored:
+            break
         }
     }
 
@@ -236,7 +286,14 @@ final class ChatViewModel: ObservableObject {
         guard action.endpointID == appleEndpointID,
               action.capabilityID == appleCapabilityID
         else {
-            await rejectInvoke(action: action, reasonCode: "unsupported_route")
+            appendDebugMessage(
+                "Ignored act for unexpected route \(action.endpointID)::\(action.capabilityID)"
+            )
+            return
+        }
+
+        guard rememberHandledAction(action.neuralSignalID) else {
+            appendDebugMessage("Ignored duplicate act \(action.neuralSignalID)")
             return
         }
 
@@ -245,6 +302,7 @@ final class ChatViewModel: ObservableObject {
             if texts.isEmpty {
                 await rejectInvoke(action: action, reasonCode: "invalid_payload")
                 appendSystemMessage("Received chat invoke with empty assistant output.")
+                log("invalid assistant payload (empty text): \(action.normalizedPayload)")
                 return
             }
 
@@ -259,7 +317,8 @@ final class ChatViewModel: ObservableObject {
             )
         } catch {
             await rejectInvoke(action: action, reasonCode: "invalid_payload")
-            appendSystemMessage("Failed to decode assistant payload: \(error.localizedDescription)")
+            appendSystemMessage("Failed to decode assistant payload: \(describeError(error))")
+            log("failed to decode assistant payload: \(describeError(error)), payload=\(action.normalizedPayload)")
         }
     }
 
@@ -272,7 +331,7 @@ final class ChatViewModel: ObservableObject {
                 reasonCode: reasonCode
             )
         } catch {
-            appendSystemMessage("Failed to send invoke result sense: \(error.localizedDescription)")
+            appendSystemMessage("Failed to send invoke result sense: \(describeError(error))")
         }
     }
 
@@ -282,6 +341,7 @@ final class ChatViewModel: ObservableObject {
                 await spineBodyEndpoint.stop()
             }
             connectionState = .disconnected
+            belunaState = .unknown
             log("received connected state while disabled; forced stop")
             return
         }
@@ -293,12 +353,30 @@ final class ChatViewModel: ObservableObject {
         }
 
         if previousState != .connected, state == .connected {
+            hasEverConnected = true
+            belunaState = .awake
             appendSystemMessage("Beluna is awake.")
             return
         }
 
         if previousState == .connected, state == .disconnected, isConnectionEnabled {
+            belunaState = .sleeping
             appendSystemMessage(sleepingNoticeText)
+            return
+        }
+
+        if !isConnectionEnabled {
+            belunaState = .unknown
+            return
+        }
+
+        if state == .connecting {
+            belunaState = hasEverConnected ? .sleeping : .unknown
+            return
+        }
+
+        if state == .disconnected {
+            belunaState = hasEverConnected ? .sleeping : .unknown
         }
     }
 
@@ -315,15 +393,57 @@ final class ChatViewModel: ObservableObject {
         "Beluna is sleeping. Start Beluna Core to wake it up."
     }
 
+    private func initialMessageText(initialAutoConnect: Bool) -> String {
+        if AppRuntimeEnvironment.isXcodeSession && !initialAutoConnect {
+            return "Debug launch: auto-connect is off. Click Connect when ready."
+        }
+        return initialAutoConnect ? sleepingHelpText() : disconnectedNoticeText
+    }
+
     private func log(_ message: String) {
         fputs("[BelunaApp] \(message)\n", stderr)
     }
 
     private func appendSystemMessage(_ text: String) {
-        if let last = messages.last, last.role == .system, last.text == text {
+        appendMessage(role: .system, text: text)
+    }
+
+    private func appendDebugMessage(_ text: String) {
+        log(text)
+        appendMessage(role: .debug, text: text)
+    }
+
+    private func appendMessage(role: ChatRole, text: String) {
+        if let last = messages.last, last.role == role, last.text == text {
             return
         }
 
-        messages.append(ChatMessage(role: .system, text: text))
+        messages.append(ChatMessage(role: role, text: text))
+    }
+
+    private func rememberHandledAction(_ actionID: String) -> Bool {
+        if handledActionIDs.contains(actionID) {
+            return false
+        }
+
+        handledActionIDs.insert(actionID)
+        handledActionOrder.append(actionID)
+        if handledActionOrder.count > handledActionLimit {
+            let removed = handledActionOrder.removeFirst()
+            handledActionIDs.remove(removed)
+        }
+        return true
+    }
+
+    private func describeError(_ error: Error) -> String {
+        if let endpointError = error as? SpineBodyEndpointError {
+            switch endpointError {
+            case .notConnected:
+                return "not connected"
+            case let .connectionFailed(message):
+                return message
+            }
+        }
+        return error.localizedDescription
     }
 }

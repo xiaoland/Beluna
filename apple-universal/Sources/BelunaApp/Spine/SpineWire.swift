@@ -87,54 +87,70 @@ struct AdmittedActionWire: Decodable, Equatable {
     }
 }
 
+struct CoreActWire: Decodable, Equatable {
+    let actID: String
+    let capabilityInstanceID: String
+    let endpointID: String
+    let capabilityID: String
+    let normalizedPayload: JSONValue
+    let requestedResources: CostVectorWire
+
+    enum CodingKeys: String, CodingKey {
+        case actID = "act_id"
+        case capabilityInstanceID = "capability_instance_id"
+        case endpointID = "endpoint_id"
+        case capabilityID = "capability_id"
+        case normalizedPayload = "normalized_payload"
+        case requestedResources = "requested_resources"
+    }
+
+    var asAdmittedAction: AdmittedActionWire {
+        AdmittedActionWire(
+            neuralSignalID: actID,
+            capabilityInstanceID: capabilityInstanceID,
+            endpointID: endpointID,
+            capabilityID: capabilityID,
+            normalizedPayload: normalizedPayload,
+            reservedCost: requestedResources
+        )
+    }
+}
+
 enum ServerWireMessage: Decodable, Equatable {
     case act(action: AdmittedActionWire)
+    case ignored(type: String)
 
     enum CodingKeys: String, CodingKey {
         case type
         case action
-    }
-
-    enum Kind: String, Decodable {
         case act
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        let kind = try container.decode(Kind.self, forKey: .type)
+        let type = try container.decode(String.self, forKey: .type)
 
-        switch kind {
-        case .act:
-            self = .act(action: try container.decode(AdmittedActionWire.self, forKey: .action))
+        guard type == "act" else {
+            self = .ignored(type: type)
+            return
         }
+
+        if let action = try container.decodeIfPresent(AdmittedActionWire.self, forKey: .action) {
+            self = .act(action: action)
+            return
+        }
+
+        if let coreAct = try container.decodeIfPresent(CoreActWire.self, forKey: .act) {
+            self = .act(action: coreAct.asAdmittedAction)
+            return
+        }
+
+        throw DecodingError.dataCorruptedError(
+            forKey: .action,
+            in: container,
+            debugDescription: "act message is missing both action and act payload"
+        )
     }
-}
-
-struct ChatReplyInvokePayload: Decodable {
-    let conversationID: String
-    let response: ResponsePayload
-
-    enum CodingKeys: String, CodingKey {
-        case conversationID = "conversation_id"
-        case response
-    }
-}
-
-struct ResponsePayload: Decodable {
-    let object: String
-    let id: String?
-    let output: [ResponseOutputItem]
-}
-
-struct ResponseOutputItem: Decodable {
-    let type: String
-    let role: String?
-    let content: [ResponseContentItem]?
-}
-
-struct ResponseContentItem: Decodable {
-    let type: String
-    let text: String?
 }
 
 func makeAppleEndpointRegisterEnvelope() -> EndpointRegisterWire {
@@ -210,26 +226,175 @@ func makeActResultSenseEnvelope(
 }
 
 func extractAssistantTexts(from normalizedPayload: JSONValue) throws -> [String] {
-    let payloadData = try JSONEncoder().encode(normalizedPayload)
-    let payload = try JSONDecoder().decode(ChatReplyInvokePayload.self, from: payloadData)
-
-    guard payload.response.object == "response" else {
+    guard let payload = normalizedPayload.objectValue else {
         return []
     }
 
     var result: [String] = []
-    for item in payload.response.output {
-        guard item.type == "message" else {
-            continue
-        }
+    result.append(contentsOf: extractTextsFromResponsesOutput(payload["response"]))
+    result.append(contentsOf: extractTextsFromOutputItems(payload["output"]?.arrayValue))
+    result.append(contentsOf: extractTextsFromChoices(payload["choices"]?.arrayValue))
 
-        for content in item.content ?? [] {
-            if content.type == "output_text", let text = content.text, !text.isEmpty {
-                result.append(text)
-            }
+    for key in ["output_text", "text", "message"] {
+        if let value = payload[key]?.stringValue {
+            result.append(value)
         }
     }
 
+    return dedupeNonEmptyTexts(result)
+}
+
+private func extractTextsFromResponsesOutput(_ response: JSONValue?) -> [String] {
+    guard let response else {
+        return []
+    }
+
+    var result: [String] = []
+    if let object = response.objectValue {
+        if let outputText = object["output_text"]?.stringValue {
+            result.append(outputText)
+        }
+        if let text = object["text"]?.stringValue {
+            result.append(text)
+        }
+        if let message = object["message"] {
+            result.append(contentsOf: extractTextsFromMessage(message, role: object["role"]?.stringValue))
+        }
+        result.append(contentsOf: extractTextsFromOutputItems(object["output"]?.arrayValue))
+        result.append(contentsOf: extractTextsFromChoices(object["choices"]?.arrayValue))
+    } else {
+        result.append(contentsOf: extractTextsFromMessage(response, role: nil))
+    }
+    return result
+}
+
+private func extractTextsFromOutputItems(_ items: [JSONValue]?) -> [String] {
+    guard let items else {
+        return []
+    }
+
+    var result: [String] = []
+    for item in items {
+        guard let object = item.objectValue else {
+            continue
+        }
+
+        if let role = object["role"]?.stringValue,
+           !role.isEmpty,
+           role != "assistant"
+        {
+            continue
+        }
+
+        if let text = object["output_text"]?.stringValue {
+            result.append(text)
+        }
+        if let text = object["text"]?.stringValue {
+            result.append(text)
+        }
+
+        if let message = object["message"] {
+            result.append(contentsOf: extractTextsFromMessage(message, role: object["role"]?.stringValue))
+        }
+
+        if let content = object["content"] {
+            result.append(contentsOf: extractTextsFromMessage(content, role: object["role"]?.stringValue))
+        }
+    }
+
+    return result
+}
+
+private func extractTextsFromChoices(_ choices: [JSONValue]?) -> [String] {
+    guard let choices else {
+        return []
+    }
+
+    var result: [String] = []
+    for choice in choices {
+        guard let object = choice.objectValue else {
+            continue
+        }
+
+        if let message = object["message"] {
+            let role = message.objectValue?["role"]?.stringValue
+            result.append(contentsOf: extractTextsFromMessage(message, role: role))
+            continue
+        }
+
+        if let text = object["text"]?.stringValue {
+            result.append(text)
+        }
+    }
+    return result
+}
+
+private func extractTextsFromMessage(_ message: JSONValue, role: String?) -> [String] {
+    if let role, !role.isEmpty, role != "assistant" {
+        return []
+    }
+
+    if let text = message.stringValue {
+        return [text]
+    }
+
+    if let array = message.arrayValue {
+        var result: [String] = []
+        for entry in array {
+            guard let content = entry.objectValue else {
+                if let text = entry.stringValue {
+                    result.append(text)
+                }
+                continue
+            }
+
+            if let entryRole = content["role"]?.stringValue,
+               !entryRole.isEmpty,
+               entryRole != "assistant"
+            {
+                continue
+            }
+
+            if let text = content["text"]?.stringValue {
+                result.append(text)
+            }
+            if let text = content["output_text"]?.stringValue {
+                result.append(text)
+            }
+            if let nested = content["content"] {
+                result.append(contentsOf: extractTextsFromMessage(nested, role: content["role"]?.stringValue))
+            }
+        }
+        return result
+    }
+
+    guard let object = message.objectValue else {
+        return []
+    }
+
+    if let text = object["text"]?.stringValue {
+        return [text]
+    }
+    if let text = object["output_text"]?.stringValue {
+        return [text]
+    }
+    if let nested = object["content"] {
+        return extractTextsFromMessage(nested, role: object["role"]?.stringValue)
+    }
+    return []
+}
+
+private func dedupeNonEmptyTexts(_ texts: [String]) -> [String] {
+    var seen = Set<String>()
+    var result: [String] = []
+    for text in texts {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !seen.contains(trimmed) else {
+            continue
+        }
+        seen.insert(trimmed)
+        result.append(trimmed)
+    }
     return result
 }
 

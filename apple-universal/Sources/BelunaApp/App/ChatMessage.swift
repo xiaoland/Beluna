@@ -4,6 +4,7 @@ enum ChatRole: String {
     case user
     case assistant
     case system
+    case debug
 }
 
 struct ChatMessage: Identifiable, Equatable {

@@ -72,6 +72,141 @@ final class SpineWireTests: XCTestCase {
             XCTAssertEqual(action.capabilityID, appleCapabilityID)
             let texts = try extractAssistantTexts(from: action.normalizedPayload)
             XCTAssertEqual(texts, ["Hello from Beluna"])
+        case .ignored:
+            XCTFail("expected act message")
+        }
+    }
+
+    func testExtractAssistantTextSupportsLegacyResponseOutputText() throws {
+        let payload: JSONValue = .object([
+            "conversation_id": .string("conv_legacy"),
+            "response": .object([
+                "output_text": .string("Legacy assistant output")
+            ])
+        ])
+
+        let texts = try extractAssistantTexts(from: payload)
+        XCTAssertEqual(texts, ["Legacy assistant output"])
+    }
+
+    func testExtractAssistantTextSupportsChatCompletionsChoices() throws {
+        let payload: JSONValue = .object([
+            "choices": .array([
+                .object([
+                    "message": .object([
+                        "role": .string("assistant"),
+                        "content": .string("Choice message content")
+                    ])
+                ])
+            ])
+        ])
+
+        let texts = try extractAssistantTexts(from: payload)
+        XCTAssertEqual(texts, ["Choice message content"])
+    }
+
+    func testDecodeActAcceptsDualActAndActionEnvelope() throws {
+        let line = """
+        {
+          "type": "act",
+          "act": {
+            "act_id": "act:abc",
+            "based_on": ["sense:1"],
+            "endpoint_id": "macos-app.01",
+            "capability_id": "present.message",
+            "capability_instance_id": "chat.1",
+            "normalized_payload": {
+              "text": "internal payload that should be ignored by legacy decoder"
+            },
+            "requested_resources": {
+              "survival_micro": 120,
+              "time_ms": 100,
+              "io_units": 1,
+              "token_units": 64
+            }
+          },
+          "action": {
+            "neural_signal_id": "act:abc",
+            "capability_instance_id": "chat.1",
+            "endpoint_id": "macos-app.01",
+            "capability_id": "present.message",
+            "normalized_payload": {
+              "response": {
+                "output_text": "dual envelope output"
+              }
+            },
+            "reserved_cost": {
+              "survival_micro": 120,
+              "time_ms": 100,
+              "io_units": 1,
+              "token_units": 64
+            }
+          }
+        }
+        """.data(using: .utf8)!
+
+        let message = try decodeServerMessage(from: line)
+        switch message {
+        case let .act(action):
+            XCTAssertEqual(action.neuralSignalID, "act:abc")
+            let texts = try extractAssistantTexts(from: action.normalizedPayload)
+            XCTAssertEqual(texts, ["dual envelope output"])
+        case .ignored:
+            XCTFail("expected act message")
+        }
+    }
+
+    func testDecodeActAcceptsCoreActEnvelopeWithoutLegacyActionAlias() throws {
+        let line = """
+        {
+          "type": "act",
+          "act": {
+            "act_id": "act:xyz",
+            "based_on": ["sense:1"],
+            "endpoint_id": "macos-app.01",
+            "capability_id": "present.message",
+            "capability_instance_id": "chat.1",
+            "normalized_payload": {
+              "response": {
+                "output_text": "core act output"
+              }
+            },
+            "requested_resources": {
+              "survival_micro": 120,
+              "time_ms": 100,
+              "io_units": 1,
+              "token_units": 64
+            }
+          }
+        }
+        """.data(using: .utf8)!
+
+        let message = try decodeServerMessage(from: line)
+        switch message {
+        case let .act(action):
+            XCTAssertEqual(action.neuralSignalID, "act:xyz")
+            let texts = try extractAssistantTexts(from: action.normalizedPayload)
+            XCTAssertEqual(texts, ["core act output"])
+        case .ignored:
+            XCTFail("expected act message")
+        }
+    }
+
+    func testDecodeUnknownWireTypeIsIgnored() throws {
+        let line = """
+        {
+          "type": "sense",
+          "sense_id": "sense:1",
+          "payload": { "ok": true }
+        }
+        """.data(using: .utf8)!
+
+        let message = try decodeServerMessage(from: line)
+        switch message {
+        case .act:
+            XCTFail("expected unknown type to be ignored")
+        case let .ignored(type):
+            XCTAssertEqual(type, "sense")
         }
     }
 

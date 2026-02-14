@@ -2,11 +2,11 @@ import SwiftUI
 
 struct ChatView: View {
     @ObservedObject var viewModel: ChatViewModel
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         VStack(spacing: 0) {
             header
-            connectionControls
             if viewModel.isSleeping {
                 sleepingNotice
             }
@@ -37,34 +37,8 @@ struct ChatView: View {
         .background(Color.orange.opacity(0.12))
     }
 
-    private var connectionControls: some View {
-        HStack(spacing: 8) {
-            Text("Socket")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-
-            TextField("/tmp/beluna.sock", text: $viewModel.socketPathDraft)
-                .textFieldStyle(.roundedBorder)
-                .font(.caption.monospaced())
-
-            Button("Apply") {
-                viewModel.applySocketPathDraft()
-            }
-            .buttonStyle(.bordered)
-            .disabled(!viewModel.canApplySocketPath)
-
-            Button(viewModel.connectButtonTitle) {
-                viewModel.toggleConnection()
-            }
-            .buttonStyle(.borderedProminent)
-        }
-        .padding(.horizontal, 12)
-        .padding(.bottom, 10)
-        .background(Color(NSColor.windowBackgroundColor))
-    }
-
     private var header: some View {
-        HStack {
+        HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Beluna")
                     .font(.title3.bold())
@@ -76,16 +50,36 @@ struct ChatView: View {
             Spacer()
 
             HStack(spacing: 8) {
-                Circle()
-                    .fill(viewModel.connectionState.tint)
-                    .frame(width: 10, height: 10)
-                Text(viewModel.connectionState.rawValue)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                statusPill(
+                    title: "Connection",
+                    value: viewModel.connectionState.rawValue,
+                    tint: viewModel.connectionState.tint
+                )
+                statusPill(
+                    title: "Beluna",
+                    value: viewModel.belunaState.rawValue,
+                    tint: viewModel.belunaState.tint
+                )
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(.regularMaterial, in: Capsule())
+
+            Button(viewModel.connectButtonTitle) {
+                viewModel.toggleConnection()
+            }
+            .buttonStyle(.borderedProminent)
+
+            Button("Retry") {
+                viewModel.retryConnection()
+            }
+            .buttonStyle(.bordered)
+            .disabled(!viewModel.canRetry)
+
+            Button {
+                openSettings()
+            } label: {
+                Image(systemName: "gearshape")
+            }
+            .buttonStyle(.bordered)
+            .help("Open Settings")
         }
         .padding(12)
         .background(Color(NSColor.windowBackgroundColor))
@@ -96,7 +90,7 @@ struct ChatView: View {
             ScrollView {
                 LazyVStack(spacing: 10) {
                     ForEach(viewModel.messages) { message in
-                        MessageBubble(message: message)
+                        MessageRow(message: message)
                             .id(message.id)
                     }
                 }
@@ -133,6 +127,67 @@ struct ChatView: View {
         }
         .padding(12)
         .background(Color(NSColor.windowBackgroundColor))
+    }
+
+    private func statusPill(title: String, value: String, tint: Color) -> some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(tint)
+                .frame(width: 8, height: 8)
+            Text("\(title): \(value)")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(.regularMaterial, in: Capsule())
+    }
+}
+
+private struct MessageRow: View {
+    let message: ChatMessage
+
+    var body: some View {
+        switch message.role {
+        case .system, .debug:
+            CenterNoticeBubble(message: message)
+        case .user, .assistant:
+            MessageBubble(message: message)
+        }
+    }
+}
+
+private struct CenterNoticeBubble: View {
+    let message: ChatMessage
+
+    var body: some View {
+        HStack {
+            Spacer()
+            Text(message.text)
+                .font(.caption)
+                .foregroundStyle(textColor)
+                .multilineTextAlignment(.center)
+                .textSelection(.enabled)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(backgroundColor, in: Capsule())
+            Spacer()
+        }
+    }
+
+    private var backgroundColor: Color {
+        switch message.role {
+        case .system:
+            return Color.orange.opacity(0.18)
+        case .debug:
+            return Color.gray.opacity(0.2)
+        case .user, .assistant:
+            return .clear
+        }
+    }
+
+    private var textColor: Color {
+        message.role == .debug ? .secondary : .primary
     }
 }
 
@@ -173,6 +228,8 @@ private struct MessageBubble: View {
             return "Beluna"
         case .system:
             return "System"
+        case .debug:
+            return "Debug"
         }
     }
 
@@ -184,6 +241,8 @@ private struct MessageBubble: View {
             return Color.gray.opacity(0.18)
         case .system:
             return Color.orange.opacity(0.18)
+        case .debug:
+            return Color.gray.opacity(0.2)
         }
     }
 
@@ -193,6 +252,8 @@ private struct MessageBubble: View {
             return .white
         case .assistant, .system:
             return .primary
+        case .debug:
+            return .secondary
         }
     }
 }

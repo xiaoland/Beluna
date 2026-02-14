@@ -17,7 +17,9 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     ingress::SenseIngress,
-    runtime_types::{Act, CapabilityDropPatch, CapabilityPatch, Sense, SenseDatum},
+    runtime_types::{
+        Act, CapabilityDropPatch, CapabilityPatch, RequestedResources, Sense, SenseDatum,
+    },
     spine::{
         registry::InMemoryEndpointRegistry,
         types::{EndpointCapabilityDescriptor, RouteKey},
@@ -27,7 +29,52 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum BodyEgressMessage {
-    Act { act: Act },
+    Act {
+        act: Act,
+        action: LegacyAdmittedAction,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct LegacyAdmittedAction {
+    neural_signal_id: String,
+    capability_instance_id: String,
+    endpoint_id: String,
+    capability_id: String,
+    normalized_payload: serde_json::Value,
+    reserved_cost: LegacyCostVector,
+}
+
+impl From<&Act> for LegacyAdmittedAction {
+    fn from(act: &Act) -> Self {
+        Self {
+            neural_signal_id: act.act_id.clone(),
+            capability_instance_id: act.capability_instance_id.clone(),
+            endpoint_id: act.endpoint_id.clone(),
+            capability_id: act.capability_id.clone(),
+            normalized_payload: act.normalized_payload.clone(),
+            reserved_cost: LegacyCostVector::from(&act.requested_resources),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct LegacyCostVector {
+    survival_micro: i64,
+    time_ms: u64,
+    io_units: u64,
+    token_units: u64,
+}
+
+impl From<&RequestedResources> for LegacyCostVector {
+    fn from(resources: &RequestedResources) -> Self {
+        Self {
+            survival_micro: resources.survival_micro,
+            time_ms: resources.time_ms,
+            io_units: resources.io_units,
+            token_units: resources.token_units,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -74,8 +121,9 @@ fn parse_body_ingress_message(line: &str) -> Result<InboundBodyMessage, serde_js
         WireMessage::Sense {
             sense_id,
             source,
-            payload,
+            mut payload,
         } => {
+            normalize_correlated_sense_payload(&mut payload);
             validate_correlated_sense_payload(&payload)?;
             InboundBodyMessage::Sense(SenseDatum {
                 sense_id,
@@ -107,6 +155,30 @@ fn parse_body_ingress_message(line: &str) -> Result<InboundBodyMessage, serde_js
         },
     };
     Ok(message)
+}
+
+fn normalize_correlated_sense_payload(payload: &mut serde_json::Value) {
+    let Some(object) = payload.as_object_mut() else {
+        return;
+    };
+
+    if object.contains_key("act_id") {
+        return;
+    }
+
+    let Some(neural_signal_id) = object
+        .get("neural_signal_id")
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return;
+    };
+
+    object.insert(
+        "act_id".to_string(),
+        serde_json::Value::String(neural_signal_id.to_string()),
+    );
 }
 
 fn validate_correlated_sense_payload(payload: &serde_json::Value) -> Result<(), serde_json::Error> {
@@ -153,7 +225,10 @@ fn invalid_correlated_sense_error(message: &str) -> serde_json::Error {
 }
 
 fn encode_body_egress_act_message(act: &Act) -> Result<String, serde_json::Error> {
-    let encoded = serde_json::to_string(&BodyEgressMessage::Act { act: act.clone() })?;
+    let encoded = serde_json::to_string(&BodyEgressMessage::Act {
+        act: act.clone(),
+        action: LegacyAdmittedAction::from(act),
+    })?;
     Ok(format!("{encoded}\n"))
 }
 
@@ -373,6 +448,24 @@ mod tests {
     }
 
     #[test]
+    fn accepts_legacy_correlated_sense_message_with_neural_signal_alias() {
+        let parsed = parse_body_ingress_message(
+            r#"{"type":"sense","sense_id":"s2","source":"body","payload":{"kind":"present_message_result","neural_signal_id":"act:legacy","capability_instance_id":"chat.1","endpoint_id":"macos-app.01","capability_id":"present.message"}}"#,
+        )
+        .expect("legacy correlated sense should parse");
+
+        match parsed {
+            InboundBodyMessage::Sense(sense) => {
+                assert_eq!(
+                    sense.payload.get("act_id"),
+                    Some(&serde_json::json!("act:legacy"))
+                );
+            }
+            _ => panic!("expected sense message"),
+        }
+    }
+
+    #[test]
     fn rejects_correlated_sense_message_missing_echo_fields() {
         assert!(
             parse_body_ingress_message(
@@ -401,15 +494,33 @@ mod tests {
             capability_id: "present.message".to_string(),
             capability_instance_id: "chat.instance".to_string(),
             normalized_payload: serde_json::json!({"ok": true}),
-            requested_resources: RequestedResources::default(),
+            requested_resources: RequestedResources {
+                survival_micro: 120,
+                time_ms: 100,
+                io_units: 1,
+                token_units: 64,
+            },
         };
 
         let encoded = encode_body_egress_act_message(&act).expect("act should encode");
         let message: BodyEgressMessage =
             serde_json::from_str(encoded.trim_end()).expect("message should decode");
-        assert!(matches!(message, BodyEgressMessage::Act { .. }));
+        match message {
+            BodyEgressMessage::Act { act, action } => {
+                assert_eq!(act.act_id, "act:1");
+                assert_eq!(action.neural_signal_id, "act:1");
+                assert_eq!(action.capability_id, "present.message");
+                assert_eq!(action.reserved_cost.survival_micro, 120);
+                assert_eq!(action.reserved_cost.time_ms, 100);
+                assert_eq!(action.reserved_cost.io_units, 1);
+                assert_eq!(action.reserved_cost.token_units, 64);
+            }
+        }
         assert!(encoded.contains("\"type\":\"act\""));
+        assert!(encoded.contains("\"act\":{"));
+        assert!(encoded.contains("\"action\":{"));
         assert!(encoded.contains("\"act_id\":\"act:1\""));
+        assert!(encoded.contains("\"neural_signal_id\":\"act:1\""));
         assert!(encoded.contains("\"capability_id\":\"present.message\""));
     }
 
