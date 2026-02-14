@@ -2,6 +2,26 @@
 
 Beluna is now organized as a multi-component repository.
 
+## Naming Conventions
+
+This monorepo follows specific naming rules for consistency:
+
+- **Directory names**: Omit "Beluna" prefix. Use short, descriptive names.
+  - ✅ `cli/`, `core/`, `apple-universal/`
+  - ❌ `beluna-cli/`, `beluna-core/`
+
+- **Package names**: Include "Beluna" for user clarity and discoverability.
+  - ✅ `beluna-cli` (in Cargo.toml)
+  - ❌ `cli` (too generic for package registries)
+
+- **User-facing documentation**: Include "Beluna" branding for clarity.
+  - ✅ "Beluna CLI", "Beluna Core" (in README.md, user guides)
+  - ❌ "CLI", "Core" (too vague for users)
+
+- **Internal documentation**: Use shorter names for agent efficiency.
+  - ✅ "Core", "CLI" (in AGENTS.md, architecture docs)
+  - Purpose: Keeps agent context concise
+
 ## Repository Layout (Crucial Only)
 
 ```
