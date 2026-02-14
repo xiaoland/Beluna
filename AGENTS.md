@@ -6,7 +6,8 @@ Beluna is now organized as a multi-component repository.
 
 ```
 .
-├── core/               # Beluna core (Rust)
+├── core/               # Core (Rust)
+├── cli/                # CLI body endpoint client (Rust)
 ├── apple-universal/    # Apple Universal App (Swift)
 └── docs/               # Product, BDT contracts, modules, ADR and tasks
 ```
