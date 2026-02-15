@@ -16,20 +16,24 @@ pub use noop::DeterministicNoopSpine;
 pub use ports::{EndpointPort, EndpointRegistryPort, SpineExecutorPort};
 pub use registry::InMemoryEndpointRegistry;
 pub use router::{NativeFunctionEndpoint, RoutingSpineExecutor};
-pub use runtime::SpineAdapterRuntime;
+pub use runtime::{Spine, SpineHandle, shutdown_global_spine};
 pub use types::{
     CostAttributionId, CostVector, EndpointCapabilityDescriptor, EndpointExecutionOutcome,
     ReserveEntryId, RouteKey, SpineCapabilityCatalog, SpineEvent, SpineExecutionMode,
 };
 
-static GLOBAL_SPINE_EXECUTOR: OnceLock<Arc<dyn SpineExecutorPort>> = OnceLock::new();
+static GLOBAL_SPINE: OnceLock<Arc<Spine>> = OnceLock::new();
 
-pub fn install_global_executor(executor: Arc<dyn SpineExecutorPort>) -> Result<(), SpineError> {
-    GLOBAL_SPINE_EXECUTOR
-        .set(executor)
-        .map_err(|_| error::internal_error("spine executor is already initialized"))
+pub fn install_global_spine(spine: Arc<Spine>) -> Result<(), SpineError> {
+    GLOBAL_SPINE
+        .set(spine)
+        .map_err(|_| error::internal_error("spine singleton is already initialized"))
+}
+
+pub fn global_spine() -> Option<Arc<Spine>> {
+    GLOBAL_SPINE.get().cloned()
 }
 
 pub fn global_executor() -> Option<Arc<dyn SpineExecutorPort>> {
-    GLOBAL_SPINE_EXECUTOR.get().cloned()
+    global_spine().map(|spine| spine.executor_port())
 }
