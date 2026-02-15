@@ -152,7 +152,7 @@ pub async fn handle_web_invoke(
                 "kind": "web_fetch_result",
                 "act_id": act.act_id,
                 "capability_instance_id": act.capability_instance_id,
-                "endpoint_id": act.endpoint_id,
+                "endpoint_id": act.body_endpoint_name,
                 "capability_id": act.capability_id,
                 "url": final_url,
                 "status_code": status_code,
@@ -203,7 +203,7 @@ mod tests {
         Act {
             act_id: act_id.to_string(),
             based_on: vec!["sense:1".to_string()],
-            endpoint_id: "ep:body:std:web".to_string(),
+            body_endpoint_name: "ep:body:std:web".to_string(),
             capability_id: "tool.web.fetch".to_string(),
             capability_instance_id: "web.instance".to_string(),
             normalized_payload: payload,

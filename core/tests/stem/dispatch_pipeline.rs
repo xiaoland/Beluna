@@ -30,7 +30,7 @@ impl CortexPort for TwoActCortex {
                 Act {
                     act_id: "act:1".to_string(),
                     based_on: vec!["sense:1".to_string()],
-                    endpoint_id: "ep.demo".to_string(),
+                    body_endpoint_name: "ep.demo".to_string(),
                     capability_id: "cap.demo".to_string(),
                     capability_instance_id: "instance:1".to_string(),
                     normalized_payload: serde_json::json!({}),
@@ -44,7 +44,7 @@ impl CortexPort for TwoActCortex {
                 Act {
                     act_id: "act:2".to_string(),
                     based_on: vec!["sense:1".to_string()],
-                    endpoint_id: "ep.demo".to_string(),
+                    body_endpoint_name: "ep.demo".to_string(),
                     capability_id: "cap.demo".to_string(),
                     capability_instance_id: "instance:2".to_string(),
                     normalized_payload: serde_json::json!({}),

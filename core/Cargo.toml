@@ -24,4 +24,4 @@ tokio = { version = "1.44.1", features = ["io-util", "macros", "net", "process",
 tokio-stream = "0.1.17"
 tokio-util = "0.7.13"
 tracing = "0.1.41"
-uuid = { version = "1.15.1", features = ["serde", "v7"] }
+uuid = { version = "1.15.1", features = ["serde", "v4", "v7"] }

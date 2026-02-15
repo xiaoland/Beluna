@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeMap,
     sync::{
         Arc, RwLock, Weak,
         atomic::{AtomicU64, Ordering},
@@ -12,9 +12,7 @@ use tokio::sync::mpsc;
 use crate::{
     runtime_types::Act,
     spine::{
-        error::{
-            SpineError, backend_failure, registration_invalid, route_conflict, route_not_found,
-        },
+        error::{SpineError, backend_failure, registration_invalid, route_not_found},
         ports::{EndpointPort, EndpointRegistryPort},
         types::{
             EndpointCapabilityDescriptor, EndpointExecutionOutcome, RouteKey,
@@ -32,16 +30,14 @@ struct RegisteredEndpoint {
 struct RegistryState {
     version: u64,
     by_endpoint: BTreeMap<String, RegisteredEndpoint>,
-    remote_route_owner: BTreeMap<RouteKey, u64>,
-    remote_routes_by_session: BTreeMap<u64, BTreeSet<RouteKey>>,
-    remote_sessions: BTreeMap<u64, mpsc::UnboundedSender<Act>>,
-    remote_endpoint_owner: BTreeMap<String, u64>,
+    adapter_channels: BTreeMap<u64, mpsc::UnboundedSender<Act>>,
+    endpoint_owner_channel: BTreeMap<String, u64>,
 }
 
 #[derive(Default)]
 pub struct InMemoryEndpointRegistry {
     state: RwLock<RegistryState>,
-    next_remote_session_id: AtomicU64,
+    next_adapter_channel_seq: AtomicU64,
 }
 
 impl InMemoryEndpointRegistry {
@@ -53,143 +49,109 @@ impl InMemoryEndpointRegistry {
         self.state.read().expect("lock poisoned").version
     }
 
-    pub fn allocate_remote_session_id(&self) -> u64 {
-        self.next_remote_session_id.fetch_add(1, Ordering::Relaxed)
+    pub fn allocate_adapter_channel_id(&self, adapter_id: u64) -> u64 {
+        let sequence = self
+            .next_adapter_channel_seq
+            .fetch_add(1, Ordering::Relaxed)
+            .saturating_add(1);
+        (adapter_id << 32) | (sequence & 0xFFFF_FFFF)
     }
 
-    pub fn attach_remote_session(&self, session_id: u64, tx: mpsc::UnboundedSender<Act>) {
+    pub fn attach_adapter_channel(&self, channel_id: u64, tx: mpsc::UnboundedSender<Act>) {
         let mut guard = self.state.write().expect("lock poisoned");
-        guard.remote_sessions.insert(session_id, tx);
+        guard.adapter_channels.insert(channel_id, tx);
     }
 
-    pub fn register_remote(
+    pub fn register_adapter_route(
         self: &Arc<Self>,
-        session_id: u64,
+        channel_id: u64,
         descriptor: EndpointCapabilityDescriptor,
     ) -> Result<(), SpineError> {
         let route = descriptor.route.clone();
         {
             let guard = self.state.read().expect("lock poisoned");
-            if !guard.remote_sessions.contains_key(&session_id) {
+            if !guard.adapter_channels.contains_key(&channel_id) {
                 return Err(backend_failure(format!(
-                    "remote session {} is not connected",
-                    session_id
+                    "adapter channel {} is not connected",
+                    channel_id
                 )));
             }
 
-            if guard.remote_route_owner.get(&route).copied() == Some(session_id) {
-                return Ok(());
-            }
-
-            if let Some(owner) = guard.remote_route_owner.get(&route).copied()
-                && owner != session_id
+            if let Some(owner) = guard
+                .endpoint_owner_channel
+                .get(&route.endpoint_id)
+                .copied()
+                && owner != channel_id
             {
-                return Err(route_conflict(format!(
-                    "route already owned by remote session {}: {}::{}",
-                    owner, route.endpoint_id, route.capability_id
-                )));
-            }
-
-            if let Some(owner) = guard.remote_endpoint_owner.get(&route.endpoint_id).copied()
-                && owner != session_id
-            {
-                return Err(route_conflict(format!(
-                    "endpoint already owned by remote session {}: {}",
+                return Err(backend_failure(format!(
+                    "endpoint already owned by adapter channel {}: {}",
                     owner, route.endpoint_id
                 )));
             }
         }
 
-        let endpoint: Arc<dyn EndpointPort> = Arc::new(RemoteEndpointPort {
+        let endpoint: Arc<dyn EndpointPort> = Arc::new(AdapterEndpointPort {
             endpoint_id: route.endpoint_id.clone(),
             registry: Arc::downgrade(self),
         });
-        self.register(descriptor.clone(), endpoint)?;
+        self.register(descriptor, endpoint)?;
 
         let mut guard = self.state.write().expect("lock poisoned");
-        guard.remote_route_owner.insert(route.clone(), session_id);
         guard
-            .remote_routes_by_session
-            .entry(session_id)
-            .or_default()
-            .insert(route.clone());
-        guard
-            .remote_endpoint_owner
-            .insert(route.endpoint_id.clone(), session_id);
+            .endpoint_owner_channel
+            .insert(route.endpoint_id.clone(), channel_id);
         Ok(())
     }
 
-    pub fn unregister_remote_route(
+    pub fn unregister_adapter_route(
         &self,
-        session_id: u64,
+        channel_id: u64,
         route: &RouteKey,
     ) -> Option<EndpointCapabilityDescriptor> {
         {
             let guard = self.state.read().expect("lock poisoned");
-            if guard.remote_route_owner.get(route).copied() != Some(session_id) {
+            if guard
+                .endpoint_owner_channel
+                .get(&route.endpoint_id)
+                .copied()
+                != Some(channel_id)
+            {
                 return None;
             }
         }
 
-        {
-            let mut guard = self.state.write().expect("lock poisoned");
-            guard.remote_route_owner.remove(route);
-            if let Some(routes) = guard.remote_routes_by_session.get_mut(&session_id) {
-                routes.remove(route);
-                if routes.is_empty() {
-                    guard.remote_routes_by_session.remove(&session_id);
-                }
-            }
-        }
-
         let removed = self.unregister(route);
-        self.cleanup_remote_endpoint_owner(&route.endpoint_id, session_id);
+        self.cleanup_endpoint_owner_channel(&route.endpoint_id, channel_id);
         removed
     }
 
-    pub fn detach_remote_session(&self, session_id: u64) -> Vec<RouteKey> {
-        let routes = {
-            let mut guard = self.state.write().expect("lock poisoned");
-            guard.remote_sessions.remove(&session_id);
-            let routes: Vec<RouteKey> = guard
-                .remote_routes_by_session
-                .remove(&session_id)
-                .map(|set| set.into_iter().collect())
-                .unwrap_or_default();
-            for route in &routes {
-                guard.remote_route_owner.remove(route);
-            }
-            routes
-        };
-
-        let mut dropped = Vec::new();
-        for route in routes {
-            if self.unregister(&route).is_some() {
-                dropped.push(route.clone());
-            }
-            self.cleanup_remote_endpoint_owner(&route.endpoint_id, session_id);
-        }
-        dropped
+    pub fn detach_adapter_channel(&self, channel_id: u64) -> Vec<RouteKey> {
+        let mut guard = self.state.write().expect("lock poisoned");
+        guard.adapter_channels.remove(&channel_id);
+        guard
+            .endpoint_owner_channel
+            .retain(|_, owner| *owner != channel_id);
+        Vec::new()
     }
 
-    pub async fn invoke_remote_endpoint(
+    pub async fn invoke_adapter_endpoint(
         &self,
         endpoint_id: &str,
         act: Act,
     ) -> Result<EndpointExecutionOutcome, SpineError> {
         let tx = {
             let guard = self.state.read().expect("lock poisoned");
-            let Some(session_id) = guard.remote_endpoint_owner.get(endpoint_id).copied() else {
+            let Some(channel_id) = guard.endpoint_owner_channel.get(endpoint_id).copied() else {
                 return Err(route_not_found(format!(
                     "endpoint is not registered: {}",
                     endpoint_id
                 )));
             };
 
-            let Some(tx) = guard.remote_sessions.get(&session_id).cloned() else {
+            let Some(tx) = guard.adapter_channels.get(&channel_id).cloned() else {
                 return Err(backend_failure(format!(
-                    "remote session {} is unavailable",
-                    session_id
+                    "adapter channel {} is unavailable",
+                    channel_id
                 )));
             };
             tx
@@ -204,11 +166,11 @@ impl InMemoryEndpointRegistry {
 
         Ok(EndpointExecutionOutcome::Applied {
             actual_cost_micro: act.requested_resources.survival_micro.max(0),
-            reference_id: format!("remote:act_sent:{}", act.act_id),
+            reference_id: format!("adapter:act_sent:{}", act.act_id),
         })
     }
 
-    fn cleanup_remote_endpoint_owner(&self, endpoint_id: &str, session_id: u64) {
+    fn cleanup_endpoint_owner_channel(&self, endpoint_id: &str, channel_id: u64) {
         let has_capabilities = {
             let guard = self.state.read().expect("lock poisoned");
             guard.by_endpoint.contains_key(endpoint_id)
@@ -218,8 +180,8 @@ impl InMemoryEndpointRegistry {
         }
 
         let mut guard = self.state.write().expect("lock poisoned");
-        if guard.remote_endpoint_owner.get(endpoint_id).copied() == Some(session_id) {
-            guard.remote_endpoint_owner.remove(endpoint_id);
+        if guard.endpoint_owner_channel.get(endpoint_id).copied() == Some(channel_id) {
+            guard.endpoint_owner_channel.remove(endpoint_id);
         }
     }
 }
@@ -245,24 +207,6 @@ impl EndpointRegistryPort for InMemoryEndpointRegistry {
                 endpoint: Arc::clone(&endpoint),
                 descriptors: BTreeMap::new(),
             });
-
-        if entry.descriptors.contains_key(&route.capability_id) {
-            return Err(route_conflict(format!(
-                "route already registered: {}::{}",
-                route.endpoint_id, route.capability_id
-            )));
-        }
-
-        if let Some(existing) = entry.descriptors.values().next()
-            && (existing.payload_schema != descriptor.payload_schema
-                || existing.max_payload_bytes != descriptor.max_payload_bytes
-                || existing.default_cost != descriptor.default_cost)
-        {
-            return Err(registration_invalid(format!(
-                "inconsistent descriptor for endpoint '{}'",
-                route.endpoint_id
-            )));
-        }
 
         entry.endpoint = endpoint;
         entry
@@ -314,19 +258,19 @@ impl EndpointRegistryPort for InMemoryEndpointRegistry {
     }
 }
 
-struct RemoteEndpointPort {
+struct AdapterEndpointPort {
     endpoint_id: String,
     registry: Weak<InMemoryEndpointRegistry>,
 }
 
 #[async_trait]
-impl EndpointPort for RemoteEndpointPort {
+impl EndpointPort for AdapterEndpointPort {
     async fn invoke(&self, act: Act) -> Result<EndpointExecutionOutcome, SpineError> {
         let Some(registry) = self.registry.upgrade() else {
             return Err(backend_failure("endpoint registry has been dropped"));
         };
         registry
-            .invoke_remote_endpoint(&self.endpoint_id, act)
+            .invoke_adapter_endpoint(&self.endpoint_id, act)
             .await
     }
 }
@@ -347,6 +291,18 @@ mod tests {
             types::CostVector,
         },
     };
+
+    #[test]
+    fn adapter_channel_id_encodes_adapter_identity() {
+        let registry = InMemoryEndpointRegistry::new();
+
+        let a1 = registry.allocate_adapter_channel_id(1);
+        let a2 = registry.allocate_adapter_channel_id(2);
+
+        assert_eq!(a1 >> 32, 1);
+        assert_eq!(a2 >> 32, 2);
+        assert!(a2 > a1);
+    }
 
     struct StubEndpoint;
 
@@ -378,7 +334,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_duplicate_route_registration() {
+    fn upserts_descriptor_on_duplicate_route_registration() {
         let registry = InMemoryEndpointRegistry::new();
         let endpoint: Arc<dyn EndpointPort> = Arc::new(StubEndpoint);
         let route = RouteKey {
@@ -392,43 +348,16 @@ mod tests {
                 Arc::clone(&endpoint),
             )
             .expect("first registration should succeed");
-
-        let err = registry
-            .register(
-                descriptor(&route.endpoint_id, &route.capability_id, 1024),
-                endpoint,
-            )
-            .expect_err("duplicate route should fail");
-
-        assert!(matches!(
-            err.kind,
-            crate::spine::error::SpineErrorKind::RouteConflict
-        ));
-    }
-
-    #[test]
-    fn rejects_inconsistent_descriptor_for_same_affordance() {
-        let registry = InMemoryEndpointRegistry::new();
-        let endpoint: Arc<dyn EndpointPort> = Arc::new(StubEndpoint);
-
         registry
             .register(
-                descriptor("core.mind", "observe.state", 1024),
-                Arc::clone(&endpoint),
-            )
-            .expect("first registration should succeed");
-
-        let err = registry
-            .register(
-                descriptor("core.mind", "observe.state.remote", 2048),
+                descriptor(&route.endpoint_id, &route.capability_id, 2048),
                 endpoint,
             )
-            .expect_err("inconsistent endpoint descriptor should fail");
+            .expect("second registration should upsert");
 
-        assert!(matches!(
-            err.kind,
-            crate::spine::error::SpineErrorKind::RegistrationInvalid
-        ));
+        let snapshot = registry.catalog_snapshot();
+        assert_eq!(snapshot.entries.len(), 1);
+        assert_eq!(snapshot.entries[0].max_payload_bytes, 2048);
     }
 
     #[test]
@@ -451,23 +380,5 @@ mod tests {
         assert_eq!(snapshot.entries.len(), 2);
         assert_eq!(snapshot.entries[0].route.endpoint_id, "endpoint.a");
         assert_eq!(snapshot.entries[1].route.endpoint_id, "endpoint.z");
-    }
-
-    #[test]
-    fn resolve_is_endpoint_level() {
-        let registry = InMemoryEndpointRegistry::new();
-        let endpoint: Arc<dyn EndpointPort> = Arc::new(StubEndpoint);
-
-        registry
-            .register(
-                descriptor("endpoint.alpha", "cap.1", 1024),
-                Arc::clone(&endpoint),
-            )
-            .expect("registration should succeed");
-        registry
-            .register(descriptor("endpoint.alpha", "cap.2", 1024), endpoint)
-            .expect("registration should succeed");
-
-        assert!(registry.resolve("endpoint.alpha").is_some());
     }
 }

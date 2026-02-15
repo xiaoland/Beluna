@@ -182,7 +182,7 @@ impl DeterministicAttemptClamp {
         Ok(Some(Act {
             act_id,
             based_on,
-            endpoint_id: draft.endpoint_id.clone(),
+            body_endpoint_name: draft.endpoint_id.clone(),
             capability_id: draft.capability_id.clone(),
             capability_instance_id,
             normalized_payload: payload,

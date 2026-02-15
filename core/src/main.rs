@@ -5,7 +5,6 @@ use tokio::{
     signal::unix::{SignalKind, signal},
     sync::{Mutex, mpsc},
 };
-use tokio_util::sync::CancellationToken;
 
 use beluna::{
     ai_gateway::{
@@ -25,9 +24,8 @@ use beluna::{
     ingress::SenseIngress,
     ledger::LedgerStage,
     spine::{
-        EndpointRegistryPort, InMemoryEndpointRegistry, RoutingSpineExecutor, SpineExecutionMode,
-        SpineExecutorPort, adapters::unix_socket::UnixSocketAdapter, global_executor,
-        install_global_executor,
+        EndpointRegistryPort, Spine, global_executor, global_spine, install_global_spine,
+        shutdown_global_spine,
     },
     stem::{StemRuntime, register_default_native_endpoints},
 };
@@ -80,11 +78,17 @@ async fn main() -> Result<()> {
         config.cortex.default_limits.clone(),
     ));
 
-    let registry = Arc::new(InMemoryEndpointRegistry::new());
-    let registry_port: Arc<dyn EndpointRegistryPort> = registry.clone();
+    let spine_runtime = Spine::new(&config.spine, ingress.clone());
+    install_global_spine(Arc::clone(&spine_runtime))
+        .context("failed to initialize process-wide spine singleton")?;
+    let spine = global_executor().context("spine singleton is not initialized")?;
+    let registry_port: Arc<dyn EndpointRegistryPort> = global_spine()
+        .context("spine singleton is not initialized")?
+        .registry_port();
+
     register_default_native_endpoints(Arc::clone(&registry_port))?;
     register_std_body_endpoints(
-        Arc::clone(&registry_port),
+        Arc::clone(&spine_runtime),
         ingress.clone(),
         config.body.std_shell.enabled,
         config.body.std_shell.limits.clone(),
@@ -92,33 +96,11 @@ async fn main() -> Result<()> {
         config.body.std_web.limits.clone(),
     )?;
 
-    let spine: Arc<dyn SpineExecutorPort> = Arc::new(RoutingSpineExecutor::new(
-        SpineExecutionMode::SerializedDeterministic,
-        Arc::clone(&registry_port),
-    ));
-    install_global_executor(Arc::clone(&spine))
-        .context("failed to initialize process-wide spine singleton")?;
-    let spine = global_executor().context("spine singleton is not initialized")?;
-
     let continuity = Arc::new(Mutex::new(ContinuityEngine::with_defaults()));
     let ledger = Arc::new(Mutex::new(LedgerStage::new(1_000_000)));
 
     let stem_runtime = StemRuntime::new(cortex, continuity.clone(), ledger, spine, sense_rx);
     let stem_task = tokio::spawn(async move { stem_runtime.run().await });
-
-    let shutdown = CancellationToken::new();
-    let adapter = UnixSocketAdapter::new(config.socket_path.clone());
-    let adapter_shutdown = shutdown.clone();
-    let adapter_task = tokio::spawn({
-        let ingress = ingress.clone();
-        let registry = Arc::clone(&registry);
-        async move { adapter.run(ingress, registry, adapter_shutdown).await }
-    });
-
-    eprintln!(
-        "Beluna listening on unix socket (NDJSON): {}",
-        config.socket_path.display()
-    );
 
     let mut sigint =
         signal(SignalKind::interrupt()).context("unable to listen for SIGINT (Ctrl+C)")?;
@@ -141,12 +123,8 @@ async fn main() -> Result<()> {
     stem_task.await.context("stem task join failed")??;
     continuity.lock().await.flush()?;
 
-    shutdown.cancel();
-    match adapter_task.await {
-        Ok(Ok(())) => {}
-        Ok(Err(err)) => eprintln!("unix socket adapter exited with error: {err:#}"),
-        Err(err) => eprintln!("unix socket adapter task join failed: {err}"),
-    }
+    let spine_runtime = global_spine().context("spine singleton is not initialized")?;
+    shutdown_global_spine(spine_runtime).await?;
 
     eprintln!("Beluna stopped: received {signal_name}");
     Ok(())

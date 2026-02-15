@@ -42,7 +42,7 @@ impl RoutingSpineExecutor {
     }
 
     async fn invoke_one(&self, act: Act) -> EndpointExecutionOutcome {
-        let Some(endpoint) = self.registry.resolve(&act.endpoint_id) else {
+        let Some(endpoint) = self.registry.resolve(&act.body_endpoint_name) else {
             return EndpointExecutionOutcome::Rejected {
                 reason_code: "endpoint_not_found".to_string(),
                 reference_id: format!("spine:missing_endpoint:{}", act.act_id),
@@ -67,7 +67,7 @@ impl SpineExecutorPort for RoutingSpineExecutor {
 
     async fn dispatch_act(&self, act: Act) -> Result<EndpointExecutionOutcome, SpineError> {
         if act.act_id.trim().is_empty()
-            || act.endpoint_id.trim().is_empty()
+            || act.body_endpoint_name.trim().is_empty()
             || act.capability_id.trim().is_empty()
         {
             return Err(crate::spine::error::invalid_batch(
@@ -113,7 +113,7 @@ mod tests {
         Act {
             act_id: "act:1".to_string(),
             based_on: vec!["sense:1".to_string()],
-            endpoint_id: endpoint_id.to_string(),
+            body_endpoint_name: endpoint_id.to_string(),
             capability_id: capability_id.to_string(),
             capability_instance_id: "instance:1".to_string(),
             normalized_payload: serde_json::json!({"ok":true}),
