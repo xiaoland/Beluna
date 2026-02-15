@@ -330,11 +330,11 @@ async fn handle_body_endpoint(
     registry: Arc<InMemoryEndpointRegistry>,
     adapter_id: u64,
 ) -> Result<()> {
-    let session_id = registry.allocate_remote_session_id(adapter_id);
+    let channel_id = registry.allocate_adapter_channel_id(adapter_id);
     let (read_half, mut write_half) = stream.into_split();
 
     let (outbound_tx, mut outbound_rx) = mpsc::unbounded_channel::<Act>();
-    registry.attach_remote_session(session_id, outbound_tx);
+    registry.attach_adapter_channel(channel_id, outbound_tx);
 
     let writer_task = tokio::spawn(async move {
         while let Some(act) = outbound_rx.recv().await {
@@ -364,7 +364,9 @@ async fn handle_body_endpoint(
                         eprintln!("body endpoint register rejected: endpoint_id cannot be empty");
                         continue;
                     }
-                    if let Err(err) = registry.register_remote(session_id, descriptor.clone()) {
+                    if let Err(err) =
+                        registry.register_adapter_route(channel_id, descriptor.clone())
+                    {
                         eprintln!("body endpoint route registration failed: {err}");
                         continue;
                     }
@@ -380,7 +382,7 @@ async fn handle_body_endpoint(
                 }
                 InboundBodyMessage::BodyEndpointUnregister { route } => {
                     if registry
-                        .unregister_remote_route(session_id, &route)
+                        .unregister_adapter_route(channel_id, &route)
                         .is_some()
                         && let Err(err) = ingress
                             .send(Sense::DropCapabilities(CapabilityDropPatch {
@@ -413,7 +415,7 @@ async fn handle_body_endpoint(
         }
     }
 
-    let routes = registry.detach_remote_session(session_id);
+    let routes = registry.detach_adapter_channel(channel_id);
     if !routes.is_empty() {
         let _ = ingress
             .send(Sense::DropCapabilities(CapabilityDropPatch { routes }))
