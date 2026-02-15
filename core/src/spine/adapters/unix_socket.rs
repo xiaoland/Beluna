@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     fs,
     io::ErrorKind,
     os::unix::fs::FileTypeExt,
@@ -21,7 +22,7 @@ use crate::{
         Act, CapabilityDropPatch, CapabilityPatch, RequestedResources, Sense, SenseDatum,
     },
     spine::{
-        registry::InMemoryEndpointRegistry,
+        runtime::Spine,
         types::{EndpointCapabilityDescriptor, RouteKey},
     },
 };
@@ -248,7 +249,7 @@ impl UnixSocketAdapter {
     pub async fn run(
         &self,
         ingress: SenseIngress,
-        registry: Arc<InMemoryEndpointRegistry>,
+        spine: Arc<Spine>,
         shutdown: CancellationToken,
     ) -> Result<()> {
         Self::prepare_socket_path(&self.socket_path)?;
@@ -264,11 +265,11 @@ impl UnixSocketAdapter {
                     match accept_result {
                         Ok((stream, _)) => {
                             let ingress = ingress.clone();
-                            let registry = Arc::clone(&registry);
+                            let spine = Arc::clone(&spine);
                             let adapter_id = self.adapter_id;
                             tokio::spawn(async move {
                                 if let Err(err) =
-                                    handle_body_endpoint(stream, ingress, registry, adapter_id)
+                                    handle_body_endpoint(stream, ingress, spine, adapter_id)
                                         .await
                                 {
                                     eprintln!("body endpoint handling failed: {err:#}");
@@ -327,14 +328,13 @@ impl UnixSocketAdapter {
 async fn handle_body_endpoint(
     stream: UnixStream,
     ingress: SenseIngress,
-    registry: Arc<InMemoryEndpointRegistry>,
+    spine: Arc<Spine>,
     adapter_id: u64,
 ) -> Result<()> {
-    let channel_id = registry.allocate_adapter_channel_id(adapter_id);
     let (read_half, mut write_half) = stream.into_split();
 
     let (outbound_tx, mut outbound_rx) = mpsc::unbounded_channel::<Act>();
-    registry.attach_adapter_channel(channel_id, outbound_tx);
+    let channel_id = spine.attach_adapter_channel(adapter_id, outbound_tx);
 
     let writer_task = tokio::spawn(async move {
         while let Some(act) = outbound_rx.recv().await {
@@ -347,6 +347,7 @@ async fn handle_body_endpoint(
     });
 
     let mut lines = BufReader::new(read_half).lines();
+    let mut endpoint_ids_by_semantic_name: BTreeMap<String, uuid::Uuid> = BTreeMap::new();
 
     while let Some(line) = lines.next_line().await? {
         let line = line.trim();
@@ -364,12 +365,34 @@ async fn handle_body_endpoint(
                         eprintln!("body endpoint register rejected: endpoint_id cannot be empty");
                         continue;
                     }
-                    if let Err(err) =
-                        registry.register_adapter_route(channel_id, descriptor.clone())
+
+                    let body_endpoint_id = if let Some(existing) =
+                        endpoint_ids_by_semantic_name.get(&endpoint_id).copied()
                     {
-                        eprintln!("body endpoint route registration failed: {err}");
-                        continue;
-                    }
+                        existing
+                    } else {
+                        match spine.new_body_endpoint(channel_id, &endpoint_id) {
+                            Ok(handle) => {
+                                endpoint_ids_by_semantic_name
+                                    .insert(endpoint_id.clone(), handle.body_endpoint_id);
+                                handle.body_endpoint_id
+                            }
+                            Err(err) => {
+                                eprintln!("body endpoint registration failed: {err:#}");
+                                continue;
+                            }
+                        }
+                    };
+
+                    let descriptor = match spine
+                        .register_body_endpoint_capability(body_endpoint_id, descriptor)
+                    {
+                        Ok(descriptor) => descriptor,
+                        Err(err) => {
+                            eprintln!("body endpoint capability registration failed: {err:#}");
+                            continue;
+                        }
+                    };
 
                     if let Err(err) = ingress
                         .send(Sense::NewCapabilities(CapabilityPatch {
@@ -381,9 +404,15 @@ async fn handle_body_endpoint(
                     }
                 }
                 InboundBodyMessage::BodyEndpointUnregister { route } => {
-                    if registry
-                        .unregister_adapter_route(channel_id, &route)
-                        .is_some()
+                    let Some(body_endpoint_id) = endpoint_ids_by_semantic_name
+                        .get(&route.endpoint_id)
+                        .copied()
+                    else {
+                        continue;
+                    };
+
+                    if let Some(route) = spine
+                        .unregister_body_endpoint_capability(body_endpoint_id, &route.capability_id)
                         && let Err(err) = ingress
                             .send(Sense::DropCapabilities(CapabilityDropPatch {
                                 routes: vec![route],
@@ -415,7 +444,7 @@ async fn handle_body_endpoint(
         }
     }
 
-    let routes = registry.detach_adapter_channel(channel_id);
+    let routes = spine.detach_adapter_channel(channel_id);
     if !routes.is_empty() {
         let _ = ingress
             .send(Sense::DropCapabilities(CapabilityDropPatch { routes }))

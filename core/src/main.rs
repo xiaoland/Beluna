@@ -78,7 +78,7 @@ async fn main() -> Result<()> {
         config.cortex.default_limits.clone(),
     ));
 
-    let spine_runtime = Arc::new(Spine::new(&config.spine, ingress.clone()));
+    let spine_runtime = Spine::new(&config.spine, ingress.clone());
     install_global_spine(Arc::clone(&spine_runtime))
         .context("failed to initialize process-wide spine singleton")?;
     let spine = global_executor().context("spine singleton is not initialized")?;
