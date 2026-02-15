@@ -28,8 +28,8 @@ impl CortexPort for TwoActCortex {
         Ok(CortexOutput {
             acts: vec![
                 Act {
-                    act_id: "0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a".to_string(),
-                    based_on: vec!["41f25f33-99f5-4250-99c3-020f8a92e199".to_string()],
+                    act_id: "act:1".to_string(),
+                    based_on: vec!["sense:1".to_string()],
                     body_endpoint_name: "ep.demo".to_string(),
                     capability_id: "cap.demo".to_string(),
                     capability_instance_id: "instance:1".to_string(),
@@ -43,7 +43,7 @@ impl CortexPort for TwoActCortex {
                 },
                 Act {
                     act_id: "act:2".to_string(),
-                    based_on: vec!["41f25f33-99f5-4250-99c3-020f8a92e199".to_string()],
+                    based_on: vec!["sense:1".to_string()],
                     body_endpoint_name: "ep.demo".to_string(),
                     capability_id: "cap.demo".to_string(),
                     capability_instance_id: "instance:2".to_string(),
@@ -93,7 +93,7 @@ async fn break_stops_current_act_only_and_keeps_next_act() {
     let (sense_tx, sense_rx) = mpsc::channel(4);
     sense_tx
         .send(Sense::Domain(SenseDatum {
-            sense_id: "41f25f33-99f5-4250-99c3-020f8a92e199".to_string(),
+            sense_id: "sense:1".to_string(),
             source: "test".to_string(),
             payload: serde_json::json!({}),
         }))

@@ -3,18 +3,6 @@ use serde::{Deserialize, Serialize};
 pub type SenseId = String;
 pub type ActId = String;
 
-pub fn is_uuid_v4(id: &str) -> bool {
-    uuid::Uuid::parse_str(id)
-        .map(|uuid| uuid.get_version_num() == 4)
-        .unwrap_or(false)
-}
-
-pub fn is_uuid_v7(id: &str) -> bool {
-    uuid::Uuid::parse_str(id)
-        .map(|uuid| uuid.get_version_num() == 7)
-        .unwrap_or(false)
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct RequestedResources {
     pub survival_micro: i64,

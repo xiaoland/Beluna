@@ -16,7 +16,7 @@ pub struct WebHandlerOutput {
 }
 
 pub async fn handle_web_invoke(
-    _request_id: &str,
+    request_id: &str,
     act: &Act,
     limits: &WebLimits,
 ) -> WebHandlerOutput {
@@ -157,7 +157,7 @@ pub async fn handle_web_invoke(
             reference_id: format!("body.std.web:applied:{}", act.act_id),
         },
         sense: Some(SenseDatum {
-            sense_id: uuid::Uuid::new_v4().to_string(),
+            sense_id: format!("sense:web:{request_id}"),
             source: "body.std.web".to_string(),
             payload: serde_json::json!({
                 "kind": "web_fetch_result",
@@ -213,7 +213,7 @@ mod tests {
     fn build_request(act_id: &str, payload: serde_json::Value) -> Act {
         Act {
             act_id: act_id.to_string(),
-            based_on: vec!["41f25f33-99f5-4250-99c3-020f8a92e199".to_string()],
+            based_on: vec!["sense:1".to_string()],
             body_endpoint_name: "ep:body:std:web".to_string(),
             capability_id: "tool.web.fetch".to_string(),
             capability_instance_id: "web.instance".to_string(),

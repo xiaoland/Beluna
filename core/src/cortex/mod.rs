@@ -12,7 +12,7 @@ pub use adapters::{AIGatewayAttemptExtractor, AIGatewayPayloadFiller, AIGatewayP
 pub use clamp::{DeterministicAttemptClamp, derive_act_id};
 pub use contracts::{
     Act, ActId, CapabilityDropPatch, CapabilityPatch, RequestedResources, Sense, SenseDatum,
-    SenseId, is_uuid_v4, is_uuid_v7,
+    SenseId,
 };
 pub use error::{CortexError, CortexErrorKind};
 pub use pipeline::CortexPipeline;

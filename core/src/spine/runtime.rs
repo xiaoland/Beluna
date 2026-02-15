@@ -468,7 +468,7 @@ mod tests {
         let runtime = tokio::runtime::Runtime::new().expect("runtime");
         let outcome = runtime
             .block_on(spine.executor_port().dispatch_act(Act {
-                act_id: "0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a".to_string(),
+                act_id: "act:1".to_string(),
                 based_on: vec![],
                 body_endpoint_name: handle.body_endpoint_name,
                 capability_id: "tool.web.fetch".to_string(),

@@ -1,7 +1,7 @@
 use beluna::{
     cortex::{
         AttemptClampPort, AttemptClampRequest, AttemptDraft, CapabilityCatalog,
-        DeterministicAttemptClamp, ReactionLimits, derive_act_id, is_uuid_v7,
+        DeterministicAttemptClamp, ReactionLimits, derive_act_id,
     },
     runtime_types::RequestedResources,
 };
@@ -22,7 +22,7 @@ fn catalog() -> CapabilityCatalog {
 fn draft() -> AttemptDraft {
     AttemptDraft {
         intent_span: "do thing".to_string(),
-        based_on: vec!["41f25f33-99f5-4250-99c3-020f8a92e199".to_string()],
+        based_on: vec!["sense:1".to_string()],
         attention_tags: vec!["a".to_string()],
         endpoint_id: "ep.demo".to_string(),
         capability_id: "cap.demo".to_string(),
@@ -39,7 +39,7 @@ fn draft() -> AttemptDraft {
 }
 
 #[test]
-fn act_id_is_uuid_v7() {
+fn deterministic_act_id_is_stable() {
     let resources = RequestedResources {
         survival_micro: 12,
         time_ms: 3,
@@ -48,7 +48,7 @@ fn act_id_is_uuid_v7() {
     };
     let lhs = derive_act_id(
         1,
-        &["41f25f33-99f5-4250-99c3-020f8a92e199".to_string()],
+        &["sense:1".to_string()],
         "ep.demo",
         "cap.demo",
         &serde_json::json!({"k":"v"}),
@@ -56,15 +56,13 @@ fn act_id_is_uuid_v7() {
     );
     let rhs = derive_act_id(
         1,
-        &["41f25f33-99f5-4250-99c3-020f8a92e199".to_string()],
+        &["sense:1".to_string()],
         "ep.demo",
         "cap.demo",
         &serde_json::json!({"k":"v"}),
         &resources,
     );
-    assert!(is_uuid_v7(&lhs));
-    assert!(is_uuid_v7(&rhs));
-    assert_ne!(lhs, rhs);
+    assert_eq!(lhs, rhs);
 }
 
 #[test]
@@ -75,7 +73,7 @@ fn clamp_rejects_unknown_sense_ids() {
             cycle_id: 1,
             drafts: vec![draft()],
             capability_catalog: catalog(),
-            known_sense_ids: vec!["34cf1137-004e-4c2d-8d67-c815404a3f89".to_string()],
+            known_sense_ids: vec!["sense:other".to_string()],
             limits: ReactionLimits::default(),
         })
         .expect("clamp should not hard-fail");
@@ -94,7 +92,7 @@ fn clamp_emits_act_with_non_negative_survival() {
             cycle_id: 1,
             drafts: vec![bad],
             capability_catalog: catalog(),
-            known_sense_ids: vec!["41f25f33-99f5-4250-99c3-020f8a92e199".to_string()],
+            known_sense_ids: vec!["sense:1".to_string()],
             limits: ReactionLimits::default(),
         })
         .expect("clamp should succeed");

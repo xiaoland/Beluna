@@ -1,5 +1,5 @@
 use jsonschema::JSONSchema;
-use uuid::Uuid;
+use sha2::{Digest, Sha256};
 
 use crate::{
     cortex::{
@@ -199,15 +199,25 @@ pub fn derive_act_id(
     normalized_payload: &serde_json::Value,
     requested_resources: &RequestedResources,
 ) -> String {
-    let _ = (
-        cycle_id,
-        based_on,
-        endpoint_id,
-        capability_id,
-        normalized_payload,
-        requested_resources,
-    );
-    Uuid::now_v7().to_string()
+    let canonical = canonicalize_json(&serde_json::json!({
+        "cycle_id": cycle_id,
+        "based_on": based_on,
+        "endpoint_id": endpoint_id,
+        "capability_id": capability_id,
+        "normalized_payload": normalized_payload,
+        "requested_resources": {
+            "survival_micro": requested_resources.survival_micro,
+            "time_ms": requested_resources.time_ms,
+            "io_units": requested_resources.io_units,
+            "token_units": requested_resources.token_units,
+        }
+    }));
+
+    let mut hasher = Sha256::new();
+    hasher.update(canonical.to_string().as_bytes());
+    let digest = hasher.finalize();
+    let hex = format!("{:x}", digest);
+    format!("act:{}", &hex[..24])
 }
 
 fn clamp_resources(resources: &RequestedResources) -> RequestedResources {

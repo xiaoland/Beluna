@@ -63,7 +63,7 @@ fn base_physical_state() -> PhysicalState {
 fn valid_draft() -> AttemptDraft {
     AttemptDraft {
         intent_span: "run".to_string(),
-        based_on: vec!["41f25f33-99f5-4250-99c3-020f8a92e199".to_string()],
+        based_on: vec!["sense:1".to_string()],
         attention_tags: vec![],
         endpoint_id: "ep.demo".to_string(),
         capability_id: "cap.demo".to_string(),
@@ -93,7 +93,7 @@ async fn cortex_pipeline_emits_acts_and_new_cognition() {
     let output = pipeline
         .cortex(
             &[Sense::Domain(SenseDatum {
-                sense_id: "41f25f33-99f5-4250-99c3-020f8a92e199".to_string(),
+                sense_id: "sense:1".to_string(),
                 source: "test".to_string(),
                 payload: serde_json::json!({"x":1}),
             })],
@@ -143,7 +143,7 @@ async fn cortex_pipeline_allows_noop_when_extractor_empty() {
     let output = pipeline
         .cortex(
             &[Sense::Domain(SenseDatum {
-                sense_id: "41f25f33-99f5-4250-99c3-020f8a92e199".to_string(),
+                sense_id: "sense:1".to_string(),
                 source: "test".to_string(),
                 payload: serde_json::json!({"x":1}),
             })],

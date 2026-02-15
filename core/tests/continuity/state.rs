@@ -76,8 +76,8 @@ fn cognition_state_is_persisted() {
 fn spine_events_are_recorded() {
     let mut engine = ContinuityEngine::with_defaults();
     let act = Act {
-        act_id: "0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a".to_string(),
-        based_on: vec!["41f25f33-99f5-4250-99c3-020f8a92e199".to_string()],
+        act_id: "act:1".to_string(),
+        based_on: vec!["sense:1".to_string()],
         body_endpoint_name: "ep.demo".to_string(),
         capability_id: "cap.demo".to_string(),
         capability_instance_id: "instance:1".to_string(),

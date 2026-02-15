@@ -11,8 +11,8 @@ use beluna::{
 
 fn request(body_endpoint_name: &str, capability_id: &str, seq_no: u64) -> Act {
     Act {
-        act_id: uuid::Uuid::now_v7().to_string(),
-        based_on: vec!["41f25f33-99f5-4250-99c3-020f8a92e199".to_string()],
+        act_id: format!("act:{seq_no}"),
+        based_on: vec!["sense:1".to_string()],
         body_endpoint_name: body_endpoint_name.to_string(),
         capability_id: capability_id.to_string(),
         capability_instance_id: format!("instance:{seq_no}"),
