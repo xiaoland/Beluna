@@ -1,5 +1,4 @@
 use std::{
-    collections::BTreeMap,
     fs,
     io::ErrorKind,
     os::unix::fs::FileTypeExt,
@@ -80,21 +79,24 @@ impl From<&RequestedResources> for LegacyCostVector {
 
 #[derive(Debug, Clone, PartialEq)]
 enum InboundBodyMessage {
+    Auth {
+        endpoint_name: String,
+        capabilities: Vec<EndpointCapabilityDescriptor>,
+    },
     Sense(SenseDatum),
     NewCapabilities(CapabilityPatch),
     DropCapabilities(CapabilityDropPatch),
-    BodyEndpointRegister {
-        endpoint_id: String,
-        descriptor: EndpointCapabilityDescriptor,
-    },
-    BodyEndpointUnregister {
-        route: RouteKey,
-    },
+    Unplug,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 enum WireMessage {
+    Auth {
+        endpoint_name: String,
+        #[serde(default)]
+        capabilities: Vec<EndpointCapabilityDescriptor>,
+    },
     Sense {
         sense_id: String,
         source: String,
@@ -106,19 +108,19 @@ enum WireMessage {
     DropCapabilities {
         routes: Vec<RouteKey>,
     },
-    BodyEndpointRegister {
-        endpoint_id: String,
-        descriptor: EndpointCapabilityDescriptor,
-    },
-    BodyEndpointUnregister {
-        endpoint_id: String,
-        capability_id: String,
-    },
+    Unplug,
 }
 
 fn parse_body_ingress_message(line: &str) -> Result<InboundBodyMessage, serde_json::Error> {
     let wire: WireMessage = serde_json::from_str(line)?;
     let message = match wire {
+        WireMessage::Auth {
+            endpoint_name,
+            capabilities,
+        } => InboundBodyMessage::Auth {
+            endpoint_name,
+            capabilities,
+        },
         WireMessage::Sense {
             sense_id,
             source,
@@ -138,22 +140,7 @@ fn parse_body_ingress_message(line: &str) -> Result<InboundBodyMessage, serde_js
         WireMessage::DropCapabilities { routes } => {
             InboundBodyMessage::DropCapabilities(CapabilityDropPatch { routes })
         }
-        WireMessage::BodyEndpointRegister {
-            endpoint_id,
-            descriptor,
-        } => InboundBodyMessage::BodyEndpointRegister {
-            endpoint_id,
-            descriptor,
-        },
-        WireMessage::BodyEndpointUnregister {
-            endpoint_id,
-            capability_id,
-        } => InboundBodyMessage::BodyEndpointUnregister {
-            route: RouteKey {
-                endpoint_id,
-                capability_id,
-            },
-        },
+        WireMessage::Unplug => InboundBodyMessage::Unplug,
     };
     Ok(message)
 }
@@ -334,7 +321,7 @@ async fn handle_body_endpoint(
     let (read_half, mut write_half) = stream.into_split();
 
     let (outbound_tx, mut outbound_rx) = mpsc::unbounded_channel::<Act>();
-    let channel_id = spine.attach_adapter_channel(adapter_id, outbound_tx);
+    let channel_id = spine.on_adapter_channel_open(adapter_id, outbound_tx);
 
     let writer_task = tokio::spawn(async move {
         while let Some(act) = outbound_rx.recv().await {
@@ -347,7 +334,7 @@ async fn handle_body_endpoint(
     });
 
     let mut lines = BufReader::new(read_half).lines();
-    let mut endpoint_ids_by_semantic_name: BTreeMap<String, uuid::Uuid> = BTreeMap::new();
+    let mut auth_endpoint_id: Option<uuid::Uuid> = None;
 
     while let Some(line) = lines.next_line().await? {
         let line = line.trim();
@@ -357,83 +344,124 @@ async fn handle_body_endpoint(
 
         match parse_body_ingress_message(line) {
             Ok(message) => match message {
-                InboundBodyMessage::BodyEndpointRegister {
-                    endpoint_id,
-                    descriptor,
+                InboundBodyMessage::Auth {
+                    endpoint_name,
+                    capabilities,
                 } => {
-                    if endpoint_id.trim().is_empty() {
-                        eprintln!("body endpoint register rejected: endpoint_id cannot be empty");
+                    if auth_endpoint_id.is_some() {
+                        eprintln!("auth ignored: endpoint already authenticated on channel");
+                        continue;
+                    }
+                    if endpoint_name.trim().is_empty() {
+                        eprintln!("auth rejected: endpoint_name cannot be empty");
                         continue;
                     }
 
-                    let body_endpoint_id = if let Some(existing) =
-                        endpoint_ids_by_semantic_name.get(&endpoint_id).copied()
-                    {
-                        existing
-                    } else {
-                        match spine.new_body_endpoint(channel_id, &endpoint_id) {
-                            Ok(handle) => {
-                                endpoint_ids_by_semantic_name
-                                    .insert(endpoint_id.clone(), handle.body_endpoint_id);
-                                handle.body_endpoint_id
-                            }
-                            Err(err) => {
-                                eprintln!("body endpoint registration failed: {err:#}");
-                                continue;
-                            }
-                        }
-                    };
-
-                    let descriptor = match spine
-                        .register_body_endpoint_capability(body_endpoint_id, descriptor)
-                    {
-                        Ok(descriptor) => descriptor,
+                    let handle = match spine.new_body_endpoint(channel_id, &endpoint_name) {
+                        Ok(handle) => handle,
                         Err(err) => {
-                            eprintln!("body endpoint capability registration failed: {err:#}");
+                            eprintln!("body endpoint registration failed during auth: {err:#}");
                             continue;
                         }
                     };
+                    auth_endpoint_id = Some(handle.body_endpoint_id);
 
-                    if let Err(err) = ingress
-                        .send(Sense::NewCapabilities(CapabilityPatch {
-                            entries: vec![descriptor],
-                        }))
-                        .await
-                    {
-                        eprintln!("dropping capability patch after register: {err}");
+                    let mut registered_entries = Vec::new();
+                    for descriptor in capabilities {
+                        match spine
+                            .register_body_endpoint_capability(handle.body_endpoint_id, descriptor)
+                        {
+                            Ok(descriptor) => registered_entries.push(descriptor),
+                            Err(err) => {
+                                eprintln!(
+                                    "body endpoint capability registration failed during auth: {err:#}"
+                                );
+                            }
+                        }
                     }
-                }
-                InboundBodyMessage::BodyEndpointUnregister { route } => {
-                    let Some(body_endpoint_id) = endpoint_ids_by_semantic_name
-                        .get(&route.endpoint_id)
-                        .copied()
-                    else {
-                        continue;
-                    };
 
-                    if let Some(route) = spine
-                        .unregister_body_endpoint_capability(body_endpoint_id, &route.capability_id)
+                    if !registered_entries.is_empty()
                         && let Err(err) = ingress
-                            .send(Sense::DropCapabilities(CapabilityDropPatch {
-                                routes: vec![route],
+                            .send(Sense::NewCapabilities(CapabilityPatch {
+                                entries: registered_entries,
                             }))
                             .await
                     {
-                        eprintln!("dropping capability drop after unregister: {err}");
+                        eprintln!("dropping capability patch after auth: {err}");
                     }
                 }
+                InboundBodyMessage::Unplug => {
+                    if let Some(body_endpoint_id) = auth_endpoint_id {
+                        let routes = spine.remove_body_endpoint(body_endpoint_id);
+                        if !routes.is_empty()
+                            && let Err(err) = ingress
+                                .send(Sense::DropCapabilities(CapabilityDropPatch { routes }))
+                                .await
+                        {
+                            eprintln!("dropping capability drop after unplug: {err}");
+                        }
+                    }
+                    break;
+                }
                 InboundBodyMessage::Sense(sense) => {
+                    if auth_endpoint_id.is_none() {
+                        eprintln!("sense rejected: endpoint must auth first");
+                        continue;
+                    }
                     if let Err(err) = ingress.send(Sense::Domain(sense)).await {
                         eprintln!("dropping sense due to closed ingress: {err}");
                     }
                 }
                 InboundBodyMessage::NewCapabilities(patch) => {
-                    if let Err(err) = ingress.send(Sense::NewCapabilities(patch)).await {
+                    let Some(body_endpoint_id) = auth_endpoint_id else {
+                        eprintln!("new_capabilities rejected: endpoint must auth first");
+                        continue;
+                    };
+
+                    let mut registered_entries = Vec::new();
+                    for descriptor in patch.entries {
+                        match spine.register_body_endpoint_capability(body_endpoint_id, descriptor)
+                        {
+                            Ok(descriptor) => registered_entries.push(descriptor),
+                            Err(err) => {
+                                eprintln!("capability registration failed: {err:#}");
+                            }
+                        }
+                    }
+
+                    if !registered_entries.is_empty()
+                        && let Err(err) = ingress
+                            .send(Sense::NewCapabilities(CapabilityPatch {
+                                entries: registered_entries,
+                            }))
+                            .await
+                    {
                         eprintln!("dropping new_capabilities due to closed ingress: {err}");
                     }
                 }
                 InboundBodyMessage::DropCapabilities(drop_patch) => {
-                    if let Err(err) = ingress.send(Sense::DropCapabilities(drop_patch)).await {
+                    let Some(body_endpoint_id) = auth_endpoint_id else {
+                        eprintln!("drop_capabilities rejected: endpoint must auth first");
+                        continue;
+                    };
+
+                    let mut dropped = Vec::new();
+                    for route in drop_patch.routes {
+                        if let Some(route) = spine.unregister_body_endpoint_capability(
+                            body_endpoint_id,
+                            &route.capability_id,
+                        ) {
+                            dropped.push(route);
+                        }
+                    }
+
+                    if !dropped.is_empty()
+                        && let Err(err) = ingress
+                            .send(Sense::DropCapabilities(CapabilityDropPatch {
+                                routes: dropped,
+                            }))
+                            .await
+                    {
                         eprintln!("dropping drop_capabilities due to closed ingress: {err}");
                     }
                 }
@@ -444,7 +472,7 @@ async fn handle_body_endpoint(
         }
     }
 
-    let routes = spine.detach_adapter_channel(channel_id);
+    let routes = spine.on_adapter_channel_closed(channel_id);
     if !routes.is_empty() {
         let _ = ingress
             .send(Sense::DropCapabilities(CapabilityDropPatch { routes }))
@@ -565,7 +593,7 @@ mod tests {
     }
 
     #[test]
-    fn accepts_registration_message() {
+    fn accepts_auth_message_with_capabilities() {
         let descriptor: EndpointCapabilityDescriptor = serde_json::from_value(serde_json::json!({
             "route": {
                 "endpoint_id": "macos-app.01",
@@ -584,15 +612,12 @@ mod tests {
         .expect("descriptor should decode");
 
         let wire = serde_json::json!({
-            "type": "body_endpoint_register",
-            "endpoint_id": "session-1",
-            "descriptor": descriptor
+            "type": "auth",
+            "endpoint_name": "macos-app",
+            "capabilities": [descriptor]
         });
 
-        let parsed = parse_body_ingress_message(&wire.to_string()).expect("register should parse");
-        assert!(matches!(
-            parsed,
-            InboundBodyMessage::BodyEndpointRegister { .. }
-        ));
+        let parsed = parse_body_ingress_message(&wire.to_string()).expect("auth should parse");
+        assert!(matches!(parsed, InboundBodyMessage::Auth { .. }));
     }
 }

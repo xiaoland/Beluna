@@ -106,7 +106,7 @@ impl Spine {
         Arc::clone(&self.executor)
     }
 
-    pub fn attach_adapter_channel(
+    pub(crate) fn on_adapter_channel_open(
         &self,
         adapter_id: u64,
         tx: tokio::sync::mpsc::UnboundedSender<crate::runtime_types::Act>,
@@ -223,7 +223,7 @@ impl Spine {
         dropped
     }
 
-    pub fn detach_adapter_channel(&self, channel_id: u64) -> Vec<RouteKey> {
+    pub(crate) fn on_adapter_channel_closed(&self, channel_id: u64) -> Vec<RouteKey> {
         let endpoint_ids = {
             let mut state = self.endpoint_state.blocking_lock();
             state.by_channel.remove(&channel_id).unwrap_or_default()
