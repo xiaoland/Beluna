@@ -17,7 +17,7 @@ pub struct ShellHandlerOutput {
 }
 
 pub async fn handle_shell_invoke(
-    request_id: &str,
+    _request_id: &str,
     act: &Act,
     limits: &ShellLimits,
 ) -> ShellHandlerOutput {
@@ -111,7 +111,7 @@ pub async fn handle_shell_invoke(
                 reference_id: format!("body.std.shell:non_zero_exit:{}:{}", exit_code, act.act_id),
             },
             sense: Some(SenseDatum {
-                sense_id: format!("sense:shell:{request_id}"),
+                sense_id: uuid::Uuid::new_v4().to_string(),
                 source: "body.std.shell".to_string(),
                 payload: serde_json::json!({
                     "kind": "shell_result",
@@ -136,7 +136,7 @@ pub async fn handle_shell_invoke(
             reference_id: format!("body.std.shell:applied:{}", act.act_id),
         },
         sense: Some(SenseDatum {
-            sense_id: format!("sense:shell:{request_id}"),
+            sense_id: uuid::Uuid::new_v4().to_string(),
             source: "body.std.shell".to_string(),
             payload: serde_json::json!({
                 "kind": "shell_result",
@@ -175,7 +175,7 @@ mod tests {
     fn build_request(act_id: &str, payload: serde_json::Value) -> Act {
         Act {
             act_id: act_id.to_string(),
-            based_on: vec!["sense:1".to_string()],
+            based_on: vec!["41f25f33-99f5-4250-99c3-020f8a92e199".to_string()],
             body_endpoint_name: "ep:body:std:shell".to_string(),
             capability_id: "tool.shell.exec".to_string(),
             capability_instance_id: "shell.instance".to_string(),

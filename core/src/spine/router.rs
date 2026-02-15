@@ -3,6 +3,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use crate::{
+    cortex::is_uuid_v7,
     runtime_types::Act,
     spine::{
         error::SpineError,
@@ -66,12 +67,12 @@ impl SpineExecutorPort for RoutingSpineExecutor {
     }
 
     async fn dispatch_act(&self, act: Act) -> Result<EndpointExecutionOutcome, SpineError> {
-        if act.act_id.trim().is_empty()
+        if !is_uuid_v7(&act.act_id)
             || act.body_endpoint_name.trim().is_empty()
             || act.capability_id.trim().is_empty()
         {
             return Err(crate::spine::error::invalid_batch(
-                "act dispatch is missing act_id/endpoint_id/capability_id",
+                "act dispatch is missing endpoint_id/capability_id or uses non-uuid-v7 act_id",
             ));
         }
 
@@ -111,8 +112,8 @@ mod tests {
 
     fn make_act(endpoint_id: &str, capability_id: &str) -> Act {
         Act {
-            act_id: "act:1".to_string(),
-            based_on: vec!["sense:1".to_string()],
+            act_id: uuid::Uuid::now_v7().to_string(),
+            based_on: vec!["41f25f33-99f5-4250-99c3-020f8a92e199".to_string()],
             body_endpoint_name: endpoint_id.to_string(),
             capability_id: capability_id.to_string(),
             capability_instance_id: "instance:1".to_string(),

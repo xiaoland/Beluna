@@ -1,11 +1,11 @@
 use async_trait::async_trait;
 
-use crate::runtime_types::Act;
 use crate::spine::{
     error::{SpineError, invalid_batch},
     ports::SpineExecutorPort,
     types::{EndpointExecutionOutcome, SpineCapabilityCatalog, SpineExecutionMode},
 };
+use crate::{cortex::is_uuid_v7, runtime_types::Act};
 
 #[derive(Debug, Clone)]
 pub struct DeterministicNoopSpine {
@@ -33,12 +33,12 @@ impl SpineExecutorPort for DeterministicNoopSpine {
     }
 
     async fn dispatch_act(&self, act: Act) -> Result<EndpointExecutionOutcome, SpineError> {
-        if act.act_id.trim().is_empty()
+        if !is_uuid_v7(&act.act_id)
             || act.body_endpoint_name.trim().is_empty()
             || act.capability_id.trim().is_empty()
         {
             return Err(invalid_batch(
-                "act dispatch is missing act_id/endpoint_id/capability_id",
+                "act dispatch is missing endpoint_id/capability_id or uses non-uuid-v7 act_id",
             ));
         }
 

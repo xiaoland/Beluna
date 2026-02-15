@@ -15,7 +15,7 @@ async fn shutdown_gate_rejects_new_senses_and_sleep_send_blocks_until_space() {
 
     ingress
         .send(Sense::Domain(SenseDatum {
-            sense_id: "sense:1".to_string(),
+            sense_id: "41f25f33-99f5-4250-99c3-020f8a92e199".to_string(),
             source: "test".to_string(),
             payload: serde_json::json!({}),
         }))

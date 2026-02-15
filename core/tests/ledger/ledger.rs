@@ -31,7 +31,7 @@ fn given_settlement_replay_with_same_reference_when_settle_then_idempotent_and_s
             &reserve_entry_id,
             "ref:settle",
             100,
-            Some("act:1".to_string()),
+            Some("0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a".to_string()),
             versions(),
         )
         .expect("settle should succeed");
@@ -42,7 +42,7 @@ fn given_settlement_replay_with_same_reference_when_settle_then_idempotent_and_s
             &reserve_entry_id,
             "ref:settle",
             100,
-            Some("act:1".to_string()),
+            Some("0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a".to_string()),
             versions(),
         )
         .expect("idempotent replay with same reference should be allowed");
@@ -52,7 +52,7 @@ fn given_settlement_replay_with_same_reference_when_settle_then_idempotent_and_s
             1,
             &reserve_entry_id,
             "ref:refund",
-            Some("act:1".to_string()),
+            Some("0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a".to_string()),
             versions(),
         )
         .expect_err("second terminal operation must fail");

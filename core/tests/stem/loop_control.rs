@@ -67,7 +67,7 @@ async fn stem_drains_all_queued_senses_into_one_cortex_cycle() {
     let (sense_tx, sense_rx) = mpsc::channel(8);
     sense_tx
         .send(Sense::Domain(SenseDatum {
-            sense_id: "sense:1".to_string(),
+            sense_id: "41f25f33-99f5-4250-99c3-020f8a92e199".to_string(),
             source: "test".to_string(),
             payload: serde_json::json!({"a":1}),
         }))

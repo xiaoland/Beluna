@@ -17,6 +17,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 use crate::{
+    cortex::{is_uuid_v4, is_uuid_v7},
     ingress::SenseIngress,
     runtime_types::{Act, CapabilityDropPatch, CapabilityPatch, Sense, SenseDatum},
     spine::{runtime::Spine, types::EndpointCapabilityDescriptor},
@@ -63,7 +64,7 @@ struct InboundSenseBody {
 
 fn parse_body_ingress_message(line: &str) -> Result<InboundBodyMessage, serde_json::Error> {
     let wire: NdjsonEnvelope<serde_json::Value> = serde_json::from_str(line)?;
-    if uuid::Uuid::parse_str(&wire.id).is_err() {
+    if !is_uuid_v4(&wire.id) {
         return Err(invalid_correlated_sense_error(
             "id must be a valid uuid-v4 string",
         ));
@@ -87,6 +88,11 @@ fn parse_body_ingress_message(line: &str) -> Result<InboundBodyMessage, serde_js
             let mut payload = body.payload;
             normalize_correlated_sense_payload(&mut payload);
             validate_correlated_sense_payload(&payload)?;
+            if !is_uuid_v4(&body.sense_id) {
+                return Err(invalid_correlated_sense_error(
+                    "sense_id must be a valid uuid-v4 string",
+                ));
+            }
             InboundBodyMessage::Sense(SenseDatum {
                 sense_id: body.sense_id,
                 source: body.source,
@@ -147,13 +153,9 @@ fn validate_correlated_sense_payload(payload: &serde_json::Value) -> Result<(), 
         return Ok(());
     };
 
-    if act_id
-        .as_str()
-        .map(|value| value.trim().is_empty())
-        .unwrap_or(true)
-    {
+    if !act_id.as_str().map(is_uuid_v7).unwrap_or(false) {
         return Err(invalid_correlated_sense_error(
-            "act_id must be a non-empty string",
+            "act_id must be a valid uuid-v7 string",
         ));
     }
 
@@ -425,7 +427,7 @@ mod tests {
     #[test]
     fn accepts_sense_message() {
         let parsed = parse_body_ingress_message(
-            r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"s1","source":"sensor","payload":{"v":1}}}"#,
+            r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"41f25f33-99f5-4250-99c3-020f8a92e199","source":"sensor","payload":{"v":1}}}"#,
         )
         .expect("sense message should parse");
         assert!(matches!(parsed, InboundBodyMessage::Sense(_)));
@@ -434,7 +436,7 @@ mod tests {
     #[test]
     fn accepts_correlated_sense_message_with_required_echo_fields() {
         let parsed = parse_body_ingress_message(
-            r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"s2","source":"body","payload":{"kind":"present_message_result","act_id":"act:1","capability_instance_id":"chat.1","endpoint_id":"macos-app.01","capability_id":"present.message"}}}"#,
+            r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"9d60f110-af6d-42cb-853b-bf6f6ce6f0dc","source":"body","payload":{"kind":"present_message_result","act_id":"0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a","capability_instance_id":"chat.1","endpoint_id":"macos-app.01","capability_id":"present.message"}}}"#,
         )
         .expect("correlated sense should parse");
         assert!(matches!(parsed, InboundBodyMessage::Sense(_)));
@@ -443,7 +445,7 @@ mod tests {
     #[test]
     fn accepts_legacy_correlated_sense_message_with_neural_signal_alias() {
         let parsed = parse_body_ingress_message(
-            r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"s2","source":"body","payload":{"kind":"present_message_result","neural_signal_id":"act:legacy","capability_instance_id":"chat.1","endpoint_id":"macos-app.01","capability_id":"present.message"}}}"#,
+            r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"9d60f110-af6d-42cb-853b-bf6f6ce6f0dc","source":"body","payload":{"kind":"present_message_result","neural_signal_id":"0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a","capability_instance_id":"chat.1","endpoint_id":"macos-app.01","capability_id":"present.message"}}}"#,
         )
         .expect("legacy correlated sense should parse");
 
@@ -451,7 +453,7 @@ mod tests {
             InboundBodyMessage::Sense(sense) => {
                 assert_eq!(
                     sense.payload.get("act_id"),
-                    Some(&serde_json::json!("act:legacy"))
+                    Some(&serde_json::json!("0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a"))
                 );
             }
             _ => panic!("expected sense message"),
@@ -462,7 +464,7 @@ mod tests {
     fn rejects_correlated_sense_message_missing_echo_fields() {
         assert!(
             parse_body_ingress_message(
-                r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"s3","source":"body","payload":{"kind":"present_message_result","act_id":"act:1","endpoint_id":"macos-app.01","capability_id":"present.message"}}}"#
+                r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"01234567-89ab-4cde-8f01-23456789abcd","source":"body","payload":{"kind":"present_message_result","act_id":"0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a","endpoint_id":"macos-app.01","capability_id":"present.message"}}}"#
             )
             .is_err()
         );
@@ -481,8 +483,8 @@ mod tests {
     #[test]
     fn act_encoding_contains_act_and_target_fields() {
         let act = Act {
-            act_id: "act:1".to_string(),
-            based_on: vec!["s1".to_string()],
+            act_id: "0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a".to_string(),
+            based_on: vec!["41f25f33-99f5-4250-99c3-020f8a92e199".to_string()],
             body_endpoint_name: "macos-app.01".to_string(),
             capability_id: "present.message".to_string(),
             capability_instance_id: "chat.instance".to_string(),
@@ -501,7 +503,10 @@ mod tests {
         assert_eq!(message.method, "act");
         assert!(uuid::Uuid::parse_str(&message.id).is_ok());
         assert!(message.timestamp > 0);
-        assert_eq!(message.body.act.act_id, "act:1");
+        assert_eq!(
+            message.body.act.act_id,
+            "0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a"
+        );
         assert_eq!(message.body.act.capability_id, "present.message");
         assert_eq!(message.body.act.requested_resources.survival_micro, 120);
         assert_eq!(message.body.act.requested_resources.time_ms, 100);
@@ -509,7 +514,7 @@ mod tests {
         assert_eq!(message.body.act.requested_resources.token_units, 64);
         assert!(encoded.contains("\"method\":\"act\""));
         assert!(encoded.contains("\"body\":{"));
-        assert!(encoded.contains("\"act_id\":\"act:1\""));
+        assert!(encoded.contains("\"act_id\":\"0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a\""));
         assert!(encoded.contains("\"capability_id\":\"present.message\""));
     }
 
