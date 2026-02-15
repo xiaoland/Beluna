@@ -50,7 +50,7 @@ impl From<&Act> for LegacyAdmittedAction {
         Self {
             neural_signal_id: act.act_id.clone(),
             capability_instance_id: act.capability_instance_id.clone(),
-            endpoint_id: act.endpoint_id.clone(),
+            endpoint_id: act.body_endpoint_name.clone(),
             capability_id: act.capability_id.clone(),
             normalized_payload: act.normalized_payload.clone(),
             reserved_cost: LegacyCostVector::from(&act.requested_resources),
@@ -501,7 +501,7 @@ mod tests {
         let act = Act {
             act_id: "act:1".to_string(),
             based_on: vec!["s1".to_string()],
-            endpoint_id: "macos-app.01".to_string(),
+            body_endpoint_name: "macos-app.01".to_string(),
             capability_id: "present.message".to_string(),
             capability_instance_id: "chat.instance".to_string(),
             normalized_payload: serde_json::json!({"ok": true}),

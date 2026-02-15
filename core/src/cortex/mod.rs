@@ -2,6 +2,7 @@
 
 pub mod adapters;
 pub mod clamp;
+pub mod contracts;
 pub mod error;
 pub mod pipeline;
 pub mod ports;
@@ -9,6 +10,10 @@ pub mod types;
 
 pub use adapters::{AIGatewayAttemptExtractor, AIGatewayPayloadFiller, AIGatewayPrimaryReasoner};
 pub use clamp::{DeterministicAttemptClamp, derive_act_id};
+pub use contracts::{
+    Act, ActId, CapabilityDropPatch, CapabilityPatch, RequestedResources, Sense, SenseDatum,
+    SenseId,
+};
 pub use error::{CortexError, CortexErrorKind};
 pub use pipeline::CortexPipeline;
 pub use ports::{

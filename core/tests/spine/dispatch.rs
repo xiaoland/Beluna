@@ -9,11 +9,11 @@ use beluna::{
     },
 };
 
-fn request(endpoint_id: &str, capability_id: &str, seq_no: u64) -> Act {
+fn request(body_endpoint_name: &str, capability_id: &str, seq_no: u64) -> Act {
     Act {
         act_id: format!("act:{seq_no}"),
         based_on: vec!["sense:1".to_string()],
-        endpoint_id: endpoint_id.to_string(),
+        body_endpoint_name: body_endpoint_name.to_string(),
         capability_id: capability_id.to_string(),
         capability_instance_id: format!("instance:{seq_no}"),
         normalized_payload: serde_json::json!({"ok":true}),
