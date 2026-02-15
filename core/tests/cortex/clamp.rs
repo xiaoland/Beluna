@@ -1,7 +1,7 @@
 use beluna::{
     cortex::{
         AttemptClampPort, AttemptClampRequest, AttemptDraft, CapabilityCatalog,
-        DeterministicAttemptClamp, ReactionLimits, derive_act_id,
+        DeterministicAttemptClamp, ReactionLimits, derive_act_id, is_uuid_v7,
     },
     runtime_types::RequestedResources,
 };
@@ -39,7 +39,7 @@ fn draft() -> AttemptDraft {
 }
 
 #[test]
-fn deterministic_act_id_is_stable() {
+fn act_id_is_uuid_v7() {
     let resources = RequestedResources {
         survival_micro: 12,
         time_ms: 3,
@@ -62,7 +62,9 @@ fn deterministic_act_id_is_stable() {
         &serde_json::json!({"k":"v"}),
         &resources,
     );
-    assert_eq!(lhs, rhs);
+    assert!(is_uuid_v7(&lhs));
+    assert!(is_uuid_v7(&rhs));
+    assert_ne!(lhs, rhs);
 }
 
 #[test]

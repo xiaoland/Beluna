@@ -17,7 +17,7 @@ pub struct ShellHandlerOutput {
 }
 
 pub async fn handle_shell_invoke(
-    request_id: &str,
+    _request_id: &str,
     act: &Act,
     limits: &ShellLimits,
 ) -> ShellHandlerOutput {
@@ -111,7 +111,7 @@ pub async fn handle_shell_invoke(
                 reference_id: format!("body.std.shell:non_zero_exit:{}:{}", exit_code, act.act_id),
             },
             sense: Some(SenseDatum {
-                sense_id: format!("sense:shell:{request_id}"),
+                sense_id: uuid::Uuid::new_v4().to_string(),
                 source: "body.std.shell".to_string(),
                 payload: serde_json::json!({
                     "kind": "shell_result",
@@ -136,7 +136,7 @@ pub async fn handle_shell_invoke(
             reference_id: format!("body.std.shell:applied:{}", act.act_id),
         },
         sense: Some(SenseDatum {
-            sense_id: format!("sense:shell:{request_id}"),
+            sense_id: uuid::Uuid::new_v4().to_string(),
             source: "body.std.shell".to_string(),
             payload: serde_json::json!({
                 "kind": "shell_result",
