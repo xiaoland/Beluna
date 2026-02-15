@@ -8,6 +8,7 @@ pub mod noop;
 pub mod ports;
 pub mod registry;
 pub mod router;
+pub mod runtime;
 pub mod types;
 
 pub use error::{SpineError, SpineErrorKind};
@@ -15,6 +16,7 @@ pub use noop::DeterministicNoopSpine;
 pub use ports::{EndpointPort, EndpointRegistryPort, SpineExecutorPort};
 pub use registry::InMemoryEndpointRegistry;
 pub use router::{NativeFunctionEndpoint, RoutingSpineExecutor};
+pub use runtime::SpineAdapterRuntime;
 pub use types::{
     CostAttributionId, CostVector, EndpointCapabilityDescriptor, EndpointExecutionOutcome,
     ReserveEntryId, RouteKey, SpineCapabilityCatalog, SpineEvent, SpineExecutionMode,

@@ -17,7 +17,7 @@ use beluna::{
     },
     body::std::register_std_body_endpoints,
     cli::config_path_from_args,
-    config::{Config, SpineAdapterConfig},
+    config::Config,
     continuity::ContinuityEngine,
     cortex::{
         AIGatewayAttemptExtractor, AIGatewayPrimaryReasoner, CortexPipeline, NoopTelemetryPort,
@@ -26,8 +26,7 @@ use beluna::{
     ledger::LedgerStage,
     spine::{
         EndpointRegistryPort, InMemoryEndpointRegistry, RoutingSpineExecutor, SpineExecutionMode,
-        SpineExecutorPort, adapters::unix_socket::UnixSocketAdapter, global_executor,
-        install_global_executor,
+        SpineExecutorPort, global_executor, install_global_executor,
     },
     stem::{StemRuntime, register_default_native_endpoints},
 };
@@ -107,32 +106,12 @@ async fn main() -> Result<()> {
     let stem_task = tokio::spawn(async move { stem_runtime.run().await });
 
     let shutdown = CancellationToken::new();
-    let mut adapter_tasks = Vec::new();
-
-    for (index, adapter_config) in config.spine.adapters.iter().enumerate() {
-        let adapter_id = (index as u64) + 1;
-        match adapter_config {
-            SpineAdapterConfig::UnixSocketNdjson {
-                config: adapter_cfg,
-            } => {
-                let adapter = UnixSocketAdapter::new(adapter_cfg.socket_path.clone(), adapter_id);
-                let adapter_shutdown = shutdown.clone();
-                let ingress = ingress.clone();
-                let registry = Arc::clone(&registry);
-                let socket_path = adapter_cfg.socket_path.clone();
-                let task =
-                    tokio::spawn(
-                        async move { adapter.run(ingress, registry, adapter_shutdown).await },
-                    );
-                adapter_tasks.push(task);
-                eprintln!(
-                    "Beluna listening on unix socket (NDJSON) adapter_id={}: {}",
-                    adapter_id,
-                    socket_path.display()
-                );
-            }
-        }
-    }
+    let adapter_runtime = beluna::spine::SpineAdapterRuntime::start(
+        &config.spine,
+        ingress.clone(),
+        Arc::clone(&registry),
+        shutdown.clone(),
+    );
 
     let mut sigint =
         signal(SignalKind::interrupt()).context("unable to listen for SIGINT (Ctrl+C)")?;
@@ -156,13 +135,7 @@ async fn main() -> Result<()> {
     continuity.lock().await.flush()?;
 
     shutdown.cancel();
-    for adapter_task in adapter_tasks {
-        match adapter_task.await {
-            Ok(Ok(())) => {}
-            Ok(Err(err)) => eprintln!("spine adapter exited with error: {err:#}"),
-            Err(err) => eprintln!("spine adapter task join failed: {err}"),
-        }
-    }
+    adapter_runtime.join_all().await;
 
     eprintln!("Beluna stopped: received {signal_name}");
     Ok(())
