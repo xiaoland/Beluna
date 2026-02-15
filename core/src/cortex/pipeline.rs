@@ -244,7 +244,7 @@ fn drafts_to_acts(
         acts.push(Act {
             act_id,
             based_on,
-            endpoint_id,
+            body_endpoint_name: endpoint_id,
             capability_id,
             capability_instance_id,
             normalized_payload: payload_draft,

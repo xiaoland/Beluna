@@ -6,7 +6,7 @@ use crate::{
     body::std::payloads::{ShellLimits, WebLimits},
     ingress::SenseIngress,
     runtime_types::{Act, Sense},
-    spine::EndpointRegistryPort,
+    spine::runtime::Spine,
 };
 
 #[cfg(any(feature = "std-shell", feature = "std-web"))]
@@ -28,13 +28,13 @@ pub mod payloads;
 pub mod shell;
 pub mod web;
 
-pub const SHELL_ENDPOINT_ID: &str = "ep:body:std:shell";
-pub const WEB_ENDPOINT_ID: &str = "ep:body:std:web";
+pub const SHELL_ENDPOINT_NAME: &str = "std-shell";
+pub const WEB_ENDPOINT_NAME: &str = "std-web";
 pub const SHELL_CAPABILITY_ID: &str = "tool.shell.exec";
 pub const WEB_CAPABILITY_ID: &str = "tool.web.fetch";
 
 pub fn register_std_body_endpoints(
-    registry: Arc<dyn EndpointRegistryPort>,
+    spine: Arc<Spine>,
     sense_ingress: SenseIngress,
     shell_enabled: bool,
     shell_limits: ShellLimits,
@@ -42,17 +42,17 @@ pub fn register_std_body_endpoints(
     web_limits: WebLimits,
 ) -> Result<()> {
     register_shell_endpoint(
-        registry.clone(),
+        Arc::clone(&spine),
         sense_ingress.clone(),
         shell_enabled,
         shell_limits,
     )?;
-    register_web_endpoint(registry, sense_ingress, web_enabled, web_limits)?;
+    register_web_endpoint(spine, sense_ingress, web_enabled, web_limits)?;
     Ok(())
 }
 
 fn register_shell_endpoint(
-    registry: Arc<dyn EndpointRegistryPort>,
+    spine: Arc<Spine>,
     sense_ingress: SenseIngress,
     enabled: bool,
     limits: ShellLimits,
@@ -67,15 +67,19 @@ fn register_shell_endpoint(
             limits,
             sense_ingress,
         });
-        registry
-            .register(shell_registration_descriptor(), endpoint)
+        spine
+            .register_inline_body_endpoint(
+                SHELL_ENDPOINT_NAME,
+                endpoint,
+                vec![shell_registration_descriptor()],
+            )
             .map_err(|err| anyhow!(err.to_string()))?;
         return Ok(());
     }
 
     #[cfg(not(feature = "std-shell"))]
     {
-        let _ = (registry, sense_ingress, limits);
+        let _ = (spine, sense_ingress, limits);
         Err(anyhow!(
             "body.std_shell.enabled=true but core is built without feature std-shell"
         ))
@@ -83,7 +87,7 @@ fn register_shell_endpoint(
 }
 
 fn register_web_endpoint(
-    registry: Arc<dyn EndpointRegistryPort>,
+    spine: Arc<Spine>,
     sense_ingress: SenseIngress,
     enabled: bool,
     limits: WebLimits,
@@ -98,15 +102,19 @@ fn register_web_endpoint(
             limits,
             sense_ingress,
         });
-        registry
-            .register(web_registration_descriptor(), endpoint)
+        spine
+            .register_inline_body_endpoint(
+                WEB_ENDPOINT_NAME,
+                endpoint,
+                vec![web_registration_descriptor()],
+            )
             .map_err(|err| anyhow!(err.to_string()))?;
         return Ok(());
     }
 
     #[cfg(not(feature = "std-web"))]
     {
-        let _ = (registry, sense_ingress, limits);
+        let _ = (spine, sense_ingress, limits);
         Err(anyhow!(
             "body.std_web.enabled=true but core is built without feature std-web"
         ))
@@ -157,7 +165,7 @@ impl EndpointPort for StdWebEndpoint {
 fn shell_registration_descriptor() -> EndpointCapabilityDescriptor {
     EndpointCapabilityDescriptor {
         route: RouteKey {
-            endpoint_id: SHELL_ENDPOINT_ID.to_string(),
+            endpoint_id: SHELL_ENDPOINT_NAME.to_string(),
             capability_id: SHELL_CAPABILITY_ID.to_string(),
         },
         payload_schema: serde_json::json!({
@@ -187,7 +195,7 @@ fn shell_registration_descriptor() -> EndpointCapabilityDescriptor {
 fn web_registration_descriptor() -> EndpointCapabilityDescriptor {
     EndpointCapabilityDescriptor {
         route: RouteKey {
-            endpoint_id: WEB_ENDPOINT_ID.to_string(),
+            endpoint_id: WEB_ENDPOINT_NAME.to_string(),
             capability_id: WEB_CAPABILITY_ID.to_string(),
         },
         payload_schema: serde_json::json!({

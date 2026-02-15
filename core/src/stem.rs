@@ -146,7 +146,7 @@ impl StemRuntime {
     ) -> Result<()> {
         eprintln!(
             "[stem] dispatch_attempt cycle={} seq={} act_id={} endpoint_id={} capability_id={}",
-            cycle_id, seq_no, act.act_id, act.endpoint_id, act.capability_id
+            cycle_id, seq_no, act.act_id, act.body_endpoint_name, act.capability_id
         );
         let ledger_ctx = LedgerDispatchContext {
             cycle_id,
