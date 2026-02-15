@@ -20,10 +20,7 @@ use crate::{
     runtime_types::{
         Act, CapabilityDropPatch, CapabilityPatch, RequestedResources, Sense, SenseDatum,
     },
-    spine::{
-        runtime::Spine,
-        types::{EndpointCapabilityDescriptor, RouteKey},
-    },
+    spine::{runtime::Spine, types::EndpointCapabilityDescriptor},
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -84,8 +81,6 @@ enum InboundBodyMessage {
         capabilities: Vec<EndpointCapabilityDescriptor>,
     },
     Sense(SenseDatum),
-    NewCapabilities(CapabilityPatch),
-    DropCapabilities(CapabilityDropPatch),
     Unplug,
 }
 
@@ -101,12 +96,6 @@ enum WireMessage {
         sense_id: String,
         source: String,
         payload: serde_json::Value,
-    },
-    NewCapabilities {
-        entries: Vec<EndpointCapabilityDescriptor>,
-    },
-    DropCapabilities {
-        routes: Vec<RouteKey>,
     },
     Unplug,
 }
@@ -133,12 +122,6 @@ fn parse_body_ingress_message(line: &str) -> Result<InboundBodyMessage, serde_js
                 source,
                 payload,
             })
-        }
-        WireMessage::NewCapabilities { entries } => {
-            InboundBodyMessage::NewCapabilities(CapabilityPatch { entries })
-        }
-        WireMessage::DropCapabilities { routes } => {
-            InboundBodyMessage::DropCapabilities(CapabilityDropPatch { routes })
         }
         WireMessage::Unplug => InboundBodyMessage::Unplug,
     };
@@ -410,59 +393,6 @@ async fn handle_body_endpoint(
                     }
                     if let Err(err) = ingress.send(Sense::Domain(sense)).await {
                         eprintln!("dropping sense due to closed ingress: {err}");
-                    }
-                }
-                InboundBodyMessage::NewCapabilities(patch) => {
-                    let Some(body_endpoint_id) = auth_endpoint_id else {
-                        eprintln!("new_capabilities rejected: endpoint must auth first");
-                        continue;
-                    };
-
-                    let mut registered_entries = Vec::new();
-                    for descriptor in patch.entries {
-                        match spine.register_body_endpoint_capability(body_endpoint_id, descriptor)
-                        {
-                            Ok(descriptor) => registered_entries.push(descriptor),
-                            Err(err) => {
-                                eprintln!("capability registration failed: {err:#}");
-                            }
-                        }
-                    }
-
-                    if !registered_entries.is_empty()
-                        && let Err(err) = ingress
-                            .send(Sense::NewCapabilities(CapabilityPatch {
-                                entries: registered_entries,
-                            }))
-                            .await
-                    {
-                        eprintln!("dropping new_capabilities due to closed ingress: {err}");
-                    }
-                }
-                InboundBodyMessage::DropCapabilities(drop_patch) => {
-                    let Some(body_endpoint_id) = auth_endpoint_id else {
-                        eprintln!("drop_capabilities rejected: endpoint must auth first");
-                        continue;
-                    };
-
-                    let mut dropped = Vec::new();
-                    for route in drop_patch.routes {
-                        if let Some(route) = spine.unregister_body_endpoint_capability(
-                            body_endpoint_id,
-                            &route.capability_id,
-                        ) {
-                            dropped.push(route);
-                        }
-                    }
-
-                    if !dropped.is_empty()
-                        && let Err(err) = ingress
-                            .send(Sense::DropCapabilities(CapabilityDropPatch {
-                                routes: dropped,
-                            }))
-                            .await
-                    {
-                        eprintln!("dropping drop_capabilities due to closed ingress: {err}");
                     }
                 }
             },
