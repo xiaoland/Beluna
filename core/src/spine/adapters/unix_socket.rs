@@ -4,10 +4,11 @@ use std::{
     os::unix::fs::FileTypeExt,
     path::{Path, PathBuf},
     sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::{Context, Result, bail};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     net::{UnixListener, UnixStream},
@@ -17,61 +18,21 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     ingress::SenseIngress,
-    runtime_types::{
-        Act, CapabilityDropPatch, CapabilityPatch, RequestedResources, Sense, SenseDatum,
-    },
+    runtime_types::{Act, CapabilityDropPatch, CapabilityPatch, Sense, SenseDatum},
     spine::{runtime::Spine, types::EndpointCapabilityDescriptor},
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-enum BodyEgressMessage {
-    Act {
-        act: Act,
-        action: LegacyAdmittedAction,
-    },
+struct NdjsonEnvelope<T> {
+    method: String,
+    id: String,
+    timestamp: u64,
+    body: T,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-struct LegacyAdmittedAction {
-    neural_signal_id: String,
-    capability_instance_id: String,
-    endpoint_id: String,
-    capability_id: String,
-    normalized_payload: serde_json::Value,
-    reserved_cost: LegacyCostVector,
-}
-
-impl From<&Act> for LegacyAdmittedAction {
-    fn from(act: &Act) -> Self {
-        Self {
-            neural_signal_id: act.act_id.clone(),
-            capability_instance_id: act.capability_instance_id.clone(),
-            endpoint_id: act.body_endpoint_name.clone(),
-            capability_id: act.capability_id.clone(),
-            normalized_payload: act.normalized_payload.clone(),
-            reserved_cost: LegacyCostVector::from(&act.requested_resources),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-struct LegacyCostVector {
-    survival_micro: i64,
-    time_ms: u64,
-    io_units: u64,
-    token_units: u64,
-}
-
-impl From<&RequestedResources> for LegacyCostVector {
-    fn from(resources: &RequestedResources) -> Self {
-        Self {
-            survival_micro: resources.survival_micro,
-            time_ms: resources.time_ms,
-            io_units: resources.io_units,
-            token_units: resources.token_units,
-        }
-    }
+struct OutboundActBody {
+    act: Act,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -85,47 +46,72 @@ enum InboundBodyMessage {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
-enum WireMessage {
-    Auth {
-        endpoint_name: String,
-        #[serde(default)]
-        capabilities: Vec<EndpointCapabilityDescriptor>,
-    },
-    Sense {
-        sense_id: String,
-        source: String,
-        payload: serde_json::Value,
-    },
-    Unplug,
+#[serde(deny_unknown_fields)]
+struct InboundAuthBody {
+    endpoint_name: String,
+    #[serde(default)]
+    capabilities: Vec<EndpointCapabilityDescriptor>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InboundSenseBody {
+    sense_id: String,
+    source: String,
+    payload: serde_json::Value,
 }
 
 fn parse_body_ingress_message(line: &str) -> Result<InboundBodyMessage, serde_json::Error> {
-    let wire: WireMessage = serde_json::from_str(line)?;
-    let message = match wire {
-        WireMessage::Auth {
-            endpoint_name,
-            capabilities,
-        } => InboundBodyMessage::Auth {
-            endpoint_name,
-            capabilities,
-        },
-        WireMessage::Sense {
-            sense_id,
-            source,
-            mut payload,
-        } => {
+    let wire: NdjsonEnvelope<serde_json::Value> = serde_json::from_str(line)?;
+    if uuid::Uuid::parse_str(&wire.id).is_err() {
+        return Err(invalid_correlated_sense_error(
+            "id must be a valid uuid-v4 string",
+        ));
+    }
+    if wire.timestamp == 0 {
+        return Err(invalid_correlated_sense_error(
+            "timestamp must be a non-zero utc epoch milliseconds integer",
+        ));
+    }
+
+    let message = match wire.method.as_str() {
+        "auth" => {
+            let body: InboundAuthBody = decode_envelope_body(wire.body)?;
+            InboundBodyMessage::Auth {
+                endpoint_name: body.endpoint_name,
+                capabilities: body.capabilities,
+            }
+        }
+        "sense" => {
+            let body: InboundSenseBody = decode_envelope_body(wire.body)?;
+            let mut payload = body.payload;
             normalize_correlated_sense_payload(&mut payload);
             validate_correlated_sense_payload(&payload)?;
             InboundBodyMessage::Sense(SenseDatum {
-                sense_id,
-                source,
+                sense_id: body.sense_id,
+                source: body.source,
                 payload,
             })
         }
-        WireMessage::Unplug => InboundBodyMessage::Unplug,
+        "unplug" => InboundBodyMessage::Unplug,
+        "act" => {
+            return Err(invalid_correlated_sense_error(
+                "direction violation: endpoint cannot send method 'act'",
+            ));
+        }
+        _ => {
+            return Err(invalid_correlated_sense_error(
+                "unsupported method, expected one of: auth|sense|unplug",
+            ));
+        }
     };
     Ok(message)
+}
+
+fn decode_envelope_body<T: DeserializeOwned>(
+    body: serde_json::Value,
+) -> Result<T, serde_json::Error> {
+    serde_json::from_value(body)
 }
 
 fn normalize_correlated_sense_payload(payload: &mut serde_json::Value) {
@@ -196,11 +182,20 @@ fn invalid_correlated_sense_error(message: &str) -> serde_json::Error {
 }
 
 fn encode_body_egress_act_message(act: &Act) -> Result<String, serde_json::Error> {
-    let encoded = serde_json::to_string(&BodyEgressMessage::Act {
-        act: act.clone(),
-        action: LegacyAdmittedAction::from(act),
+    let encoded = serde_json::to_string(&NdjsonEnvelope {
+        method: "act".to_string(),
+        id: uuid::Uuid::new_v4().to_string(),
+        timestamp: timestamp_millis(),
+        body: OutboundActBody { act: act.clone() },
     })?;
     Ok(format!("{encoded}\n"))
+}
+
+fn timestamp_millis() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
 }
 
 pub struct UnixSocketAdapter {
@@ -420,8 +415,8 @@ mod tests {
         runtime_types::{Act, RequestedResources},
         spine::{
             adapters::unix_socket::{
-                BodyEgressMessage, InboundBodyMessage, encode_body_egress_act_message,
-                parse_body_ingress_message,
+                InboundBodyMessage, NdjsonEnvelope, OutboundActBody,
+                encode_body_egress_act_message, parse_body_ingress_message,
             },
             types::EndpointCapabilityDescriptor,
         },
@@ -430,7 +425,7 @@ mod tests {
     #[test]
     fn accepts_sense_message() {
         let parsed = parse_body_ingress_message(
-            r#"{"type":"sense","sense_id":"s1","source":"sensor","payload":{"v":1}}"#,
+            r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"s1","source":"sensor","payload":{"v":1}}}"#,
         )
         .expect("sense message should parse");
         assert!(matches!(parsed, InboundBodyMessage::Sense(_)));
@@ -439,7 +434,7 @@ mod tests {
     #[test]
     fn accepts_correlated_sense_message_with_required_echo_fields() {
         let parsed = parse_body_ingress_message(
-            r#"{"type":"sense","sense_id":"s2","source":"body","payload":{"kind":"present_message_result","act_id":"act:1","capability_instance_id":"chat.1","endpoint_id":"macos-app.01","capability_id":"present.message"}}"#,
+            r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"s2","source":"body","payload":{"kind":"present_message_result","act_id":"act:1","capability_instance_id":"chat.1","endpoint_id":"macos-app.01","capability_id":"present.message"}}}"#,
         )
         .expect("correlated sense should parse");
         assert!(matches!(parsed, InboundBodyMessage::Sense(_)));
@@ -448,7 +443,7 @@ mod tests {
     #[test]
     fn accepts_legacy_correlated_sense_message_with_neural_signal_alias() {
         let parsed = parse_body_ingress_message(
-            r#"{"type":"sense","sense_id":"s2","source":"body","payload":{"kind":"present_message_result","neural_signal_id":"act:legacy","capability_instance_id":"chat.1","endpoint_id":"macos-app.01","capability_id":"present.message"}}"#,
+            r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"s2","source":"body","payload":{"kind":"present_message_result","neural_signal_id":"act:legacy","capability_instance_id":"chat.1","endpoint_id":"macos-app.01","capability_id":"present.message"}}}"#,
         )
         .expect("legacy correlated sense should parse");
 
@@ -467,17 +462,17 @@ mod tests {
     fn rejects_correlated_sense_message_missing_echo_fields() {
         assert!(
             parse_body_ingress_message(
-                r#"{"type":"sense","sense_id":"s3","source":"body","payload":{"kind":"present_message_result","act_id":"act:1","endpoint_id":"macos-app.01","capability_id":"present.message"}}"#
+                r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"s3","source":"body","payload":{"kind":"present_message_result","act_id":"act:1","endpoint_id":"macos-app.01","capability_id":"present.message"}}}"#
             )
             .is_err()
         );
     }
 
     #[test]
-    fn rejects_removed_admission_feedback_message() {
+    fn rejects_direction_violation_for_inbound_act_method() {
         assert!(
             parse_body_ingress_message(
-                r#"{"type":"admission_feedback","attempt_id":"att:1","code":"admitted"}"#
+                r#"{"method":"act","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{}}"#
             )
             .is_err()
         );
@@ -501,24 +496,20 @@ mod tests {
         };
 
         let encoded = encode_body_egress_act_message(&act).expect("act should encode");
-        let message: BodyEgressMessage =
+        let message: NdjsonEnvelope<OutboundActBody> =
             serde_json::from_str(encoded.trim_end()).expect("message should decode");
-        match message {
-            BodyEgressMessage::Act { act, action } => {
-                assert_eq!(act.act_id, "act:1");
-                assert_eq!(action.neural_signal_id, "act:1");
-                assert_eq!(action.capability_id, "present.message");
-                assert_eq!(action.reserved_cost.survival_micro, 120);
-                assert_eq!(action.reserved_cost.time_ms, 100);
-                assert_eq!(action.reserved_cost.io_units, 1);
-                assert_eq!(action.reserved_cost.token_units, 64);
-            }
-        }
-        assert!(encoded.contains("\"type\":\"act\""));
-        assert!(encoded.contains("\"act\":{"));
-        assert!(encoded.contains("\"action\":{"));
+        assert_eq!(message.method, "act");
+        assert!(uuid::Uuid::parse_str(&message.id).is_ok());
+        assert!(message.timestamp > 0);
+        assert_eq!(message.body.act.act_id, "act:1");
+        assert_eq!(message.body.act.capability_id, "present.message");
+        assert_eq!(message.body.act.requested_resources.survival_micro, 120);
+        assert_eq!(message.body.act.requested_resources.time_ms, 100);
+        assert_eq!(message.body.act.requested_resources.io_units, 1);
+        assert_eq!(message.body.act.requested_resources.token_units, 64);
+        assert!(encoded.contains("\"method\":\"act\""));
+        assert!(encoded.contains("\"body\":{"));
         assert!(encoded.contains("\"act_id\":\"act:1\""));
-        assert!(encoded.contains("\"neural_signal_id\":\"act:1\""));
         assert!(encoded.contains("\"capability_id\":\"present.message\""));
     }
 
@@ -542,9 +533,13 @@ mod tests {
         .expect("descriptor should decode");
 
         let wire = serde_json::json!({
-            "type": "auth",
-            "endpoint_name": "macos-app",
-            "capabilities": [descriptor]
+            "method": "auth",
+            "id": "2f8daebf-f529-4ea4-b322-7df109e86d66",
+            "timestamp": 1739500000000_u64,
+            "body": {
+                "endpoint_name": "macos-app",
+                "capabilities": [descriptor]
+            }
         });
 
         let parsed = parse_body_ingress_message(&wire.to_string()).expect("auth should parse");
