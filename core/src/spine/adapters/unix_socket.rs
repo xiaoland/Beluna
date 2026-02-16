@@ -13,10 +13,12 @@ use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     net::{UnixListener, UnixStream},
     sync::mpsc,
+    time::{Duration, Instant, timeout},
 };
 use tokio_util::sync::CancellationToken;
 
 use crate::{
+    cortex::{is_uuid_v4, is_uuid_v7},
     ingress::SenseIngress,
     runtime_types::{Act, CapabilityDropPatch, CapabilityPatch, Sense, SenseDatum},
     spine::{runtime::Spine, types::EndpointCapabilityDescriptor},
@@ -42,6 +44,9 @@ enum InboundBodyMessage {
         capabilities: Vec<EndpointCapabilityDescriptor>,
     },
     Sense(SenseDatum),
+    ActAck {
+        act_id: String,
+    },
     Unplug,
 }
 
@@ -61,9 +66,15 @@ struct InboundSenseBody {
     payload: serde_json::Value,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InboundActAckBody {
+    act_id: String,
+}
+
 fn parse_body_ingress_message(line: &str) -> Result<InboundBodyMessage, serde_json::Error> {
     let wire: NdjsonEnvelope<serde_json::Value> = serde_json::from_str(line)?;
-    if uuid::Uuid::parse_str(&wire.id).is_err() {
+    if !is_uuid_v4(&wire.id) {
         return Err(invalid_correlated_sense_error(
             "id must be a valid uuid-v4 string",
         ));
@@ -87,11 +98,27 @@ fn parse_body_ingress_message(line: &str) -> Result<InboundBodyMessage, serde_js
             let mut payload = body.payload;
             normalize_correlated_sense_payload(&mut payload);
             validate_correlated_sense_payload(&payload)?;
+            if !is_uuid_v4(&body.sense_id) {
+                return Err(invalid_correlated_sense_error(
+                    "sense_id must be a valid uuid-v4 string",
+                ));
+            }
             InboundBodyMessage::Sense(SenseDatum {
                 sense_id: body.sense_id,
                 source: body.source,
                 payload,
             })
+        }
+        "act_ack" => {
+            let body: InboundActAckBody = decode_envelope_body(wire.body)?;
+            if !is_uuid_v7(&body.act_id) {
+                return Err(invalid_correlated_sense_error(
+                    "act_ack.act_id must be a valid uuid-v7 string",
+                ));
+            }
+            InboundBodyMessage::ActAck {
+                act_id: body.act_id,
+            }
         }
         "unplug" => InboundBodyMessage::Unplug,
         "act" => {
@@ -101,7 +128,7 @@ fn parse_body_ingress_message(line: &str) -> Result<InboundBodyMessage, serde_js
         }
         _ => {
             return Err(invalid_correlated_sense_error(
-                "unsupported method, expected one of: auth|sense|unplug",
+                "unsupported method, expected one of: auth|sense|act_ack|unplug",
             ));
         }
     };
@@ -147,13 +174,9 @@ fn validate_correlated_sense_payload(payload: &serde_json::Value) -> Result<(), 
         return Ok(());
     };
 
-    if act_id
-        .as_str()
-        .map(|value| value.trim().is_empty())
-        .unwrap_or(true)
-    {
+    if !act_id.as_str().map(is_uuid_v7).unwrap_or(false) {
         return Err(invalid_correlated_sense_error(
-            "act_id must be a non-empty string",
+            "act_id must be a valid uuid-v7 string",
         ));
     }
 
@@ -290,6 +313,34 @@ impl UnixSocketAdapter {
     }
 }
 
+const ACT_ACK_TIMEOUT_MS: u64 = 1_500;
+const ACT_ACK_MAX_RETRIES: usize = 2;
+
+async fn wait_for_act_ack(
+    ack_rx: &mut mpsc::UnboundedReceiver<String>,
+    act_id: &str,
+    timeout_ms: u64,
+) -> bool {
+    let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+    loop {
+        let now = Instant::now();
+        if now >= deadline {
+            return false;
+        }
+
+        let remaining = deadline.duration_since(now);
+        match timeout(remaining, ack_rx.recv()).await {
+            Ok(Some(received_act_id)) => {
+                if received_act_id == act_id {
+                    return true;
+                }
+            }
+            Ok(None) => return false,
+            Err(_) => return false,
+        }
+    }
+}
+
 async fn handle_body_endpoint(
     stream: UnixStream,
     ingress: SenseIngress,
@@ -300,12 +351,36 @@ async fn handle_body_endpoint(
 
     let (outbound_tx, mut outbound_rx) = mpsc::unbounded_channel::<Act>();
     let channel_id = spine.on_adapter_channel_open(adapter_id, outbound_tx);
+    let (ack_tx, mut ack_rx) = mpsc::unbounded_channel::<String>();
 
     let writer_task = tokio::spawn(async move {
         while let Some(act) = outbound_rx.recv().await {
-            let encoded = encode_body_egress_act_message(&act)?;
-            write_half.write_all(encoded.as_bytes()).await?;
-            write_half.flush().await?;
+            let mut acknowledged = false;
+            for attempt in 0..=ACT_ACK_MAX_RETRIES {
+                let encoded = encode_body_egress_act_message(&act)?;
+                write_half.write_all(encoded.as_bytes()).await?;
+                write_half.flush().await?;
+
+                if wait_for_act_ack(&mut ack_rx, &act.act_id, ACT_ACK_TIMEOUT_MS).await {
+                    acknowledged = true;
+                    break;
+                }
+
+                if attempt < ACT_ACK_MAX_RETRIES {
+                    eprintln!(
+                        "act ack timeout, retrying dispatch act_id={} attempt={}",
+                        act.act_id,
+                        attempt + 1
+                    );
+                }
+            }
+
+            if !acknowledged {
+                return Err(anyhow::anyhow!(
+                    "failed to receive act_ack after retries for act_id={}",
+                    act.act_id
+                ));
+            }
         }
 
         Ok::<(), anyhow::Error>(())
@@ -368,6 +443,11 @@ async fn handle_body_endpoint(
                         eprintln!("dropping capability patch after auth: {err}");
                     }
                 }
+                InboundBodyMessage::ActAck { act_id } => {
+                    if ack_tx.send(act_id).is_err() {
+                        eprintln!("dropping act_ack because writer has closed");
+                    }
+                }
                 InboundBodyMessage::Unplug => {
                     if let Some(body_endpoint_id) = auth_endpoint_id {
                         let routes = spine.remove_body_endpoint(body_endpoint_id);
@@ -425,7 +505,7 @@ mod tests {
     #[test]
     fn accepts_sense_message() {
         let parsed = parse_body_ingress_message(
-            r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"s1","source":"sensor","payload":{"v":1}}}"#,
+            r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"41f25f33-99f5-4250-99c3-020f8a92e199","source":"sensor","payload":{"v":1}}}"#,
         )
         .expect("sense message should parse");
         assert!(matches!(parsed, InboundBodyMessage::Sense(_)));
@@ -434,7 +514,7 @@ mod tests {
     #[test]
     fn accepts_correlated_sense_message_with_required_echo_fields() {
         let parsed = parse_body_ingress_message(
-            r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"s2","source":"body","payload":{"kind":"present_message_result","act_id":"act:1","capability_instance_id":"chat.1","endpoint_id":"macos-app.01","capability_id":"present.message"}}}"#,
+            r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"9d60f110-af6d-42cb-853b-bf6f6ce6f0dc","source":"body","payload":{"kind":"present_message_result","act_id":"0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a","capability_instance_id":"chat.1","endpoint_id":"macos-app.01","capability_id":"present.message"}}}"#,
         )
         .expect("correlated sense should parse");
         assert!(matches!(parsed, InboundBodyMessage::Sense(_)));
@@ -443,7 +523,7 @@ mod tests {
     #[test]
     fn accepts_legacy_correlated_sense_message_with_neural_signal_alias() {
         let parsed = parse_body_ingress_message(
-            r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"s2","source":"body","payload":{"kind":"present_message_result","neural_signal_id":"act:legacy","capability_instance_id":"chat.1","endpoint_id":"macos-app.01","capability_id":"present.message"}}}"#,
+            r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"9d60f110-af6d-42cb-853b-bf6f6ce6f0dc","source":"body","payload":{"kind":"present_message_result","neural_signal_id":"0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a","capability_instance_id":"chat.1","endpoint_id":"macos-app.01","capability_id":"present.message"}}}"#,
         )
         .expect("legacy correlated sense should parse");
 
@@ -451,7 +531,7 @@ mod tests {
             InboundBodyMessage::Sense(sense) => {
                 assert_eq!(
                     sense.payload.get("act_id"),
-                    Some(&serde_json::json!("act:legacy"))
+                    Some(&serde_json::json!("0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a"))
                 );
             }
             _ => panic!("expected sense message"),
@@ -462,7 +542,7 @@ mod tests {
     fn rejects_correlated_sense_message_missing_echo_fields() {
         assert!(
             parse_body_ingress_message(
-                r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"s3","source":"body","payload":{"kind":"present_message_result","act_id":"act:1","endpoint_id":"macos-app.01","capability_id":"present.message"}}}"#
+                r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"01234567-89ab-4cde-8f01-23456789abcd","source":"body","payload":{"kind":"present_message_result","act_id":"0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a","endpoint_id":"macos-app.01","capability_id":"present.message"}}}"#
             )
             .is_err()
         );
@@ -481,8 +561,8 @@ mod tests {
     #[test]
     fn act_encoding_contains_act_and_target_fields() {
         let act = Act {
-            act_id: "act:1".to_string(),
-            based_on: vec!["s1".to_string()],
+            act_id: "0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a".to_string(),
+            based_on: vec!["41f25f33-99f5-4250-99c3-020f8a92e199".to_string()],
             body_endpoint_name: "macos-app.01".to_string(),
             capability_id: "present.message".to_string(),
             capability_instance_id: "chat.instance".to_string(),
@@ -501,7 +581,10 @@ mod tests {
         assert_eq!(message.method, "act");
         assert!(uuid::Uuid::parse_str(&message.id).is_ok());
         assert!(message.timestamp > 0);
-        assert_eq!(message.body.act.act_id, "act:1");
+        assert_eq!(
+            message.body.act.act_id,
+            "0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a"
+        );
         assert_eq!(message.body.act.capability_id, "present.message");
         assert_eq!(message.body.act.requested_resources.survival_micro, 120);
         assert_eq!(message.body.act.requested_resources.time_ms, 100);
@@ -509,7 +592,7 @@ mod tests {
         assert_eq!(message.body.act.requested_resources.token_units, 64);
         assert!(encoded.contains("\"method\":\"act\""));
         assert!(encoded.contains("\"body\":{"));
-        assert!(encoded.contains("\"act_id\":\"act:1\""));
+        assert!(encoded.contains("\"act_id\":\"0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a\""));
         assert!(encoded.contains("\"capability_id\":\"present.message\""));
     }
 

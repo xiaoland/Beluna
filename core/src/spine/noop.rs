@@ -33,13 +33,8 @@ impl SpineExecutorPort for DeterministicNoopSpine {
     }
 
     async fn dispatch_act(&self, act: Act) -> Result<EndpointExecutionOutcome, SpineError> {
-        if act.act_id.trim().is_empty()
-            || act.body_endpoint_name.trim().is_empty()
-            || act.capability_id.trim().is_empty()
-        {
-            return Err(invalid_batch(
-                "act dispatch is missing act_id/endpoint_id/capability_id",
-            ));
+        if act.act_id.trim().is_empty() || act.body_endpoint_name.trim().is_empty() {
+            return Err(invalid_batch("act dispatch is missing act_id/endpoint_id"));
         }
 
         Ok(EndpointExecutionOutcome::Applied {

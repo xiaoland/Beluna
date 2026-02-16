@@ -16,7 +16,7 @@ pub struct WebHandlerOutput {
 }
 
 pub async fn handle_web_invoke(
-    request_id: &str,
+    _request_id: &str,
     act: &Act,
     limits: &WebLimits,
 ) -> WebHandlerOutput {
@@ -82,7 +82,18 @@ pub async fn handle_web_invoke(
         }
     };
 
-    let client = Client::new();
+    let client = match Client::builder().no_proxy().build() {
+        Ok(client) => client,
+        Err(_) => {
+            return WebHandlerOutput {
+                outcome: EndpointExecutionOutcome::Rejected {
+                    reason_code: "network_error".to_string(),
+                    reference_id: format!("body.std.web:client_build_error:{}", act.act_id),
+                },
+                sense: None,
+            };
+        }
+    };
     let timeout_ms = web_request.timeout_ms(limits);
     let response_cap = web_request.response_max_bytes(limits);
 
@@ -146,7 +157,7 @@ pub async fn handle_web_invoke(
             reference_id: format!("body.std.web:applied:{}", act.act_id),
         },
         sense: Some(SenseDatum {
-            sense_id: format!("sense:web:{request_id}"),
+            sense_id: uuid::Uuid::new_v4().to_string(),
             source: "body.std.web".to_string(),
             payload: serde_json::json!({
                 "kind": "web_fetch_result",

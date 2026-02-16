@@ -7,4 +7,4 @@ Cortex is a stateless cognition boundary that consumes a drained sense batch plu
 - Cortex does not durably persist cognition/goal state internally.
 - Primary output is prose IR; sub-stages compile to structured drafts.
 - Deterministic clamp is final authority before act emission.
-- `act_id` derivation is deterministic.
+- `act_id` derivation follows current contract constraints defined by product direction.

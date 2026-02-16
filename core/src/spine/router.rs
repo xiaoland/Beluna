@@ -66,12 +66,9 @@ impl SpineExecutorPort for RoutingSpineExecutor {
     }
 
     async fn dispatch_act(&self, act: Act) -> Result<EndpointExecutionOutcome, SpineError> {
-        if act.act_id.trim().is_empty()
-            || act.body_endpoint_name.trim().is_empty()
-            || act.capability_id.trim().is_empty()
-        {
+        if act.act_id.trim().is_empty() || act.body_endpoint_name.trim().is_empty() {
             return Err(crate::spine::error::invalid_batch(
-                "act dispatch is missing act_id/endpoint_id/capability_id",
+                "act dispatch is missing act_id/endpoint_id",
             ));
         }
 
