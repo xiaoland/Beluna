@@ -3,11 +3,28 @@
 ## Core
 
 - [x] 把 beluan core 的配置文件合并进入 beluna runtime, beluna core 只是一个 crate，它没有 main
-- [ ] Cortex adapters makes no sense，和 AI Gateway 强耦合是预期的行为
 - [x] Cortex 为核心，Stem 为枢纽；Organs (Spine, Continuity, Ledger, Motor) 为外围的有机结构
-- [ ] 日志写入本地文件，采用 json log
+- [ ] 移除所有的 TelemetrySink port，直接用 tracing，而后日志写入本地文件（采用 json log）
+- [ ] core/src/body 就是 std body 了，不用再包一层
+- [ ] ingress 破坏了 Beluna 的生物学隐喻式命名，我建议 pathway (afferent pathway)
+- [ ] ingress 应该包含创建 mpsc queue 的部分
+- [ ] 有 legder/ledger.rs，那为什么没有 cortex/cortex.rs 和 spine/spine.rs 呢
+- [ ] 可不可以在 Spine, Cortex runtime 内实现 singleton 而不是 module 级别呢？
+
+### Cortex
+
+- [ ] Cortex adapters makes no sense，和 AI Gateway 强耦合是预期的行为
 - [ ] Cortex contracts 中的 Act, Sense, Capability 移动到 types 中
 - [ ] Cortex Config 来配置用什么 ai-provider-string 为 Primary, Serialize, Deserialize 等等
+
+### Spine
+
+- [ ] adapters/catalog_bridge 是什么鬼
+- [ ] 我没有看到 inline adapter
+- [ ] 移除 body_endpoint_id ，name就是 id
+- [ ] 为什么要在 Spine runtime 中维护 adapter channel?
+- [ ] 测试应该在 tests/ 下面，有什么特殊的理由要 aside src 吗？
+- [ ] new spine 不代表马上就要 start 啊
 
 ### AI Gateway
 
