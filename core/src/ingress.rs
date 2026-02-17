@@ -8,7 +8,7 @@ use std::{
 
 use tokio::sync::{Mutex, mpsc};
 
-use crate::runtime_types::Sense;
+use crate::types::Sense;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IngressErrorKind {

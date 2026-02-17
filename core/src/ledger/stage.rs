@@ -6,8 +6,8 @@ use crate::{
         SurvivalLedger,
         types::{PolicyVersionTuple, ReservationState},
     },
-    runtime_types::{Act, DispatchDecision, PhysicalLedgerSnapshot},
     spine::types::SpineEvent,
+    types::{Act, DispatchDecision, PhysicalLedgerSnapshot},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]

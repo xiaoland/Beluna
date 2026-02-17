@@ -1,9 +1,9 @@
 use beluna::{
     cortex::{
-        AttemptClampPort, AttemptClampRequest, AttemptDraft, CapabilityCatalog,
-        DeterministicAttemptClamp, ReactionLimits, derive_act_id, is_uuid_v7,
+        AttemptClampRequest, AttemptDraft, CapabilityCatalog, DeterministicAttemptClamp,
+        ReactionLimits, derive_act_id, is_uuid_v7,
     },
-    runtime_types::RequestedResources,
+    types::RequestedResources,
 };
 
 fn catalog() -> CapabilityCatalog {

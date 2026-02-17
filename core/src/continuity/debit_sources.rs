@@ -5,10 +5,6 @@ use crate::{
     continuity::types::ExternalDebitObservation,
 };
 
-pub trait ExternalDebitSourcePort: Send + Sync {
-    fn drain_observations(&self) -> Vec<ExternalDebitObservation>;
-}
-
 #[derive(Default)]
 pub struct InMemoryDebitSource {
     observations: Mutex<VecDeque<ExternalDebitObservation>>,
@@ -20,10 +16,8 @@ impl InMemoryDebitSource {
             guard.push_back(observation);
         }
     }
-}
 
-impl ExternalDebitSourcePort for InMemoryDebitSource {
-    fn drain_observations(&self) -> Vec<ExternalDebitObservation> {
+    pub fn drain_observations(&self) -> Vec<ExternalDebitObservation> {
         let mut out = Vec::new();
         if let Ok(mut guard) = self.observations.lock() {
             while let Some(item) = guard.pop_front() {
@@ -54,8 +48,8 @@ impl Default for AIGatewayApproxDebitSource {
     }
 }
 
-impl ExternalDebitSourcePort for AIGatewayApproxDebitSource {
-    fn drain_observations(&self) -> Vec<ExternalDebitObservation> {
+impl AIGatewayApproxDebitSource {
+    pub fn drain_observations(&self) -> Vec<ExternalDebitObservation> {
         let mut out = Vec::new();
         if let Ok(mut guard) = self.queue.lock() {
             while let Some(item) = guard.pop_front() {

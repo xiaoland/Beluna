@@ -5,8 +5,8 @@ use crate::{
         types::{ContinuityDispatchRecord, DispatchContext},
     },
     cortex::CapabilityCatalog,
-    runtime_types::{Act, CapabilityDropPatch, CapabilityPatch, CognitionState, DispatchDecision},
     spine::types::SpineEvent,
+    types::{Act, CapabilityDropPatch, CapabilityPatch, CognitionState, DispatchDecision},
 };
 
 #[derive(Debug, Clone, Default)]

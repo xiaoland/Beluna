@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::runtime_types::{Act, CognitionState, RequestedResources, SenseId};
+use crate::types::{Act, CognitionState, RequestedResources, SenseId};
 
 pub type AttentionTag = String;
 

@@ -1,47 +1,14 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
-
 use beluna::{
     cortex::{
-        AttemptDraft, AttemptExtractorPort, AttemptExtractorRequest, CortexPipeline, CortexPort,
-        NoopTelemetryPort, PrimaryReasonerPort, PrimaryReasonerRequest, ProseIr, ReactionLimits,
+        AttemptDraft, AttemptExtractorHook, Cortex, PrimaryReasonerHook, ProseIr, ReactionLimits,
     },
-    runtime_types::{
+    types::{
         CognitionState, PhysicalLedgerSnapshot, PhysicalState, RequestedResources, Sense,
         SenseDatum,
     },
 };
-
-#[derive(Clone)]
-struct StaticPrimary;
-
-#[async_trait]
-impl PrimaryReasonerPort for StaticPrimary {
-    async fn infer_ir(
-        &self,
-        _req: PrimaryReasonerRequest,
-    ) -> Result<ProseIr, beluna::cortex::CortexError> {
-        Ok(ProseIr {
-            text: "ir".to_string(),
-        })
-    }
-}
-
-#[derive(Clone)]
-struct StaticExtractor {
-    drafts: Vec<AttemptDraft>,
-}
-
-#[async_trait]
-impl AttemptExtractorPort for StaticExtractor {
-    async fn extract(
-        &self,
-        _req: AttemptExtractorRequest,
-    ) -> Result<Vec<AttemptDraft>, beluna::cortex::CortexError> {
-        Ok(self.drafts.clone())
-    }
-}
 
 fn base_physical_state() -> PhysicalState {
     PhysicalState {
@@ -79,16 +46,25 @@ fn valid_draft() -> AttemptDraft {
     }
 }
 
+fn build_pipeline(drafts: Vec<AttemptDraft>) -> Cortex {
+    let primary: PrimaryReasonerHook = Arc::new(|_req| {
+        Box::pin(async {
+            Ok(ProseIr {
+                text: "ir".to_string(),
+            })
+        })
+    });
+    let extractor: AttemptExtractorHook = Arc::new(move |_req| {
+        let drafts = drafts.clone();
+        Box::pin(async move { Ok(drafts) })
+    });
+
+    Cortex::for_test_with_hooks(primary, extractor, ReactionLimits::default())
+}
+
 #[tokio::test]
 async fn cortex_pipeline_emits_acts_and_new_cognition() {
-    let pipeline = CortexPipeline::new(
-        Arc::new(StaticPrimary),
-        Arc::new(StaticExtractor {
-            drafts: vec![valid_draft()],
-        }),
-        Arc::new(NoopTelemetryPort),
-        ReactionLimits::default(),
-    );
+    let pipeline = build_pipeline(vec![valid_draft()]);
 
     let output = pipeline
         .cortex(
@@ -109,12 +85,7 @@ async fn cortex_pipeline_emits_acts_and_new_cognition() {
 
 #[tokio::test]
 async fn cortex_pipeline_rejects_sleep_sense() {
-    let pipeline = CortexPipeline::new(
-        Arc::new(StaticPrimary),
-        Arc::new(StaticExtractor { drafts: vec![] }),
-        Arc::new(NoopTelemetryPort),
-        ReactionLimits::default(),
-    );
+    let pipeline = build_pipeline(vec![]);
 
     let err = pipeline
         .cortex(
@@ -132,13 +103,7 @@ async fn cortex_pipeline_rejects_sleep_sense() {
 
 #[tokio::test]
 async fn cortex_pipeline_allows_noop_when_extractor_empty() {
-    let limits = ReactionLimits::default();
-    let pipeline = CortexPipeline::new(
-        Arc::new(StaticPrimary),
-        Arc::new(StaticExtractor { drafts: vec![] }),
-        Arc::new(NoopTelemetryPort),
-        limits,
-    );
+    let pipeline = build_pipeline(vec![]);
 
     let output = pipeline
         .cortex(

@@ -6,8 +6,8 @@ use tokio::time::{Duration, timeout};
 
 use crate::{
     body::std::payloads::{WebFetchRequest, WebLimits},
-    runtime_types::{Act, SenseDatum},
     spine::types::EndpointExecutionOutcome,
+    types::{Act, SenseDatum},
 };
 
 pub struct WebHandlerOutput {
@@ -204,8 +204,8 @@ mod tests {
     };
 
     use crate::{
-        runtime_types::{Act, RequestedResources},
         spine::types::EndpointExecutionOutcome,
+        types::{Act, RequestedResources},
     };
 
     use super::{WebLimits, handle_web_invoke};

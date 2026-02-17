@@ -4,17 +4,25 @@ use uuid::Uuid;
 use crate::{
     cortex::{
         error::{CortexError, internal_error},
-        ports::{AttemptClampPort, AttemptClampRequest},
         types::{AttemptDraft, ClampResult, ClampViolation, ClampViolationCode},
     },
-    runtime_types::{Act, RequestedResources, SenseId},
+    types::{Act, RequestedResources, SenseId},
 };
+
+#[derive(Debug, Clone)]
+pub struct AttemptClampRequest {
+    pub cycle_id: u64,
+    pub drafts: Vec<AttemptDraft>,
+    pub capability_catalog: crate::cortex::CapabilityCatalog,
+    pub known_sense_ids: Vec<SenseId>,
+    pub limits: crate::cortex::ReactionLimits,
+}
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct DeterministicAttemptClamp;
 
-impl AttemptClampPort for DeterministicAttemptClamp {
-    fn clamp(&self, req: AttemptClampRequest) -> Result<ClampResult, CortexError> {
+impl DeterministicAttemptClamp {
+    pub fn clamp(&self, req: AttemptClampRequest) -> Result<ClampResult, CortexError> {
         let mut drafts = req.drafts.clone();
         drafts.sort_by(|lhs, rhs| {
             lhs.endpoint_id
@@ -64,9 +72,7 @@ impl AttemptClampPort for DeterministicAttemptClamp {
             original_drafts: req.drafts,
         })
     }
-}
 
-impl DeterministicAttemptClamp {
     fn validate_and_build_act(
         &self,
         cycle_id: u64,

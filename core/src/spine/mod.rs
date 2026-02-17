@@ -3,20 +3,14 @@
 use std::sync::{Arc, OnceLock};
 
 pub mod adapters;
+pub mod endpoint;
 pub mod error;
-pub mod noop;
-pub mod ports;
-pub mod registry;
-pub mod router;
 pub mod runtime;
 pub mod types;
 
+pub use endpoint::{Endpoint, NativeFunctionEndpoint};
 pub use error::{SpineError, SpineErrorKind};
-pub use noop::DeterministicNoopSpine;
-pub use ports::{EndpointPort, EndpointRegistryPort, SpineExecutorPort};
-pub use registry::InMemoryEndpointRegistry;
-pub use router::{NativeFunctionEndpoint, RoutingSpineExecutor};
-pub use runtime::{Spine, SpineHandle, shutdown_global_spine};
+pub use runtime::{EndpointBinding, Spine, shutdown_global_spine};
 pub use types::{
     CostAttributionId, CostVector, EndpointCapabilityDescriptor, EndpointExecutionOutcome,
     ReserveEntryId, RouteKey, SpineCapabilityCatalog, SpineEvent, SpineExecutionMode,
@@ -32,8 +26,4 @@ pub fn install_global_spine(spine: Arc<Spine>) -> Result<(), SpineError> {
 
 pub fn global_spine() -> Option<Arc<Spine>> {
     GLOBAL_SPINE.get().cloned()
-}
-
-pub fn global_executor() -> Option<Arc<dyn SpineExecutorPort>> {
-    global_spine().map(|spine| spine.executor_port())
 }

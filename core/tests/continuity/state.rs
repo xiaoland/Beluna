@@ -1,9 +1,7 @@
 use beluna::{
     continuity::{ContinuityEngine, ContinuityState, DispatchContext},
-    runtime_types::{
-        Act, CapabilityDropPatch, CapabilityPatch, CognitionState, RequestedResources,
-    },
     spine::types::{EndpointCapabilityDescriptor, RouteKey, SpineEvent},
+    types::{Act, CapabilityDropPatch, CapabilityPatch, CognitionState, RequestedResources},
 };
 
 fn descriptor(

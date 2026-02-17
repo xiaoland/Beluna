@@ -5,8 +5,8 @@ use anyhow::{Result, anyhow};
 use crate::{
     body::std::payloads::{ShellLimits, WebLimits},
     ingress::SenseIngress,
-    runtime_types::{Act, Sense},
     spine::runtime::Spine,
+    types::{Act, Sense},
 };
 
 #[cfg(any(feature = "std-shell", feature = "std-web"))]
@@ -20,8 +20,8 @@ use crate::body::std::web::handle_web_invoke;
 
 #[cfg(any(feature = "std-shell", feature = "std-web"))]
 use crate::spine::{
-    EndpointCapabilityDescriptor, EndpointExecutionOutcome, RouteKey, error::SpineError,
-    ports::EndpointPort, types::CostVector,
+    Endpoint, EndpointBinding, EndpointCapabilityDescriptor, EndpointExecutionOutcome, RouteKey,
+    error::SpineError, types::CostVector,
 };
 
 pub mod payloads;
@@ -63,14 +63,14 @@ fn register_shell_endpoint(
 
     #[cfg(feature = "std-shell")]
     {
-        let endpoint: Arc<dyn EndpointPort> = Arc::new(StdShellEndpoint {
+        let endpoint: Arc<dyn Endpoint> = Arc::new(StdShellEndpoint {
             limits,
             sense_ingress,
         });
         spine
-            .register_inline_body_endpoint(
+            .add_endpoint(
                 SHELL_ENDPOINT_NAME,
-                endpoint,
+                EndpointBinding::Inline(endpoint),
                 vec![shell_registration_descriptor()],
             )
             .map_err(|err| anyhow!(err.to_string()))?;
@@ -98,14 +98,14 @@ fn register_web_endpoint(
 
     #[cfg(feature = "std-web")]
     {
-        let endpoint: Arc<dyn EndpointPort> = Arc::new(StdWebEndpoint {
+        let endpoint: Arc<dyn Endpoint> = Arc::new(StdWebEndpoint {
             limits,
             sense_ingress,
         });
         spine
-            .register_inline_body_endpoint(
+            .add_endpoint(
                 WEB_ENDPOINT_NAME,
-                endpoint,
+                EndpointBinding::Inline(endpoint),
                 vec![web_registration_descriptor()],
             )
             .map_err(|err| anyhow!(err.to_string()))?;
@@ -135,7 +135,7 @@ struct StdWebEndpoint {
 
 #[cfg(feature = "std-shell")]
 #[async_trait]
-impl EndpointPort for StdShellEndpoint {
+impl Endpoint for StdShellEndpoint {
     async fn invoke(&self, act: Act) -> Result<EndpointExecutionOutcome, SpineError> {
         let request_id = format!("builtin-shell:{}", act.act_id);
         let output = handle_shell_invoke(&request_id, &act, &self.limits).await;
@@ -149,7 +149,7 @@ impl EndpointPort for StdShellEndpoint {
 
 #[cfg(feature = "std-web")]
 #[async_trait]
-impl EndpointPort for StdWebEndpoint {
+impl Endpoint for StdWebEndpoint {
     async fn invoke(&self, act: Act) -> Result<EndpointExecutionOutcome, SpineError> {
         let request_id = format!("builtin-web:{}", act.act_id);
         let output = handle_web_invoke(&request_id, &act, &self.limits).await;

@@ -2,17 +2,17 @@
 
 ## Summary
 
-Remove all hexagonal architecture patterns from `core/` in one cutover by replacing trait-port/adapter indirection with concrete, direct module composition.  
-Goal: keep behavior identical while reducing abstraction layers, dynamic dispatch, and "port/adapter/noop" scaffolding.
+Perform a single cutover in `core/` to remove business-path hexagonal runtime indirection (`*Port` trait objects and noop architecture layers), while preserving behavior.
+Goal: keep behavior identical while reducing unnecessary abstraction layers and dynamic dispatch in the main runtime path.
 
-## Inventory Of Hexagonal Patterns To Remove
+## Scope And Inventory
 
 1. `spine` port interfaces and runtime polymorphism:
 
    - `core/src/spine/ports.rs` (`EndpointPort`, `EndpointRegistryPort`, `SpineExecutorPort`)
    - `Arc<dyn ...Port>` usage in `core/src/spine/runtime.rs`, `core/src/spine/router.rs`, `core/src/spine/registry.rs`, `core/src/stem.rs`, `core/src/main.rs`
    - `core/src/spine/noop.rs` (`DeterministicNoopSpine`)
-   - `core/src/spine/adapters/*` as architecture “adapter shell” layer (`mod.rs`, `unix_socket.rs`, `catalog_bridge.rs`)
+   - Keep `core/src/spine/adapters/*` as concrete transport/integration modules (not architecture-level adapter shells)
 
 2. `cortex` port interfaces and adapter layer:
 
@@ -27,76 +27,77 @@ Goal: keep behavior identical while reducing abstraction layers, dynamic dispatc
    - `core/src/continuity/noop.rs` (`SpinePortAdapter`, `NoopDebitSource`)
    - `core/src/continuity/debit_sources.rs` (`ExternalDebitSourcePort` trait abstraction)
 
-4. `ai_gateway` internal port-like abstraction:
+4. `ai_gateway` internal library abstractions (out of scope in this cutover):
 
    - `core/src/ai_gateway/adapters/mod.rs` (`BackendAdapter` trait + `HashMap<BackendDialect, Arc<dyn BackendAdapter>>`)
    - Trait-object adapter dispatch in `core/src/ai_gateway/gateway.rs`
    - `CredentialProvider` trait-object wiring in gateway construction path (`Arc<dyn CredentialProvider>`)
 
-5. Test-suite hex patterns (must be updated with runtime):
+5. Test-suite wiring patterns (update only where required by API changes):
 
-   - Trait-based mocks/fakes in `core/tests/stem/*`, `core/tests/cortex/*`, `core/tests/spine/*`
-   - `Arc<dyn ...Port>` test setup throughout the above files
+   - Trait-based mocks/fakes in `core/tests/stem/*`, `core/tests/cortex/*`, `core/tests/spine/*` when they block concrete runtime migration
+   - `Arc<dyn ...Port>` setup throughout the above files
 
 ## Target Design (Post-Cutover)
 
 1. Spine becomes concrete:
 
-    - `Spine` owns a concrete `InMemoryEndpointRegistry` and concrete dispatch method.
-    - Remove `RoutingSpineExecutor` and call concrete `Spine::dispatch_act(...)` directly.
-    - ~Keep Unix socket transport as a normal module under spine, not “adapter architecture”; rename module path to transport-oriented naming (for example `spine/transport/unix_socket.rs`) in same cutover.~
-      - 这个不能采纳，保留这层 adapter
+   - `Spine` owns a concrete `InMemoryEndpointRegistry` and concrete dispatch method.
+   - Remove `RoutingSpineExecutor` and call concrete `Spine::dispatch_act(...)` directly.
+   - Keep existing `spine/adapters/*` layout, but treat it as concrete transport/integration code.
 
 2. Cortex becomes concrete pipeline:
 
    - `CortexPipeline` stores concrete collaborators, not traits.
-   - Replace `AIGatewayPrimaryReasoner`/`AIGatewayAttemptExtractor` “adapter”role direct calls into `AIGateway` from pipeline. （建议先重构 AI Gateway）
+   - Replace `AIGatewayPrimaryReasoner`/`AIGatewayAttemptExtractor` “adapter” role direct calls into `AIGateway` from pipeline. （建议先重构 AI Gateway）
    - Remove telemetry port trait and use concrete telemetry sink struct/callback type.
 
 3. Continuity stays concrete-only:
 
-- Delete `ports.rs` and `noop.rs`.
-- Replace `ExternalDebitSourcePort` trait with concrete source structs consumed directly.
+   - Delete `ports.rs` and `noop.rs`.
+   - Replace `ExternalDebitSourcePort` trait with concrete source structs consumed directly.
 
-1. ~AI Gateway provider dispatch becomes enum-based concrete dispatch:~ （这个不做，AI Gateway 作为一个 lib 性质的模块，这种程度的抽象是有必要的）
+4. AI Gateway keeps current internal abstraction in this cutover:
 
-   - Replace `BackendAdapter` trait-object map with `BackendClient` enum (`OpenAiCompatible`, `Ollama`, `GitHubCopilot`).
-   - Use `match` dispatch in `gateway.rs`.
-   - Replace `CredentialProvider` trait object with a concrete credential resolver struct used directly by gateway.
+   - Do not force enum-based backend dispatch replacement in this plan.
+   - Keep library-level extension seams unless behavior/correctness issues require change.
 
-2. Composition/wiring:
+5. Composition/wiring:
 
-    - `main.rs` creates only concrete structs.
-    - `Stem` （从 `StemRuntime` 重命名而来；把那些 `runtime_types` 都放到 `types` 里面，作为全局类型即可 ） holds concrete `Cortex` (自 `CortexRuntime` 重命名而来 ) and `Spine` handles (no `Arc<dyn ...>`).
+   - `main.rs` creates concrete runtime structs.
+   - `Stem` (renamed from `StemRuntime`) holds concrete `Cortex` (renamed from `CortexRuntime`) and `Spine` handles, with no `Arc<dyn ...>` in runtime composition.
+   - Move `runtime_types` into a unified `types` module for global runtime types.
 
 ## Important API / Interface / Type Changes
 
-1. Remove and stop exporting all `*Port` traits in:
+1. Remove and stop exporting business-path `*Port` traits in:
 
    - `core/src/spine/mod.rs`
    - `core/src/cortex/mod.rs`
    - `core/src/continuity/mod.rs`
 
-2. Remove trait-object-returning APIs:
+2. Remove trait-object-returning APIs on runtime hot path:
 
-    - `Spine::registry_port() -> Arc<dyn EndpointRegistryPort>` （这个挺好的，没必要移除吧）
-    - `Spine::executor_port() -> Arc<dyn SpineExecutorPort>`
-    - `global_executor() -> Option<Arc<dyn SpineExecutorPort>>`
+   - `Spine::registry_port() -> Arc<dyn EndpointRegistryPort>` (replace with concrete registry accessor)
+   - `Spine::executor_port() -> Arc<dyn SpineExecutorPort>`
+   - `global_executor() -> Option<Arc<dyn SpineExecutorPort>>`
 
 3. Replace with concrete APIs:
 
    - `Spine::registry() -> Arc<InMemoryEndpointRegistry>` (or `&InMemoryEndpointRegistry`)
    - `Spine::dispatch_act(...) -> Result<EndpointExecutionOutcome, SpineError>`
 
-4. Test utility API updates:
+4. Test API updates:
 
-   - Remove tests implementing traits just to fake collaborators; replace with concrete fake structs and test-only constructors. （有待考量，有点像虚荣指标了）
+   - Apply minimal test rewrites required by constructor/signature changes.
+   - Do not refactor tests solely for style.
 
 ## Single-Cutover Implementation Sequence
 
 1. Delete/replace `spine` ports and executor layering:
 
-   - Inline routing logic into `Spine`. （这意味着什么？有点奇怪欸）
+   - Remove `RoutingSpineExecutor` indirection and expose concrete `Spine::dispatch_act(...)`.
+   - Keep routing semantics intact.
    - Update registry and body endpoint registration to use concrete types.
 
 2. Rewire `stem` to call concrete `Spine` and concrete `Cortex`.
@@ -115,7 +116,7 @@ Goal: keep behavior identical while reducing abstraction layers, dynamic dispatc
 
 5. Update module exports and imports (`mod.rs` files and callers).
 
-6. Rewrite tests for concrete constructors and direct collaborator injection.
+6. Update tests only where constructor/signature changes require it, preserving existing behavior assertions.
 
 7. Run full verification and fix compile/test regressions.
 
@@ -160,7 +161,7 @@ Goal: keep behavior identical while reducing abstraction layers, dynamic dispatc
 
 ## Assumptions And Defaults
 
-1. Chosen scope: `Everything` (remove all hexagonal patterns, including AI provider adapter traits and transport “adapter architecture” naming).
+1. Chosen scope: `Selective de-hexagonalization` (remove business-path `*Port` trait-object/noop architecture layers in `spine`, `cortex`, `continuity`; keep AI Gateway library-level abstractions and existing transport adapter layout where reasonable).
 2. Chosen execution mode: `Single Cutover`.
 3. Priority: simplicity over extension points; future re-abstraction is deferred until justified by real variability.
-4. Acceptance criterion: no trait-port/adapter/noop architecture layers remain in `core/src`; behavior and test outcomes remain equivalent.
+4. Acceptance criterion: no business-path `*Port` trait-object/noop architecture layers remain in `core/src` runtime composition; behavior and test outcomes remain equivalent.

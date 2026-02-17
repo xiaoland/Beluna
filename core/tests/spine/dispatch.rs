@@ -1,13 +1,15 @@
 use std::sync::Arc;
 
 use beluna::{
-    runtime_types::{Act, RequestedResources},
+    config::SpineRuntimeConfig,
+    ingress::SenseIngress,
     spine::{
-        DeterministicNoopSpine, InMemoryEndpointRegistry, RoutingSpineExecutor, SpineExecutionMode,
-        SpineExecutorPort,
-        types::{CostVector, EndpointExecutionOutcome},
+        CostVector, EndpointBinding, EndpointCapabilityDescriptor, EndpointExecutionOutcome,
+        NativeFunctionEndpoint, RouteKey, Spine,
     },
+    types::{Act, RequestedResources},
 };
+use tokio::sync::mpsc;
 
 fn request(body_endpoint_name: &str, capability_id: &str, seq_no: u64) -> Act {
     Act {
@@ -26,13 +28,41 @@ fn request(body_endpoint_name: &str, capability_id: &str, seq_no: u64) -> Act {
     }
 }
 
+fn test_spine() -> Arc<Spine> {
+    let config = SpineRuntimeConfig { adapters: vec![] };
+    Spine::new(&config, SenseIngress::new(mpsc::channel(4).0))
+}
+
 #[tokio::test]
-async fn noop_spine_dispatches_single_act() {
-    let spine = DeterministicNoopSpine::new(SpineExecutionMode::SerializedDeterministic);
+async fn noop_equivalent_spine_dispatches_single_act() {
+    let spine = test_spine();
+    let endpoint = Arc::new(NativeFunctionEndpoint::new(Arc::new(|act| {
+        Ok(EndpointExecutionOutcome::Applied {
+            actual_cost_micro: act.requested_resources.survival_micro.max(0),
+            reference_id: format!("native:settle:{}", act.act_id),
+        })
+    })));
+    let handle = spine
+        .add_endpoint(
+            "ep.demo",
+            EndpointBinding::Inline(endpoint),
+            vec![EndpointCapabilityDescriptor {
+                route: RouteKey {
+                    endpoint_id: "placeholder".to_string(),
+                    capability_id: "cap.demo".to_string(),
+                },
+                payload_schema: serde_json::json!({"type":"object"}),
+                max_payload_bytes: 1024,
+                default_cost: CostVector::default(),
+                metadata: Default::default(),
+            }],
+        )
+        .expect("endpoint registration should succeed");
+
     let outcome = spine
-        .dispatch_act(request("ep.demo", "cap.demo", 1))
+        .dispatch_act(request(&handle.body_endpoint_name, "cap.demo", 1))
         .await
-        .expect("noop dispatch should succeed");
+        .expect("dispatch should succeed");
 
     assert!(matches!(
         outcome,
@@ -44,14 +74,13 @@ async fn noop_spine_dispatches_single_act() {
 }
 
 #[tokio::test]
-async fn routing_spine_rejects_missing_endpoint() {
-    let registry = Arc::new(InMemoryEndpointRegistry::new());
-    let spine = RoutingSpineExecutor::new(SpineExecutionMode::SerializedDeterministic, registry);
+async fn spine_rejects_missing_endpoint() {
+    let spine = test_spine();
 
     let outcome = spine
         .dispatch_act(request("missing.endpoint", "missing.capability", 3))
         .await
-        .expect("routing should produce outcome");
+        .expect("dispatch should produce outcome");
 
     assert!(matches!(
         outcome,

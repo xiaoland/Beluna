@@ -7,8 +7,8 @@ use tokio::{
 
 use crate::{
     body::std::payloads::{ShellExecRequest, ShellLimits},
-    runtime_types::{Act, SenseDatum},
     spine::types::EndpointExecutionOutcome,
+    types::{Act, SenseDatum},
 };
 
 pub struct ShellHandlerOutput {
@@ -166,8 +166,8 @@ fn truncate_to_text(bytes: &[u8], cap: usize) -> (String, bool) {
 #[cfg(test)]
 mod tests {
     use crate::{
-        runtime_types::{Act, RequestedResources},
         spine::types::EndpointExecutionOutcome,
+        types::{Act, RequestedResources},
     };
 
     use super::{ShellLimits, handle_shell_invoke};

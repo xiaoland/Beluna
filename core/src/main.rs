@@ -18,16 +18,11 @@ use beluna::{
     cli::config_path_from_args,
     config::Config,
     continuity::ContinuityEngine,
-    cortex::{
-        AIGatewayAttemptExtractor, AIGatewayPrimaryReasoner, CortexPipeline, NoopTelemetryPort,
-    },
+    cortex::Cortex,
     ingress::SenseIngress,
     ledger::LedgerStage,
-    spine::{
-        EndpointRegistryPort, Spine, global_executor, global_spine, install_global_spine,
-        shutdown_global_spine,
-    },
-    stem::{StemRuntime, register_default_native_endpoints},
+    spine::{Spine, global_spine, install_global_spine, shutdown_global_spine},
+    stem::{Stem, register_default_native_endpoints},
 };
 
 #[tokio::main]
@@ -60,33 +55,17 @@ async fn main() -> Result<()> {
         .context("failed to construct ai gateway for cortex")?,
     );
 
-    let primary = Arc::new(AIGatewayPrimaryReasoner::new(
+    let cortex = Arc::new(Cortex::from_config(
+        &config.cortex,
         Arc::clone(&gateway),
-        config.cortex.primary_backend_id.clone(),
         None,
-    ));
-    let extractor = Arc::new(AIGatewayAttemptExtractor::new(
-        Arc::clone(&gateway),
-        config.cortex.sub_backend_id.clone(),
-        None,
-    ));
-    let telemetry = Arc::new(NoopTelemetryPort);
-    let cortex = Arc::new(CortexPipeline::new(
-        primary,
-        extractor,
-        telemetry,
-        config.cortex.default_limits.clone(),
     ));
 
     let spine_runtime = Spine::new(&config.spine, ingress.clone());
     install_global_spine(Arc::clone(&spine_runtime))
         .context("failed to initialize process-wide spine singleton")?;
-    let spine = global_executor().context("spine singleton is not initialized")?;
-    let registry_port: Arc<dyn EndpointRegistryPort> = global_spine()
-        .context("spine singleton is not initialized")?
-        .registry_port();
-
-    register_default_native_endpoints(Arc::clone(&registry_port))?;
+    let spine = global_spine().context("spine singleton is not initialized")?;
+    register_default_native_endpoints(spine)?;
     register_std_body_endpoints(
         Arc::clone(&spine_runtime),
         ingress.clone(),
@@ -99,7 +78,7 @@ async fn main() -> Result<()> {
     let continuity = Arc::new(Mutex::new(ContinuityEngine::with_defaults()));
     let ledger = Arc::new(Mutex::new(LedgerStage::new(1_000_000)));
 
-    let stem_runtime = StemRuntime::new(cortex, continuity.clone(), ledger, spine, sense_rx);
+    let stem_runtime = Stem::new(cortex, continuity.clone(), ledger, spine_runtime, sense_rx);
     let stem_task = tokio::spawn(async move { stem_runtime.run().await });
 
     let mut sigint =

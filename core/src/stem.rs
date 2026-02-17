@@ -5,31 +5,31 @@ use tokio::sync::{Mutex, mpsc};
 
 use crate::{
     continuity::{ContinuityEngine, DispatchContext as ContinuityDispatchContext},
-    cortex::{AffordanceCapability, CapabilityCatalog, CortexPort},
+    cortex::{AffordanceCapability, CapabilityCatalog, Cortex},
     ledger::{DispatchContext as LedgerDispatchContext, LedgerDispatchTicket, LedgerStage},
-    runtime_types::{Act, CognitionState, DispatchDecision, PhysicalState, Sense},
     spine::{
-        EndpointCapabilityDescriptor, EndpointExecutionOutcome, EndpointRegistryPort,
-        NativeFunctionEndpoint, RouteKey, SpineEvent, SpineExecutorPort,
+        EndpointBinding, EndpointCapabilityDescriptor, EndpointExecutionOutcome,
+        NativeFunctionEndpoint, RouteKey, Spine, SpineEvent,
         adapters::catalog_bridge::to_cortex_catalog, types::CostVector,
     },
+    types::{Act, CognitionState, DispatchDecision, PhysicalState, Sense},
 };
 
-pub struct StemRuntime {
+pub struct Stem {
     cycle_id: u64,
-    cortex: Arc<dyn CortexPort>,
+    cortex: Arc<Cortex>,
     continuity: Arc<Mutex<ContinuityEngine>>,
     ledger: Arc<Mutex<LedgerStage>>,
-    spine: Arc<dyn SpineExecutorPort>,
+    spine: Arc<Spine>,
     sense_rx: mpsc::Receiver<Sense>,
 }
 
-impl StemRuntime {
+impl Stem {
     pub fn new(
-        cortex: Arc<dyn CortexPort>,
+        cortex: Arc<Cortex>,
         continuity: Arc<Mutex<ContinuityEngine>>,
         ledger: Arc<Mutex<LedgerStage>>,
-        spine: Arc<dyn SpineExecutorPort>,
+        spine: Arc<Spine>,
         sense_rx: mpsc::Receiver<Sense>,
     ) -> Self {
         Self {
@@ -337,7 +337,7 @@ fn merge_capability_catalogs(
     }
 }
 
-pub fn register_default_native_endpoints(registry: Arc<dyn EndpointRegistryPort>) -> Result<()> {
+pub fn register_default_native_endpoints(spine: Arc<Spine>) -> Result<()> {
     let native_endpoint = Arc::new(NativeFunctionEndpoint::new(Arc::new(|act| {
         Ok(crate::spine::types::EndpointExecutionOutcome::Applied {
             actual_cost_micro: act.requested_resources.survival_micro.max(0),
@@ -345,65 +345,76 @@ pub fn register_default_native_endpoints(registry: Arc<dyn EndpointRegistryPort>
         })
     })));
 
-    let register =
-        |endpoint_id: &str, capability_id: &str, default_cost: CostVector| -> Result<()> {
-            registry
-                .register(
-                    EndpointCapabilityDescriptor {
-                        route: RouteKey {
-                            endpoint_id: endpoint_id.to_string(),
-                            capability_id: capability_id.to_string(),
-                        },
-                        payload_schema: serde_json::json!({"type":"object"}),
-                        max_payload_bytes: 16_384,
-                        default_cost,
-                        metadata: Default::default(),
-                    },
-                    native_endpoint.clone(),
-                )
-                .map_err(|err| anyhow::anyhow!(err.to_string()))?;
-            Ok(())
-        };
+    let _deliberate = spine.add_endpoint(
+        "deliberate.plan",
+        EndpointBinding::Inline(native_endpoint.clone()),
+        vec![
+            EndpointCapabilityDescriptor {
+                route: RouteKey {
+                    endpoint_id: "placeholder".to_string(),
+                    capability_id: "cap.core".to_string(),
+                },
+                payload_schema: serde_json::json!({"type":"object"}),
+                max_payload_bytes: 16_384,
+                default_cost: CostVector {
+                    survival_micro: 250,
+                    time_ms: 120,
+                    io_units: 1,
+                    token_units: 128,
+                },
+                metadata: Default::default(),
+            },
+            EndpointCapabilityDescriptor {
+                route: RouteKey {
+                    endpoint_id: "placeholder".to_string(),
+                    capability_id: "cap.core.lite".to_string(),
+                },
+                payload_schema: serde_json::json!({"type":"object"}),
+                max_payload_bytes: 16_384,
+                default_cost: CostVector {
+                    survival_micro: 250,
+                    time_ms: 120,
+                    io_units: 1,
+                    token_units: 128,
+                },
+                metadata: Default::default(),
+            },
+            EndpointCapabilityDescriptor {
+                route: RouteKey {
+                    endpoint_id: "placeholder".to_string(),
+                    capability_id: "cap.core.minimal".to_string(),
+                },
+                payload_schema: serde_json::json!({"type":"object"}),
+                max_payload_bytes: 16_384,
+                default_cost: CostVector {
+                    survival_micro: 250,
+                    time_ms: 120,
+                    io_units: 1,
+                    token_units: 128,
+                },
+                metadata: Default::default(),
+            },
+        ],
+    )?;
 
-    register(
-        "deliberate.plan",
-        "cap.core",
-        CostVector {
-            survival_micro: 250,
-            time_ms: 120,
-            io_units: 1,
-            token_units: 128,
-        },
-    )?;
-    register(
-        "deliberate.plan",
-        "cap.core.lite",
-        CostVector {
-            survival_micro: 250,
-            time_ms: 120,
-            io_units: 1,
-            token_units: 128,
-        },
-    )?;
-    register(
-        "deliberate.plan",
-        "cap.core.minimal",
-        CostVector {
-            survival_micro: 250,
-            time_ms: 120,
-            io_units: 1,
-            token_units: 128,
-        },
-    )?;
-    register(
+    let _execute = spine.add_endpoint(
         "execute.tool",
-        "cap.core",
-        CostVector {
-            survival_micro: 400,
-            time_ms: 200,
-            io_units: 2,
-            token_units: 256,
-        },
+        EndpointBinding::Inline(native_endpoint),
+        vec![EndpointCapabilityDescriptor {
+            route: RouteKey {
+                endpoint_id: "placeholder".to_string(),
+                capability_id: "cap.core".to_string(),
+            },
+            payload_schema: serde_json::json!({"type":"object"}),
+            max_payload_bytes: 16_384,
+            default_cost: CostVector {
+                survival_micro: 400,
+                time_ms: 200,
+                io_units: 2,
+                token_units: 256,
+            },
+            metadata: Default::default(),
+        }],
     )?;
 
     Ok(())

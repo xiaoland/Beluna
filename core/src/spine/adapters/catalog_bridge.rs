@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
     cortex::{AffordanceCapability, CapabilityCatalog},
-    runtime_types::RequestedResources,
     spine::types::SpineCapabilityCatalog,
+    types::RequestedResources,
 };
 
 pub fn to_cortex_catalog(source: &SpineCapabilityCatalog) -> CapabilityCatalog {

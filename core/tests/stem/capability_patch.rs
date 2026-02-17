@@ -1,39 +1,40 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use tokio::sync::{Mutex, mpsc};
 
 use beluna::{
+    config::SpineRuntimeConfig,
     continuity::ContinuityEngine,
-    cortex::{CortexError, CortexOutput, CortexPort},
+    cortex::{AttemptExtractorHook, Cortex, PrimaryReasonerHook, ProseIr, ReactionLimits},
+    ingress::SenseIngress,
     ledger::LedgerStage,
-    runtime_types::{CapabilityPatch, CognitionState, PhysicalState, Sense},
-    spine::{DeterministicNoopSpine, EndpointCapabilityDescriptor, RouteKey, SpineExecutorPort},
-    stem::StemRuntime,
+    spine::{EndpointCapabilityDescriptor, RouteKey, Spine},
+    stem::Stem,
+    types::{CapabilityPatch, PhysicalState, Sense},
 };
 
-#[derive(Default)]
-struct CaptureCortex {
-    physical_states: Mutex<Vec<PhysicalState>>,
+fn test_spine() -> Arc<Spine> {
+    let config = SpineRuntimeConfig { adapters: vec![] };
+    Spine::new(&config, SenseIngress::new(mpsc::channel(4).0))
 }
 
-#[async_trait]
-impl CortexPort for CaptureCortex {
-    async fn cortex(
-        &self,
-        _senses: &[Sense],
-        physical_state: &PhysicalState,
-        cognition_state: &CognitionState,
-    ) -> Result<CortexOutput, CortexError> {
-        self.physical_states
-            .lock()
-            .await
-            .push(physical_state.clone());
-        Ok(CortexOutput {
-            acts: Vec::new(),
-            new_cognition_state: cognition_state.clone(),
+fn capture_cortex(physical_states: Arc<Mutex<Vec<PhysicalState>>>) -> Arc<Cortex> {
+    let primary: PrimaryReasonerHook = Arc::new(move |req| {
+        let physical_states = Arc::clone(&physical_states);
+        Box::pin(async move {
+            physical_states.lock().await.push(req.physical_state);
+            Ok(ProseIr {
+                text: "ir".to_string(),
+            })
         })
-    }
+    });
+    let extractor: AttemptExtractorHook = Arc::new(|_req| Box::pin(async { Ok(Vec::new()) }));
+
+    Arc::new(Cortex::for_test_with_hooks(
+        primary,
+        extractor,
+        ReactionLimits::default(),
+    ))
 }
 
 #[tokio::test]
@@ -60,15 +61,20 @@ async fn new_capabilities_patch_takes_effect_before_cortex() {
         .expect("sleep should be enqueued");
     drop(sense_tx);
 
-    let cortex = Arc::new(CaptureCortex::default());
+    let physical_states = Arc::new(Mutex::new(Vec::new()));
     let continuity = Arc::new(Mutex::new(ContinuityEngine::with_defaults()));
     let ledger = Arc::new(Mutex::new(LedgerStage::new(1_000)));
-    let spine: Arc<dyn SpineExecutorPort> = Arc::new(DeterministicNoopSpine::default());
 
-    let runtime = StemRuntime::new(cortex.clone(), continuity, ledger, spine, sense_rx);
+    let runtime = Stem::new(
+        capture_cortex(Arc::clone(&physical_states)),
+        continuity,
+        ledger,
+        test_spine(),
+        sense_rx,
+    );
     runtime.run().await.expect("stem should run");
 
-    let captured = cortex.physical_states.lock().await;
+    let captured = physical_states.lock().await;
     assert_eq!(captured.len(), 1);
     let affordance = captured[0]
         .capabilities

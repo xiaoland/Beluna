@@ -5,7 +5,7 @@ use tokio::{
 
 use beluna::{
     ingress::{IngressErrorKind, SenseIngress},
-    runtime_types::{Sense, SenseDatum},
+    types::{Sense, SenseDatum},
 };
 
 #[tokio::test]

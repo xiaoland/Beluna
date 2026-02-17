@@ -20,8 +20,8 @@ use tokio_util::sync::CancellationToken;
 use crate::{
     cortex::{is_uuid_v4, is_uuid_v7},
     ingress::SenseIngress,
-    runtime_types::{Act, CapabilityDropPatch, CapabilityPatch, Sense, SenseDatum},
-    spine::{runtime::Spine, types::EndpointCapabilityDescriptor},
+    spine::{EndpointBinding, runtime::Spine, types::EndpointCapabilityDescriptor},
+    types::{Act, CapabilityDropPatch, CapabilityPatch, Sense, SenseDatum},
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -410,7 +410,11 @@ async fn handle_body_endpoint(
                         continue;
                     }
 
-                    let handle = match spine.new_body_endpoint(channel_id, &endpoint_name) {
+                    let handle = match spine.add_endpoint(
+                        &endpoint_name,
+                        EndpointBinding::AdapterChannel(channel_id),
+                        vec![],
+                    ) {
                         Ok(handle) => handle,
                         Err(err) => {
                             eprintln!("body endpoint registration failed during auth: {err:#}");
@@ -419,19 +423,17 @@ async fn handle_body_endpoint(
                     };
                     auth_endpoint_id = Some(handle.body_endpoint_id);
 
-                    let mut registered_entries = Vec::new();
-                    for descriptor in capabilities {
-                        match spine
-                            .register_body_endpoint_capability(handle.body_endpoint_id, descriptor)
-                        {
-                            Ok(descriptor) => registered_entries.push(descriptor),
-                            Err(err) => {
-                                eprintln!(
-                                    "body endpoint capability registration failed during auth: {err:#}"
-                                );
-                            }
+                    let registered_entries = match spine
+                        .add_capabilities(handle.body_endpoint_id, capabilities)
+                    {
+                        Ok(entries) => entries,
+                        Err(err) => {
+                            eprintln!(
+                                "body endpoint capability registration failed during auth: {err:#}"
+                            );
+                            Vec::new()
                         }
-                    }
+                    };
 
                     if !registered_entries.is_empty()
                         && let Err(err) = ingress
@@ -450,7 +452,7 @@ async fn handle_body_endpoint(
                 }
                 InboundBodyMessage::Unplug => {
                     if let Some(body_endpoint_id) = auth_endpoint_id {
-                        let routes = spine.remove_body_endpoint(body_endpoint_id);
+                        let routes = spine.remove_endpoint(body_endpoint_id);
                         if !routes.is_empty()
                             && let Err(err) = ingress
                                 .send(Sense::DropCapabilities(CapabilityDropPatch { routes }))
@@ -492,7 +494,6 @@ async fn handle_body_endpoint(
 #[cfg(test)]
 mod tests {
     use crate::{
-        runtime_types::{Act, RequestedResources},
         spine::{
             adapters::unix_socket::{
                 InboundBodyMessage, NdjsonEnvelope, OutboundActBody,
@@ -500,6 +501,7 @@ mod tests {
             },
             types::EndpointCapabilityDescriptor,
         },
+        types::{Act, RequestedResources},
     };
 
     #[test]

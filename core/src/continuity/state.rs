@@ -3,11 +3,11 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use crate::{
     continuity::types::{ContinuityDispatchRecord, DispatchContext},
     cortex::{AffordanceCapability, CapabilityCatalog},
-    runtime_types::{
+    spine::types::{EndpointCapabilityDescriptor, RouteKey, SpineEvent},
+    types::{
         Act, CapabilityDropPatch, CapabilityPatch, CognitionState, DispatchDecision,
         RequestedResources,
     },
-    spine::types::{EndpointCapabilityDescriptor, RouteKey, SpineEvent},
 };
 
 const MAX_DISPATCH_RECORDS: usize = 256;
