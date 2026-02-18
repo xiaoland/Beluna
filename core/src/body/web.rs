@@ -5,7 +5,7 @@ use reqwest::{
 use tokio::time::{Duration, timeout};
 
 use crate::{
-    body::std::payloads::{WebFetchRequest, WebLimits},
+    body::payloads::{WebFetchRequest, WebLimits},
     spine::types::EndpointExecutionOutcome,
     types::{Act, SenseDatum},
 };

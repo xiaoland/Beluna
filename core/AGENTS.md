@@ -37,7 +37,7 @@ Beluna Core is the runnable runtime and domain agent implementation.
 
 ## Current State
 
-> Last Updated At: 2026-02-14T13:30Z+08:00
+> Last Updated At: 2026-02-18T23:58Z+08:00
 
 ### Live Capabilities
 
@@ -50,7 +50,7 @@ Beluna Core is the runnable runtime and domain agent implementation.
 - Control senses:
   - `sleep` breaks loop without calling Cortex.
   - `new_capabilities` / `drop_capabilities` mutate capability state before same-cycle Cortex call.
-- Built-in standard body endpoints (shell/web) run in-process, gated by config and cargo features.
+- Built-in inline body endpoints (shell/web under `core/src/body`) are started by `main` after Spine boot, each on a dedicated thread, and attach through Spine Inline Adapter configured in `spine.adapters`.
 - External body endpoints register over UnixSocket and publish senses/capability patches.
 - AI Gateway MVP provides deterministic routing, strict normalization, reliability controls, and budget enforcement.
 

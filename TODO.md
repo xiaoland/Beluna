@@ -5,10 +5,9 @@
 - [x] 把 beluan core 的配置文件合并进入 beluna runtime, beluna core 只是一个 crate，它没有 main
 - [x] Cortex 为核心，Stem 为枢纽；Organs (Spine, Continuity, Ledger, Motor) 为外围的有机结构
 - [ ] 移除所有的 TelemetrySink port，直接用 tracing，而后日志写入本地文件（采用 json log）
-- [ ] core/src/body 就是 std body 了，不用再包一层
+- [x] core/src/body 就是 std body 了，不用再包一层
 - [x] ingress 破坏了 Beluna 的生物学隐喻式命名，我建议命名为 afferent pathway
 - [x] ingress 应该包含创建 mpsc queue 的部分，而不是让 main 来创建
-- [ ] body 使用 pathway 是不可能的，它只能和 Spine 交互（更具体地说是 BodyEndpoint Adapter）
 - [ ] 有 legder/ledger.rs，那为什么没有 cortex/cortex.rs 和 spine/spine.rs 呢
 - [ ] 可不可以在 Spine, Cortex runtime 内实现 singleton 而不是 module 级别呢？
 
@@ -20,8 +19,10 @@
 
 ### Spine
 
+- [x] body 使用 pathway 是不可能的，它只能和 Spine 交互（更具体地说是 BodyEndpoint Adapter）
+- [x] Inline Body Endpoint 和 Inline BodyEndpoint Adapter 之间的交互也要重新设计
+- [ ] Spine Runtime 和 Body Endpoint Adapter 之间的交互给我搞清楚咯
 - [ ] adapters/catalog_bridge 是什么鬼
-- [ ] 我没有看到 inline adapter
 - [ ] 移除 body_endpoint_id ，name就是 id
 - [ ] 为什么要在 Spine runtime 中维护 adapter channel?
 - [ ] 测试应该在 tests/ 下面，有什么特殊的理由要 aside src 吗？

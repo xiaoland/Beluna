@@ -8,9 +8,9 @@ use crate::{
     cortex::{AffordanceCapability, CapabilityCatalog, Cortex},
     ledger::{DispatchContext as LedgerDispatchContext, LedgerDispatchTicket, LedgerStage},
     spine::{
-        EndpointBinding, EndpointCapabilityDescriptor, EndpointExecutionOutcome,
-        NativeFunctionEndpoint, RouteKey, Spine, SpineEvent,
-        adapters::catalog_bridge::to_cortex_catalog, types::CostVector,
+        ActDispatchResult, EndpointBinding, EndpointCapabilityDescriptor, NativeFunctionEndpoint,
+        RouteKey, Spine, SpineEvent, adapters::catalog_bridge::to_cortex_catalog,
+        types::CostVector,
     },
     types::{Act, CognitionState, DispatchDecision, PhysicalState, Sense},
 };
@@ -191,8 +191,8 @@ impl Stem {
         }
 
         let event = match self.spine.dispatch_act(act.clone()).await {
-            Ok(outcome) => {
-                map_endpoint_outcome_to_spine_event(cycle_id, seq_no, &act, &ticket, outcome)
+            Ok(dispatch_result) => {
+                map_dispatch_result_to_spine_event(cycle_id, seq_no, &act, &ticket, dispatch_result)
             }
             Err(err) => map_spine_error_to_rejected_event(cycle_id, seq_no, &act, &ticket, err),
         };
@@ -260,44 +260,28 @@ fn map_spine_error_to_rejected_event(
     }
 }
 
-fn map_endpoint_outcome_to_spine_event(
+fn map_dispatch_result_to_spine_event(
     cycle_id: u64,
     seq_no: u64,
     act: &Act,
     ticket: &LedgerDispatchTicket,
-    outcome: EndpointExecutionOutcome,
+    dispatch_result: ActDispatchResult,
 ) -> SpineEvent {
-    match outcome {
-        EndpointExecutionOutcome::Applied {
-            actual_cost_micro,
-            reference_id,
-        } => SpineEvent::ActApplied {
+    match dispatch_result {
+        ActDispatchResult::Acknowledged { reference_id } => SpineEvent::ActApplied {
             cycle_id,
             seq_no,
             act_id: act.act_id.clone(),
             capability_instance_id: act.capability_instance_id.clone(),
             reserve_entry_id: ticket.reserve_entry_id.clone(),
             cost_attribution_id: ticket.cost_attribution_id.clone(),
-            actual_cost_micro,
+            actual_cost_micro: act.requested_resources.survival_micro.max(0),
             reference_id,
         },
-        EndpointExecutionOutcome::Rejected {
+        ActDispatchResult::Rejected {
             reason_code,
             reference_id,
         } => SpineEvent::ActRejected {
-            cycle_id,
-            seq_no,
-            act_id: act.act_id.clone(),
-            capability_instance_id: act.capability_instance_id.clone(),
-            reserve_entry_id: ticket.reserve_entry_id.clone(),
-            cost_attribution_id: ticket.cost_attribution_id.clone(),
-            reason_code,
-            reference_id,
-        },
-        EndpointExecutionOutcome::Deferred {
-            reason_code,
-            reference_id,
-        } => SpineEvent::ActDeferred {
             cycle_id,
             seq_no,
             act_id: act.act_id.clone(),
@@ -339,8 +323,7 @@ fn merge_capability_catalogs(
 
 pub fn register_default_native_endpoints(spine: Arc<Spine>) -> Result<()> {
     let native_endpoint = Arc::new(NativeFunctionEndpoint::new(Arc::new(|act| {
-        Ok(crate::spine::types::EndpointExecutionOutcome::Applied {
-            actual_cost_micro: act.requested_resources.survival_micro.max(0),
+        Ok(crate::spine::types::ActDispatchResult::Acknowledged {
             reference_id: format!("native:settle:{}", act.act_id),
         })
     })));

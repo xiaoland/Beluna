@@ -15,7 +15,7 @@ use beluna::{
             NoopTelemetrySink, StderrTelemetrySink, TelemetrySink, ai_gateway_debug_enabled,
         },
     },
-    body::std::register_std_body_endpoints,
+    body::register_inline_body_endpoints,
     cli::config_path_from_args,
     config::Config,
     continuity::ContinuityEngine,
@@ -66,9 +66,11 @@ async fn main() -> Result<()> {
         .context("failed to initialize process-wide spine singleton")?;
     let spine = global_spine().context("spine singleton is not initialized")?;
     register_default_native_endpoints(spine)?;
-    register_std_body_endpoints(
-        Arc::clone(&spine_runtime),
-        afferent_pathway.clone(),
+    let inline_adapter = spine_runtime
+        .inline_adapter()
+        .context("inline body endpoints require spine.adapters entry with type=inline")?;
+    register_inline_body_endpoints(
+        inline_adapter,
         config.body.std_shell.enabled,
         config.body.std_shell.limits.clone(),
         config.body.std_web.enabled,

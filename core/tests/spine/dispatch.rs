@@ -4,7 +4,7 @@ use beluna::{
     afferent_pathway::SenseAfferentPathway,
     config::SpineRuntimeConfig,
     spine::{
-        CostVector, EndpointBinding, EndpointCapabilityDescriptor, EndpointExecutionOutcome,
+        ActDispatchResult, CostVector, EndpointBinding, EndpointCapabilityDescriptor,
         NativeFunctionEndpoint, RouteKey, Spine,
     },
     types::{Act, RequestedResources},
@@ -36,8 +36,7 @@ fn test_spine() -> Arc<Spine> {
 async fn noop_equivalent_spine_dispatches_single_act() {
     let spine = test_spine();
     let endpoint = Arc::new(NativeFunctionEndpoint::new(Arc::new(|act| {
-        Ok(EndpointExecutionOutcome::Applied {
-            actual_cost_micro: act.requested_resources.survival_micro.max(0),
+        Ok(ActDispatchResult::Acknowledged {
             reference_id: format!("native:settle:{}", act.act_id),
         })
     })));
@@ -63,13 +62,7 @@ async fn noop_equivalent_spine_dispatches_single_act() {
         .await
         .expect("dispatch should succeed");
 
-    assert!(matches!(
-        outcome,
-        EndpointExecutionOutcome::Applied {
-            actual_cost_micro: 10,
-            ..
-        }
-    ));
+    assert!(matches!(outcome, ActDispatchResult::Acknowledged { .. }));
 }
 
 #[tokio::test]
@@ -83,7 +76,7 @@ async fn spine_rejects_missing_endpoint() {
 
     assert!(matches!(
         outcome,
-        EndpointExecutionOutcome::Rejected { ref reason_code, .. } if reason_code == "endpoint_not_found"
+        ActDispatchResult::Rejected { ref reason_code, .. } if reason_code == "endpoint_not_found"
     ));
 }
 

@@ -53,6 +53,18 @@ pub struct SpineCapabilityCatalog {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+pub enum ActDispatchResult {
+    Acknowledged {
+        reference_id: String,
+    },
+    Rejected {
+        reason_code: String,
+        reference_id: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum EndpointExecutionOutcome {
     Applied {
         actual_cost_micro: i64,

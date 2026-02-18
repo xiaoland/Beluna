@@ -89,7 +89,7 @@ Rules:
 - Add `config.spine.adapters[]` and adapter factory wiring.
 - `Spine.start` boots all configured adapters (`{type, config}`), e.g. `unix-socket-ndjson` with `{socket_path}`.
 - While booting adapters, Spine assigns monotonic incremental `adapter_id` values (e.g. `1, 2, 3...`) and uses them for endpoint ownership mapping.
-- Start in-core body endpoints via inline adapter after Spine starts.
+- Start in-core inline body endpoints after Spine starts; endpoints self-register into Spine.
 - Start Stem after adapter and endpoint startup stage.
 
 ### WS8 — Tests and conformance (P0-P2)

@@ -93,7 +93,7 @@
 - emit/control `Sense` variants through ingress wrapper.
 - honor ingress gate during shutdown.
 
-17. `core/src/body/std/mod.rs`
+17. `core/src/body/mod.rs`
 - switch endpoint invocation payload from old admitted action type to new Act execution request type.
 
 18. `core/src/config.rs`

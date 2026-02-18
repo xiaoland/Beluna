@@ -10,7 +10,7 @@ use serde_json::Value;
 
 use crate::{
     ai_gateway::types::AIGatewayConfig,
-    body::std::payloads::{ShellLimits, WebLimits},
+    body::payloads::{ShellLimits, WebLimits},
     cortex::ReactionLimits,
 };
 
@@ -29,6 +29,14 @@ pub struct Config {
 
 fn default_socket_path() -> PathBuf {
     PathBuf::from("beluna.sock")
+}
+
+fn default_inline_act_queue_capacity() -> usize {
+    32
+}
+
+fn default_inline_sense_queue_capacity() -> usize {
+    32
 }
 
 fn default_cortex_inbox_capacity() -> usize {
@@ -58,19 +66,44 @@ impl Default for SpineRuntimeConfig {
 }
 
 fn default_spine_adapters() -> Vec<SpineAdapterConfig> {
-    vec![SpineAdapterConfig::UnixSocketNdjson {
-        config: UnixSocketNdjsonAdapterConfig {
-            socket_path: default_socket_path(),
+    vec![
+        SpineAdapterConfig::Inline {
+            config: InlineAdapterConfig::default(),
         },
-    }]
+        SpineAdapterConfig::UnixSocketNdjson {
+            config: UnixSocketNdjsonAdapterConfig {
+                socket_path: default_socket_path(),
+            },
+        },
+    ]
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum SpineAdapterConfig {
+    Inline {
+        config: InlineAdapterConfig,
+    },
     UnixSocketNdjson {
         config: UnixSocketNdjsonAdapterConfig,
     },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InlineAdapterConfig {
+    #[serde(default = "default_inline_act_queue_capacity")]
+    pub act_queue_capacity: usize,
+    #[serde(default = "default_inline_sense_queue_capacity")]
+    pub sense_queue_capacity: usize,
+}
+
+impl Default for InlineAdapterConfig {
+    fn default() -> Self {
+        Self {
+            act_queue_capacity: default_inline_act_queue_capacity(),
+            sense_queue_capacity: default_inline_sense_queue_capacity(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -179,9 +212,13 @@ impl Config {
             serde_json::from_value(config_value).context("failed to deserialize core config")?;
 
         for adapter in &mut config.spine.adapters {
-            let SpineAdapterConfig::UnixSocketNdjson { config } = adapter;
-            if !config.socket_path.is_absolute() {
-                config.socket_path = config_base.join(&config.socket_path);
+            match adapter {
+                SpineAdapterConfig::Inline { .. } => {}
+                SpineAdapterConfig::UnixSocketNdjson { config } => {
+                    if !config.socket_path.is_absolute() {
+                        config.socket_path = config_base.join(&config.socket_path);
+                    }
+                }
             }
         }
 

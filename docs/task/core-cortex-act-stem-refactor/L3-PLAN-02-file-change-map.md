@@ -44,9 +44,9 @@
 23. `/Users/lanzhijiang/Development/Beluna/core/src/spine/adapters/wire.rs`
 24. `/Users/lanzhijiang/Development/Beluna/core/src/spine/adapters/unix_socket.rs`
 25. `/Users/lanzhijiang/Development/Beluna/core/src/spine/adapters/catalog_bridge.rs`
-26. `/Users/lanzhijiang/Development/Beluna/core/src/body/std/mod.rs`
-27. `/Users/lanzhijiang/Development/Beluna/core/src/body/std/shell.rs`
-28. `/Users/lanzhijiang/Development/Beluna/core/src/body/std/web.rs`
+26. `/Users/lanzhijiang/Development/Beluna/core/src/body/mod.rs`
+27. `/Users/lanzhijiang/Development/Beluna/core/src/body/shell.rs`
+28. `/Users/lanzhijiang/Development/Beluna/core/src/body/web.rs`
 29. `/Users/lanzhijiang/Development/Beluna/core/beluna.schema.json`
 
 ## 2) Test Changes

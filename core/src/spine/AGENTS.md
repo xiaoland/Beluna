@@ -8,3 +8,4 @@ Spine defines contracts for endpoint-level routing of serial `Act` dispatches.
 - Capability routing is delegated to the target Body Endpoint.
 - Spine executor is process-wide singleton initialized once at runtime boot.
 - Registry owns remote endpoint session channels and lifecycle ownership.
+- Inline adapter owns inline endpoint mailboxes and lifecycle ownership.

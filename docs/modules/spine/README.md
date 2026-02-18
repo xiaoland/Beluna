@@ -15,9 +15,11 @@ Current scope:
    - body endpoint register/unregister/disconnect lifecycle
    - external sense ingress
    - capability patch/drop ingress
-6. body endpoint capabilities are reflected to runtime through `new_capabilities` / `drop_capabilities` senses
+6. In-process inline body endpoints (`core/src/body/*`) attach through Spine Inline Adapter during runtime boot
+7. body endpoint capabilities are reflected to runtime through `new_capabilities` / `drop_capabilities` senses
 
 Runtime notes:
 1. Registry owns remote endpoint session channels and ownership maps.
-2. Spine returns deterministic rejection outcomes for missing endpoint and endpoint failures.
-3. Stem maps outcomes to settlement-linked `SpineEvent`s.
+2. Spine Runtime starts adapters from `spine.adapters`; `main` then starts inline endpoints and passes them the inline adapter instance.
+3. Spine returns deterministic rejection outcomes for missing endpoint and endpoint failures.
+4. Stem maps outcomes to settlement-linked `SpineEvent`s.

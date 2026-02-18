@@ -6,7 +6,7 @@ use tokio::{
 };
 
 use crate::{
-    body::std::payloads::{ShellExecRequest, ShellLimits},
+    body::payloads::{ShellExecRequest, ShellLimits},
     spine::types::EndpointExecutionOutcome,
     types::{Act, SenseDatum},
 };

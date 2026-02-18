@@ -1,7 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::{
-        Arc, Mutex, RwLock,
+        Arc, Mutex, OnceLock, RwLock,
         atomic::{AtomicU64, Ordering},
     },
 };
@@ -16,12 +16,11 @@ use crate::{
     config::SpineRuntimeConfig,
     spine::{
         SpineExecutionMode,
-        adapters::unix_socket::UnixSocketAdapter,
+        adapters::{inline::SpineInlineAdapter, unix_socket::UnixSocketAdapter},
         endpoint::Endpoint,
         error::{SpineError, backend_failure, invalid_batch, registration_invalid},
         types::{
-            EndpointCapabilityDescriptor, EndpointExecutionOutcome, RouteKey,
-            SpineCapabilityCatalog,
+            ActDispatchResult, EndpointCapabilityDescriptor, RouteKey, SpineCapabilityCatalog,
         },
     },
     types::Act,
@@ -115,6 +114,7 @@ pub struct Spine {
     shutdown: CancellationToken,
     tasks: tokio::sync::Mutex<Vec<JoinHandle<Result<()>>>>,
     endpoint_state: Mutex<EndpointState>,
+    inline_adapter: OnceLock<Arc<SpineInlineAdapter>>,
 }
 
 impl Spine {
@@ -126,6 +126,7 @@ impl Spine {
             shutdown: CancellationToken::new(),
             tasks: tokio::sync::Mutex::new(Vec::new()),
             endpoint_state: Mutex::new(EndpointState::default()),
+            inline_adapter: OnceLock::new(),
         });
 
         spine.start_adapters(config, afferent_pathway);
@@ -140,6 +141,32 @@ impl Spine {
         for (index, adapter_config) in config.adapters.iter().enumerate() {
             let adapter_id = (index as u64) + 1;
             match adapter_config {
+                crate::config::SpineAdapterConfig::Inline {
+                    config: adapter_cfg,
+                } => {
+                    let adapter = Arc::new(SpineInlineAdapter::new(
+                        adapter_id,
+                        adapter_cfg.clone(),
+                        Arc::clone(self),
+                        afferent_pathway.clone(),
+                        self.shutdown.clone(),
+                    ));
+
+                    if self.inline_adapter.set(Arc::clone(&adapter)).is_err() {
+                        eprintln!(
+                            "[spine] duplicate inline adapter ignored adapter_id={}",
+                            adapter_id
+                        );
+                        continue;
+                    }
+
+                    eprintln!(
+                        "[spine] adapter_started type=inline adapter_id={} act_queue_capacity={} sense_queue_capacity={}",
+                        adapter.adapter_id(),
+                        adapter_cfg.act_queue_capacity,
+                        adapter_cfg.sense_queue_capacity,
+                    );
+                }
                 crate::config::SpineAdapterConfig::UnixSocketNdjson {
                     config: adapter_cfg,
                 } => {
@@ -172,13 +199,17 @@ impl Spine {
         self.catalog_snapshot()
     }
 
-    pub async fn dispatch_act(&self, act: Act) -> Result<EndpointExecutionOutcome, SpineError> {
+    pub fn inline_adapter(&self) -> Option<Arc<SpineInlineAdapter>> {
+        self.inline_adapter.get().cloned()
+    }
+
+    pub async fn dispatch_act(&self, act: Act) -> Result<ActDispatchResult, SpineError> {
         if act.act_id.trim().is_empty() || act.body_endpoint_name.trim().is_empty() {
             return Err(invalid_batch("act dispatch is missing act_id/endpoint_id"));
         }
 
         let Some(dispatch) = self.resolve_dispatch(&act.body_endpoint_name) else {
-            return Ok(EndpointExecutionOutcome::Rejected {
+            return Ok(ActDispatchResult::Rejected {
                 reason_code: "endpoint_not_found".to_string(),
                 reference_id: format!("spine:missing_endpoint:{}", act.act_id),
             });
@@ -187,7 +218,7 @@ impl Spine {
         match dispatch {
             EndpointDispatch::Inline(endpoint) => match endpoint.invoke(act.clone()).await {
                 Ok(outcome) => Ok(outcome),
-                Err(_) => Ok(EndpointExecutionOutcome::Rejected {
+                Err(_) => Ok(ActDispatchResult::Rejected {
                     reason_code: "endpoint_error".to_string(),
                     reference_id: format!("spine:error:{}", act.act_id),
                 }),
@@ -195,7 +226,7 @@ impl Spine {
             EndpointDispatch::AdapterChannel(channel_id) => {
                 match self.invoke_adapter_endpoint(channel_id, act.clone()) {
                     Ok(outcome) => Ok(outcome),
-                    Err(_) => Ok(EndpointExecutionOutcome::Rejected {
+                    Err(_) => Ok(ActDispatchResult::Rejected {
                         reason_code: "endpoint_error".to_string(),
                         reference_id: format!("spine:error:{}", act.act_id),
                     }),
@@ -426,7 +457,7 @@ impl Spine {
         &self,
         channel_id: u64,
         act: Act,
-    ) -> Result<EndpointExecutionOutcome, SpineError> {
+    ) -> Result<ActDispatchResult, SpineError> {
         let tx = self
             .routing
             .read()
@@ -445,8 +476,7 @@ impl Spine {
             )));
         }
 
-        Ok(EndpointExecutionOutcome::Applied {
-            actual_cost_micro: act.requested_resources.survival_micro.max(0),
+        Ok(ActDispatchResult::Acknowledged {
             reference_id: format!("adapter:act_sent:{}", act.act_id),
         })
     }
@@ -534,7 +564,7 @@ mod tests {
         spine::{
             endpoint::Endpoint,
             error::internal_error,
-            types::{CostVector, EndpointExecutionOutcome},
+            types::{ActDispatchResult, CostVector},
         },
         types::RequestedResources,
     };
@@ -543,12 +573,8 @@ mod tests {
 
     #[async_trait]
     impl Endpoint for StubInlineEndpoint {
-        async fn invoke(
-            &self,
-            _act: Act,
-        ) -> std::result::Result<EndpointExecutionOutcome, SpineError> {
-            Ok(EndpointExecutionOutcome::Applied {
-                actual_cost_micro: 0,
+        async fn invoke(&self, _act: Act) -> std::result::Result<ActDispatchResult, SpineError> {
+            Ok(ActDispatchResult::Acknowledged {
                 reference_id: "stub:inline".to_string(),
             })
         }
@@ -676,7 +702,7 @@ mod tests {
             }))
             .expect("dispatch by endpoint name");
 
-        assert!(matches!(outcome, EndpointExecutionOutcome::Applied { .. }));
+        assert!(matches!(outcome, ActDispatchResult::Acknowledged { .. }));
     }
 
     #[test]
@@ -704,7 +730,7 @@ mod tests {
 
         assert!(matches!(
             outcome,
-            EndpointExecutionOutcome::Rejected { ref reason_code, .. } if reason_code == "endpoint_not_found"
+            ActDispatchResult::Rejected { ref reason_code, .. } if reason_code == "endpoint_not_found"
         ));
     }
 
@@ -712,10 +738,7 @@ mod tests {
 
     #[async_trait]
     impl Endpoint for FailingEndpoint {
-        async fn invoke(
-            &self,
-            _act: Act,
-        ) -> std::result::Result<EndpointExecutionOutcome, SpineError> {
+        async fn invoke(&self, _act: Act) -> std::result::Result<ActDispatchResult, SpineError> {
             Err(internal_error("endpoint exploded"))
         }
     }
@@ -755,7 +778,7 @@ mod tests {
 
         assert!(matches!(
             outcome,
-            EndpointExecutionOutcome::Rejected { ref reason_code, .. } if reason_code == "endpoint_error"
+            ActDispatchResult::Rejected { ref reason_code, .. } if reason_code == "endpoint_error"
         ));
     }
 

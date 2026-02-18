@@ -387,33 +387,61 @@
           "type": "array",
           "minItems": 1,
           "items": {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "enum": [
-                  "unix-socket-ndjson"
-                ]
-              },
-              "config": {
+            "oneOf": [
+              {
                 "type": "object",
                 "properties": {
-                  "socket_path": {
-                    "type": "string",
-                    "minLength": 1
+                  "type": {
+                    "const": "inline"
+                  },
+                  "config": {
+                    "type": "object",
+                    "properties": {
+                      "act_queue_capacity": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "sense_queue_capacity": {
+                        "type": "integer",
+                        "minimum": 1
+                      }
+                    },
+                    "additionalProperties": false
                   }
                 },
                 "required": [
-                  "socket_path"
+                  "type",
+                  "config"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "const": "unix-socket-ndjson"
+                  },
+                  "config": {
+                    "type": "object",
+                    "properties": {
+                      "socket_path": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "socket_path"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "type",
+                  "config"
                 ],
                 "additionalProperties": false
               }
-            },
-            "required": [
-              "type",
-              "config"
-            ],
-            "additionalProperties": false
+            ]
           }
         }
       },

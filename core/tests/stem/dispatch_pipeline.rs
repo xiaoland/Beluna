@@ -12,8 +12,8 @@ use beluna::{
     },
     ledger::LedgerStage,
     spine::{
-        CostVector, Endpoint, EndpointBinding, EndpointCapabilityDescriptor,
-        EndpointExecutionOutcome, RouteKey, Spine,
+        ActDispatchResult, CostVector, Endpoint, EndpointBinding, EndpointCapabilityDescriptor,
+        RouteKey, Spine,
     },
     stem::Stem,
     types::{Act, RequestedResources, Sense, SenseDatum},
@@ -26,13 +26,9 @@ struct SpyEndpoint {
 
 #[async_trait]
 impl Endpoint for SpyEndpoint {
-    async fn invoke(
-        &self,
-        act: Act,
-    ) -> Result<EndpointExecutionOutcome, beluna::spine::SpineError> {
+    async fn invoke(&self, act: Act) -> Result<ActDispatchResult, beluna::spine::SpineError> {
         self.requests.lock().await.push(act.clone());
-        Ok(EndpointExecutionOutcome::Applied {
-            actual_cost_micro: act.requested_resources.survival_micro.max(0),
+        Ok(ActDispatchResult::Acknowledged {
             reference_id: format!("spy:settle:{}", act.act_id),
         })
     }

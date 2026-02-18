@@ -12,8 +12,9 @@ pub use endpoint::{Endpoint, NativeFunctionEndpoint};
 pub use error::{SpineError, SpineErrorKind};
 pub use runtime::{EndpointBinding, Spine, shutdown_global_spine};
 pub use types::{
-    CostAttributionId, CostVector, EndpointCapabilityDescriptor, EndpointExecutionOutcome,
-    ReserveEntryId, RouteKey, SpineCapabilityCatalog, SpineEvent, SpineExecutionMode,
+    ActDispatchResult, CostAttributionId, CostVector, EndpointCapabilityDescriptor,
+    EndpointExecutionOutcome, ReserveEntryId, RouteKey, SpineCapabilityCatalog, SpineEvent,
+    SpineExecutionMode,
 };
 
 static GLOBAL_SPINE: OnceLock<Arc<Spine>> = OnceLock::new();
