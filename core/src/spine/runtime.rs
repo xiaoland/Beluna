@@ -12,8 +12,8 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::{
+    afferent_pathway::SenseAfferentPathway,
     config::SpineRuntimeConfig,
-    ingress::SenseIngress,
     spine::{
         SpineExecutionMode,
         adapters::unix_socket::UnixSocketAdapter,
@@ -118,7 +118,7 @@ pub struct Spine {
 }
 
 impl Spine {
-    pub fn new(config: &SpineRuntimeConfig, ingress: SenseIngress) -> Arc<Self> {
+    pub fn new(config: &SpineRuntimeConfig, afferent_pathway: SenseAfferentPathway) -> Arc<Self> {
         let spine = Arc::new(Self {
             mode: SpineExecutionMode::SerializedDeterministic,
             routing: RwLock::new(RoutingState::default()),
@@ -128,11 +128,15 @@ impl Spine {
             endpoint_state: Mutex::new(EndpointState::default()),
         });
 
-        spine.start_adapters(config, ingress);
+        spine.start_adapters(config, afferent_pathway);
         spine
     }
 
-    fn start_adapters(self: &Arc<Self>, config: &SpineRuntimeConfig, ingress: SenseIngress) {
+    fn start_adapters(
+        self: &Arc<Self>,
+        config: &SpineRuntimeConfig,
+        afferent_pathway: SenseAfferentPathway,
+    ) {
         for (index, adapter_config) in config.adapters.iter().enumerate() {
             let adapter_id = (index as u64) + 1;
             match adapter_config {
@@ -141,7 +145,7 @@ impl Spine {
                 } => {
                     let adapter =
                         UnixSocketAdapter::new(adapter_cfg.socket_path.clone(), adapter_id);
-                    let ingress = ingress.clone();
+                    let afferent_pathway = afferent_pathway.clone();
                     let spine = Arc::clone(self);
                     let shutdown = self.shutdown.clone();
                     let socket_path = adapter_cfg.socket_path.clone();
@@ -152,7 +156,7 @@ impl Spine {
                             adapter_id,
                             socket_path.display()
                         );
-                        adapter.run(ingress, spine, shutdown).await
+                        adapter.run(afferent_pathway, spine, shutdown).await
                     });
                     self.tasks.blocking_lock().push(task);
                 }
@@ -570,7 +574,7 @@ mod tests {
 
     fn test_spine() -> Arc<Spine> {
         let cfg = SpineRuntimeConfig { adapters: vec![] };
-        Spine::new(&cfg, SenseIngress::new(mpsc::channel(4).0))
+        Spine::new(&cfg, SenseAfferentPathway::new(4).0)
     }
 
     #[test]

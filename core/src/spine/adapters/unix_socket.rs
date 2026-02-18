@@ -18,8 +18,8 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 use crate::{
+    afferent_pathway::SenseAfferentPathway,
     cortex::{is_uuid_v4, is_uuid_v7},
-    ingress::SenseIngress,
     spine::{EndpointBinding, runtime::Spine, types::EndpointCapabilityDescriptor},
     types::{Act, CapabilityDropPatch, CapabilityPatch, Sense, SenseDatum},
 };
@@ -72,7 +72,7 @@ struct InboundActAckBody {
     act_id: String,
 }
 
-fn parse_body_ingress_message(line: &str) -> Result<InboundBodyMessage, serde_json::Error> {
+fn parse_body_afferent_message(line: &str) -> Result<InboundBodyMessage, serde_json::Error> {
     let wire: NdjsonEnvelope<serde_json::Value> = serde_json::from_str(line)?;
     if !is_uuid_v4(&wire.id) {
         return Err(invalid_correlated_sense_error(
@@ -236,7 +236,7 @@ impl UnixSocketAdapter {
 
     pub async fn run(
         &self,
-        ingress: SenseIngress,
+        afferent_pathway: SenseAfferentPathway,
         spine: Arc<Spine>,
         shutdown: CancellationToken,
     ) -> Result<()> {
@@ -252,12 +252,12 @@ impl UnixSocketAdapter {
                 accept_result = listener.accept() => {
                     match accept_result {
                         Ok((stream, _)) => {
-                            let ingress = ingress.clone();
+                            let afferent_pathway = afferent_pathway.clone();
                             let spine = Arc::clone(&spine);
                             let adapter_id = self.adapter_id;
                             tokio::spawn(async move {
                                 if let Err(err) =
-                                    handle_body_endpoint(stream, ingress, spine, adapter_id)
+                                    handle_body_endpoint(stream, afferent_pathway, spine, adapter_id)
                                         .await
                                 {
                                     eprintln!("body endpoint handling failed: {err:#}");
@@ -343,7 +343,7 @@ async fn wait_for_act_ack(
 
 async fn handle_body_endpoint(
     stream: UnixStream,
-    ingress: SenseIngress,
+    afferent_pathway: SenseAfferentPathway,
     spine: Arc<Spine>,
     adapter_id: u64,
 ) -> Result<()> {
@@ -395,7 +395,7 @@ async fn handle_body_endpoint(
             continue;
         }
 
-        match parse_body_ingress_message(line) {
+        match parse_body_afferent_message(line) {
             Ok(message) => match message {
                 InboundBodyMessage::Auth {
                     endpoint_name,
@@ -436,7 +436,7 @@ async fn handle_body_endpoint(
                     };
 
                     if !registered_entries.is_empty()
-                        && let Err(err) = ingress
+                        && let Err(err) = afferent_pathway
                             .send(Sense::NewCapabilities(CapabilityPatch {
                                 entries: registered_entries,
                             }))
@@ -454,7 +454,7 @@ async fn handle_body_endpoint(
                     if let Some(body_endpoint_id) = auth_endpoint_id {
                         let routes = spine.remove_endpoint(body_endpoint_id);
                         if !routes.is_empty()
-                            && let Err(err) = ingress
+                            && let Err(err) = afferent_pathway
                                 .send(Sense::DropCapabilities(CapabilityDropPatch { routes }))
                                 .await
                         {
@@ -468,20 +468,20 @@ async fn handle_body_endpoint(
                         eprintln!("sense rejected: endpoint must auth first");
                         continue;
                     }
-                    if let Err(err) = ingress.send(Sense::Domain(sense)).await {
-                        eprintln!("dropping sense due to closed ingress: {err}");
+                    if let Err(err) = afferent_pathway.send(Sense::Domain(sense)).await {
+                        eprintln!("dropping sense due to closed afferent pathway: {err}");
                     }
                 }
             },
             Err(err) => {
-                eprintln!("invalid ingress message: {err}");
+                eprintln!("invalid afferent message: {err}");
             }
         }
     }
 
     let routes = spine.on_adapter_channel_closed(channel_id);
     if !routes.is_empty() {
-        let _ = ingress
+        let _ = afferent_pathway
             .send(Sense::DropCapabilities(CapabilityDropPatch { routes }))
             .await;
     }
@@ -497,7 +497,7 @@ mod tests {
         spine::{
             adapters::unix_socket::{
                 InboundBodyMessage, NdjsonEnvelope, OutboundActBody,
-                encode_body_egress_act_message, parse_body_ingress_message,
+                encode_body_egress_act_message, parse_body_afferent_message,
             },
             types::EndpointCapabilityDescriptor,
         },
@@ -506,7 +506,7 @@ mod tests {
 
     #[test]
     fn accepts_sense_message() {
-        let parsed = parse_body_ingress_message(
+        let parsed = parse_body_afferent_message(
             r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"41f25f33-99f5-4250-99c3-020f8a92e199","source":"sensor","payload":{"v":1}}}"#,
         )
         .expect("sense message should parse");
@@ -515,7 +515,7 @@ mod tests {
 
     #[test]
     fn accepts_correlated_sense_message_with_required_echo_fields() {
-        let parsed = parse_body_ingress_message(
+        let parsed = parse_body_afferent_message(
             r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"9d60f110-af6d-42cb-853b-bf6f6ce6f0dc","source":"body","payload":{"kind":"present_message_result","act_id":"0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a","capability_instance_id":"chat.1","endpoint_id":"macos-app.01","capability_id":"present.message"}}}"#,
         )
         .expect("correlated sense should parse");
@@ -524,7 +524,7 @@ mod tests {
 
     #[test]
     fn accepts_legacy_correlated_sense_message_with_neural_signal_alias() {
-        let parsed = parse_body_ingress_message(
+        let parsed = parse_body_afferent_message(
             r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"9d60f110-af6d-42cb-853b-bf6f6ce6f0dc","source":"body","payload":{"kind":"present_message_result","neural_signal_id":"0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a","capability_instance_id":"chat.1","endpoint_id":"macos-app.01","capability_id":"present.message"}}}"#,
         )
         .expect("legacy correlated sense should parse");
@@ -543,7 +543,7 @@ mod tests {
     #[test]
     fn rejects_correlated_sense_message_missing_echo_fields() {
         assert!(
-            parse_body_ingress_message(
+            parse_body_afferent_message(
                 r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"01234567-89ab-4cde-8f01-23456789abcd","source":"body","payload":{"kind":"present_message_result","act_id":"0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a","endpoint_id":"macos-app.01","capability_id":"present.message"}}}"#
             )
             .is_err()
@@ -553,7 +553,7 @@ mod tests {
     #[test]
     fn rejects_direction_violation_for_inbound_act_method() {
         assert!(
-            parse_body_ingress_message(
+            parse_body_afferent_message(
                 r#"{"method":"act","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{}}"#
             )
             .is_err()
@@ -627,7 +627,7 @@ mod tests {
             }
         });
 
-        let parsed = parse_body_ingress_message(&wire.to_string()).expect("auth should parse");
+        let parsed = parse_body_afferent_message(&wire.to_string()).expect("auth should parse");
         assert!(matches!(parsed, InboundBodyMessage::Auth { .. }));
     }
 
@@ -642,7 +642,7 @@ mod tests {
             }
         });
 
-        let parsed = parse_body_ingress_message(&wire.to_string()).expect("auth should parse");
+        let parsed = parse_body_afferent_message(&wire.to_string()).expect("auth should parse");
         match parsed {
             InboundBodyMessage::Auth {
                 endpoint_name,
@@ -664,7 +664,7 @@ mod tests {
                 "timestamp": 1739500000000_u64,
                 "body": {}
             });
-            assert!(parse_body_ingress_message(&wire.to_string()).is_err());
+            assert!(parse_body_afferent_message(&wire.to_string()).is_err());
         }
     }
 }

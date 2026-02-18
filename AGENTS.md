@@ -2,33 +2,13 @@
 
 Beluna is now organized as a multi-component repository.
 
-## Naming Conventions
-
-This monorepo follows specific naming rules for consistency:
-
-- **Directory names**: Omit "Beluna" prefix. Use short, descriptive names.
-  - ✅ `cli/`, `core/`, `apple-universal/`
-  - ❌ `beluna-cli/`, `beluna-core/`
-
-- **Package names**: Include "Beluna" for user clarity and discoverability.
-  - ✅ `beluna-cli` (in Cargo.toml)
-  - ❌ `cli` (too generic for package registries)
-
-- **User-facing documentation**: Include "Beluna" branding for clarity.
-  - ✅ "Beluna CLI", "Beluna Core" (in README.md, user guides)
-  - ❌ "CLI", "Core" (too vague for users)
-
-- **Internal documentation**: Use shorter names for agent efficiency.
-  - ✅ "Core", "CLI" (in AGENTS.md, architecture docs)
-  - Purpose: Keeps agent context concise
-
 ## Repository Layout (Crucial Only)
 
 ```
 .
-├── core/               # Core (Rust)
-├── cli/                # CLI body endpoint client (Rust)
-├── apple-universal/    # Apple Universal App (Swift)
+├── core/               # Beluna (Rust)
+├── cli/                # Beluna Body Endpoint, CLI (Rust)
+├── apple-universal/    # Beluna Body Endpoint, Apple Universal App (Swift)
 └── docs/               # Product, BDT contracts, modules, ADR and tasks
 ```
 
@@ -49,5 +29,29 @@ Read following documents if needed, and keep them current:
 - [Core's AGENTS.md](./core/AGENTS.md)
 - [Apple Universal App's AGENTS.md](./apple-universal/AGENTS.md)
 
-> Note that documents are for communication only, code are the single source of truth.
-> You are encouraged to add an AGENTS.md file under modules with significant complexity when needed.
+Note that documents are for communication only, code are the single source of truth.
+
+You are encouraged to add an AGENTS.md file under modules with significant complexity when needed.
+Whenever new understanding emerges during implementation, you should decide whether that knowledge is reusable. If yes, it must be promoted from working memory to documentation.
+
+## Coding Guidelines
+
+- Prefer abstraction only when duplication or patterns become clear.
+
+### Naming Conventions
+
+- Directory names: Omit "Beluna" prefix. Use short, descriptive names.
+  - ✅ `cli/`, `core/`, `apple-universal/`
+  - ❌ `beluna-cli/`, `beluna-core/`
+
+- Package names: Include "Beluna" for user clarity and discoverability.
+  - ✅ `beluna-cli` (in Cargo.toml)
+  - ❌ `cli` (too generic for package registries)
+
+- User-facing documentation: Include "Beluna" branding for clarity.
+  - ✅ "Beluna CLI", "Beluna Core" (in README.md, user guides)
+  - ❌ "CLI", "Core" (too vague for users)
+
+- Internal documentation: Use shorter names for agent efficiency.
+  - ✅ "Core", "CLI" (in AGENTS.md, architecture docs)
+  - Purpose: Keeps agent context concise

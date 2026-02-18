@@ -1,19 +1,15 @@
-use tokio::{
-    sync::mpsc,
-    time::{Duration, timeout},
-};
+use tokio::time::{Duration, timeout};
 
 use beluna::{
-    ingress::{IngressErrorKind, SenseIngress},
+    afferent_pathway::{AfferentPathwayErrorKind, SenseAfferentPathway},
     types::{Sense, SenseDatum},
 };
 
 #[tokio::test]
 async fn shutdown_gate_rejects_new_senses_and_sleep_send_blocks_until_space() {
-    let (sense_tx, mut sense_rx) = mpsc::channel(1);
-    let ingress = SenseIngress::new(sense_tx);
+    let (afferent_pathway, mut sense_rx) = SenseAfferentPathway::new(1);
 
-    ingress
+    afferent_pathway
         .send(Sense::Domain(SenseDatum {
             sense_id: "sense:1".to_string(),
             source: "test".to_string(),
@@ -22,23 +18,23 @@ async fn shutdown_gate_rejects_new_senses_and_sleep_send_blocks_until_space() {
         .await
         .expect("first sense should be accepted");
 
-    ingress.close_gate().await;
+    afferent_pathway.close_gate().await;
 
-    let err = ingress
+    let err = afferent_pathway
         .send(Sense::Domain(SenseDatum {
             sense_id: "sense:2".to_string(),
             source: "test".to_string(),
             payload: serde_json::json!({}),
         }))
         .await
-        .expect_err("closed ingress should reject producer sends");
-    assert_eq!(err.kind, IngressErrorKind::Closed);
+        .expect_err("closed afferent pathway should reject producer sends");
+    assert_eq!(err.kind, AfferentPathwayErrorKind::Closed);
 
-    let ingress_for_sleep = ingress.clone();
+    let afferent_pathway_for_sleep = afferent_pathway.clone();
     assert!(
         timeout(
             Duration::from_millis(100),
-            ingress_for_sleep.send_sleep_blocking(),
+            afferent_pathway_for_sleep.send_sleep_blocking(),
         )
         .await
         .is_err()
@@ -50,7 +46,7 @@ async fn shutdown_gate_rejects_new_senses_and_sleep_send_blocks_until_space() {
         .expect("first queued sense should exist");
     assert!(matches!(first, Sense::Domain(_)));
 
-    ingress
+    afferent_pathway
         .send_sleep_blocking()
         .await
         .expect("sleep should enqueue once queue has space");

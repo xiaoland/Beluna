@@ -3,8 +3,8 @@ use std::sync::Arc;
 use anyhow::{Result, anyhow};
 
 use crate::{
+    afferent_pathway::SenseAfferentPathway,
     body::std::payloads::{ShellLimits, WebLimits},
-    ingress::SenseIngress,
     spine::runtime::Spine,
     types::{Act, Sense},
 };
@@ -35,7 +35,7 @@ pub const WEB_CAPABILITY_ID: &str = "tool.web.fetch";
 
 pub fn register_std_body_endpoints(
     spine: Arc<Spine>,
-    sense_ingress: SenseIngress,
+    sense_afferent_pathway: SenseAfferentPathway,
     shell_enabled: bool,
     shell_limits: ShellLimits,
     web_enabled: bool,
@@ -43,17 +43,17 @@ pub fn register_std_body_endpoints(
 ) -> Result<()> {
     register_shell_endpoint(
         Arc::clone(&spine),
-        sense_ingress.clone(),
+        sense_afferent_pathway.clone(),
         shell_enabled,
         shell_limits,
     )?;
-    register_web_endpoint(spine, sense_ingress, web_enabled, web_limits)?;
+    register_web_endpoint(spine, sense_afferent_pathway, web_enabled, web_limits)?;
     Ok(())
 }
 
 fn register_shell_endpoint(
     spine: Arc<Spine>,
-    sense_ingress: SenseIngress,
+    sense_afferent_pathway: SenseAfferentPathway,
     enabled: bool,
     limits: ShellLimits,
 ) -> Result<()> {
@@ -65,7 +65,7 @@ fn register_shell_endpoint(
     {
         let endpoint: Arc<dyn Endpoint> = Arc::new(StdShellEndpoint {
             limits,
-            sense_ingress,
+            sense_afferent_pathway,
         });
         spine
             .add_endpoint(
@@ -79,7 +79,7 @@ fn register_shell_endpoint(
 
     #[cfg(not(feature = "std-shell"))]
     {
-        let _ = (spine, sense_ingress, limits);
+        let _ = (spine, sense_afferent_pathway, limits);
         Err(anyhow!(
             "body.std_shell.enabled=true but core is built without feature std-shell"
         ))
@@ -88,7 +88,7 @@ fn register_shell_endpoint(
 
 fn register_web_endpoint(
     spine: Arc<Spine>,
-    sense_ingress: SenseIngress,
+    sense_afferent_pathway: SenseAfferentPathway,
     enabled: bool,
     limits: WebLimits,
 ) -> Result<()> {
@@ -100,7 +100,7 @@ fn register_web_endpoint(
     {
         let endpoint: Arc<dyn Endpoint> = Arc::new(StdWebEndpoint {
             limits,
-            sense_ingress,
+            sense_afferent_pathway,
         });
         spine
             .add_endpoint(
@@ -114,7 +114,7 @@ fn register_web_endpoint(
 
     #[cfg(not(feature = "std-web"))]
     {
-        let _ = (spine, sense_ingress, limits);
+        let _ = (spine, sense_afferent_pathway, limits);
         Err(anyhow!(
             "body.std_web.enabled=true but core is built without feature std-web"
         ))
@@ -124,13 +124,13 @@ fn register_web_endpoint(
 #[cfg(feature = "std-shell")]
 struct StdShellEndpoint {
     limits: ShellLimits,
-    sense_ingress: SenseIngress,
+    sense_afferent_pathway: SenseAfferentPathway,
 }
 
 #[cfg(feature = "std-web")]
 struct StdWebEndpoint {
     limits: WebLimits,
-    sense_ingress: SenseIngress,
+    sense_afferent_pathway: SenseAfferentPathway,
 }
 
 #[cfg(feature = "std-shell")]
@@ -140,7 +140,7 @@ impl Endpoint for StdShellEndpoint {
         let request_id = format!("builtin-shell:{}", act.act_id);
         let output = handle_shell_invoke(&request_id, &act, &self.limits).await;
         if let Some(sense) = output.sense {
-            let _ = self.sense_ingress.send(Sense::Domain(sense)).await;
+            let _ = self.sense_afferent_pathway.send(Sense::Domain(sense)).await;
         }
 
         Ok(output.outcome)
@@ -154,7 +154,7 @@ impl Endpoint for StdWebEndpoint {
         let request_id = format!("builtin-web:{}", act.act_id);
         let output = handle_web_invoke(&request_id, &act, &self.limits).await;
         if let Some(sense) = output.sense {
-            let _ = self.sense_ingress.send(Sense::Domain(sense)).await;
+            let _ = self.sense_afferent_pathway.send(Sense::Domain(sense)).await;
         }
 
         Ok(output.outcome)

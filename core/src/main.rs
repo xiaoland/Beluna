@@ -3,10 +3,11 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use tokio::{
     signal::unix::{SignalKind, signal},
-    sync::{Mutex, mpsc},
+    sync::Mutex,
 };
 
 use beluna::{
+    afferent_pathway::SenseAfferentPathway,
     ai_gateway::{
         credentials::EnvCredentialProvider,
         gateway::AIGateway,
@@ -19,7 +20,6 @@ use beluna::{
     config::Config,
     continuity::ContinuityEngine,
     cortex::Cortex,
-    ingress::SenseIngress,
     ledger::LedgerStage,
     spine::{Spine, global_spine, install_global_spine, shutdown_global_spine},
     stem::{Stem, register_default_native_endpoints},
@@ -31,8 +31,8 @@ async fn main() -> Result<()> {
     let config = Config::load(&config_path)
         .with_context(|| format!("failed to load config from {}", config_path.display()))?;
 
-    let (sense_tx, sense_rx) = mpsc::channel(config.r#loop.sense_queue_capacity.max(1));
-    let ingress = SenseIngress::new(sense_tx);
+    let (afferent_pathway, sense_rx) =
+        SenseAfferentPathway::new(config.r#loop.sense_queue_capacity);
 
     let gateway_debug_enabled = ai_gateway_debug_enabled();
     let gateway_telemetry: Arc<dyn TelemetrySink> = if gateway_debug_enabled {
@@ -61,14 +61,14 @@ async fn main() -> Result<()> {
         None,
     ));
 
-    let spine_runtime = Spine::new(&config.spine, ingress.clone());
+    let spine_runtime = Spine::new(&config.spine, afferent_pathway.clone());
     install_global_spine(Arc::clone(&spine_runtime))
         .context("failed to initialize process-wide spine singleton")?;
     let spine = global_spine().context("spine singleton is not initialized")?;
     register_default_native_endpoints(spine)?;
     register_std_body_endpoints(
         Arc::clone(&spine_runtime),
-        ingress.clone(),
+        afferent_pathway.clone(),
         config.body.std_shell.enabled,
         config.body.std_shell.limits.clone(),
         config.body.std_web.enabled,
@@ -90,10 +90,10 @@ async fn main() -> Result<()> {
         _ = sigterm.recv() => "SIGTERM",
     };
 
-    eprintln!("received {signal_name}; closing sense ingress gate");
-    ingress.close_gate().await;
+    eprintln!("received {signal_name}; closing sense afferent pathway gate");
+    afferent_pathway.close_gate().await;
     eprintln!("enqueueing sleep sense");
-    ingress
+    afferent_pathway
         .send_sleep_blocking()
         .await
         .context("failed to enqueue sleep sense")?;

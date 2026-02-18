@@ -3,10 +3,10 @@ use std::sync::Arc;
 use tokio::sync::{Mutex, mpsc};
 
 use beluna::{
+    afferent_pathway::SenseAfferentPathway,
     config::SpineRuntimeConfig,
     continuity::ContinuityEngine,
     cortex::{AttemptExtractorHook, Cortex, PrimaryReasonerHook, ProseIr, ReactionLimits},
-    ingress::SenseIngress,
     ledger::LedgerStage,
     spine::{EndpointCapabilityDescriptor, RouteKey, Spine},
     stem::Stem,
@@ -15,7 +15,7 @@ use beluna::{
 
 fn test_spine() -> Arc<Spine> {
     let config = SpineRuntimeConfig { adapters: vec![] };
-    Spine::new(&config, SenseIngress::new(mpsc::channel(4).0))
+    Spine::new(&config, SenseAfferentPathway::new(4).0)
 }
 
 fn capture_cortex(physical_states: Arc<Mutex<Vec<PhysicalState>>>) -> Arc<Cortex> {

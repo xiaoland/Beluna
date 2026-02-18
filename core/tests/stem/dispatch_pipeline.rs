@@ -4,12 +4,12 @@ use async_trait::async_trait;
 use tokio::sync::{Mutex, mpsc};
 
 use beluna::{
+    afferent_pathway::SenseAfferentPathway,
     config::SpineRuntimeConfig,
     continuity::ContinuityEngine,
     cortex::{
         AttemptDraft, AttemptExtractorHook, Cortex, PrimaryReasonerHook, ProseIr, ReactionLimits,
     },
-    ingress::SenseIngress,
     ledger::LedgerStage,
     spine::{
         CostVector, Endpoint, EndpointBinding, EndpointCapabilityDescriptor,
@@ -40,7 +40,7 @@ impl Endpoint for SpyEndpoint {
 
 fn test_spine_with_spy() -> (Arc<Spine>, Arc<SpyEndpoint>) {
     let config = SpineRuntimeConfig { adapters: vec![] };
-    let spine = Spine::new(&config, SenseIngress::new(mpsc::channel(4).0));
+    let spine = Spine::new(&config, SenseAfferentPathway::new(4).0);
     let spy_endpoint = Arc::new(SpyEndpoint::default());
 
     spine

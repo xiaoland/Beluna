@@ -1,15 +1,14 @@
 use std::sync::Arc;
 
 use beluna::{
+    afferent_pathway::SenseAfferentPathway,
     config::SpineRuntimeConfig,
-    ingress::SenseIngress,
     spine::{
         CostVector, EndpointBinding, EndpointCapabilityDescriptor, EndpointExecutionOutcome,
         NativeFunctionEndpoint, RouteKey, Spine,
     },
     types::{Act, RequestedResources},
 };
-use tokio::sync::mpsc;
 
 fn request(body_endpoint_name: &str, capability_id: &str, seq_no: u64) -> Act {
     Act {
@@ -30,7 +29,7 @@ fn request(body_endpoint_name: &str, capability_id: &str, seq_no: u64) -> Act {
 
 fn test_spine() -> Arc<Spine> {
     let config = SpineRuntimeConfig { adapters: vec![] };
-    Spine::new(&config, SenseIngress::new(mpsc::channel(4).0))
+    Spine::new(&config, SenseAfferentPathway::new(4).0)
 }
 
 #[tokio::test]
