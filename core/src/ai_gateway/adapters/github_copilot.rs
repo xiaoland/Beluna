@@ -14,9 +14,10 @@ use tokio_stream::wrappers::ReceiverStream;
 use crate::ai_gateway::{
     adapters::{BackendAdapter, copilot_rpc::RpcIo},
     error::{GatewayError, GatewayErrorKind},
-    types::{
-        AdapterContext, AdapterInvocation, BackendCapabilities, BackendDialect, BackendIdentity,
-        BackendRawEvent, CanonicalRequest,
+    types::{AdapterContext, BackendCapabilities, BackendDialect},
+    types_chat::{
+        AdapterInvocation, BackendIdentity, BackendRawEvent, CanonicalContentPart,
+        CanonicalRequest, FinishReason,
     },
 };
 
@@ -218,7 +219,7 @@ impl BackendAdapter for GitHubCopilotAdapter {
 
                 let _ = tx
                     .send(Ok(BackendRawEvent::Completed {
-                        finish_reason: crate::ai_gateway::types::FinishReason::Stop,
+                        finish_reason: FinishReason::Stop,
                     }))
                     .await;
             } else {
@@ -270,7 +271,7 @@ fn build_panel_completion_params(req: &CanonicalRequest) -> Value {
         .iter()
         .flat_map(|message| message.parts.iter())
         .filter_map(|part| match part {
-            crate::ai_gateway::types::CanonicalContentPart::Text { text } => Some(text.as_str()),
+            CanonicalContentPart::Text { text } => Some(text.as_str()),
             _ => None,
         })
         .collect::<Vec<_>>()

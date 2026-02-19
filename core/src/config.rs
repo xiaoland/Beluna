@@ -120,9 +120,9 @@ pub struct CortexRuntimeConfig {
     #[serde(default)]
     pub default_limits: ReactionLimits,
     #[serde(default)]
-    pub primary_backend_id: Option<String>,
+    pub primary_route: Option<String>,
     #[serde(default)]
-    pub sub_backend_id: Option<String>,
+    pub sub_route: Option<String>,
 }
 
 impl Default for CortexRuntimeConfig {
@@ -131,8 +131,8 @@ impl Default for CortexRuntimeConfig {
             inbox_capacity: default_cortex_inbox_capacity(),
             outbox_capacity: default_cortex_outbox_capacity(),
             default_limits: ReactionLimits::default(),
-            primary_backend_id: None,
-            sub_backend_id: None,
+            primary_route: None,
+            sub_route: None,
         }
     }
 }

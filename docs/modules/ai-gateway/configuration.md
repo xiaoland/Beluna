@@ -4,18 +4,26 @@ Gateway config is nested under top-level `ai_gateway`.
 
 ## Required Fields
 
-- `default_backend`
 - `backends[]`
+- `route_aliases`
 
 Each backend profile includes:
 
 - `id`
 - `dialect`
 - `credential`
-- `default_model`
+- `models[]`
 - optional `endpoint`
 - optional `capabilities`
 - optional `copilot` (for `github_copilot_sdk`)
+
+`route_aliases` maps an alias name to one concrete target:
+
+- `alias -> { backend_id, model_id }`
+
+Convention:
+
+- alias `default` must exist.
 
 ## Credential Shapes
 

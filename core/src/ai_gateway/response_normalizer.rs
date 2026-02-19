@@ -1,6 +1,7 @@
 use crate::ai_gateway::{
     error::GatewayError,
-    types::{BackendRawEvent, GatewayEvent, RequestId},
+    types::RequestId,
+    types_chat::{BackendRawEvent, ChatEvent},
 };
 
 #[derive(Default, Clone, Copy)]
@@ -11,9 +12,9 @@ impl ResponseNormalizer {
         &self,
         request_id: &RequestId,
         raw: BackendRawEvent,
-    ) -> Result<GatewayEvent, GatewayError> {
+    ) -> Result<ChatEvent, GatewayError> {
         let event = match raw {
-            BackendRawEvent::OutputTextDelta { delta } => GatewayEvent::OutputTextDelta {
+            BackendRawEvent::OutputTextDelta { delta } => ChatEvent::TextDelta {
                 request_id: request_id.clone(),
                 delta,
             },
@@ -21,25 +22,25 @@ impl ResponseNormalizer {
                 call_id,
                 name,
                 arguments_delta,
-            } => GatewayEvent::ToolCallDelta {
+            } => ChatEvent::ToolCallDelta {
                 request_id: request_id.clone(),
                 call_id,
                 name,
                 arguments_delta,
             },
-            BackendRawEvent::ToolCallReady { call } => GatewayEvent::ToolCallReady {
+            BackendRawEvent::ToolCallReady { call } => ChatEvent::ToolCallReady {
                 request_id: request_id.clone(),
                 call,
             },
-            BackendRawEvent::Usage { usage } => GatewayEvent::Usage {
+            BackendRawEvent::Usage { usage } => ChatEvent::Usage {
                 request_id: request_id.clone(),
                 usage,
             },
-            BackendRawEvent::Completed { finish_reason } => GatewayEvent::Completed {
+            BackendRawEvent::Completed { finish_reason } => ChatEvent::Completed {
                 request_id: request_id.clone(),
                 finish_reason,
             },
-            BackendRawEvent::Failed { error } => GatewayEvent::Failed {
+            BackendRawEvent::Failed { error } => ChatEvent::Failed {
                 request_id: request_id.clone(),
                 error,
             },
@@ -48,26 +49,26 @@ impl ResponseNormalizer {
         Ok(event)
     }
 
-    pub fn is_output_event(event: &GatewayEvent) -> bool {
+    pub fn is_output_event(event: &ChatEvent) -> bool {
         matches!(
             event,
-            GatewayEvent::OutputTextDelta { .. }
-                | GatewayEvent::ToolCallDelta { .. }
-                | GatewayEvent::ToolCallReady { .. }
+            ChatEvent::TextDelta { .. }
+                | ChatEvent::ToolCallDelta { .. }
+                | ChatEvent::ToolCallReady { .. }
         )
     }
 
-    pub fn is_tool_event(event: &GatewayEvent) -> bool {
+    pub fn is_tool_event(event: &ChatEvent) -> bool {
         matches!(
             event,
-            GatewayEvent::ToolCallDelta { .. } | GatewayEvent::ToolCallReady { .. }
+            ChatEvent::ToolCallDelta { .. } | ChatEvent::ToolCallReady { .. }
         )
     }
 
-    pub fn is_terminal_event(event: &GatewayEvent) -> bool {
+    pub fn is_terminal_event(event: &ChatEvent) -> bool {
         matches!(
             event,
-            GatewayEvent::Completed { .. } | GatewayEvent::Failed { .. }
+            ChatEvent::Completed { .. } | ChatEvent::Failed { .. }
         )
     }
 }

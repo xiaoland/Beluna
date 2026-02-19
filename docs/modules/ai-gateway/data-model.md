@@ -2,18 +2,23 @@
 
 ## Key Types
 
-- `BelunaInferenceRequest`: caller-facing input
+- `ChatRequest`: caller-facing chat capability input
 - `CanonicalRequest`: backend-neutral normalized input
-- `GatewayEvent`: canonical streaming event union
-- `CanonicalFinalResponse`: non-stream aggregate output
+- `ChatEvent`: chat streaming event union
+- `ChatResponse`: non-stream aggregate output
 - `GatewayError`: canonical error taxonomy
+
+Code split:
+
+- non capability-specific types are in `core/src/ai_gateway/types.rs`
+- chat capability types are in `core/src/ai_gateway/types_chat.rs`
 
 ## Event Lifecycle
 
-Canonical stream contract:
+Chat stream contract:
 
 - first event: `Started`
-- zero or more non-terminal events (`OutputTextDelta`, `ToolCallDelta`, `ToolCallReady`, optional `Usage`)
+- zero or more non-terminal events (`TextDelta`, `ToolCallDelta`, `ToolCallReady`, optional `Usage`)
 - exactly one terminal event: `Completed` or `Failed`
 
 ## Tool Status Scope

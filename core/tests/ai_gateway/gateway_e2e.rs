@@ -19,11 +19,14 @@ use beluna::ai_gateway::{
     gateway::AIGateway,
     telemetry::NoopTelemetrySink,
     types::{
-        AIGatewayConfig, AdapterContext, AdapterInvocation, BackendCapabilities, BackendDialect,
-        BackendIdentity, BackendProfile, BackendRawEvent, BelunaContentPart,
-        BelunaInferenceRequest, BelunaMessage, BelunaRole, BudgetConfig, CanonicalRequest,
-        CredentialRef, FinishReason, GatewayEvent, OutputMode, ReliabilityConfig,
-        RequestLimitOverrides, ResolvedCredential, RetryPolicy, ToolChoice,
+        AIGatewayConfig, AdapterContext, BackendCapabilities, BackendDialect, BackendProfile,
+        BudgetConfig, CredentialRef, ModelProfile, ModelTarget, ReliabilityConfig,
+        ResolvedCredential, RetryPolicy,
+    },
+    types_chat::{
+        AdapterInvocation, BackendIdentity, BackendRawEvent, BelunaContentPart, BelunaMessage,
+        BelunaRole, CanonicalRequest, ChatEvent, ChatRequest, FinishReason, OutputMode,
+        RequestLimitOverrides, ToolChoice, UsageStats,
     },
 };
 
@@ -167,7 +170,7 @@ impl BackendAdapter for UsageOverBudgetThenCompleteAdapter {
         Ok(AdapterInvocation {
             stream: Box::pin(iter(vec![
                 Ok(BackendRawEvent::Usage {
-                    usage: beluna::ai_gateway::types::UsageStats {
+                    usage: UsageStats {
                         input_tokens: Some(10),
                         output_tokens: Some(20),
                         total_tokens: Some(30),
@@ -239,14 +242,24 @@ fn gateway_config() -> AIGatewayConfig {
 }
 
 fn gateway_config_with_budget(budget: BudgetConfig) -> AIGatewayConfig {
+    let mut route_aliases = BTreeMap::new();
+    route_aliases.insert(
+        "default".to_string(),
+        ModelTarget {
+            backend_id: "openai-default".to_string(),
+            model_id: "m1".to_string(),
+        },
+    );
+
     AIGatewayConfig {
-        default_backend: "openai-default".to_string(),
         backends: vec![BackendProfile {
             id: "openai-default".to_string(),
             dialect: BackendDialect::OpenAiCompatible,
             endpoint: Some("https://example.invalid/v1".to_string()),
             credential: CredentialRef::None,
-            default_model: "m1".to_string(),
+            models: vec![ModelProfile {
+                id: "m1".to_string(),
+            }],
             capabilities: Some(BackendCapabilities {
                 streaming: true,
                 tool_calls: false,
@@ -256,6 +269,7 @@ fn gateway_config_with_budget(budget: BudgetConfig) -> AIGatewayConfig {
             }),
             copilot: None,
         }],
+        route_aliases,
         reliability: ReliabilityConfig {
             request_timeout_ms: 30_000,
             max_retries: 2,
@@ -269,11 +283,10 @@ fn gateway_config_with_budget(budget: BudgetConfig) -> AIGatewayConfig {
     }
 }
 
-fn request() -> BelunaInferenceRequest {
-    BelunaInferenceRequest {
+fn request() -> ChatRequest {
+    ChatRequest {
         request_id: None,
-        backend_id: Some("openai-default".to_string()),
-        model: None,
+        route: Some("default".to_string()),
         messages: vec![BelunaMessage {
             role: BelunaRole::User,
             parts: vec![BelunaContentPart::Text {
@@ -288,12 +301,11 @@ fn request() -> BelunaInferenceRequest {
         limits: RequestLimitOverrides::default(),
         metadata: BTreeMap::new(),
         cost_attribution_id: None,
-        stream: true,
     }
 }
 
 #[tokio::test]
-async fn given_transient_failure_before_output_when_infer_once_then_gateway_retries_and_succeeds() {
+async fn given_transient_failure_before_output_when_chat_once_then_gateway_retries_and_succeeds() {
     let calls = Arc::new(AtomicUsize::new(0));
     let adapter = Arc::new(RetryOnceMockAdapter {
         calls: Arc::clone(&calls),
@@ -311,7 +323,7 @@ async fn given_transient_failure_before_output_when_infer_once_then_gateway_retr
     .with_adapters(adapters);
 
     let response = gateway
-        .infer_once(request())
+        .chat_once(request())
         .await
         .expect("request should succeed after retry");
     assert_eq!(response.output_text, "ok");
@@ -319,7 +331,7 @@ async fn given_transient_failure_before_output_when_infer_once_then_gateway_retr
 }
 
 #[tokio::test]
-async fn given_failure_after_output_when_infer_once_then_gateway_does_not_retry() {
+async fn given_failure_after_output_when_chat_once_then_gateway_does_not_retry() {
     let calls = Arc::new(AtomicUsize::new(0));
     let adapter = Arc::new(OutputThenFailAdapter {
         calls: Arc::clone(&calls),
@@ -337,7 +349,7 @@ async fn given_failure_after_output_when_infer_once_then_gateway_does_not_retry(
     .with_adapters(adapters);
 
     let err = gateway
-        .infer_once(request())
+        .chat_once(request())
         .await
         .expect_err("request should fail without retry after output");
     assert_eq!(err.kind, GatewayErrorKind::BackendTransient);
@@ -345,7 +357,7 @@ async fn given_failure_after_output_when_infer_once_then_gateway_does_not_retry(
 }
 
 #[tokio::test]
-async fn given_failing_stream_when_infer_stream_then_started_is_first_and_terminal_is_emitted_once()
+async fn given_failing_stream_when_chat_stream_then_started_is_first_and_terminal_is_emitted_once()
 {
     let calls = Arc::new(AtomicUsize::new(0));
     let adapter = Arc::new(OutputThenFailAdapter {
@@ -364,7 +376,7 @@ async fn given_failing_stream_when_infer_stream_then_started_is_first_and_termin
     .with_adapters(adapters);
 
     let mut stream = gateway
-        .infer_stream(request())
+        .chat_stream(request())
         .await
         .expect("stream should start");
     let first = stream
@@ -372,18 +384,18 @@ async fn given_failing_stream_when_infer_stream_then_started_is_first_and_termin
         .await
         .expect("started event")
         .expect("started event should be ok");
-    assert!(matches!(first, GatewayEvent::Started { .. }));
+    assert!(matches!(first, ChatEvent::Started { .. }));
 
     let mut terminal_count = 0;
     while let Some(event) = stream.next().await {
         let event = event.expect("gateway event should be valid");
         if matches!(
             event,
-            GatewayEvent::Completed { .. } | GatewayEvent::Failed { .. }
+            ChatEvent::Completed { .. } | ChatEvent::Failed { .. }
         ) {
             terminal_count += 1;
             assert!(
-                matches!(event, GatewayEvent::Failed { .. }),
+                matches!(event, ChatEvent::Failed { .. }),
                 "this failure-path adapter must terminate with Failed event",
             );
         }
@@ -393,7 +405,7 @@ async fn given_failing_stream_when_infer_stream_then_started_is_first_and_termin
 }
 
 #[tokio::test]
-async fn given_usage_over_budget_post_check_when_infer_once_then_stream_still_completes() {
+async fn given_usage_over_budget_post_check_when_chat_once_then_stream_still_completes() {
     let adapter = Arc::new(UsageOverBudgetThenCompleteAdapter);
 
     let mut adapters: HashMap<BackendDialect, Arc<dyn BackendAdapter>> = HashMap::new();
@@ -413,7 +425,7 @@ async fn given_usage_over_budget_post_check_when_infer_once_then_stream_still_co
     .with_adapters(adapters);
 
     let response = gateway
-        .infer_once(request())
+        .chat_once(request())
         .await
         .expect("usage post-check must not terminate active stream");
     assert_eq!(response.output_text, "still-running");
@@ -450,7 +462,7 @@ async fn given_stream_drop_when_inflight_then_adapter_is_cancelled_and_budget_is
     .with_adapters(adapters);
 
     let mut first_stream = gateway
-        .infer_stream(request())
+        .chat_stream(request())
         .await
         .expect("first stream should start");
     let first_started = first_stream
@@ -458,7 +470,7 @@ async fn given_stream_drop_when_inflight_then_adapter_is_cancelled_and_budget_is
         .await
         .expect("first started event should exist")
         .expect("first started event should be valid");
-    assert!(matches!(first_started, GatewayEvent::Started { .. }));
+    assert!(matches!(first_started, ChatEvent::Started { .. }));
 
     timeout(Duration::from_millis(300), async {
         while !invoked.load(Ordering::SeqCst) {
@@ -478,14 +490,14 @@ async fn given_stream_drop_when_inflight_then_adapter_is_cancelled_and_budget_is
     .await
     .expect("adapter cancel handle should be called");
 
-    let mut second_stream = timeout(Duration::from_millis(500), gateway.infer_stream(request()))
+    let mut second_stream = timeout(Duration::from_millis(500), gateway.chat_stream(request()))
         .await
-        .expect("second infer_stream should not block after release")
+        .expect("second chat_stream should not block after release")
         .expect("second stream should start");
     let second_started = timeout(Duration::from_millis(500), second_stream.next())
         .await
         .expect("second started event should arrive")
         .expect("second started event should exist")
         .expect("second started event should be valid");
-    assert!(matches!(second_started, GatewayEvent::Started { .. }));
+    assert!(matches!(second_started, ChatEvent::Started { .. }));
 }

@@ -4,11 +4,10 @@ use uuid::Uuid;
 
 use crate::ai_gateway::{
     error::{GatewayError, invalid_request},
-    types::{
-        BelunaContentPart, BelunaInferenceRequest, BelunaMessage, BelunaRole, BelunaToolDefinition,
-        CanonicalContentPart, CanonicalLimits, CanonicalMessage, CanonicalOutputMode,
-        CanonicalRequest, CanonicalRole, CanonicalToolChoice, CanonicalToolDefinition, OutputMode,
-        ToolChoice,
+    types_chat::{
+        BelunaContentPart, BelunaMessage, BelunaRole, BelunaToolDefinition, CanonicalContentPart,
+        CanonicalLimits, CanonicalMessage, CanonicalOutputMode, CanonicalRequest, CanonicalRole,
+        CanonicalToolChoice, CanonicalToolDefinition, ChatRequest, OutputMode, ToolChoice,
     },
 };
 
@@ -16,9 +15,10 @@ use crate::ai_gateway::{
 pub struct RequestNormalizer;
 
 impl RequestNormalizer {
-    pub fn normalize(
+    pub fn normalize_chat(
         &self,
-        request: BelunaInferenceRequest,
+        request: ChatRequest,
+        stream: bool,
     ) -> Result<CanonicalRequest, GatewayError> {
         if request.messages.is_empty() {
             return Err(invalid_request("messages must not be empty"));
@@ -32,14 +32,14 @@ impl RequestNormalizer {
             Self::validate_tool_schema_keywords(tool)?;
         }
 
+        let route_hint = Self::resolve_route_hint(&request)?;
         let request_id = request
             .request_id
             .unwrap_or_else(|| Uuid::now_v7().to_string());
 
         Ok(CanonicalRequest {
             request_id,
-            backend_hint: request.backend_id,
-            model_override: request.model,
+            route_hint,
             messages: request
                 .messages
                 .into_iter()
@@ -58,7 +58,7 @@ impl RequestNormalizer {
             },
             metadata: request.metadata,
             cost_attribution_id: request.cost_attribution_id,
-            stream: request.stream,
+            stream,
         })
     }
 
@@ -145,6 +145,17 @@ impl RequestNormalizer {
         }
 
         Ok(())
+    }
+
+    fn resolve_route_hint(request: &ChatRequest) -> Result<Option<String>, GatewayError> {
+        if let Some(route) = request
+            .route
+            .as_ref()
+            .filter(|route| !route.trim().is_empty())
+        {
+            return Ok(Some(route.trim().to_string()));
+        }
+        Ok(None)
     }
 
     fn map_message(message: BelunaMessage) -> Result<CanonicalMessage, GatewayError> {

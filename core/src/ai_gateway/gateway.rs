@@ -15,10 +15,10 @@ use crate::ai_gateway::{
     response_normalizer::ResponseNormalizer,
     router::BackendRouter,
     telemetry::{GatewayTelemetryEvent, TelemetrySink, debug_log},
-    types::{
-        AIGatewayConfig, AdapterContext, BackendCapabilities, BackendDialect,
-        BelunaInferenceRequest, CanonicalFinalResponse, CanonicalRequest, FinishReason,
-        GatewayEvent, GatewayEventStream, UsageStats,
+    types::{AIGatewayConfig, AdapterContext, BackendCapabilities, BackendDialect},
+    types_chat::{
+        CanonicalRequest, ChatEvent, ChatEventStream, ChatRequest, ChatResponse, FinishReason,
+        UsageStats,
     },
 };
 
@@ -62,11 +62,87 @@ impl AIGateway {
         self
     }
 
-    pub async fn infer_stream(
+    pub async fn chat_stream(&self, request: ChatRequest) -> Result<ChatEventStream, GatewayError> {
+        self.chat_stream_internal(request, true).await
+    }
+
+    pub async fn chat_once(&self, request: ChatRequest) -> Result<ChatResponse, GatewayError> {
+        let mut stream = self.chat_stream_internal(request, false).await?;
+        let mut output_text = String::new();
+        let mut tool_calls = Vec::new();
+        let mut usage: Option<UsageStats> = None;
+        let mut finish_reason: Option<FinishReason> = None;
+        let mut request_id: Option<String> = None;
+
+        while let Some(item) = stream.next().await {
+            let event = item?;
+            match event {
+                ChatEvent::Started { request_id: id, .. } => {
+                    request_id = Some(id);
+                }
+                ChatEvent::TextDelta { delta, .. } => {
+                    output_text.push_str(&delta);
+                }
+                ChatEvent::ToolCallReady { call, .. } => {
+                    tool_calls.push(call);
+                }
+                ChatEvent::Usage { usage: current, .. } => {
+                    usage = Some(current);
+                }
+                ChatEvent::Completed {
+                    request_id: id,
+                    finish_reason: reason,
+                } => {
+                    request_id = Some(id);
+                    finish_reason = Some(reason);
+                    break;
+                }
+                ChatEvent::Failed { error, .. } => {
+                    return Err(error);
+                }
+                ChatEvent::ToolCallDelta { .. } => {}
+            }
+        }
+
+        let request_id = request_id.ok_or_else(|| {
+            GatewayError::new(
+                GatewayErrorKind::ProtocolViolation,
+                "missing request id in stream",
+            )
+            .with_retryable(false)
+        })?;
+
+        let finish_reason = finish_reason.ok_or_else(|| {
+            GatewayError::new(
+                GatewayErrorKind::ProtocolViolation,
+                "stream ended without terminal event",
+            )
+            .with_retryable(false)
+        })?;
+
+        Ok(ChatResponse {
+            request_id,
+            output_text,
+            tool_calls,
+            usage,
+            finish_reason,
+            backend_metadata: Default::default(),
+        })
+    }
+
+    async fn chat_stream_internal(
         &self,
-        request: BelunaInferenceRequest,
-    ) -> Result<GatewayEventStream, GatewayError> {
-        let canonical_request = self.request_normalizer.normalize(request)?;
+        request: ChatRequest,
+        stream: bool,
+    ) -> Result<ChatEventStream, GatewayError> {
+        let canonical_request = self.request_normalizer.normalize_chat(request, stream)?;
+        self.dispatch_stream(canonical_request).await
+    }
+
+    async fn dispatch_stream(
+        &self,
+        canonical_request: CanonicalRequest,
+    ) -> Result<ChatEventStream, GatewayError> {
         let selected = self.router.select(&canonical_request)?;
         let credential = self
             .credential_provider
@@ -103,7 +179,7 @@ impl AIGateway {
             .await?;
 
         debug_log(format!(
-            "infer_stream_prepared request_id={} backend_id={} dialect={:?} model={} stream={} stage={} max_output_tokens={:?} requested_timeout_ms={:?} effective_timeout_ms={}",
+            "chat_stream_prepared request_id={} backend_id={} dialect={:?} model={} stream={} stage={} max_output_tokens={:?} requested_timeout_ms={:?} effective_timeout_ms={}",
             canonical_request.request_id,
             selected.backend_id,
             selected.profile.dialect,
@@ -127,7 +203,7 @@ impl AIGateway {
                 cost_attribution_id: canonical_request.cost_attribution_id.clone(),
             });
 
-        let (tx, rx) = mpsc::channel::<Result<GatewayEvent, GatewayError>>(128);
+        let (tx, rx) = mpsc::channel::<Result<ChatEvent, GatewayError>>(128);
 
         let response_normalizer = self.response_normalizer;
         let reliability = self.reliability.clone();
@@ -153,78 +229,11 @@ impl AIGateway {
 
         Ok(Box::pin(ReceiverStream::new(rx)))
     }
-
-    pub async fn infer_once(
-        &self,
-        request: BelunaInferenceRequest,
-    ) -> Result<CanonicalFinalResponse, GatewayError> {
-        let mut stream = self.infer_stream(request).await?;
-        let mut output_text = String::new();
-        let mut tool_calls = Vec::new();
-        let mut usage: Option<UsageStats> = None;
-        let mut finish_reason: Option<FinishReason> = None;
-        let mut request_id: Option<String> = None;
-
-        while let Some(item) = stream.next().await {
-            let event = item?;
-            match event {
-                GatewayEvent::Started { request_id: id, .. } => {
-                    request_id = Some(id);
-                }
-                GatewayEvent::OutputTextDelta { delta, .. } => {
-                    output_text.push_str(&delta);
-                }
-                GatewayEvent::ToolCallReady { call, .. } => {
-                    tool_calls.push(call);
-                }
-                GatewayEvent::Usage { usage: current, .. } => {
-                    usage = Some(current);
-                }
-                GatewayEvent::Completed {
-                    request_id: id,
-                    finish_reason: reason,
-                } => {
-                    request_id = Some(id);
-                    finish_reason = Some(reason);
-                    break;
-                }
-                GatewayEvent::Failed { error, .. } => {
-                    return Err(error);
-                }
-                GatewayEvent::ToolCallDelta { .. } => {}
-            }
-        }
-
-        let request_id = request_id.ok_or_else(|| {
-            GatewayError::new(
-                GatewayErrorKind::ProtocolViolation,
-                "missing request id in stream",
-            )
-            .with_retryable(false)
-        })?;
-
-        let finish_reason = finish_reason.ok_or_else(|| {
-            GatewayError::new(
-                GatewayErrorKind::ProtocolViolation,
-                "stream ended without terminal event",
-            )
-            .with_retryable(false)
-        })?;
-
-        Ok(CanonicalFinalResponse {
-            request_id,
-            output_text,
-            tool_calls,
-            usage,
-            finish_reason,
-            backend_metadata: Default::default(),
-        })
-    }
 }
 
 #[allow(clippy::too_many_arguments)]
 async fn run_stream_task(
-    tx: mpsc::Sender<Result<GatewayEvent, GatewayError>>,
+    tx: mpsc::Sender<Result<ChatEvent, GatewayError>>,
     canonical_request: CanonicalRequest,
     selected: crate::ai_gateway::router::SelectedBackend,
     adapter: Arc<dyn BackendAdapter>,
@@ -245,10 +254,10 @@ async fn run_stream_task(
     let mut lease = Some(budget_lease);
 
     if tx
-        .send(Ok(GatewayEvent::Started {
+        .send(Ok(ChatEvent::Started {
             request_id: request_id.clone(),
             backend_id: selected.backend_id.clone(),
-            model: selected.resolved_model.clone(),
+            model_id: selected.resolved_model.clone(),
         }))
         .await
         .is_err()
@@ -287,7 +296,7 @@ async fn run_stream_task(
             .await
         {
             let _ = tx
-                .send(Ok(GatewayEvent::Failed {
+                .send(Ok(ChatEvent::Failed {
                     request_id: request_id.clone(),
                     error: err.clone(),
                 }))
@@ -394,7 +403,7 @@ async fn run_stream_task(
                 }
 
                 let _ = tx
-                    .send(Ok(GatewayEvent::Failed {
+                    .send(Ok(ChatEvent::Failed {
                         request_id: request_id.clone(),
                         error: err.clone(),
                     }))
@@ -507,7 +516,7 @@ async fn run_stream_task(
                     }
 
                     match event {
-                        GatewayEvent::Usage { usage, .. } => {
+                        ChatEvent::Usage { usage, .. } => {
                             if usage_emitted {
                                 terminal_error = Some(
                                     GatewayError::new(
@@ -521,7 +530,7 @@ async fn run_stream_task(
                             }
                             usage_emitted = true;
                             last_usage = Some(usage.clone());
-                            let usage_event = GatewayEvent::Usage {
+                            let usage_event = ChatEvent::Usage {
                                 request_id: request_id.clone(),
                                 usage,
                             };
@@ -538,11 +547,11 @@ async fn run_stream_task(
                                 return;
                             }
                         }
-                        GatewayEvent::Completed { finish_reason, .. } => {
+                        ChatEvent::Completed { finish_reason, .. } => {
                             terminal_success = Some(finish_reason);
                             break;
                         }
-                        GatewayEvent::Failed { error, .. } => {
+                        ChatEvent::Failed { error, .. } => {
                             terminal_error = Some(error);
                             break;
                         }
@@ -575,7 +584,7 @@ async fn run_stream_task(
             ));
             reliability.record_success(&selected.backend_id).await;
             let _ = tx
-                .send(Ok(GatewayEvent::Completed {
+                .send(Ok(ChatEvent::Completed {
                     request_id: request_id.clone(),
                     finish_reason,
                 }))
@@ -664,7 +673,7 @@ async fn run_stream_task(
         }
 
         let _ = tx
-            .send(Ok(GatewayEvent::Failed {
+            .send(Ok(ChatEvent::Failed {
                 request_id: request_id.clone(),
                 error: err.clone(),
             }))
@@ -688,15 +697,15 @@ async fn run_stream_task(
     }
 }
 
-fn gateway_event_name(event: &GatewayEvent) -> &'static str {
+fn gateway_event_name(event: &ChatEvent) -> &'static str {
     match event {
-        GatewayEvent::Started { .. } => "started",
-        GatewayEvent::OutputTextDelta { .. } => "output_text_delta",
-        GatewayEvent::ToolCallDelta { .. } => "tool_call_delta",
-        GatewayEvent::ToolCallReady { .. } => "tool_call_ready",
-        GatewayEvent::Usage { .. } => "usage",
-        GatewayEvent::Completed { .. } => "completed",
-        GatewayEvent::Failed { .. } => "failed",
+        ChatEvent::Started { .. } => "started",
+        ChatEvent::TextDelta { .. } => "text_delta",
+        ChatEvent::ToolCallDelta { .. } => "tool_call_delta",
+        ChatEvent::ToolCallReady { .. } => "tool_call_ready",
+        ChatEvent::Usage { .. } => "usage",
+        ChatEvent::Completed { .. } => "completed",
+        ChatEvent::Failed { .. } => "failed",
     }
 }
 

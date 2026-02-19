@@ -22,7 +22,8 @@ The architecture guidance previously described here is now maintained in HLD.
 ```text
 core/src/ai_gateway/
 ├── mod.rs
-├── types.rs
+├── types.rs            # Non capability-specific types
+├── types_chat.rs       # Chat capability types
 ├── error.rs
 ├── capabilities.rs
 ├── credentials.rs
@@ -44,4 +45,4 @@ core/src/ai_gateway/
 
 ## Last Updated
 
-> 2026-02-09
+> 2026-02-19

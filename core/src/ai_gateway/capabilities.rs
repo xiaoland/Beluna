@@ -1,8 +1,8 @@
 use crate::ai_gateway::{
     error::{GatewayError, unsupported_capability},
-    types::{
-        BackendCapabilities, CanonicalContentPart, CanonicalOutputMode, CanonicalRequest,
-        CanonicalToolChoice,
+    types::BackendCapabilities,
+    types_chat::{
+        CanonicalContentPart, CanonicalOutputMode, CanonicalRequest, CanonicalToolChoice,
     },
 };
 

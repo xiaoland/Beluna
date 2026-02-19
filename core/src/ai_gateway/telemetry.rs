@@ -2,7 +2,8 @@ use std::sync::OnceLock;
 
 use crate::ai_gateway::{
     error::GatewayErrorKind,
-    types::{BackendId, RequestId, UsageStats},
+    types::{BackendId, RequestId},
+    types_chat::UsageStats,
 };
 
 #[derive(Debug, Clone)]

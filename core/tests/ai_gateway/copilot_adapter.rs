@@ -1,18 +1,17 @@
 use beluna::ai_gateway::{
     adapters::{BackendAdapter, github_copilot::GitHubCopilotAdapter},
     error::GatewayErrorKind,
-    types::{
-        AdapterContext, BackendDialect, BackendProfile, CanonicalContentPart, CanonicalLimits,
-        CanonicalMessage, CanonicalOutputMode, CanonicalRequest, CanonicalRole,
-        CanonicalToolChoice, CredentialRef, ResolvedCredential,
+    types::{AdapterContext, BackendDialect, BackendProfile, CredentialRef, ResolvedCredential},
+    types_chat::{
+        CanonicalContentPart, CanonicalLimits, CanonicalMessage, CanonicalOutputMode,
+        CanonicalRequest, CanonicalRole, CanonicalToolChoice,
     },
 };
 
 fn request() -> CanonicalRequest {
     CanonicalRequest {
         request_id: "req-copilot".to_string(),
-        backend_hint: Some("copilot".to_string()),
-        model_override: Some("copilot-default".to_string()),
+        route_hint: Some("copilot/copilot-default".to_string()),
         messages: vec![CanonicalMessage {
             role: CanonicalRole::User,
             parts: vec![CanonicalContentPart::Text {
@@ -44,7 +43,9 @@ async fn given_missing_copilot_config_when_invoked_then_first_stream_item_is_inv
             dialect: BackendDialect::GitHubCopilotSdk,
             endpoint: None,
             credential: CredentialRef::None,
-            default_model: "copilot-default".to_string(),
+            models: vec![beluna::ai_gateway::types::ModelProfile {
+                id: "copilot-default".to_string(),
+            }],
             capabilities: None,
             copilot: None,
         },

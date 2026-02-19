@@ -16,6 +16,7 @@
 - [ ] CortexCollaborators 是什么，和 AI Gateway 强耦合是预期行为
 - [ ] Cortex contracts 中的 Act, Sense, Capability 移动到 types 中
 - [ ] Cortex Config 来配置用什么 ai-provider-string 为 Primary, Serialize, Deserialize 等等
+- [ ] Cognition State 还包含 messages （但这是当前实现特定的，就作为一个字段就可以了）
 
 ### Spine
 

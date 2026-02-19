@@ -4,9 +4,8 @@ use async_trait::async_trait;
 
 use crate::ai_gateway::{
     error::GatewayError,
-    types::{
-        AdapterContext, AdapterInvocation, BackendCapabilities, BackendDialect, CanonicalRequest,
-    },
+    types::{AdapterContext, BackendCapabilities, BackendDialect},
+    types_chat::{AdapterInvocation, CanonicalRequest},
 };
 
 pub mod copilot_rpc;

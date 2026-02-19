@@ -2,17 +2,16 @@ use std::collections::BTreeMap;
 
 use beluna::ai_gateway::{
     request_normalizer::RequestNormalizer,
-    types::{
-        BelunaContentPart, BelunaInferenceRequest, BelunaMessage, BelunaRole, BelunaToolDefinition,
+    types_chat::{
+        BelunaContentPart, BelunaMessage, BelunaRole, BelunaToolDefinition, ChatRequest,
         OutputMode, RequestLimitOverrides, ToolChoice,
     },
 };
 
-fn base_request() -> BelunaInferenceRequest {
-    BelunaInferenceRequest {
+fn base_request() -> ChatRequest {
+    ChatRequest {
         request_id: None,
-        backend_id: Some("openai-default".to_string()),
-        model: Some("gpt-4.1-mini".to_string()),
+        route: Some("default".to_string()),
         messages: vec![BelunaMessage {
             role: BelunaRole::User,
             parts: vec![BelunaContentPart::Text {
@@ -27,7 +26,6 @@ fn base_request() -> BelunaInferenceRequest {
         limits: RequestLimitOverrides::default(),
         metadata: BTreeMap::new(),
         cost_attribution_id: None,
-        stream: true,
     }
 }
 
@@ -36,7 +34,7 @@ fn given_request_id_is_missing_when_normalized_then_non_empty_request_id_is_gene
     let normalizer = RequestNormalizer;
     let request = base_request();
     let normalized = normalizer
-        .normalize(request)
+        .normalize_chat(request, true)
         .expect("normalization should succeed");
     assert!(!normalized.request_id.is_empty());
 }
@@ -55,7 +53,7 @@ fn given_tool_message_without_tool_call_id_when_normalized_then_invalid_request_
     }];
 
     let err = normalizer
-        .normalize(request)
+        .normalize_chat(request, true)
         .expect_err("normalization should fail");
     assert!(err.message.contains("tool_call_id"));
 }
@@ -75,7 +73,7 @@ fn given_tool_message_with_image_part_when_normalized_then_invalid_request_is_re
     }];
 
     let err = normalizer
-        .normalize(request)
+        .normalize_chat(request, true)
         .expect_err("normalization should fail");
     assert!(err.message.contains("text/json"));
 }
@@ -87,7 +85,7 @@ fn given_non_tool_message_with_tool_linkage_when_normalized_then_invalid_request
     request.messages[0].tool_call_id = Some("abc".to_string());
 
     let err = normalizer
-        .normalize(request)
+        .normalize_chat(request, true)
         .expect_err("normalization should fail");
     assert!(err.message.contains("non-tool"));
 }
@@ -106,7 +104,7 @@ fn given_tool_schema_with_unknown_keyword_when_normalized_then_invalid_request_i
     }];
 
     let err = normalizer
-        .normalize(request)
+        .normalize_chat(request, true)
         .expect_err("normalization should fail");
     assert!(err.message.contains("unsupported keyword"));
 }

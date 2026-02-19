@@ -4,7 +4,7 @@ use serde_json::{Value, json};
 
 use crate::ai_gateway::{
     error::{GatewayError, GatewayErrorKind},
-    types::{
+    types_chat::{
         CanonicalContentPart, CanonicalMessage, CanonicalRole, CanonicalToolChoice,
         CanonicalToolDefinition, FinishReason,
     },

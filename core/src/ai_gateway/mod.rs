@@ -12,3 +12,4 @@ pub mod response_normalizer;
 pub mod router;
 pub mod telemetry;
 pub mod types;
+pub mod types_chat;

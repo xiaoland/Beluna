@@ -5,8 +5,9 @@ use tokio::time::timeout;
 use beluna::ai_gateway::{
     budget::BudgetEnforcer,
     error::GatewayErrorKind,
-    types::{
-        BudgetConfig, CanonicalContentPart, CanonicalLimits, CanonicalMessage, CanonicalOutputMode,
+    types::BudgetConfig,
+    types_chat::{
+        CanonicalContentPart, CanonicalLimits, CanonicalMessage, CanonicalOutputMode,
         CanonicalRequest, CanonicalRole, CanonicalToolChoice,
     },
 };
@@ -14,8 +15,7 @@ use beluna::ai_gateway::{
 fn request(max_output_tokens: Option<u64>) -> CanonicalRequest {
     CanonicalRequest {
         request_id: "req-budget".to_string(),
-        backend_hint: Some("b1".to_string()),
-        model_override: None,
+        route_hint: Some("b1/m1".to_string()),
         messages: vec![CanonicalMessage {
             role: CanonicalRole::User,
             parts: vec![CanonicalContentPart::Text {

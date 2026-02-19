@@ -17,10 +17,10 @@ use crate::ai_gateway::{
     adapters::{BackendAdapter, http_common},
     error::{GatewayError, GatewayErrorKind},
     telemetry::debug_log,
-    types::{
-        AdapterContext, AdapterInvocation, BackendCapabilities, BackendDialect, BackendIdentity,
-        BackendRawEvent, CanonicalOutputMode, CanonicalRequest, CanonicalToolCall, ToolCallStatus,
-        UsageStats,
+    types::{AdapterContext, BackendCapabilities, BackendDialect},
+    types_chat::{
+        AdapterInvocation, BackendIdentity, BackendRawEvent, CanonicalOutputMode, CanonicalRequest,
+        CanonicalToolCall, FinishReason, ToolCallStatus, UsageStats,
     },
 };
 
@@ -245,7 +245,7 @@ impl BackendAdapter for OpenAiCompatibleAdapter {
                             if !saw_terminal {
                                 let _ = tx
                                     .send(Ok(BackendRawEvent::Completed {
-                                        finish_reason: crate::ai_gateway::types::FinishReason::Stop,
+                                        finish_reason: FinishReason::Stop,
                                     }))
                                     .await;
                             }
@@ -298,7 +298,7 @@ impl BackendAdapter for OpenAiCompatibleAdapter {
                     ));
                     let _ = tx
                         .send(Ok(BackendRawEvent::Completed {
-                            finish_reason: crate::ai_gateway::types::FinishReason::Stop,
+                            finish_reason: FinishReason::Stop,
                         }))
                         .await;
                 }

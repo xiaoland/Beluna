@@ -16,9 +16,10 @@ use tokio_stream::wrappers::ReceiverStream;
 use crate::ai_gateway::{
     adapters::{BackendAdapter, http_common},
     error::{GatewayError, GatewayErrorKind},
-    types::{
-        AdapterContext, AdapterInvocation, BackendCapabilities, BackendDialect, BackendIdentity,
-        BackendRawEvent, CanonicalRequest, CanonicalToolCall, ToolCallStatus, UsageStats,
+    types::{AdapterContext, BackendCapabilities, BackendDialect},
+    types_chat::{
+        AdapterInvocation, BackendIdentity, BackendRawEvent, CanonicalRequest, CanonicalToolCall,
+        FinishReason, ToolCallStatus, UsageStats,
     },
 };
 
@@ -201,7 +202,7 @@ impl BackendAdapter for OllamaAdapter {
                 if !saw_terminal {
                     let _ = tx
                         .send(Ok(BackendRawEvent::Completed {
-                            finish_reason: crate::ai_gateway::types::FinishReason::Stop,
+                            finish_reason: FinishReason::Stop,
                         }))
                         .await;
                 }
@@ -321,7 +322,7 @@ fn parse_ollama_payload(payload: &Value) -> Result<Vec<BackendRawEvent>, Gateway
             };
             events.push(BackendRawEvent::Usage { usage });
             events.push(BackendRawEvent::Completed {
-                finish_reason: crate::ai_gateway::types::FinishReason::Stop,
+                finish_reason: FinishReason::Stop,
             });
         }
     }

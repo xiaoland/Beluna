@@ -7,9 +7,9 @@ use crate::{
     ai_gateway::{
         gateway::AIGateway,
         telemetry::debug_log,
-        types::{
-            BelunaContentPart, BelunaInferenceRequest, BelunaMessage, BelunaRole,
-            CanonicalFinalResponse, OutputMode, RequestLimitOverrides, ToolChoice,
+        types_chat::{
+            BelunaContentPart, BelunaMessage, BelunaRole, ChatRequest, ChatResponse, OutputMode,
+            RequestLimitOverrides, ToolChoice,
         },
     },
     cortex::{
@@ -65,10 +65,8 @@ pub type AttemptExtractorHook =
 enum CortexCollaborators {
     Gateway {
         gateway: Arc<AIGateway>,
-        primary_backend_id: Option<String>,
-        primary_model: Option<String>,
-        sub_backend_id: Option<String>,
-        sub_model: Option<String>,
+        primary_route: Option<String>,
+        sub_route: Option<String>,
     },
     Hooks {
         primary: PrimaryReasonerHook,
@@ -92,10 +90,8 @@ impl Cortex {
         Self {
             collaborators: CortexCollaborators::Gateway {
                 gateway,
-                primary_backend_id: config.primary_backend_id.clone(),
-                primary_model: None,
-                sub_backend_id: config.sub_backend_id.clone(),
-                sub_model: None,
+                primary_route: config.primary_route.clone(),
+                sub_route: config.sub_route.clone(),
             },
             telemetry_hook,
             limits: config.default_limits.clone(),
@@ -245,18 +241,9 @@ impl Cortex {
         match &self.collaborators {
             CortexCollaborators::Gateway {
                 gateway,
-                primary_backend_id,
-                primary_model,
+                primary_route,
                 ..
-            } => {
-                infer_ir_via_gateway(
-                    gateway,
-                    primary_backend_id.clone(),
-                    primary_model.clone(),
-                    req,
-                )
-                .await
-            }
+            } => infer_ir_via_gateway(gateway, primary_route.clone(), req).await,
             CortexCollaborators::Hooks { primary, .. } => (primary)(req).await,
         }
     }
@@ -267,19 +254,8 @@ impl Cortex {
     ) -> Result<Vec<AttemptDraft>, CortexError> {
         match &self.collaborators {
             CortexCollaborators::Gateway {
-                gateway,
-                sub_backend_id,
-                sub_model,
-                ..
-            } => {
-                extract_attempts_via_gateway(
-                    gateway,
-                    sub_backend_id.clone(),
-                    sub_model.clone(),
-                    req,
-                )
-                .await
-            }
+                gateway, sub_route, ..
+            } => extract_attempts_via_gateway(gateway, sub_route.clone(), req).await,
             CortexCollaborators::Hooks { extractor, .. } => (extractor)(req).await,
         }
     }
@@ -459,8 +435,7 @@ struct AttemptDraftEnvelope {
 
 async fn infer_ir_via_gateway(
     gateway: &AIGateway,
-    backend_id: Option<String>,
-    model: Option<String>,
+    route: Option<String>,
     req: PrimaryReasonerRequest,
 ) -> Result<ProseIr, CortexError> {
     let helper_request_id = format!("cortex-helper-{}", req.cycle_id);
@@ -473,12 +448,11 @@ async fn infer_ir_via_gateway(
         .saturating_sub(helper_timeout_ms)
         .max(1);
     debug_log(format!(
-        "cortex_primary_start cycle_id={} helper_request_id={} request_id={} backend_hint={} model_hint={} helper_timeout_ms={} primary_timeout_ms={} max_output_tokens={}",
+        "cortex_primary_start cycle_id={} helper_request_id={} request_id={} route_hint={} helper_timeout_ms={} primary_timeout_ms={} max_output_tokens={}",
         req.cycle_id,
         helper_request_id,
         request_id,
-        backend_id.as_deref().unwrap_or("-"),
-        model.as_deref().unwrap_or("-"),
+        route.as_deref().unwrap_or("-"),
         helper_timeout_ms,
         primary_timeout_ms,
         req.limits.max_primary_output_tokens,
@@ -486,8 +460,7 @@ async fn infer_ir_via_gateway(
 
     let helper_request = build_text_request(
         helper_request_id.clone(),
-        backend_id.clone(),
-        model.clone(),
+        route.clone(),
         req.limits.max_primary_output_tokens,
         helper_timeout_ms,
         build_helper_prompt(&req),
@@ -495,7 +468,7 @@ async fn infer_ir_via_gateway(
         OutputMode::Text,
     );
     log_llm_input("helper", req.cycle_id, &helper_request);
-    let helper_response = gateway.infer_once(helper_request).await.map_err(|err| {
+    let helper_response = gateway.chat_once(helper_request).await.map_err(|err| {
         debug_log(format!(
             "cortex_helper_failed cycle_id={} request_id={} elapsed_ms={} error_kind={:?} error={}",
             req.cycle_id,
@@ -514,8 +487,7 @@ async fn infer_ir_via_gateway(
 
     let request = build_text_request(
         request_id.clone(),
-        backend_id,
-        model,
+        route,
         req.limits.max_primary_output_tokens,
         primary_timeout_ms,
         build_primary_prompt(&helper_text),
@@ -523,7 +495,7 @@ async fn infer_ir_via_gateway(
         OutputMode::Text,
     );
     log_llm_input("primary", req.cycle_id, &request);
-    let response = gateway.infer_once(request).await.map_err(|err| {
+    let response = gateway.chat_once(request).await.map_err(|err| {
         debug_log(format!(
             "cortex_primary_failed cycle_id={} request_id={} elapsed_ms={} error_kind={:?} error={}",
             req.cycle_id,
@@ -559,8 +531,7 @@ async fn infer_ir_via_gateway(
 
 async fn extract_attempts_via_gateway(
     gateway: &AIGateway,
-    backend_id: Option<String>,
-    model: Option<String>,
+    route: Option<String>,
     req: AttemptExtractorRequest,
 ) -> Result<Vec<AttemptDraft>, CortexError> {
     let schema_hint = serde_json::json!({
@@ -596,8 +567,7 @@ async fn extract_attempts_via_gateway(
     let request_id = format!("cortex-extractor-{}", req.cycle_id);
     let request = build_text_request(
         request_id.clone(),
-        backend_id,
-        model,
+        route,
         req.limits.max_sub_output_tokens,
         req.limits.max_cycle_time_ms,
         prompt,
@@ -605,7 +575,7 @@ async fn extract_attempts_via_gateway(
         OutputMode::JsonObject,
     );
     log_llm_input("extractor", req.cycle_id, &request);
-    let response = gateway.infer_once(request).await.map_err(|err| {
+    let response = gateway.chat_once(request).await.map_err(|err| {
         debug_log(format!(
             "llm_call_failed stage=extractor cycle_id={} request_id={} error_kind={:?} error={}",
             req.cycle_id, request_id, err.kind, err.message
@@ -626,22 +596,20 @@ async fn extract_attempts_via_gateway(
 
 fn build_text_request(
     request_id: String,
-    backend_id: Option<String>,
-    model: Option<String>,
+    route: Option<String>,
     max_output_tokens: u64,
     max_request_time_ms: u64,
     user_prompt: String,
     stage: Option<String>,
     output_mode: OutputMode,
-) -> BelunaInferenceRequest {
+) -> ChatRequest {
     let mut metadata = BTreeMap::new();
     if let Some(stage) = stage {
         metadata.insert("cortex_stage".to_string(), stage);
     }
-    BelunaInferenceRequest {
+    ChatRequest {
         request_id: Some(request_id),
-        backend_id,
-        model,
+        route,
         messages: vec![
             BelunaMessage {
                 role: BelunaRole::System,
@@ -668,7 +636,6 @@ fn build_text_request(
         },
         metadata,
         cost_attribution_id: None,
-        stream: false,
     }
 }
 
@@ -688,16 +655,15 @@ fn build_helper_prompt(req: &PrimaryReasonerRequest) -> String {
     )
 }
 
-fn log_llm_input(stage: &str, cycle_id: u64, request: &BelunaInferenceRequest) {
+fn log_llm_input(stage: &str, cycle_id: u64, request: &ChatRequest) {
     let request_json = serde_json::to_string_pretty(request)
         .unwrap_or_else(|err| format!("{{\"serialization_error\":\"{}\"}}", err));
     debug_log(format!(
-        "llm_input stage={} cycle_id={} request_id={} backend_id={} model={} output_mode={:?} limits={{max_output_tokens:{:?},max_request_time_ms:{:?}}}\n{}",
+        "llm_input stage={} cycle_id={} request_id={} route={} output_mode={:?} limits={{max_output_tokens:{:?},max_request_time_ms:{:?}}}\n{}",
         stage,
         cycle_id,
         request.request_id.as_deref().unwrap_or("-"),
-        request.backend_id.as_deref().unwrap_or("-"),
-        request.model.as_deref().unwrap_or("-"),
+        request.route.as_deref().unwrap_or("-"),
         request.output_mode,
         request.limits.max_output_tokens,
         request.limits.max_request_time_ms,
@@ -705,7 +671,7 @@ fn log_llm_input(stage: &str, cycle_id: u64, request: &BelunaInferenceRequest) {
     ));
 }
 
-fn log_llm_output(stage: &str, cycle_id: u64, request_id: &str, response: &CanonicalFinalResponse) {
+fn log_llm_output(stage: &str, cycle_id: u64, request_id: &str, response: &ChatResponse) {
     let usage = response
         .usage
         .as_ref()

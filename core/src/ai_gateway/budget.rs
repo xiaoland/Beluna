@@ -11,7 +11,8 @@ use tokio::{
 
 use crate::ai_gateway::{
     error::{GatewayError, GatewayErrorKind},
-    types::{BackendId, BudgetConfig, CanonicalRequest, GatewayEvent},
+    types::{BackendId, BudgetConfig},
+    types_chat::{CanonicalRequest, ChatEvent},
 };
 
 #[derive(Clone)]
@@ -102,8 +103,8 @@ impl BudgetEnforcer {
         })
     }
 
-    pub async fn observe_event(&self, backend_id: &BackendId, event: &GatewayEvent) {
-        let GatewayEvent::Usage { usage, .. } = event else {
+    pub async fn observe_event(&self, backend_id: &BackendId, event: &ChatEvent) {
+        let ChatEvent::Usage { usage, .. } = event else {
             return;
         };
 
