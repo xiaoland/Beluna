@@ -1,4 +1,10 @@
+# MacOS System files
 .DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
 
 # Python
 __pycache__/
@@ -23,7 +29,22 @@ beluna.jsonc
 .firecrawl
 
 /core/target/
-/runtime/target/
-/std-body/target/
-/apple-universal/.build/
-/apple-universal/.swiftpm/
+
+# XCode & SPM & CocoaPods
+apple-universal/.swiftpm/
+apple-universal/.build/
+apple-universal/build/
+apple-universal/DerivedData/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+*.swiftdoc
+*.swiftmodule
+*.swiftinterface
+*.xcuserdatad/
+*.xcworkspace/xcuserdata/
+*.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings
+*.xcodeproj/xcuserdata/
+*.crash
+Pods/
