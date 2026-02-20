@@ -3,6 +3,7 @@ use std::{collections::HashMap, sync::Arc, time::Instant};
 use futures_util::StreamExt;
 use tokio::{sync::mpsc, time::sleep};
 use tokio_stream::wrappers::ReceiverStream;
+use tracing::Instrument;
 
 use crate::ai_gateway::{
     adapters::{BackendAdapter, build_default_adapters},
@@ -14,7 +15,7 @@ use crate::ai_gateway::{
     request_normalizer::RequestNormalizer,
     response_normalizer::ResponseNormalizer,
     router::BackendRouter,
-    telemetry::{GatewayTelemetryEvent, TelemetrySink, debug_log},
+    telemetry::{GatewayTelemetryEvent, emit_gateway_event},
     types::{AIGatewayConfig, AdapterContext, BackendCapabilities, BackendDialect},
     types_chat::{
         CanonicalRequest, ChatEvent, ChatEventStream, ChatRequest, ChatResponse, FinishReason,
@@ -31,14 +32,12 @@ pub struct AIGateway {
     capability_guard: CapabilityGuard,
     budget_enforcer: BudgetEnforcer,
     reliability: ReliabilityLayer,
-    telemetry: Arc<dyn TelemetrySink>,
 }
 
 impl AIGateway {
     pub fn new(
         config: AIGatewayConfig,
         credential_provider: Arc<dyn CredentialProvider>,
-        telemetry: Arc<dyn TelemetrySink>,
     ) -> Result<Self, GatewayError> {
         let router = BackendRouter::new(&config)?;
         Ok(Self {
@@ -50,7 +49,6 @@ impl AIGateway {
             capability_guard: CapabilityGuard,
             budget_enforcer: BudgetEnforcer::new(config.budget),
             reliability: ReliabilityLayer::new(config.reliability),
-            telemetry,
         })
     }
 
@@ -178,60 +176,96 @@ impl AIGateway {
             .pre_dispatch(&canonical_request, &selected.backend_id)
             .await?;
 
-        debug_log(format!(
-            "chat_stream_prepared request_id={} backend_id={} dialect={:?} model={} stream={} stage={} max_output_tokens={:?} requested_timeout_ms={:?} effective_timeout_ms={}",
-            canonical_request.request_id,
-            selected.backend_id,
-            selected.profile.dialect,
-            selected.resolved_model,
-            canonical_request.stream,
-            canonical_request
-                .metadata
-                .get("cortex_stage")
-                .map(String::as_str)
-                .unwrap_or("primary"),
-            canonical_request.limits.max_output_tokens,
-            canonical_request.limits.max_request_time_ms,
-            budget_lease.effective_timeout.as_millis(),
-        ));
+        let stage = canonical_request
+            .metadata
+            .get("cortex_stage")
+            .map(String::as_str)
+            .unwrap_or("primary");
+        let request_span = tracing::info_span!(
+            target: "ai_gateway",
+            "gateway_request",
+            request_id = %canonical_request.request_id,
+            backend_id = %selected.backend_id,
+            model = %selected.resolved_model,
+            stream = canonical_request.stream,
+            stage = stage,
+            cost_attribution_id = canonical_request.cost_attribution_id.as_deref().unwrap_or("-")
+        );
 
-        self.telemetry
-            .on_event(GatewayTelemetryEvent::RequestStarted {
-                request_id: canonical_request.request_id.clone(),
-                backend_id: selected.backend_id.clone(),
-                model: selected.resolved_model.clone(),
-                cost_attribution_id: canonical_request.cost_attribution_id.clone(),
-            });
+        tracing::debug!(
+            target: "ai_gateway",
+            request_id = %canonical_request.request_id,
+            backend_id = %selected.backend_id,
+            dialect = ?selected.profile.dialect,
+            model = %selected.resolved_model,
+            stream = canonical_request.stream,
+            stage = stage,
+            max_output_tokens = ?canonical_request.limits.max_output_tokens,
+            requested_timeout_ms = ?canonical_request.limits.max_request_time_ms,
+            effective_timeout_ms = budget_lease.effective_timeout.as_millis() as u64,
+            "chat_stream_prepared"
+        );
+
+        emit_gateway_event(GatewayTelemetryEvent::RequestStarted {
+            request_id: canonical_request.request_id.clone(),
+            backend_id: selected.backend_id.clone(),
+            model: selected.resolved_model.clone(),
+            cost_attribution_id: canonical_request.cost_attribution_id.clone(),
+        });
 
         let (tx, rx) = mpsc::channel::<Result<ChatEvent, GatewayError>>(128);
 
         let response_normalizer = self.response_normalizer;
         let reliability = self.reliability.clone();
         let budget_enforcer = self.budget_enforcer.clone();
-        let telemetry = self.telemetry.clone();
 
-        tokio::spawn(async move {
-            run_stream_task(
-                tx,
-                canonical_request,
-                selected,
-                adapter,
-                credential,
-                capabilities,
-                response_normalizer,
-                reliability,
-                budget_enforcer,
-                telemetry,
-                budget_lease,
-            )
-            .await;
-        });
+        tokio::spawn(
+            async move {
+                run_stream_task(
+                    tx,
+                    canonical_request,
+                    selected,
+                    adapter,
+                    credential,
+                    capabilities,
+                    response_normalizer,
+                    reliability,
+                    budget_enforcer,
+                    budget_lease,
+                )
+                .await;
+            }
+            .instrument(request_span),
+        );
 
         Ok(Box::pin(ReceiverStream::new(rx)))
     }
 }
 
 #[allow(clippy::too_many_arguments)]
+#[tracing::instrument(
+    name = "gateway_stream_task",
+    target = "ai_gateway",
+    skip(
+        tx,
+        canonical_request,
+        selected,
+        adapter,
+        credential,
+        capabilities,
+        response_normalizer,
+        reliability,
+        budget_enforcer,
+        budget_lease
+    ),
+    fields(
+        request_id = %canonical_request.request_id,
+        backend_id = %selected.backend_id,
+        model = %selected.resolved_model,
+        stream = canonical_request.stream,
+        cost_attribution_id = canonical_request.cost_attribution_id.as_deref().unwrap_or("-")
+    )
+)]
 async fn run_stream_task(
     tx: mpsc::Sender<Result<ChatEvent, GatewayError>>,
     canonical_request: CanonicalRequest,
@@ -242,7 +276,6 @@ async fn run_stream_task(
     response_normalizer: ResponseNormalizer,
     reliability: ReliabilityLayer,
     budget_enforcer: BudgetEnforcer,
-    telemetry: Arc<dyn TelemetrySink>,
     budget_lease: BudgetLease,
 ) {
     let request_id = canonical_request.request_id.clone();
@@ -263,21 +296,24 @@ async fn run_stream_task(
         .is_err()
     {
         release_lease(&budget_enforcer, &mut lease);
-        telemetry.on_event(GatewayTelemetryEvent::RequestCancelled {
+        emit_gateway_event(GatewayTelemetryEvent::RequestCancelled {
             request_id,
             cost_attribution_id,
         });
         return;
     }
-    debug_log(format!(
-        "run_stream_task_started request_id={} backend_id={} model={}",
-        request_id, selected.backend_id, selected.resolved_model
-    ));
+    tracing::debug!(
+        target: "ai_gateway",
+        request_id = %request_id,
+        backend_id = %selected.backend_id,
+        model = %selected.resolved_model,
+        "run_stream_task_started"
+    );
 
     loop {
         if tx.is_closed() {
             release_lease(&budget_enforcer, &mut lease);
-            telemetry.on_event(GatewayTelemetryEvent::RequestCancelled {
+            emit_gateway_event(GatewayTelemetryEvent::RequestCancelled {
                 request_id: request_id.clone(),
                 cost_attribution_id: cost_attribution_id.clone(),
             });
@@ -285,7 +321,7 @@ async fn run_stream_task(
         }
 
         let attempt_started_at = Instant::now();
-        telemetry.on_event(GatewayTelemetryEvent::AttemptStarted {
+        emit_gateway_event(GatewayTelemetryEvent::AttemptStarted {
             request_id: request_id.clone(),
             attempt,
             cost_attribution_id: cost_attribution_id.clone(),
@@ -302,7 +338,7 @@ async fn run_stream_task(
                 }))
                 .await;
             release_lease(&budget_enforcer, &mut lease);
-            telemetry.on_event(GatewayTelemetryEvent::RequestFailed {
+            emit_gateway_event(GatewayTelemetryEvent::RequestFailed {
                 request_id,
                 attempts: attempt + 1,
                 error_kind: err.kind,
@@ -326,23 +362,28 @@ async fn run_stream_task(
         };
 
         let timeout_ms = adapter_ctx.timeout.as_millis();
-        debug_log(format!(
-            "attempt_invoke_start request_id={} attempt={} backend_id={} timeout_ms={}",
-            request_id, attempt, selected.backend_id, timeout_ms
-        ));
+        tracing::debug!(
+            target: "ai_gateway",
+            request_id = %request_id,
+            attempt = attempt,
+            backend_id = %selected.backend_id,
+            timeout_ms = timeout_ms as u64,
+            "attempt_invoke_start"
+        );
         let invoke_started_at = Instant::now();
 
         let invocation = adapter
             .invoke_stream(adapter_ctx, canonical_request.clone())
             .await;
-        debug_log(format!(
-            "attempt_invoke_result request_id={} attempt={} backend_id={} elapsed_ms={} success={}",
-            request_id,
-            attempt,
-            selected.backend_id,
-            invoke_started_at.elapsed().as_millis(),
-            invocation.is_ok()
-        ));
+        tracing::debug!(
+            target: "ai_gateway",
+            request_id = %request_id,
+            attempt = attempt,
+            backend_id = %selected.backend_id,
+            elapsed_ms = invoke_started_at.elapsed().as_millis() as u64,
+            success = invocation.is_ok(),
+            "attempt_invoke_result"
+        );
 
         let mut emitted_output = false;
         let mut emitted_tool = false;
@@ -358,19 +399,20 @@ async fn run_stream_task(
                     &capabilities,
                     adapter.supports_tool_retry(),
                 );
-                debug_log(format!(
-                    "attempt_invoke_failed request_id={} attempt={} backend_id={} elapsed_ms={} kind={:?} retryable={} can_retry={} error={}",
-                    request_id,
-                    attempt,
-                    selected.backend_id,
-                    attempt_started_at.elapsed().as_millis(),
-                    err.kind,
-                    err.retryable,
-                    can_retry,
-                    err.message
-                ));
+                tracing::debug!(
+                    target: "ai_gateway",
+                    request_id = %request_id,
+                    attempt = attempt,
+                    backend_id = %selected.backend_id,
+                    elapsed_ms = attempt_started_at.elapsed().as_millis() as u64,
+                    kind = ?err.kind,
+                    retryable = err.retryable,
+                    can_retry = can_retry,
+                    error = %err.message,
+                    "attempt_invoke_failed"
+                );
 
-                telemetry.on_event(GatewayTelemetryEvent::AttemptFailed {
+                emit_gateway_event(GatewayTelemetryEvent::AttemptFailed {
                     request_id: request_id.clone(),
                     attempt,
                     kind: err.kind,
@@ -391,7 +433,7 @@ async fn run_stream_task(
                     tokio::select! {
                         _ = tx.closed() => {
                             release_lease(&budget_enforcer, &mut lease);
-                            telemetry.on_event(GatewayTelemetryEvent::RequestCancelled {
+                            emit_gateway_event(GatewayTelemetryEvent::RequestCancelled {
                                 request_id: request_id.clone(),
                                 cost_attribution_id: cost_attribution_id.clone(),
                             });
@@ -409,7 +451,7 @@ async fn run_stream_task(
                     }))
                     .await;
                 release_lease(&budget_enforcer, &mut lease);
-                telemetry.on_event(GatewayTelemetryEvent::RequestFailed {
+                emit_gateway_event(GatewayTelemetryEvent::RequestFailed {
                     request_id,
                     attempts: attempt + 1,
                     error_kind: err.kind,
@@ -418,14 +460,15 @@ async fn run_stream_task(
                 return;
             }
         };
-        debug_log(format!(
-            "attempt_stream_started request_id={} attempt={} backend_id={} dialect={:?} model={}",
-            request_id,
-            attempt,
-            invocation.backend_identity.backend_id,
-            invocation.backend_identity.dialect,
-            invocation.backend_identity.model
-        ));
+        tracing::debug!(
+            target: "ai_gateway",
+            request_id = %request_id,
+            attempt = attempt,
+            backend_id = %invocation.backend_identity.backend_id,
+            dialect = ?invocation.backend_identity.dialect,
+            model = %invocation.backend_identity.model,
+            "attempt_stream_started"
+        );
 
         let mut terminal_error: Option<GatewayError> = None;
         let mut terminal_success: Option<FinishReason> = None;
@@ -440,20 +483,21 @@ async fn run_stream_task(
                         cancel();
                     }
                     release_lease(&budget_enforcer, &mut lease);
-                    telemetry.on_event(GatewayTelemetryEvent::RequestCancelled {
+                    emit_gateway_event(GatewayTelemetryEvent::RequestCancelled {
                         request_id: request_id.clone(),
                         cost_attribution_id: cost_attribution_id.clone(),
                     });
                     return;
                 }
                 _ = sleep(std::time::Duration::from_secs(5)), if !saw_first_stream_event => {
-                    debug_log(format!(
-                        "attempt_waiting_first_event request_id={} attempt={} backend_id={} elapsed_ms={}",
-                        request_id,
-                        attempt,
-                        selected.backend_id,
-                        attempt_started_at.elapsed().as_millis(),
-                    ));
+                    tracing::debug!(
+                        target: "ai_gateway",
+                        request_id = %request_id,
+                        attempt = attempt,
+                        backend_id = %selected.backend_id,
+                        elapsed_ms = attempt_started_at.elapsed().as_millis() as u64,
+                        "attempt_waiting_first_event"
+                    );
                 }
                 next_item = stream.next() => {
                     let Some(item) = next_item else {
@@ -466,13 +510,14 @@ async fn run_stream_task(
                                 .with_retryable(false)
                                 .with_backend_id(selected.backend_id.clone())
                             );
-                            debug_log(format!(
-                                "attempt_stream_ended_without_terminal request_id={} attempt={} backend_id={} elapsed_ms={}",
-                                request_id,
-                                attempt,
-                                selected.backend_id,
-                                attempt_started_at.elapsed().as_millis(),
-                            ));
+                            tracing::debug!(
+                                target: "ai_gateway",
+                                request_id = %request_id,
+                                attempt = attempt,
+                                backend_id = %selected.backend_id,
+                                elapsed_ms = attempt_started_at.elapsed().as_millis() as u64,
+                                "attempt_stream_ended_without_terminal"
+                            );
                         }
                         break;
                     };
@@ -495,17 +540,18 @@ async fn run_stream_task(
 
                     if !saw_first_stream_event {
                         saw_first_stream_event = true;
-                        telemetry.on_event(GatewayTelemetryEvent::StreamFirstEvent {
+                        emit_gateway_event(GatewayTelemetryEvent::StreamFirstEvent {
                             request_id: request_id.clone(),
                         });
-                        debug_log(format!(
-                            "attempt_first_event request_id={} attempt={} backend_id={} event={} elapsed_ms={}",
-                            request_id,
-                            attempt,
-                            selected.backend_id,
-                            gateway_event_name(&event),
-                            attempt_started_at.elapsed().as_millis(),
-                        ));
+                        tracing::debug!(
+                            target: "ai_gateway",
+                            request_id = %request_id,
+                            attempt = attempt,
+                            backend_id = %selected.backend_id,
+                            event = gateway_event_name(&event),
+                            elapsed_ms = attempt_started_at.elapsed().as_millis() as u64,
+                            "attempt_first_event"
+                        );
                     }
 
                     if ResponseNormalizer::is_output_event(&event) {
@@ -540,7 +586,7 @@ async fn run_stream_task(
                                     cancel();
                                 }
                                 release_lease(&budget_enforcer, &mut lease);
-                                telemetry.on_event(GatewayTelemetryEvent::RequestCancelled {
+                                emit_gateway_event(GatewayTelemetryEvent::RequestCancelled {
                                     request_id: request_id.clone(),
                                     cost_attribution_id: cost_attribution_id.clone(),
                                 });
@@ -561,7 +607,7 @@ async fn run_stream_task(
                                     cancel();
                                 }
                                 release_lease(&budget_enforcer, &mut lease);
-                                telemetry.on_event(GatewayTelemetryEvent::RequestCancelled {
+                                emit_gateway_event(GatewayTelemetryEvent::RequestCancelled {
                                     request_id: request_id.clone(),
                                     cost_attribution_id: cost_attribution_id.clone(),
                                 });
@@ -574,14 +620,15 @@ async fn run_stream_task(
         }
 
         if let Some(finish_reason) = terminal_success {
-            debug_log(format!(
-                "attempt_completed request_id={} attempt={} backend_id={} finish_reason={:?} elapsed_ms={}",
-                request_id,
-                attempt,
-                selected.backend_id,
-                finish_reason,
-                attempt_started_at.elapsed().as_millis(),
-            ));
+            tracing::debug!(
+                target: "ai_gateway",
+                request_id = %request_id,
+                attempt = attempt,
+                backend_id = %selected.backend_id,
+                finish_reason = ?finish_reason,
+                elapsed_ms = attempt_started_at.elapsed().as_millis() as u64,
+                "attempt_completed"
+            );
             reliability.record_success(&selected.backend_id).await;
             let _ = tx
                 .send(Ok(ChatEvent::Completed {
@@ -590,19 +637,20 @@ async fn run_stream_task(
                 }))
                 .await;
             release_lease(&budget_enforcer, &mut lease);
-            telemetry.on_event(GatewayTelemetryEvent::RequestCompleted {
+            emit_gateway_event(GatewayTelemetryEvent::RequestCompleted {
                 request_id,
                 attempts: attempt + 1,
                 usage: last_usage,
                 cost_attribution_id,
             });
-            debug_log(format!(
-                "request_completed request_id={} backend_id={} attempts={} total_elapsed_ms={}",
-                canonical_request.request_id,
-                selected.backend_id,
-                attempt + 1,
-                request_started_at.elapsed().as_millis(),
-            ));
+            tracing::debug!(
+                target: "ai_gateway",
+                request_id = %canonical_request.request_id,
+                backend_id = %selected.backend_id,
+                attempts = attempt + 1,
+                total_elapsed_ms = request_started_at.elapsed().as_millis() as u64,
+                "request_completed"
+            );
             return;
         }
 
@@ -623,21 +671,22 @@ async fn run_stream_task(
             &capabilities,
             adapter.supports_tool_retry(),
         );
-        debug_log(format!(
-            "attempt_terminal_error request_id={} attempt={} backend_id={} kind={:?} retryable={} can_retry={} emitted_output={} emitted_tool={} elapsed_ms={} error={}",
-            request_id,
-            attempt,
-            selected.backend_id,
-            err.kind,
-            err.retryable,
-            can_retry,
-            emitted_output,
-            emitted_tool,
-            attempt_started_at.elapsed().as_millis(),
-            err.message
-        ));
+        tracing::debug!(
+            target: "ai_gateway",
+            request_id = %request_id,
+            attempt = attempt,
+            backend_id = %selected.backend_id,
+            kind = ?err.kind,
+            retryable = err.retryable,
+            can_retry = can_retry,
+            emitted_output = emitted_output,
+            emitted_tool = emitted_tool,
+            elapsed_ms = attempt_started_at.elapsed().as_millis() as u64,
+            error = %err.message,
+            "attempt_terminal_error"
+        );
 
-        telemetry.on_event(GatewayTelemetryEvent::AttemptFailed {
+        emit_gateway_event(GatewayTelemetryEvent::AttemptFailed {
             request_id: request_id.clone(),
             attempt,
             kind: err.kind,
@@ -661,7 +710,7 @@ async fn run_stream_task(
                         cancel();
                     }
                     release_lease(&budget_enforcer, &mut lease);
-                    telemetry.on_event(GatewayTelemetryEvent::RequestCancelled {
+                    emit_gateway_event(GatewayTelemetryEvent::RequestCancelled {
                         request_id: request_id.clone(),
                         cost_attribution_id: cost_attribution_id.clone(),
                     });
@@ -679,20 +728,21 @@ async fn run_stream_task(
             }))
             .await;
         release_lease(&budget_enforcer, &mut lease);
-        telemetry.on_event(GatewayTelemetryEvent::RequestFailed {
+        emit_gateway_event(GatewayTelemetryEvent::RequestFailed {
             request_id,
             attempts: attempt + 1,
             error_kind: err.kind,
             cost_attribution_id,
         });
-        debug_log(format!(
-            "request_failed request_id={} backend_id={} attempts={} total_elapsed_ms={} error_kind={:?}",
-            canonical_request.request_id,
-            selected.backend_id,
-            attempt + 1,
-            request_started_at.elapsed().as_millis(),
-            err.kind
-        ));
+        tracing::debug!(
+            target: "ai_gateway",
+            request_id = %canonical_request.request_id,
+            backend_id = %selected.backend_id,
+            attempts = attempt + 1,
+            total_elapsed_ms = request_started_at.elapsed().as_millis() as u64,
+            error_kind = ?err.kind,
+            "request_failed"
+        );
         return;
     }
 }

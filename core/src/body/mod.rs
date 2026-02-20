@@ -50,9 +50,11 @@ fn start_std_shell_inline_endpoint(
     #[cfg(feature = "std-shell")]
     {
         let (ready_tx, ready_rx) = std::sync::mpsc::channel::<Result<()>>();
+        let parent_span = tracing::Span::current();
         std::thread::Builder::new()
             .name("beluna-inline-std-shell".to_string())
             .spawn(move || {
+                let _entered = parent_span.enter();
                 let runtime = tokio::runtime::Builder::new_current_thread()
                     .enable_all()
                     .build();
@@ -106,9 +108,11 @@ fn start_std_web_inline_endpoint(
     #[cfg(feature = "std-web")]
     {
         let (ready_tx, ready_rx) = std::sync::mpsc::channel::<Result<()>>();
+        let parent_span = tracing::Span::current();
         std::thread::Builder::new()
             .name("beluna-inline-std-web".to_string())
             .spawn(move || {
+                let _entered = parent_span.enter();
                 let runtime = tokio::runtime::Builder::new_current_thread()
                     .enable_all()
                     .build();
@@ -156,6 +160,11 @@ fn start_std_web_inline_endpoint(
 }
 
 #[cfg(feature = "std-shell")]
+#[tracing::instrument(
+    name = "std_shell_worker",
+    target = "body.inline",
+    skip(handles, limits)
+)]
 async fn run_shell_worker(mut handles: InlineEndpointRuntimeHandles, limits: ShellLimits) {
     while let Some(act) = handles.act_rx.recv().await {
         let request_id = format!("builtin-shell:{}", act.act_id);
@@ -169,6 +178,7 @@ async fn run_shell_worker(mut handles: InlineEndpointRuntimeHandles, limits: She
 }
 
 #[cfg(feature = "std-web")]
+#[tracing::instrument(name = "std_web_worker", target = "body.inline", skip(handles, limits))]
 async fn run_web_worker(mut handles: InlineEndpointRuntimeHandles, limits: WebLimits) {
     while let Some(act) = handles.act_rx.recv().await {
         let request_id = format!("builtin-web:{}", act.act_id);

@@ -7,6 +7,7 @@ pub mod config;
 pub mod continuity;
 pub mod cortex;
 pub mod ledger;
+pub mod logging;
 pub mod spine;
 pub mod stem;
 pub mod types;

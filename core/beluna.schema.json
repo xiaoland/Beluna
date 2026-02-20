@@ -253,6 +253,34 @@
       ],
       "additionalProperties": false
     },
+    "logging": {
+      "type": "object",
+      "properties": {
+        "dir": {
+          "type": "string",
+          "minLength": 1
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rotation": {
+          "type": "string",
+          "enum": [
+            "daily",
+            "hourly"
+          ]
+        },
+        "retention_days": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "stderr_warn_enabled": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
     "cortex": {
       "type": "object",
       "properties": {

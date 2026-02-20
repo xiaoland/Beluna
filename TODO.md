@@ -29,12 +29,20 @@
 - [ ] 测试应该在 tests/ 下面，有什么特殊的理由要 aside src 吗？
 - [ ] new spine 不代表马上就要 start 啊
 
+### Observability
+
+- [ ] 拥抱 OpenTelemetry
+- [ ] Request ID
+- [ ] RED Metrics
+- [ ] O11y in Error Handling
+
 ### AI Gateway
 
-- [ ] AI Gateway 重构
+- [x] AI Gateway 重构
   - route by `backend-id/model-id`; can define a set of alias (eg. `default`, `low-cost`).
   - 配置文件要基于 backend 为首的结构
   - 提供能力特定的接口，而不是 infer_once, infer_stream 这样通用的接口。对于 result Ok 可以没有通用定义，但是 result Err 可以有。
+- [ ] 移除 Credential Provider
 
 ## Apple Universal
 

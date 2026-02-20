@@ -5,22 +5,18 @@ use tokio::{
     signal::unix::{SignalKind, signal},
     sync::Mutex,
 };
+use tracing::Instrument;
 
 use beluna::{
     afferent_pathway::SenseAfferentPathway,
-    ai_gateway::{
-        credentials::EnvCredentialProvider,
-        gateway::AIGateway,
-        telemetry::{
-            NoopTelemetrySink, StderrTelemetrySink, TelemetrySink, ai_gateway_debug_enabled,
-        },
-    },
+    ai_gateway::{credentials::EnvCredentialProvider, gateway::AIGateway},
     body::register_inline_body_endpoints,
     cli::config_path_from_args,
     config::Config,
     continuity::ContinuityEngine,
     cortex::Cortex,
     ledger::LedgerStage,
+    logging::init_tracing,
     spine::{Spine, global_spine, install_global_spine, shutdown_global_spine},
     stem::{Stem, register_default_native_endpoints},
 };
@@ -30,29 +26,21 @@ async fn main() -> Result<()> {
     let config_path = config_path_from_args()?;
     let config = Config::load(&config_path)
         .with_context(|| format!("failed to load config from {}", config_path.display()))?;
+    let _logging_guard =
+        init_tracing(&config.logging).context("failed to initialize tracing logging")?;
+    let _run_span = tracing::info_span!("core_run", run_id = %_logging_guard.run_id()).entered();
+    tracing::info!(
+        target: "core",
+        config_path = %config_path.display(),
+        "core_runtime_booting"
+    );
 
     let (afferent_pathway, sense_rx) =
         SenseAfferentPathway::new(config.r#loop.sense_queue_capacity);
 
-    let gateway_debug_enabled = ai_gateway_debug_enabled();
-    let gateway_telemetry: Arc<dyn TelemetrySink> = if gateway_debug_enabled {
-        Arc::new(StderrTelemetrySink)
-    } else {
-        Arc::new(NoopTelemetrySink)
-    };
-    if gateway_debug_enabled {
-        eprintln!(
-            "[ai_gateway] verbose debug logging enabled (set BELUNA_DEBUG_AI_GATEWAY=0/false to disable)"
-        );
-    }
-
     let gateway = Arc::new(
-        AIGateway::new(
-            config.ai_gateway.clone(),
-            Arc::new(EnvCredentialProvider),
-            gateway_telemetry,
-        )
-        .context("failed to construct ai gateway for cortex")?,
+        AIGateway::new(config.ai_gateway.clone(), Arc::new(EnvCredentialProvider))
+            .context("failed to construct ai gateway for cortex")?,
     );
 
     let cortex = Arc::new(Cortex::from_config(
@@ -81,7 +69,10 @@ async fn main() -> Result<()> {
     let ledger = Arc::new(Mutex::new(LedgerStage::new(1_000_000)));
 
     let stem_runtime = Stem::new(cortex, continuity.clone(), ledger, spine_runtime, sense_rx);
-    let stem_task = tokio::spawn(async move { stem_runtime.run().await });
+    let stem_task = tokio::spawn(
+        async move { stem_runtime.run().await }
+            .instrument(tracing::info_span!(target: "core", "stem_task")),
+    );
 
     let mut sigint =
         signal(SignalKind::interrupt()).context("unable to listen for SIGINT (Ctrl+C)")?;
@@ -92,14 +83,18 @@ async fn main() -> Result<()> {
         _ = sigterm.recv() => "SIGTERM",
     };
 
-    eprintln!("received {signal_name}; closing sense afferent pathway gate");
+    tracing::info!(
+        target: "core",
+        signal_name = signal_name,
+        "received_signal_closing_sense_afferent_pathway_gate"
+    );
     afferent_pathway.close_gate().await;
-    eprintln!("enqueueing sleep sense");
+    tracing::info!(target: "core", "enqueueing_sleep_sense");
     afferent_pathway
         .send_sleep_blocking()
         .await
         .context("failed to enqueue sleep sense")?;
-    eprintln!("sleep sense enqueued");
+    tracing::info!(target: "core", "sleep_sense_enqueued");
 
     stem_task.await.context("stem task join failed")??;
     continuity.lock().await.flush()?;
@@ -107,6 +102,10 @@ async fn main() -> Result<()> {
     let spine_runtime = global_spine().context("spine singleton is not initialized")?;
     shutdown_global_spine(spine_runtime).await?;
 
-    eprintln!("Beluna stopped: received {signal_name}");
+    tracing::info!(
+        target: "core",
+        signal_name = signal_name,
+        "core_runtime_stopped"
+    );
     Ok(())
 }

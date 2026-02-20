@@ -19,5 +19,5 @@ Index:
 - docs/contracts/continuity/README.md
 - docs/contracts/ledger/README.md
 - docs/contracts/spine/README.md
-- docs/contracts/non-cortex/README.md (stem runtime contracts)
+- docs/contracts/stem/README.md
 - docs/contracts/mind/README.md (deprecated)

@@ -42,6 +42,7 @@ impl Stem {
         }
     }
 
+    #[tracing::instrument(name = "stem_run", target = "stem", skip(self))]
     pub async fn run(mut self) -> Result<()> {
         loop {
             let Some(first_sense) = self.sense_rx.recv().await else {
@@ -89,7 +90,12 @@ impl Stem {
             {
                 Ok(output) => output,
                 Err(err) => {
-                    eprintln!("cortex failed for cycle {}: {}", self.cycle_id, err);
+                    tracing::warn!(
+                        target: "stem",
+                        cycle_id = self.cycle_id,
+                        error = %err,
+                        "cortex_failed_for_cycle"
+                    );
                     continue;
                 }
             };
@@ -98,10 +104,11 @@ impl Stem {
                 .lock()
                 .await
                 .persist_cognition_state(output.new_cognition_state.clone())?;
-            eprintln!(
-                "[stem] cycle={} generated_acts={}",
-                self.cycle_id,
-                output.acts.len()
+            tracing::debug!(
+                target: "stem",
+                cycle_id = self.cycle_id,
+                generated_acts = output.acts.len(),
+                "cycle_generated_acts"
             );
 
             for (index, act) in output.acts.into_iter().enumerate() {
@@ -122,6 +129,12 @@ impl Stem {
         Ok(())
     }
 
+    #[tracing::instrument(
+        name = "stem_compose_physical_state",
+        target = "stem",
+        skip(self),
+        fields(cycle_id = cycle_id)
+    )]
     async fn compose_physical_state(&self, cycle_id: u64) -> Result<PhysicalState> {
         let ledger_snapshot = self.ledger.lock().await.physical_snapshot();
         let spine_catalog = to_cortex_catalog(&self.spine.capability_catalog_snapshot());
@@ -137,6 +150,18 @@ impl Stem {
         })
     }
 
+    #[tracing::instrument(
+        name = "stem_dispatch_one_act_serial",
+        target = "stem",
+        skip(self, act, cognition_state),
+        fields(
+            cycle_id = cycle_id,
+            seq_no = seq_no,
+            act_id = %act.act_id,
+            endpoint_id = %act.body_endpoint_name,
+            capability_id = %act.capability_id
+        )
+    )]
     async fn dispatch_one_act_serial(
         &self,
         cycle_id: u64,
@@ -144,9 +169,14 @@ impl Stem {
         act: Act,
         cognition_state: &CognitionState,
     ) -> Result<()> {
-        eprintln!(
-            "[stem] dispatch_attempt cycle={} seq={} act_id={} endpoint_id={} capability_id={}",
-            cycle_id, seq_no, act.act_id, act.body_endpoint_name, act.capability_id
+        tracing::debug!(
+            target: "stem",
+            cycle_id = cycle_id,
+            seq_no = seq_no,
+            act_id = %act.act_id,
+            endpoint_id = %act.body_endpoint_name,
+            capability_id = %act.capability_id,
+            "dispatch_attempt"
         );
         let ledger_ctx = LedgerDispatchContext {
             cycle_id,
@@ -160,9 +190,12 @@ impl Stem {
         let (ledger_decision, ticket_opt) =
             self.ledger.lock().await.pre_dispatch(&act, &ledger_ctx)?;
         if matches!(ledger_decision, DispatchDecision::Break) {
-            eprintln!(
-                "[stem] dispatch_break cycle={} seq={} reason=ledger_break",
-                cycle_id, seq_no
+            tracing::info!(
+                target: "stem",
+                cycle_id = cycle_id,
+                seq_no = seq_no,
+                reason = "ledger_break",
+                "dispatch_break"
             );
             return Ok(());
         }
@@ -174,9 +207,12 @@ impl Stem {
                 .await
                 .pre_dispatch(&act, cognition_state, &continuity_ctx)?;
         if matches!(continuity_decision, DispatchDecision::Break) {
-            eprintln!(
-                "[stem] dispatch_break cycle={} seq={} reason=continuity_break",
-                cycle_id, seq_no
+            tracing::info!(
+                target: "stem",
+                cycle_id = cycle_id,
+                seq_no = seq_no,
+                reason = "continuity_break",
+                "dispatch_break"
             );
             let event = synthetic_continuity_break_event(cycle_id, seq_no, &act, &ticket);
             self.ledger
@@ -196,15 +232,16 @@ impl Stem {
             }
             Err(err) => map_spine_error_to_rejected_event(cycle_id, seq_no, &act, &ticket, err),
         };
-        eprintln!(
-            "[stem] dispatch_event cycle={} seq={} kind={}",
-            cycle_id,
-            seq_no,
-            match &event {
+        tracing::debug!(
+            target: "stem",
+            cycle_id = cycle_id,
+            seq_no = seq_no,
+            kind = match &event {
                 SpineEvent::ActApplied { .. } => "act_applied",
                 SpineEvent::ActRejected { .. } => "act_rejected",
                 SpineEvent::ActDeferred { .. } => "act_deferred",
-            }
+            },
+            "dispatch_event"
         );
 
         self.ledger

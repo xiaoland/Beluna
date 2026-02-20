@@ -61,5 +61,5 @@ Invalid states must fail as canonical `InvalidRequest`, not provider-specific er
 - Normalization: `src/ai_gateway/request_normalizer.rs`, `src/ai_gateway/response_normalizer.rs`
 - Routing/Capabilities: `src/ai_gateway/router.rs`, `src/ai_gateway/capabilities.rs`
 - Reliability/Budget: `src/ai_gateway/reliability.rs`, `src/ai_gateway/budget.rs`
-- Credentials/Telemetry: `src/ai_gateway/credentials.rs`, `src/ai_gateway/telemetry.rs`
+- Credentials/Tracing Telemetry: `src/ai_gateway/credentials.rs`, `src/ai_gateway/telemetry.rs`
 - Adapters: `src/ai_gateway/adapters/*`

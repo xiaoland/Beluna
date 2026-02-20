@@ -10,6 +10,7 @@ use tokio::{
     task::JoinHandle,
 };
 use tokio_util::sync::CancellationToken;
+use tracing::Instrument;
 use uuid::Uuid;
 
 use crate::{
@@ -109,40 +110,50 @@ impl SpineInlineAdapter {
         let shutdown = self.shutdown.clone();
         let endpoint_name_for_task = endpoint_name.clone();
         let body_endpoint_id = handle.body_endpoint_id;
-        let sense_task = tokio::spawn(async move {
-            loop {
-                tokio::select! {
-                    _ = shutdown.cancelled() => {
-                        break;
-                    }
-                    maybe_sense = sense_rx.recv() => {
-                        let Some(sense) = maybe_sense else {
+        let sense_span = tracing::info_span!(
+            target: "spine.inline_adapter",
+            "inline_sense_task",
+            endpoint_name = %endpoint_name_for_task,
+            body_endpoint_id = %body_endpoint_id
+        );
+        let sense_task = tokio::spawn(
+            async move {
+                loop {
+                    tokio::select! {
+                        _ = shutdown.cancelled() => {
                             break;
-                        };
-                        let Some(adapter) = adapter.upgrade() else {
-                            break;
-                        };
-                        if let Err(err) = adapter
-                            .afferent_pathway
-                            .send(Sense::Domain((*sense).clone()))
-                            .await
-                        {
-                            eprintln!(
-                                "inline adapter dropped sense from endpoint '{}': {}",
-                                endpoint_name_for_task,
-                                err
-                            );
+                        }
+                        maybe_sense = sense_rx.recv() => {
+                            let Some(sense) = maybe_sense else {
+                                break;
+                            };
+                            let Some(adapter) = adapter.upgrade() else {
+                                break;
+                            };
+                            if let Err(err) = adapter
+                                .afferent_pathway
+                                .send(Sense::Domain((*sense).clone()))
+                                .await
+                            {
+                                tracing::warn!(
+                                    target: "spine.inline_adapter",
+                                    endpoint_name = endpoint_name_for_task,
+                                    error = %err,
+                                    "dropped_sense_from_inline_endpoint"
+                                );
+                            }
                         }
                     }
                 }
-            }
 
-            if let Some(adapter) = adapter.upgrade() {
-                adapter
-                    .remove_endpoint_by_name(&endpoint_name_for_task, body_endpoint_id, false)
-                    .await;
+                if let Some(adapter) = adapter.upgrade() {
+                    adapter
+                        .remove_endpoint_by_name(&endpoint_name_for_task, body_endpoint_id, false)
+                        .await;
+                }
             }
-        });
+            .instrument(sense_span),
+        );
 
         {
             let mut state = self.endpoints.lock().await;
@@ -164,7 +175,11 @@ impl SpineInlineAdapter {
                 }))
                 .await
         {
-            eprintln!("inline adapter dropped capability patch after attach: {err}");
+            tracing::warn!(
+                target: "spine.inline_adapter",
+                error = %err,
+                "dropped_capability_patch_after_attach"
+            );
         }
 
         Ok(InlineEndpointRuntimeHandles { act_rx, sense_tx })
@@ -233,7 +248,11 @@ impl SpineInlineAdapter {
                     .send(Sense::DropCapabilities(CapabilityDropPatch { routes }))
                     .await
             {
-                eprintln!("inline adapter dropped capability drop during detach: {err}");
+                tracing::warn!(
+                    target: "spine.inline_adapter",
+                    error = %err,
+                    "dropped_capability_drop_during_detach"
+                );
             }
         }
     }

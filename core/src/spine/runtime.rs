@@ -6,9 +6,10 @@ use std::{
     },
 };
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
+use tracing::Instrument;
 use uuid::Uuid;
 
 use crate::{
@@ -112,7 +113,7 @@ pub struct Spine {
     routing: RwLock<RoutingState>,
     next_adapter_channel_seq: AtomicU64,
     shutdown: CancellationToken,
-    tasks: tokio::sync::Mutex<Vec<JoinHandle<Result<()>>>>,
+    tasks: Mutex<Vec<JoinHandle<Result<()>>>>,
     endpoint_state: Mutex<EndpointState>,
     inline_adapter: OnceLock<Arc<SpineInlineAdapter>>,
 }
@@ -124,7 +125,7 @@ impl Spine {
             routing: RwLock::new(RoutingState::default()),
             next_adapter_channel_seq: AtomicU64::new(0),
             shutdown: CancellationToken::new(),
-            tasks: tokio::sync::Mutex::new(Vec::new()),
+            tasks: Mutex::new(Vec::new()),
             endpoint_state: Mutex::new(EndpointState::default()),
             inline_adapter: OnceLock::new(),
         });
@@ -153,18 +154,21 @@ impl Spine {
                     ));
 
                     if self.inline_adapter.set(Arc::clone(&adapter)).is_err() {
-                        eprintln!(
-                            "[spine] duplicate inline adapter ignored adapter_id={}",
-                            adapter_id
+                        tracing::warn!(
+                            target: "spine",
+                            adapter_id = adapter_id,
+                            "duplicate_inline_adapter_ignored"
                         );
                         continue;
                     }
 
-                    eprintln!(
-                        "[spine] adapter_started type=inline adapter_id={} act_queue_capacity={} sense_queue_capacity={}",
-                        adapter.adapter_id(),
-                        adapter_cfg.act_queue_capacity,
-                        adapter_cfg.sense_queue_capacity,
+                    tracing::info!(
+                        target: "spine",
+                        adapter_type = "inline",
+                        adapter_id = adapter.adapter_id(),
+                        act_queue_capacity = adapter_cfg.act_queue_capacity,
+                        sense_queue_capacity = adapter_cfg.sense_queue_capacity,
+                        "adapter_started"
                     );
                 }
                 crate::config::SpineAdapterConfig::UnixSocketNdjson {
@@ -176,16 +180,26 @@ impl Spine {
                     let spine = Arc::clone(self);
                     let shutdown = self.shutdown.clone();
                     let socket_path = adapter_cfg.socket_path.clone();
-
-                    let task = tokio::spawn(async move {
-                        eprintln!(
-                            "[spine] adapter_started type=unix-socket-ndjson adapter_id={} socket_path={}",
-                            adapter_id,
-                            socket_path.display()
-                        );
-                        adapter.run(afferent_pathway, spine, shutdown).await
-                    });
-                    self.tasks.blocking_lock().push(task);
+                    let adapter_span = tracing::info_span!(
+                        target: "spine",
+                        "unix_socket_adapter_task",
+                        adapter_id = adapter_id,
+                        socket_path = %socket_path.display()
+                    );
+                    let task = tokio::spawn(
+                        async move {
+                            tracing::info!(
+                                target: "spine",
+                                adapter_type = "unix-socket-ndjson",
+                                adapter_id = adapter_id,
+                                socket_path = %socket_path.display(),
+                                "adapter_started"
+                            );
+                            adapter.run(afferent_pathway, spine, shutdown).await
+                        }
+                        .instrument(adapter_span),
+                    );
+                    self.tasks.lock().expect("lock poisoned").push(task);
                 }
             }
         }
@@ -402,13 +416,21 @@ impl Spine {
         dropped
     }
 
-    pub async fn shutdown(self) {
+    pub async fn shutdown(&self) {
         self.shutdown.cancel();
-        for task in self.tasks.into_inner() {
+        let tasks = {
+            let mut guard = self.tasks.lock().expect("lock poisoned");
+            std::mem::take(&mut *guard)
+        };
+        for task in tasks {
             match task.await {
                 Ok(Ok(())) => {}
-                Ok(Err(err)) => eprintln!("spine adapter exited with error: {err:#}"),
-                Err(err) => eprintln!("spine adapter task join failed: {err}"),
+                Ok(Err(err)) => {
+                    tracing::error!(target: "spine", error = ?err, "spine_adapter_exited_with_error")
+                }
+                Err(err) => {
+                    tracing::error!(target: "spine", error = %err, "spine_adapter_task_join_failed")
+                }
             }
         }
     }
@@ -541,16 +563,8 @@ impl Spine {
 }
 
 pub async fn shutdown_global_spine(spine: Arc<Spine>) -> Result<()> {
-    match Arc::try_unwrap(spine) {
-        Ok(spine) => {
-            spine.shutdown().await;
-            Ok(())
-        }
-        Err(_) => Err(anyhow::anyhow!(
-            "failed to shutdown spine: outstanding references still exist"
-        ))
-        .context("spine shutdown requires exclusive ownership"),
-    }
+    spine.shutdown().await;
+    Ok(())
 }
 
 #[cfg(test)]

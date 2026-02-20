@@ -16,7 +16,7 @@ It is backend-dialect oriented and backend transport agnostic.
 - `ReliabilityLayer`: exponential backoff retry + circuit breaker
 - `BackendAdapter`: owns both transport and dialect mapping
 - `ResponseNormalizer`: backend raw events -> canonical event stream
-- `TelemetrySink`: lifecycle/attempt/outcome/usage telemetry
+- `tracing` structured telemetry: lifecycle/attempt/outcome/usage events emitted as logs
 
 ## Routing and Adapter Principles
 

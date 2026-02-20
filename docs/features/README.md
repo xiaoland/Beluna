@@ -24,5 +24,5 @@ Index:
 - [Continuity](./continuity/PRD.md)
 - [Ledger](./ledger/PRD.md)
 - [Spine](./spine/PRD.md)
-- [Stem](./non-cortex/PRD.md)
+- [Stem](./stem/PRD.md)
 - [Mind (deprecated)](./mind/PRD.md)

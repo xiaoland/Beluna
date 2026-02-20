@@ -6,7 +6,6 @@ use tokio::time::{Duration, timeout};
 use crate::{
     ai_gateway::{
         gateway::AIGateway,
-        telemetry::debug_log,
         types_chat::{
             BelunaContentPart, BelunaMessage, BelunaRole, ChatRequest, ChatResponse, OutputMode,
             RequestLimitOverrides, ToolChoice,
@@ -447,16 +446,17 @@ async fn infer_ir_via_gateway(
         .max_cycle_time_ms
         .saturating_sub(helper_timeout_ms)
         .max(1);
-    debug_log(format!(
-        "cortex_primary_start cycle_id={} helper_request_id={} request_id={} route_hint={} helper_timeout_ms={} primary_timeout_ms={} max_output_tokens={}",
-        req.cycle_id,
-        helper_request_id,
-        request_id,
-        route.as_deref().unwrap_or("-"),
-        helper_timeout_ms,
-        primary_timeout_ms,
-        req.limits.max_primary_output_tokens,
-    ));
+    tracing::debug!(
+        target: "cortex",
+        cycle_id = req.cycle_id,
+        helper_request_id = %helper_request_id,
+        request_id = %request_id,
+        route_hint = route.as_deref().unwrap_or("-"),
+        helper_timeout_ms = helper_timeout_ms,
+        primary_timeout_ms = primary_timeout_ms,
+        max_output_tokens = req.limits.max_primary_output_tokens,
+        "cortex_primary_start"
+    );
 
     let helper_request = build_text_request(
         helper_request_id.clone(),
@@ -469,14 +469,15 @@ async fn infer_ir_via_gateway(
     );
     log_llm_input("helper", req.cycle_id, &helper_request);
     let helper_response = gateway.chat_once(helper_request).await.map_err(|err| {
-        debug_log(format!(
-            "cortex_helper_failed cycle_id={} request_id={} elapsed_ms={} error_kind={:?} error={}",
-            req.cycle_id,
-            helper_request_id,
-            started_at.elapsed().as_millis(),
-            err.kind,
-            err.message,
-        ));
+        tracing::debug!(
+            target: "cortex",
+            cycle_id = req.cycle_id,
+            request_id = %helper_request_id,
+            elapsed_ms = started_at.elapsed().as_millis() as u64,
+            error_kind = ?err.kind,
+            error = %err.message,
+            "cortex_helper_failed"
+        );
         primary_failed(err.to_string())
     })?;
     log_llm_output("helper", req.cycle_id, &helper_request_id, &helper_response);
@@ -496,36 +497,39 @@ async fn infer_ir_via_gateway(
     );
     log_llm_input("primary", req.cycle_id, &request);
     let response = gateway.chat_once(request).await.map_err(|err| {
-        debug_log(format!(
-            "cortex_primary_failed cycle_id={} request_id={} elapsed_ms={} error_kind={:?} error={}",
-            req.cycle_id,
-            request_id,
-            started_at.elapsed().as_millis(),
-            err.kind,
-            err.message,
-        ));
+        tracing::debug!(
+            target: "cortex",
+            cycle_id = req.cycle_id,
+            request_id = %request_id,
+            elapsed_ms = started_at.elapsed().as_millis() as u64,
+            error_kind = ?err.kind,
+            error = %err.message,
+            "cortex_primary_failed"
+        );
         primary_failed(err.to_string())
     })?;
     log_llm_output("primary", req.cycle_id, &request_id, &response);
     let finish_reason = response.finish_reason;
     let text = response.output_text.trim().to_string();
     if text.is_empty() {
-        debug_log(format!(
-            "cortex_primary_empty cycle_id={} request_id={} elapsed_ms={}",
-            req.cycle_id,
-            request_id,
-            started_at.elapsed().as_millis(),
-        ));
+        tracing::debug!(
+            target: "cortex",
+            cycle_id = req.cycle_id,
+            request_id = %request_id,
+            elapsed_ms = started_at.elapsed().as_millis() as u64,
+            "cortex_primary_empty"
+        );
         return Err(primary_failed("primary reasoner produced empty IR"));
     }
-    debug_log(format!(
-        "cortex_primary_completed cycle_id={} request_id={} elapsed_ms={} finish_reason={:?} output_chars={}",
-        req.cycle_id,
-        request_id,
-        started_at.elapsed().as_millis(),
-        finish_reason,
-        text.len(),
-    ));
+    tracing::debug!(
+        target: "cortex",
+        cycle_id = req.cycle_id,
+        request_id = %request_id,
+        elapsed_ms = started_at.elapsed().as_millis() as u64,
+        finish_reason = ?finish_reason,
+        output_chars = text.len(),
+        "cortex_primary_completed"
+    );
     Ok(ProseIr { text })
 }
 
@@ -576,21 +580,32 @@ async fn extract_attempts_via_gateway(
     );
     log_llm_input("extractor", req.cycle_id, &request);
     let response = gateway.chat_once(request).await.map_err(|err| {
-        debug_log(format!(
-            "llm_call_failed stage=extractor cycle_id={} request_id={} error_kind={:?} error={}",
-            req.cycle_id, request_id, err.kind, err.message
-        ));
+        tracing::debug!(
+            target: "cortex",
+            stage = "extractor",
+            cycle_id = req.cycle_id,
+            request_id = %request_id,
+            error_kind = ?err.kind,
+            error = %err.message,
+            "llm_call_failed"
+        );
         extractor_failed(err.to_string())
     })?;
     log_llm_output("extractor", req.cycle_id, &request_id, &response);
 
-    let parsed = parse_json_output::<AttemptDraftEnvelope>(&response.output_text).map_err(|err| {
-        debug_log(format!(
-            "llm_output_parse_failed stage=extractor cycle_id={} request_id={} error={} raw_output=\n{}",
-            req.cycle_id, request_id, err, response.output_text
-        ));
-        extractor_failed(err.to_string())
-    })?;
+    let parsed =
+        parse_json_output::<AttemptDraftEnvelope>(&response.output_text).map_err(|err| {
+            tracing::debug!(
+                target: "cortex",
+                stage = "extractor",
+                cycle_id = req.cycle_id,
+                request_id = %request_id,
+                error = %err,
+                raw_output = %response.output_text,
+                "llm_output_parse_failed"
+            );
+            extractor_failed(err.to_string())
+        })?;
     Ok(parsed.attempts)
 }
 
@@ -658,41 +673,40 @@ fn build_helper_prompt(req: &PrimaryReasonerRequest) -> String {
 fn log_llm_input(stage: &str, cycle_id: u64, request: &ChatRequest) {
     let request_json = serde_json::to_string_pretty(request)
         .unwrap_or_else(|err| format!("{{\"serialization_error\":\"{}\"}}", err));
-    debug_log(format!(
-        "llm_input stage={} cycle_id={} request_id={} route={} output_mode={:?} limits={{max_output_tokens:{:?},max_request_time_ms:{:?}}}\n{}",
-        stage,
-        cycle_id,
-        request.request_id.as_deref().unwrap_or("-"),
-        request.route.as_deref().unwrap_or("-"),
-        request.output_mode,
-        request.limits.max_output_tokens,
-        request.limits.max_request_time_ms,
-        request_json
-    ));
+    tracing::debug!(
+        target: "cortex",
+        stage = stage,
+        cycle_id = cycle_id,
+        request_id = request.request_id.as_deref().unwrap_or("-"),
+        route = request.route.as_deref().unwrap_or("-"),
+        output_mode = ?request.output_mode,
+        max_output_tokens = ?request.limits.max_output_tokens,
+        max_request_time_ms = ?request.limits.max_request_time_ms,
+        request_json = %request_json,
+        "llm_input"
+    );
 }
 
 fn log_llm_output(stage: &str, cycle_id: u64, request_id: &str, response: &ChatResponse) {
-    let usage = response
+    let (input_tokens, output_tokens, total_tokens) = response
         .usage
         .as_ref()
-        .map(|u| {
-            format!(
-                "input={:?},output={:?},total={:?}",
-                u.input_tokens, u.output_tokens, u.total_tokens
-            )
-        })
-        .unwrap_or_else(|| "none".to_string());
-    debug_log(format!(
-        "llm_output stage={} cycle_id={} request_id={} finish_reason={:?} usage={} tool_calls={} output_chars={}\n{}",
-        stage,
-        cycle_id,
-        request_id,
-        response.finish_reason,
-        usage,
-        response.tool_calls.len(),
-        response.output_text.len(),
-        response.output_text
-    ));
+        .map(|u| (u.input_tokens, u.output_tokens, u.total_tokens))
+        .unwrap_or((None, None, None));
+    tracing::debug!(
+        target: "cortex",
+        stage = stage,
+        cycle_id = cycle_id,
+        request_id = request_id,
+        finish_reason = ?response.finish_reason,
+        usage_input_tokens = ?input_tokens,
+        usage_output_tokens = ?output_tokens,
+        usage_total_tokens = ?total_tokens,
+        tool_calls = response.tool_calls.len(),
+        output_chars = response.output_text.len(),
+        output_text = %response.output_text,
+        "llm_output"
+    );
 }
 
 fn parse_json_output<T: for<'a> Deserialize<'a>>(text: &str) -> Result<T, CortexError> {

@@ -37,7 +37,7 @@ Beluna Core is the runnable runtime and domain agent implementation.
 
 ## Current State
 
-> Last Updated At: 2026-02-18T23:58Z+08:00
+> Last Updated At: 2026-02-20T11:30+08:00
 
 ### Live Capabilities
 
@@ -46,13 +46,14 @@ Beluna Core is the runnable runtime and domain agent implementation.
 - Runtime uses one bounded Rust MPSC sense queue with native sender backpressure.
 - `main` boots continuity/ledger/spine/cortex, starts the Stem loop, and listens for SIGTERM/SIGINT.
 - Shutdown closes ingress gate first, then blocks until `sleep` sense is enqueued.
+- Runtime logging is `tracing`-only: JSON file logs with rotation/retention and optional stderr warn/error mirroring via `logging.*` config.
 - Stem consumes one sense at a time, composes physical+cognition state, invokes pure cortex boundary, then dispatches acts serially through Ledger -> Continuity -> Spine.
 - Control senses:
   - `sleep` breaks loop without calling Cortex.
   - `new_capabilities` / `drop_capabilities` mutate capability state before same-cycle Cortex call.
 - Built-in inline body endpoints (shell/web under `core/src/body`) are started by `main` after Spine boot, each on a dedicated thread, and attach through Spine Inline Adapter configured in `spine.adapters`.
 - External body endpoints register over UnixSocket and publish senses/capability patches.
-- AI Gateway MVP provides deterministic routing, strict normalization, reliability controls, and budget enforcement.
+- AI Gateway MVP provides deterministic routing, strict normalization, reliability controls, budget enforcement, and tracing-structured telemetry events.
 
 ### Known Limitations & Mocks
 

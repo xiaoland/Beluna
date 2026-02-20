@@ -1,4 +1,4 @@
-# Stem Runtime Module
+# Stem Module
 
 Stem is the runtime orchestrator for sense ingestion, cortex invocation, and serial act dispatch.
 
@@ -14,3 +14,6 @@ Key properties:
 - stage decision contract: `Continue` / `Break`
 - `Break` affects current act only
 - shutdown path gates ingress before blocking sleep enqueue
+
+See also:
+- [Observability Module](../observability/README.md)

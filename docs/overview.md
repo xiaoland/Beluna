@@ -46,3 +46,14 @@ Shutdown flow:
 2. closes ingress gate (rejects producer sends).
 3. blocks until `sleep` is enqueued.
 4. waits for Stem completion and runs cleanup.
+
+## Runtime Logging
+
+Core runtime logs are emitted through `tracing` only.
+
+Default behavior:
+1. JSON logs are written to `./logs/core` (relative to process current working directory unless `logging.dir` overrides).
+2. File rotation defaults to daily (`logging.rotation` supports `daily` and `hourly`).
+3. Retention cleanup removes prefixed historical log files older than `logging.retention_days` (default: 14).
+4. `warn` and `error` are mirrored to stderr when `logging.stderr_warn_enabled=true` (default).
+5. Log level/filter is configured via `logging.filter` (default: `info`).

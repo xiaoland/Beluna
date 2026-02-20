@@ -18,6 +18,8 @@ use crate::{
 pub struct Config {
     pub ai_gateway: AIGatewayConfig,
     #[serde(default)]
+    pub logging: LoggingConfig,
+    #[serde(default)]
     pub cortex: CortexRuntimeConfig,
     #[serde(default)]
     pub spine: SpineRuntimeConfig,
@@ -49,6 +51,55 @@ fn default_cortex_outbox_capacity() -> usize {
 
 fn default_enabled_true() -> bool {
     true
+}
+
+fn default_logging_dir() -> PathBuf {
+    PathBuf::from("./logs/core")
+}
+
+fn default_logging_filter() -> String {
+    "info".to_string()
+}
+
+fn default_logging_rotation() -> LoggingRotation {
+    LoggingRotation::Daily
+}
+
+fn default_logging_retention_days() -> usize {
+    14
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum LoggingRotation {
+    Daily,
+    Hourly,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoggingConfig {
+    #[serde(default = "default_logging_dir")]
+    pub dir: PathBuf,
+    #[serde(default = "default_logging_filter")]
+    pub filter: String,
+    #[serde(default = "default_logging_rotation")]
+    pub rotation: LoggingRotation,
+    #[serde(default = "default_logging_retention_days")]
+    pub retention_days: usize,
+    #[serde(default = "default_enabled_true")]
+    pub stderr_warn_enabled: bool,
+}
+
+impl Default for LoggingConfig {
+    fn default() -> Self {
+        Self {
+            dir: default_logging_dir(),
+            filter: default_logging_filter(),
+            rotation: default_logging_rotation(),
+            retention_days: default_logging_retention_days(),
+            stderr_warn_enabled: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -269,5 +320,91 @@ fn validate_against_schema(config_value: &Value, schema_path: &Path) -> Result<(
                 .collect();
             Err(anyhow!("config validation failed: {}", messages.join("; ")))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use uuid::Uuid;
+
+    use super::{Config, LoggingConfig, LoggingRotation};
+
+    #[test]
+    fn logging_config_defaults_match_contract() {
+        let config = LoggingConfig::default();
+        assert_eq!(config.dir, std::path::PathBuf::from("./logs/core"));
+        assert_eq!(config.filter, "info");
+        assert_eq!(config.rotation, LoggingRotation::Daily);
+        assert_eq!(config.retention_days, 14);
+        assert!(config.stderr_warn_enabled);
+    }
+
+    #[test]
+    fn logging_rotation_hourly_is_deserialized() {
+        #[derive(serde::Deserialize)]
+        struct Wrapper {
+            logging: LoggingConfig,
+        }
+
+        let parsed: Wrapper = serde_json::from_value(serde_json::json!({
+            "logging": {
+                "rotation": "hourly"
+            }
+        }))
+        .expect("wrapper should deserialize");
+        assert_eq!(parsed.logging.rotation, LoggingRotation::Hourly);
+    }
+
+    #[test]
+    fn config_load_rejects_zero_logging_retention_days() {
+        let work_dir = std::env::temp_dir().join(format!("beluna-config-test-{}", Uuid::now_v7()));
+        fs::create_dir_all(&work_dir).expect("temp work dir should be created");
+
+        let config_path = work_dir.join("beluna.jsonc");
+        let schema_path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("beluna.schema.json");
+        let config_text = format!(
+            r#"{{
+  "$schema": "{}",
+  "ai_gateway": {{
+    "backends": [
+      {{
+        "id": "backend-default",
+        "dialect": "openai_compatible",
+        "credential": {{
+          "type": "none"
+        }},
+        "models": [
+          {{
+            "id": "m1"
+          }}
+        ]
+      }}
+    ],
+    "route_aliases": {{
+      "default": {{
+        "backend_id": "backend-default",
+        "model_id": "m1"
+      }}
+    }}
+  }},
+  "logging": {{
+    "retention_days": 0
+  }}
+}}"#,
+            schema_path.display(),
+        );
+        fs::write(&config_path, config_text).expect("config should be written");
+
+        let err = Config::load(&config_path).expect_err("retention_days=0 should fail schema");
+        assert!(
+            err.to_string().contains("minimum"),
+            "unexpected error: {err}",
+        );
+
+        let _ = fs::remove_file(&config_path);
+        let _ = fs::remove_dir(&work_dir);
     }
 }

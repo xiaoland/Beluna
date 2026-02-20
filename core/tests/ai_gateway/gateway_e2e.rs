@@ -17,7 +17,6 @@ use beluna::ai_gateway::{
     credentials::CredentialProvider,
     error::{GatewayError, GatewayErrorKind},
     gateway::AIGateway,
-    telemetry::NoopTelemetrySink,
     types::{
         AIGatewayConfig, AdapterContext, BackendCapabilities, BackendDialect, BackendProfile,
         BudgetConfig, CredentialRef, ModelProfile, ModelTarget, ReliabilityConfig,
@@ -314,13 +313,9 @@ async fn given_transient_failure_before_output_when_chat_once_then_gateway_retri
     let mut adapters: HashMap<BackendDialect, Arc<dyn BackendAdapter>> = HashMap::new();
     adapters.insert(BackendDialect::OpenAiCompatible, adapter);
 
-    let gateway = AIGateway::new(
-        gateway_config(),
-        Arc::new(StaticCredentialProvider),
-        Arc::new(NoopTelemetrySink),
-    )
-    .expect("gateway should build")
-    .with_adapters(adapters);
+    let gateway = AIGateway::new(gateway_config(), Arc::new(StaticCredentialProvider))
+        .expect("gateway should build")
+        .with_adapters(adapters);
 
     let response = gateway
         .chat_once(request())
@@ -340,13 +335,9 @@ async fn given_failure_after_output_when_chat_once_then_gateway_does_not_retry()
     let mut adapters: HashMap<BackendDialect, Arc<dyn BackendAdapter>> = HashMap::new();
     adapters.insert(BackendDialect::OpenAiCompatible, adapter);
 
-    let gateway = AIGateway::new(
-        gateway_config(),
-        Arc::new(StaticCredentialProvider),
-        Arc::new(NoopTelemetrySink),
-    )
-    .expect("gateway should build")
-    .with_adapters(adapters);
+    let gateway = AIGateway::new(gateway_config(), Arc::new(StaticCredentialProvider))
+        .expect("gateway should build")
+        .with_adapters(adapters);
 
     let err = gateway
         .chat_once(request())
@@ -367,13 +358,9 @@ async fn given_failing_stream_when_chat_stream_then_started_is_first_and_termina
     let mut adapters: HashMap<BackendDialect, Arc<dyn BackendAdapter>> = HashMap::new();
     adapters.insert(BackendDialect::OpenAiCompatible, adapter);
 
-    let gateway = AIGateway::new(
-        gateway_config(),
-        Arc::new(StaticCredentialProvider),
-        Arc::new(NoopTelemetrySink),
-    )
-    .expect("gateway should build")
-    .with_adapters(adapters);
+    let gateway = AIGateway::new(gateway_config(), Arc::new(StaticCredentialProvider))
+        .expect("gateway should build")
+        .with_adapters(adapters);
 
     let mut stream = gateway
         .chat_stream(request())
@@ -419,7 +406,6 @@ async fn given_usage_over_budget_post_check_when_chat_once_then_stream_still_com
             rate_smoothing_per_second: None,
         }),
         Arc::new(StaticCredentialProvider),
-        Arc::new(NoopTelemetrySink),
     )
     .expect("gateway should build")
     .with_adapters(adapters);
@@ -456,7 +442,6 @@ async fn given_stream_drop_when_inflight_then_adapter_is_cancelled_and_budget_is
             rate_smoothing_per_second: None,
         }),
         Arc::new(StaticCredentialProvider),
-        Arc::new(NoopTelemetrySink),
     )
     .expect("gateway should build")
     .with_adapters(adapters);

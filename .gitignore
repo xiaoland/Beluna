@@ -24,11 +24,14 @@ __pycache__/
 .vscode/
 
 # Debug
-*.sock
-beluna.jsonc
 .firecrawl
 
+# Core's
+beluna.jsonc
+*.sock
+/logs/
 /core/target/
+
 
 # XCode & SPM & CocoaPods
 apple-universal/.swiftpm/

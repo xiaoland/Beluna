@@ -4,12 +4,14 @@ use std::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
+    time::Instant,
 };
 
 use async_trait::async_trait;
 use serde_json::{Value, json};
 use tokio::{process::Command, sync::mpsc};
 use tokio_stream::wrappers::ReceiverStream;
+use tracing::Instrument;
 
 use crate::ai_gateway::{
     adapters::{BackendAdapter, copilot_rpc::RpcIo},
@@ -51,190 +53,280 @@ impl BackendAdapter for GitHubCopilotAdapter {
 
         let backend_id = ctx.backend_id.clone();
         let model = ctx.model.clone();
+        let model_for_task = model.clone();
+        let request_id = ctx.request_id.clone();
         let copilot_config = ctx.profile.copilot.clone();
+        let dispatch_span = tracing::debug_span!(
+            target: "ai_gateway.github_copilot",
+            "copilot_dispatch",
+            request_id = %request_id,
+            backend_id = %backend_id,
+            model = %model_for_task,
+            stream = req.stream
+        );
 
-        tokio::spawn(async move {
-            let copilot_config = match copilot_config {
-                Some(config) => config,
-                None => {
-                    let _ = tx
-                        .send(Err(GatewayError::new(
-                            GatewayErrorKind::InvalidRequest,
-                            "github_copilot_sdk backend requires copilot config",
-                        )
-                        .with_retryable(false)
-                        .with_backend_id(backend_id.clone())))
-                        .await;
-                    return;
-                }
-            };
+        tokio::spawn(
+            async move {
+                let request_started_at = Instant::now();
+                tracing::debug!(
+                    target: "ai_gateway.github_copilot",
+                    request_id = %request_id,
+                    backend_id = %backend_id,
+                    model = %model_for_task,
+                    stream = req.stream,
+                    "copilot_dispatch_start"
+                );
+                let copilot_config = match copilot_config {
+                    Some(config) => config,
+                    None => {
+                        let _ = tx
+                            .send(Err(GatewayError::new(
+                                GatewayErrorKind::InvalidRequest,
+                                "github_copilot_sdk backend requires copilot config",
+                            )
+                            .with_retryable(false)
+                            .with_backend_id(backend_id.clone())))
+                            .await;
+                        return;
+                    }
+                };
 
-            let mut command = Command::new(&copilot_config.command);
-            command
-                .args(&copilot_config.args)
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::null());
+                let mut command = Command::new(&copilot_config.command);
+                command
+                    .args(&copilot_config.args)
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::null());
 
-            let mut child = match command.spawn() {
-                Ok(child) => child,
-                Err(err) => {
-                    let _ = tx
-                        .send(Err(GatewayError::new(
-                            GatewayErrorKind::BackendTransient,
-                            format!("failed to spawn copilot language server: {}", err),
-                        )
-                        .with_retryable(true)
-                        .with_backend_id(backend_id.clone())))
-                        .await;
-                    return;
-                }
-            };
+                let mut child = match command.spawn() {
+                    Ok(child) => child,
+                    Err(err) => {
+                        tracing::debug!(
+                            target: "ai_gateway.github_copilot",
+                            request_id = %request_id,
+                            backend_id = %backend_id,
+                            elapsed_ms = request_started_at.elapsed().as_millis() as u64,
+                            error = %err,
+                            "copilot_spawn_failed"
+                        );
+                        let _ = tx
+                            .send(Err(GatewayError::new(
+                                GatewayErrorKind::BackendTransient,
+                                format!("failed to spawn copilot language server: {}", err),
+                            )
+                            .with_retryable(true)
+                            .with_backend_id(backend_id.clone())))
+                            .await;
+                        return;
+                    }
+                };
 
-            let stdout = match child.stdout.take() {
-                Some(stdout) => stdout,
-                None => {
-                    let _ = tx
-                        .send(Err(GatewayError::new(
-                            GatewayErrorKind::ProtocolViolation,
-                            "copilot process missing stdout pipe",
-                        )
-                        .with_retryable(false)
-                        .with_backend_id(backend_id.clone())))
-                        .await;
-                    let _ = child.kill().await;
-                    return;
-                }
-            };
-            let stdin = match child.stdin.take() {
-                Some(stdin) => stdin,
-                None => {
-                    let _ = tx
-                        .send(Err(GatewayError::new(
-                            GatewayErrorKind::ProtocolViolation,
-                            "copilot process missing stdin pipe",
-                        )
-                        .with_retryable(false)
-                        .with_backend_id(backend_id.clone())))
-                        .await;
-                    let _ = child.kill().await;
-                    return;
-                }
-            };
+                let stdout = match child.stdout.take() {
+                    Some(stdout) => stdout,
+                    None => {
+                        let _ = tx
+                            .send(Err(GatewayError::new(
+                                GatewayErrorKind::ProtocolViolation,
+                                "copilot process missing stdout pipe",
+                            )
+                            .with_retryable(false)
+                            .with_backend_id(backend_id.clone())))
+                            .await;
+                        let _ = child.kill().await;
+                        return;
+                    }
+                };
+                let stdin = match child.stdin.take() {
+                    Some(stdin) => stdin,
+                    None => {
+                        let _ = tx
+                            .send(Err(GatewayError::new(
+                                GatewayErrorKind::ProtocolViolation,
+                                "copilot process missing stdin pipe",
+                            )
+                            .with_retryable(false)
+                            .with_backend_id(backend_id.clone())))
+                            .await;
+                        let _ = child.kill().await;
+                        return;
+                    }
+                };
 
-            let mut rpc = RpcIo::new(stdout, stdin);
+                let mut rpc = RpcIo::new(stdout, stdin);
 
-            if let Err(err) = rpc
-                .request(
-                    1,
-                    "initialize",
-                    json!({
-                        "processId": std::process::id(),
-                        "clientInfo": {"name": "beluna", "version": "0.1.0"},
-                        "rootUri": null,
-                        "capabilities": {},
-                    }),
-                )
-                .await
-            {
-                let _ = tx.send(Err(err.with_backend_id(backend_id.clone()))).await;
-                let _ = child.kill().await;
-                return;
-            }
-
-            if cancel_flag_task.load(Ordering::SeqCst) {
-                let _ = child.kill().await;
-                return;
-            }
-
-            if let Err(err) = rpc.send_notification("initialized", json!({})).await {
-                let _ = tx.send(Err(err.with_backend_id(backend_id.clone()))).await;
-                let _ = child.kill().await;
-                return;
-            }
-
-            let status_result = match rpc.request(2, "checkStatus", json!({})).await {
-                Ok(result) => result,
-                Err(err) => {
+                if let Err(err) = rpc
+                    .request(
+                        1,
+                        "initialize",
+                        json!({
+                            "processId": std::process::id(),
+                            "clientInfo": {"name": "beluna", "version": "0.1.0"},
+                            "rootUri": null,
+                            "capabilities": {},
+                        }),
+                    )
+                    .await
+                {
+                    tracing::debug!(
+                        target: "ai_gateway.github_copilot",
+                        request_id = %request_id,
+                        backend_id = %backend_id,
+                        elapsed_ms = request_started_at.elapsed().as_millis() as u64,
+                        error = %err,
+                        "copilot_initialize_failed"
+                    );
                     let _ = tx.send(Err(err.with_backend_id(backend_id.clone()))).await;
                     let _ = child.kill().await;
                     return;
                 }
-            };
 
-            if !status_is_ready(&status_result) {
-                let _ = tx
-                    .send(Err(GatewayError::new(
-                        GatewayErrorKind::Authentication,
-                        "copilot session is not authenticated/ready",
-                    )
-                    .with_retryable(false)
-                    .with_backend_id(backend_id.clone())))
-                    .await;
-                let _ = child.kill().await;
-                return;
-            }
+                if cancel_flag_task.load(Ordering::SeqCst) {
+                    let _ = child.kill().await;
+                    return;
+                }
 
-            if cancel_flag_task.load(Ordering::SeqCst) {
-                let _ = child.kill().await;
-                return;
-            }
+                if let Err(err) = rpc.send_notification("initialized", json!({})).await {
+                    tracing::debug!(
+                        target: "ai_gateway.github_copilot",
+                        request_id = %request_id,
+                        backend_id = %backend_id,
+                        elapsed_ms = request_started_at.elapsed().as_millis() as u64,
+                        error = %err,
+                        "copilot_initialized_notification_failed"
+                    );
+                    let _ = tx.send(Err(err.with_backend_id(backend_id.clone()))).await;
+                    let _ = child.kill().await;
+                    return;
+                }
 
-            let panel_params = build_panel_completion_params(&req);
-            let completion_result = match rpc
-                .request(3, "textDocument/copilotPanelCompletion", panel_params)
-                .await
-            {
-                Ok(result) => result,
-                Err(_) => match rpc
-                    .request(
-                        4,
-                        "textDocument/inlineCompletion",
-                        build_inline_completion_params(&req),
-                    )
-                    .await
-                {
+                let status_result = match rpc.request(2, "checkStatus", json!({})).await {
                     Ok(result) => result,
                     Err(err) => {
+                        tracing::debug!(
+                            target: "ai_gateway.github_copilot",
+                            request_id = %request_id,
+                            backend_id = %backend_id,
+                            elapsed_ms = request_started_at.elapsed().as_millis() as u64,
+                            error = %err,
+                            "copilot_check_status_failed"
+                        );
                         let _ = tx.send(Err(err.with_backend_id(backend_id.clone()))).await;
                         let _ = child.kill().await;
                         return;
                     }
-                },
-            };
+                };
 
-            if let Some(text) = extract_completion_text(&completion_result) {
-                if !text.is_empty() {
-                    if tx
-                        .send(Ok(BackendRawEvent::OutputTextDelta {
-                            delta: text.to_string(),
-                        }))
-                        .await
-                        .is_err()
-                    {
-                        let _ = child.kill().await;
-                        return;
-                    }
+                if !status_is_ready(&status_result) {
+                    tracing::debug!(
+                        target: "ai_gateway.github_copilot",
+                        request_id = %request_id,
+                        backend_id = %backend_id,
+                        elapsed_ms = request_started_at.elapsed().as_millis() as u64,
+                        "copilot_not_ready"
+                    );
+                    let _ = tx
+                        .send(Err(GatewayError::new(
+                            GatewayErrorKind::Authentication,
+                            "copilot session is not authenticated/ready",
+                        )
+                        .with_retryable(false)
+                        .with_backend_id(backend_id.clone())))
+                        .await;
+                    let _ = child.kill().await;
+                    return;
                 }
 
-                let _ = tx
-                    .send(Ok(BackendRawEvent::Completed {
-                        finish_reason: FinishReason::Stop,
-                    }))
-                    .await;
-            } else {
-                let _ = tx
-                    .send(Err(GatewayError::new(
-                        GatewayErrorKind::ProtocolViolation,
-                        "copilot completion response missing text",
-                    )
-                    .with_retryable(false)
-                    .with_backend_id(backend_id.clone())))
-                    .await;
-            }
+                if cancel_flag_task.load(Ordering::SeqCst) {
+                    let _ = child.kill().await;
+                    return;
+                }
 
-            let _ = child.kill().await;
-        });
+                let panel_params = build_panel_completion_params(&req);
+                let completion_result = match rpc
+                    .request(3, "textDocument/copilotPanelCompletion", panel_params)
+                    .await
+                {
+                    Ok(result) => result,
+                    Err(_) => match rpc
+                        .request(
+                            4,
+                            "textDocument/inlineCompletion",
+                            build_inline_completion_params(&req),
+                        )
+                        .await
+                    {
+                        Ok(result) => result,
+                        Err(err) => {
+                            tracing::debug!(
+                                target: "ai_gateway.github_copilot",
+                                request_id = %request_id,
+                                backend_id = %backend_id,
+                                elapsed_ms = request_started_at.elapsed().as_millis() as u64,
+                                error = %err,
+                                "copilot_completion_failed"
+                            );
+                            let _ = tx.send(Err(err.with_backend_id(backend_id.clone()))).await;
+                            let _ = child.kill().await;
+                            return;
+                        }
+                    },
+                };
+
+                if let Some(text) = extract_completion_text(&completion_result) {
+                    if !text.is_empty() {
+                        tracing::debug!(
+                            target: "ai_gateway.github_copilot",
+                            request_id = %request_id,
+                            backend_id = %backend_id,
+                            output_chars = text.len(),
+                            elapsed_ms = request_started_at.elapsed().as_millis() as u64,
+                            "copilot_completion_text_ready"
+                        );
+                        if tx
+                            .send(Ok(BackendRawEvent::OutputTextDelta {
+                                delta: text.to_string(),
+                            }))
+                            .await
+                            .is_err()
+                        {
+                            tracing::debug!(
+                                target: "ai_gateway.github_copilot",
+                                request_id = %request_id,
+                                backend_id = %backend_id,
+                                "copilot_stream_receiver_closed"
+                            );
+                            let _ = child.kill().await;
+                            return;
+                        }
+                    }
+
+                    let _ = tx
+                        .send(Ok(BackendRawEvent::Completed {
+                            finish_reason: FinishReason::Stop,
+                        }))
+                        .await;
+                } else {
+                    tracing::debug!(
+                        target: "ai_gateway.github_copilot",
+                        request_id = %request_id,
+                        backend_id = %backend_id,
+                        elapsed_ms = request_started_at.elapsed().as_millis() as u64,
+                        "copilot_completion_missing_text"
+                    );
+                    let _ = tx
+                        .send(Err(GatewayError::new(
+                            GatewayErrorKind::ProtocolViolation,
+                            "copilot completion response missing text",
+                        )
+                        .with_retryable(false)
+                        .with_backend_id(backend_id.clone())))
+                        .await;
+                }
+
+                let _ = child.kill().await;
+            }
+            .instrument(dispatch_span),
+        );
 
         let cancel = {
             let cancel_flag = cancel_flag.clone();

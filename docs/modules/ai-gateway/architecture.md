@@ -11,7 +11,10 @@
 - `ReliabilityLayer`: retry/backoff + per-backend circuit breaker
 - `BackendAdapter`: transport + dialect mapping
 - `ResponseNormalizer`: backend raw event -> canonical event
-- `TelemetrySink`: lifecycle/attempt/outcome events
+- `tracing` structured telemetry: lifecycle/attempt/outcome events
+
+Observability details:
+- see [Observability Module](../observability/README.md)
 
 ## Layering Rule
 

@@ -16,6 +16,7 @@ use tokio::{
     time::{Duration, Instant, timeout},
 };
 use tokio_util::sync::CancellationToken;
+use tracing::Instrument;
 
 use crate::{
     afferent_pathway::SenseAfferentPathway,
@@ -255,17 +256,30 @@ impl UnixSocketAdapter {
                             let afferent_pathway = afferent_pathway.clone();
                             let spine = Arc::clone(&spine);
                             let adapter_id = self.adapter_id;
+                            let session_span = tracing::info_span!(
+                                target: "spine.unix_socket",
+                                "body_endpoint_session",
+                                adapter_id = adapter_id
+                            );
                             tokio::spawn(async move {
                                 if let Err(err) =
                                     handle_body_endpoint(stream, afferent_pathway, spine, adapter_id)
                                         .await
                                 {
-                                    eprintln!("body endpoint handling failed: {err:#}");
+                                    tracing::warn!(
+                                        target: "spine.unix_socket",
+                                        error = ?err,
+                                        "body_endpoint_handling_failed"
+                                    );
                                 }
-                            });
+                            }.instrument(session_span));
                         }
                         Err(err) => {
-                            eprintln!("accept failed: {err}");
+                            tracing::warn!(
+                                target: "spine.unix_socket",
+                                error = %err,
+                                "accept_failed"
+                            );
                         }
                     }
                 }
@@ -341,6 +355,12 @@ async fn wait_for_act_ack(
     }
 }
 
+#[tracing::instrument(
+    name = "handle_body_endpoint",
+    target = "spine.unix_socket",
+    skip(stream, afferent_pathway, spine),
+    fields(adapter_id = adapter_id)
+)]
 async fn handle_body_endpoint(
     stream: UnixStream,
     afferent_pathway: SenseAfferentPathway,
@@ -353,38 +373,47 @@ async fn handle_body_endpoint(
     let channel_id = spine.on_adapter_channel_open(adapter_id, outbound_tx);
     let (ack_tx, mut ack_rx) = mpsc::unbounded_channel::<String>();
 
-    let writer_task = tokio::spawn(async move {
-        while let Some(act) = outbound_rx.recv().await {
-            let mut acknowledged = false;
-            for attempt in 0..=ACT_ACK_MAX_RETRIES {
-                let encoded = encode_body_egress_act_message(&act)?;
-                write_half.write_all(encoded.as_bytes()).await?;
-                write_half.flush().await?;
+    let writer_span = tracing::debug_span!(
+        target: "spine.unix_socket",
+        "body_endpoint_writer_task",
+        channel_id = channel_id
+    );
+    let writer_task = tokio::spawn(
+        async move {
+            while let Some(act) = outbound_rx.recv().await {
+                let mut acknowledged = false;
+                for attempt in 0..=ACT_ACK_MAX_RETRIES {
+                    let encoded = encode_body_egress_act_message(&act)?;
+                    write_half.write_all(encoded.as_bytes()).await?;
+                    write_half.flush().await?;
 
-                if wait_for_act_ack(&mut ack_rx, &act.act_id, ACT_ACK_TIMEOUT_MS).await {
-                    acknowledged = true;
-                    break;
+                    if wait_for_act_ack(&mut ack_rx, &act.act_id, ACT_ACK_TIMEOUT_MS).await {
+                        acknowledged = true;
+                        break;
+                    }
+
+                    if attempt < ACT_ACK_MAX_RETRIES {
+                        tracing::warn!(
+                            target: "spine.unix_socket",
+                            act_id = %act.act_id,
+                            attempt = attempt + 1,
+                            "act_ack_timeout_retrying_dispatch"
+                        );
+                    }
                 }
 
-                if attempt < ACT_ACK_MAX_RETRIES {
-                    eprintln!(
-                        "act ack timeout, retrying dispatch act_id={} attempt={}",
-                        act.act_id,
-                        attempt + 1
-                    );
+                if !acknowledged {
+                    return Err(anyhow::anyhow!(
+                        "failed to receive act_ack after retries for act_id={}",
+                        act.act_id
+                    ));
                 }
             }
 
-            if !acknowledged {
-                return Err(anyhow::anyhow!(
-                    "failed to receive act_ack after retries for act_id={}",
-                    act.act_id
-                ));
-            }
+            Ok::<(), anyhow::Error>(())
         }
-
-        Ok::<(), anyhow::Error>(())
-    });
+        .instrument(writer_span),
+    );
 
     let mut lines = BufReader::new(read_half).lines();
     let mut auth_endpoint_id: Option<uuid::Uuid> = None;
@@ -402,11 +431,17 @@ async fn handle_body_endpoint(
                     capabilities,
                 } => {
                     if auth_endpoint_id.is_some() {
-                        eprintln!("auth ignored: endpoint already authenticated on channel");
+                        tracing::warn!(
+                            target: "spine.unix_socket",
+                            "auth_ignored_endpoint_already_authenticated_on_channel"
+                        );
                         continue;
                     }
                     if endpoint_name.trim().is_empty() {
-                        eprintln!("auth rejected: endpoint_name cannot be empty");
+                        tracing::warn!(
+                            target: "spine.unix_socket",
+                            "auth_rejected_endpoint_name_cannot_be_empty"
+                        );
                         continue;
                     }
 
@@ -417,23 +452,28 @@ async fn handle_body_endpoint(
                     ) {
                         Ok(handle) => handle,
                         Err(err) => {
-                            eprintln!("body endpoint registration failed during auth: {err:#}");
+                            tracing::warn!(
+                                target: "spine.unix_socket",
+                                error = ?err,
+                                "body_endpoint_registration_failed_during_auth"
+                            );
                             continue;
                         }
                     };
                     auth_endpoint_id = Some(handle.body_endpoint_id);
 
-                    let registered_entries = match spine
-                        .add_capabilities(handle.body_endpoint_id, capabilities)
-                    {
-                        Ok(entries) => entries,
-                        Err(err) => {
-                            eprintln!(
-                                "body endpoint capability registration failed during auth: {err:#}"
-                            );
-                            Vec::new()
-                        }
-                    };
+                    let registered_entries =
+                        match spine.add_capabilities(handle.body_endpoint_id, capabilities) {
+                            Ok(entries) => entries,
+                            Err(err) => {
+                                tracing::warn!(
+                                    target: "spine.unix_socket",
+                                    error = ?err,
+                                    "body_endpoint_capability_registration_failed_during_auth"
+                                );
+                                Vec::new()
+                            }
+                        };
 
                     if !registered_entries.is_empty()
                         && let Err(err) = afferent_pathway
@@ -442,12 +482,19 @@ async fn handle_body_endpoint(
                             }))
                             .await
                     {
-                        eprintln!("dropping capability patch after auth: {err}");
+                        tracing::warn!(
+                            target: "spine.unix_socket",
+                            error = %err,
+                            "dropping_capability_patch_after_auth"
+                        );
                     }
                 }
                 InboundBodyMessage::ActAck { act_id } => {
                     if ack_tx.send(act_id).is_err() {
-                        eprintln!("dropping act_ack because writer has closed");
+                        tracing::warn!(
+                            target: "spine.unix_socket",
+                            "dropping_act_ack_because_writer_has_closed"
+                        );
                     }
                 }
                 InboundBodyMessage::Unplug => {
@@ -458,23 +505,38 @@ async fn handle_body_endpoint(
                                 .send(Sense::DropCapabilities(CapabilityDropPatch { routes }))
                                 .await
                         {
-                            eprintln!("dropping capability drop after unplug: {err}");
+                            tracing::warn!(
+                                target: "spine.unix_socket",
+                                error = %err,
+                                "dropping_capability_drop_after_unplug"
+                            );
                         }
                     }
                     break;
                 }
                 InboundBodyMessage::Sense(sense) => {
                     if auth_endpoint_id.is_none() {
-                        eprintln!("sense rejected: endpoint must auth first");
+                        tracing::warn!(
+                            target: "spine.unix_socket",
+                            "sense_rejected_endpoint_must_auth_first"
+                        );
                         continue;
                     }
                     if let Err(err) = afferent_pathway.send(Sense::Domain(sense)).await {
-                        eprintln!("dropping sense due to closed afferent pathway: {err}");
+                        tracing::warn!(
+                            target: "spine.unix_socket",
+                            error = %err,
+                            "dropping_sense_due_to_closed_afferent_pathway"
+                        );
                     }
                 }
             },
             Err(err) => {
-                eprintln!("invalid afferent message: {err}");
+                tracing::warn!(
+                    target: "spine.unix_socket",
+                    error = %err,
+                    "invalid_afferent_message"
+                );
             }
         }
     }
