@@ -14,10 +14,11 @@
 
 ### Cortex
 
+- [x] Cortex contracts 中的 Act, Sense, Capability 移动到 types 中
+- [ ] Cortex 的实现需要简化，目前搞得好混乱，不好调试还很慢
+- [ ] Cognition State 还包含 context （但这是当前实现特定的，就作为一个字段就可以了）
 - [ ] CortexCollaborators 是什么，和 AI Gateway 强耦合是预期行为
-- [ ] Cortex contracts 中的 Act, Sense, Capability 移动到 types 中
 - [ ] Cortex Config 来配置用什么 ai-provider-string 为 Primary, Serialize, Deserialize 等等
-- [ ] Cognition State 还包含 messages （但这是当前实现特定的，就作为一个字段就可以了）
 
 ### Spine
 
@@ -25,18 +26,18 @@
 - [x] Inline Body Endpoint 和 Inline BodyEndpoint Adapter 之间的交互也要重新设计
 - [ ] Spine Runtime 和 Body Endpoint Adapter 之间的交互给我搞清楚咯
 - [ ] adapters/catalog_bridge 是什么鬼
-- [ ] 移除 body_endpoint_id ，name就是 id
-- [ ] 为什么要在 Spine runtime 中维护 adapter channel?
+- [x] 移除 body_endpoint_id ，name就是 id
+- [x] 为什么要在 Spine runtime 中维护 adapter channel?
 - [ ] 测试应该在 tests/ 下面，有什么特殊的理由要 aside src 吗？
-- [ ] new spine 不代表马上就要 start 啊
+- [x] new spine 不代表马上就要 start 啊
 - [ ] 让 adapter 自己处理自己的 config
 
 ### Observability
 
 - [ ] 拥抱 OpenTelemetry
-- [ ] Request ID
+- [x] Request ID
 - [ ] RED Metrics
-- [ ] O11y in Error Handling
+- [x] O11y in Error Handling
 
 ### AI Gateway
 

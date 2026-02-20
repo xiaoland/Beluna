@@ -1,47 +1,26 @@
 import Foundation
 
-let appleEndpointID = "macos-app.01"
-let appleCapabilityID = "present.message"
+let appleEndpointName = "macos-app"
+let appleActNeuralSignalDescriptorID = "present.message"
+let appleUserSenseNeuralSignalDescriptorID = "apple.chat.user_message"
+let appleActResultSenseNeuralSignalDescriptorID = "apple.chat.present_message_result"
 
-struct RouteDescriptor: Codable, Equatable {
+enum NeuralSignalTypeWire: String, Codable, Equatable {
+    case sense
+    case act
+}
+
+struct NeuralSignalDescriptorWire: Codable, Equatable {
+    let type: NeuralSignalTypeWire
     let endpointID: String
-    let capabilityID: String
-
-    enum CodingKeys: String, CodingKey {
-        case endpointID = "endpoint_id"
-        case capabilityID = "capability_id"
-    }
-}
-
-struct CostVectorWire: Codable, Equatable {
-    let survivalMicro: Int64
-    let timeMS: UInt64
-    let ioUnits: UInt64
-    let tokenUnits: UInt64
-
-    enum CodingKeys: String, CodingKey {
-        case survivalMicro = "survival_micro"
-        case timeMS = "time_ms"
-        case ioUnits = "io_units"
-        case tokenUnits = "token_units"
-    }
-
-    static let zero = CostVectorWire(survivalMicro: 0, timeMS: 0, ioUnits: 0, tokenUnits: 0)
-}
-
-struct EndpointDescriptorWire: Codable, Equatable {
-    let route: RouteDescriptor
+    let neuralSignalDescriptorID: String
     let payloadSchema: JSONValue
-    let maxPayloadBytes: Int
-    let defaultCost: CostVectorWire
-    let metadata: [String: String]
 
     enum CodingKeys: String, CodingKey {
-        case route
+        case type
+        case endpointID = "endpoint_id"
+        case neuralSignalDescriptorID = "neural_signal_descriptor_id"
         case payloadSchema = "payload_schema"
-        case maxPayloadBytes = "max_payload_bytes"
-        case defaultCost = "default_cost"
-        case metadata
     }
 }
 
@@ -54,7 +33,7 @@ struct NDJSONEnvelope<Body: Codable>: Codable {
 
 struct AuthBodyWire: Codable {
     let endpointName: String
-    let capabilities: [EndpointDescriptorWire]
+    let capabilities: [NeuralSignalDescriptorWire]
 
     enum CodingKeys: String, CodingKey {
         case endpointName = "endpoint_name"
@@ -64,12 +43,12 @@ struct AuthBodyWire: Codable {
 
 struct SenseBodyWire: Codable {
     let senseID: String
-    let source: String
+    let neuralSignalDescriptorID: String
     let payload: JSONValue
 
     enum CodingKeys: String, CodingKey {
         case senseID = "sense_id"
-        case source
+        case neuralSignalDescriptorID = "neural_signal_descriptor_id"
         case payload
     }
 }
@@ -82,75 +61,17 @@ struct ActAckBodyWire: Codable {
     }
 }
 
-struct AdmittedActionWire: Decodable, Equatable {
-    let neuralSignalID: String
-    let capabilityInstanceID: String
-    let endpointID: String
-    let capabilityID: String
-    let normalizedPayload: JSONValue
-    let reservedCost: CostVectorWire
-
-    enum CodingKeys: String, CodingKey {
-        case neuralSignalID = "neural_signal_id"
-        case capabilityInstanceID = "capability_instance_id"
-        case endpointID = "endpoint_id"
-        case capabilityID = "capability_id"
-        case normalizedPayload = "normalized_payload"
-        case reservedCost = "reserved_cost"
-    }
-}
-
-struct CoreActWire: Decodable, Equatable {
+struct InboundActWire: Decodable, Equatable {
     let actID: String
-    let bodyEndpointName: String
-    let capabilityInstanceID: String
-    let capabilityID: String
-    let normalizedPayload: JSONValue
-    let requestedResources: CostVectorWire
+    let endpointID: String
+    let neuralSignalDescriptorID: String
+    let payload: JSONValue
 
     enum CodingKeys: String, CodingKey {
         case actID = "act_id"
-        case bodyEndpointName = "body_endpoint_name"
         case endpointID = "endpoint_id"
-        case capabilityInstanceID = "capability_instance_id"
-        case capabilityID = "capability_id"
-        case normalizedPayload = "normalized_payload"
-        case requestedResources = "requested_resources"
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        actID = try container.decode(String.self, forKey: .actID)
-        capabilityInstanceID = try container.decode(String.self, forKey: .capabilityInstanceID)
-        capabilityID = try container.decode(String.self, forKey: .capabilityID)
-        normalizedPayload = try container.decode(JSONValue.self, forKey: .normalizedPayload)
-        requestedResources =
-            try container.decodeIfPresent(CostVectorWire.self, forKey: .requestedResources)
-            ?? .zero
-        if let endpoint = try container.decodeIfPresent(String.self, forKey: .bodyEndpointName) {
-            bodyEndpointName = endpoint
-        } else if let legacyEndpoint = try container.decodeIfPresent(String.self, forKey: .endpointID) {
-            bodyEndpointName = legacyEndpoint
-        } else {
-            throw DecodingError.keyNotFound(
-                CodingKeys.bodyEndpointName,
-                DecodingError.Context(
-                    codingPath: container.codingPath,
-                    debugDescription: "missing both body_endpoint_name and endpoint_id"
-                )
-            )
-        }
-    }
-
-    var asAdmittedAction: AdmittedActionWire {
-        AdmittedActionWire(
-            neuralSignalID: actID,
-            capabilityInstanceID: capabilityInstanceID,
-            endpointID: bodyEndpointName,
-            capabilityID: capabilityID,
-            normalizedPayload: normalizedPayload,
-            reservedCost: requestedResources
-        )
+        case neuralSignalDescriptorID = "neural_signal_descriptor_id"
+        case payload
     }
 }
 
@@ -162,17 +83,11 @@ private struct InboundEnvelopeWire: Decodable {
 }
 
 private struct InboundActBodyWire: Decodable {
-    let act: CoreActWire
-}
-
-private struct LegacyInboundMessageWire: Decodable {
-    let type: String
-    let action: AdmittedActionWire?
-    let act: CoreActWire?
+    let act: InboundActWire
 }
 
 enum ServerWireMessage: Equatable {
-    case act(action: AdmittedActionWire)
+    case act(action: InboundActWire)
     case ignored(type: String)
 }
 
@@ -189,25 +104,33 @@ func makeAppleEndpointRegisterEnvelope() -> NDJSONEnvelope<AuthBodyWire> {
     makeEnvelope(
         method: "auth",
         body: AuthBodyWire(
-            endpointName: appleEndpointID,
+            endpointName: appleEndpointName,
             capabilities: [
-                EndpointDescriptorWire(
-                    route: RouteDescriptor(
-                        endpointID: appleEndpointID,
-                        capabilityID: appleCapabilityID
-                    ),
+                NeuralSignalDescriptorWire(
+                    type: .act,
+                    endpointID: appleEndpointName,
+                    neuralSignalDescriptorID: appleActNeuralSignalDescriptorID,
+                    payloadSchema: .object([
+                        "type": .string("object")
+                    ])
+                ),
+                NeuralSignalDescriptorWire(
+                    type: .sense,
+                    endpointID: appleEndpointName,
+                    neuralSignalDescriptorID: appleUserSenseNeuralSignalDescriptorID,
                     payloadSchema: .object([
                         "type": .string("object"),
-                        "required": .array([.string("conversation_id"), .string("response")])
-                    ]),
-                    maxPayloadBytes: 32_768,
-                    defaultCost: CostVectorWire(
-                        survivalMicro: 120,
-                        timeMS: 100,
-                        ioUnits: 1,
-                        tokenUnits: 64
-                    ),
-                    metadata: ["app": "apple-universal"]
+                        "required": .array([.string("conversation_id"), .string("input")])
+                    ])
+                ),
+                NeuralSignalDescriptorWire(
+                    type: .sense,
+                    endpointID: appleEndpointName,
+                    neuralSignalDescriptorID: appleActResultSenseNeuralSignalDescriptorID,
+                    payloadSchema: .object([
+                        "type": .string("object"),
+                        "required": .array([.string("act_id"), .string("status"), .string("reference_id")])
+                    ])
                 )
             ]
         )
@@ -219,7 +142,7 @@ func makeUserSenseEnvelope(conversationID: String, text: String) -> NDJSONEnvelo
         method: "sense",
         body: SenseBodyWire(
             senseID: UUID().uuidString.lowercased(),
-            source: "apple.universal.chat",
+            neuralSignalDescriptorID: appleUserSenseNeuralSignalDescriptorID,
             payload: .object([
                 "conversation_id": .string(conversationID),
                 "input": .array([
@@ -240,7 +163,7 @@ func makeUserSenseEnvelope(conversationID: String, text: String) -> NDJSONEnvelo
 }
 
 func makeActResultSenseEnvelope(
-    action: AdmittedActionWire,
+    action: InboundActWire,
     status: String,
     referenceID: String,
     reasonCode: String? = nil
@@ -248,10 +171,7 @@ func makeActResultSenseEnvelope(
     var payload: [String: JSONValue] = [
         "kind": .string("present_message_result"),
         "status": .string(status),
-        "act_id": .string(action.neuralSignalID),
-        "capability_instance_id": .string(action.capabilityInstanceID),
-        "endpoint_id": .string(action.endpointID),
-        "capability_id": .string(action.capabilityID),
+        "act_id": .string(action.actID),
         "reference_id": .string(referenceID)
     ]
     if let reasonCode {
@@ -262,7 +182,7 @@ func makeActResultSenseEnvelope(
         method: "sense",
         body: SenseBodyWire(
             senseID: UUID().uuidString.lowercased(),
-            source: "apple.universal.chat",
+            neuralSignalDescriptorID: appleActResultSenseNeuralSignalDescriptorID,
             payload: .object(payload)
         )
     )
@@ -272,18 +192,18 @@ func makeActAckEnvelope(actID: String) -> NDJSONEnvelope<ActAckBodyWire> {
     makeEnvelope(method: "act_ack", body: ActAckBodyWire(actID: actID))
 }
 
-func extractAssistantTexts(from normalizedPayload: JSONValue) throws -> [String] {
-    guard let payload = normalizedPayload.objectValue else {
+func extractAssistantTexts(from payload: JSONValue) throws -> [String] {
+    guard let object = payload.objectValue else {
         return []
     }
 
     var result: [String] = []
-    result.append(contentsOf: extractTextsFromResponsesOutput(payload["response"]))
-    result.append(contentsOf: extractTextsFromOutputItems(payload["output"]?.arrayValue))
-    result.append(contentsOf: extractTextsFromChoices(payload["choices"]?.arrayValue))
+    result.append(contentsOf: extractTextsFromResponsesOutput(object["response"]))
+    result.append(contentsOf: extractTextsFromOutputItems(object["output"]?.arrayValue))
+    result.append(contentsOf: extractTextsFromChoices(object["choices"]?.arrayValue))
 
     for key in ["output_text", "text", "message"] {
-        if let value = payload[key]?.stringValue {
+        if let value = object[key]?.stringValue {
             result.append(value)
         }
     }
@@ -452,33 +372,12 @@ func encodeLine<T: Encodable>(_ value: T) throws -> Data {
 
 func decodeServerMessage(from line: Data) throws -> ServerWireMessage {
     let decoder = JSONDecoder()
-
-    do {
-        let envelope = try decoder.decode(InboundEnvelopeWire.self, from: line)
-        guard envelope.method == "act" else {
-            return .ignored(type: envelope.method)
-        }
-
-        let bodyData = try JSONEncoder().encode(envelope.body)
-        let actBody = try decoder.decode(InboundActBodyWire.self, from: bodyData)
-        return .act(action: actBody.act.asAdmittedAction)
-    } catch {
-        let legacy = try decoder.decode(LegacyInboundMessageWire.self, from: line)
-        guard legacy.type == "act" else {
-            return .ignored(type: legacy.type)
-        }
-        if let action = legacy.action {
-            return .act(action: action)
-        }
-        if let act = legacy.act {
-            return .act(action: act.asAdmittedAction)
-        }
-
-        throw DecodingError.dataCorrupted(
-            DecodingError.Context(
-                codingPath: [],
-                debugDescription: "legacy act message is missing both action and act payload"
-            )
-        )
+    let envelope = try decoder.decode(InboundEnvelopeWire.self, from: line)
+    guard envelope.method == "act" else {
+        return .ignored(type: envelope.method)
     }
+
+    let bodyData = try JSONEncoder().encode(envelope.body)
+    let actBody = try decoder.decode(InboundActBodyWire.self, from: bodyData)
+    return .act(action: actBody.act)
 }

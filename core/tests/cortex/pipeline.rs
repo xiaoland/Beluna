@@ -5,8 +5,8 @@ use beluna::{
         AttemptDraft, AttemptExtractorHook, Cortex, PrimaryReasonerHook, ProseIr, ReactionLimits,
     },
     types::{
-        CognitionState, PhysicalLedgerSnapshot, PhysicalState, RequestedResources, Sense,
-        SenseDatum,
+        CognitionState, NeuralSignalDescriptor, NeuralSignalDescriptorCatalog, NeuralSignalType,
+        PhysicalLedgerSnapshot, PhysicalState, Sense, SenseDatum,
     },
 };
 
@@ -14,14 +14,13 @@ fn base_physical_state() -> PhysicalState {
     PhysicalState {
         cycle_id: 1,
         ledger: PhysicalLedgerSnapshot::default(),
-        capabilities: beluna::cortex::CapabilityCatalog {
+        capabilities: NeuralSignalDescriptorCatalog {
             version: "v1".to_string(),
-            affordances: vec![beluna::cortex::AffordanceCapability {
+            entries: vec![NeuralSignalDescriptor {
+                r#type: NeuralSignalType::Act,
                 endpoint_id: "ep.demo".to_string(),
-                allowed_capability_ids: vec!["cap.demo".to_string()],
+                neural_signal_descriptor_id: "cap.demo".to_string(),
                 payload_schema: serde_json::json!({"type":"object"}),
-                max_payload_bytes: 1024,
-                default_resources: RequestedResources::default(),
             }],
         },
     }
@@ -33,15 +32,8 @@ fn valid_draft() -> AttemptDraft {
         based_on: vec!["sense:1".to_string()],
         attention_tags: vec![],
         endpoint_id: "ep.demo".to_string(),
-        capability_id: "cap.demo".to_string(),
-        capability_instance_id: "".to_string(),
+        neural_signal_descriptor_id: "cap.demo".to_string(),
         payload_draft: serde_json::json!({"ok":true}),
-        requested_resources: RequestedResources {
-            survival_micro: 10,
-            time_ms: 0,
-            io_units: 0,
-            token_units: 0,
-        },
         goal_hint: None,
     }
 }
@@ -70,7 +62,8 @@ async fn cortex_pipeline_emits_acts_and_new_cognition() {
         .cortex(
             &[Sense::Domain(SenseDatum {
                 sense_id: "sense:1".to_string(),
-                source: "test".to_string(),
+                endpoint_id: "ep.demo".to_string(),
+                neural_signal_descriptor_id: "sense.demo".to_string(),
                 payload: serde_json::json!({"x":1}),
             })],
             &base_physical_state(),
@@ -109,7 +102,8 @@ async fn cortex_pipeline_allows_noop_when_extractor_empty() {
         .cortex(
             &[Sense::Domain(SenseDatum {
                 sense_id: "sense:1".to_string(),
-                source: "test".to_string(),
+                endpoint_id: "ep.demo".to_string(),
+                neural_signal_descriptor_id: "sense.demo".to_string(),
                 payload: serde_json::json!({"x":1}),
             })],
             &base_physical_state(),

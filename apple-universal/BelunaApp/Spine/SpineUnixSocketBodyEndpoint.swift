@@ -117,7 +117,7 @@ actor SpineUnixSocketBodyEndpoint {
     }
 
     func sendActResultSense(
-        action: AdmittedActionWire,
+        action: InboundActWire,
         status: String,
         referenceID: String,
         reasonCode: String? = nil
@@ -350,7 +350,7 @@ actor SpineUnixSocketBodyEndpoint {
 
             switch message {
             case let .act(action):
-                try await sendActAck(actID: action.neuralSignalID)
+                try await sendActAck(actID: action.actID)
                 onServerMessage?(message)
             case let .ignored(type):
                 onDebug?("Ignored inbound \(type) message.")

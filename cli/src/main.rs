@@ -1,5 +1,4 @@
 use std::{
-    collections::BTreeMap,
     env,
     path::PathBuf,
     sync::{
@@ -12,16 +11,18 @@ use std::{
 use anyhow::{Context, Result, anyhow};
 use serde::{Deserialize, Serialize};
 use tokio::{
-    io::{AsyncBufReadExt, AsyncWrite, AsyncWriteExt, BufReader},
+    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     net::UnixStream,
+    sync::{Mutex, mpsc},
 };
 
-const PRESENT_PLAIN_TEXT_CAPABILITY_ID: &str = "present.plain_text";
+const PRESENT_PLAIN_TEXT_NEURAL_SIGNAL_DESCRIPTOR_ID: &str = "present.plain_text";
+const USER_MESSAGE_NEURAL_SIGNAL_DESCRIPTOR_ID: &str = "user.message";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CliOptions {
     socket_path: PathBuf,
-    endpoint_id: String,
+    endpoint_name: String,
 }
 
 fn cli_options_from_args() -> Result<CliOptions> {
@@ -33,7 +34,7 @@ where
     I: Iterator<Item = String>,
 {
     let mut socket_path = None;
-    let mut endpoint_id = "body.cli".to_string();
+    let mut endpoint_name = "body.cli".to_string();
 
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -43,84 +44,98 @@ where
                     .ok_or_else(|| anyhow!("missing value for --socket-path"))?;
                 socket_path = Some(PathBuf::from(value));
             }
-            "--endpoint-id" => {
-                endpoint_id = args
+            "--endpoint-name" | "--endpoint-id" => {
+                endpoint_name = args
                     .next()
-                    .ok_or_else(|| anyhow!("missing value for --endpoint-id"))?;
+                    .ok_or_else(|| anyhow!("missing value for {arg}"))?;
             }
             other => {
                 return Err(anyhow!(
-                    "unknown argument: {other}. usage: beluna-cli --socket-path <path> [--endpoint-id <id>]"
+                    "unknown argument: {other}. usage: beluna-cli --socket-path <path> [--endpoint-name <name>]"
                 ));
             }
         }
     }
 
-    if endpoint_id.trim().is_empty() {
-        return Err(anyhow!("endpoint id cannot be empty"));
+    if endpoint_name.trim().is_empty() {
+        return Err(anyhow!("endpoint name cannot be empty"));
     }
 
     let socket_path = socket_path.ok_or_else(|| {
-        anyhow!("missing required argument --socket-path. usage: beluna-cli --socket-path <path> [--endpoint-id <id>]")
+        anyhow!("missing required argument --socket-path. usage: beluna-cli --socket-path <path> [--endpoint-name <name>]")
     })?;
 
     Ok(CliOptions {
         socket_path,
-        endpoint_id,
+        endpoint_name,
     })
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-struct CostVector {
-    survival_micro: i64,
-    time_ms: u64,
-    io_units: u64,
-    token_units: u64,
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum NeuralSignalType {
+    Sense,
+    Act,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-struct RouteKey {
+#[derive(Debug, Clone, PartialEq, Serialize)]
+struct NeuralSignalDescriptor {
+    #[serde(rename = "type")]
+    r#type: NeuralSignalType,
     endpoint_id: String,
-    capability_id: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-struct EndpointCapabilityDescriptor {
-    route: RouteKey,
+    neural_signal_descriptor_id: String,
     payload_schema: serde_json::Value,
-    max_payload_bytes: usize,
-    #[serde(default)]
-    default_cost: CostVector,
-    #[serde(default)]
-    metadata: BTreeMap<String, String>,
 }
 
-#[derive(Debug, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-enum BodyIngressMessage {
-    BodyEndpointRegister {
-        endpoint_id: String,
-        descriptor: EndpointCapabilityDescriptor,
-    },
-    Sense {
-        sense_id: String,
-        source: String,
-        payload: serde_json::Value,
-    },
+#[derive(Debug, Clone, PartialEq, Serialize)]
+struct NdjsonEnvelope<T>
+where
+    T: Serialize,
+{
+    method: String,
+    id: String,
+    timestamp: u64,
+    body: T,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-enum BodyEgressMessage {
-    Act { act: ActEnvelope },
+#[derive(Debug, Clone, PartialEq, Serialize)]
+struct AuthBody {
+    endpoint_name: String,
+    capabilities: Vec<NeuralSignalDescriptor>,
 }
 
-#[derive(Debug, Deserialize)]
-struct ActEnvelope {
+#[derive(Debug, Clone, PartialEq, Serialize)]
+struct SenseBody {
+    sense_id: String,
+    neural_signal_descriptor_id: String,
+    payload: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+struct ActAckBody {
+    act_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+struct InboundEnvelope {
+    method: String,
+    id: String,
+    timestamp: u64,
+    body: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+struct InboundActBody {
+    act: Act,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+struct Act {
     act_id: String,
     endpoint_id: String,
-    capability_id: String,
-    normalized_payload: serde_json::Value,
+    neural_signal_descriptor_id: String,
+    payload: serde_json::Value,
 }
 
 #[tokio::main]
@@ -135,48 +150,69 @@ async fn main() -> Result<()> {
             )
         })?;
 
-    let (read_half, mut write_half) = stream.into_split();
+    let (read_half, write_half) = stream.into_split();
+    let writer = Arc::new(Mutex::new(write_half));
     let mut socket_lines = BufReader::new(read_half).lines();
 
-    let registration = BodyIngressMessage::BodyEndpointRegister {
-        endpoint_id: options.endpoint_id.clone(),
-        descriptor: plain_text_descriptor(&options.endpoint_id),
-    };
-    send_message(&mut write_half, &registration).await?;
+    send_ndjson(
+        Arc::clone(&writer),
+        "auth",
+        AuthBody {
+            endpoint_name: options.endpoint_name.clone(),
+            capabilities: vec![
+                plain_text_descriptor(&options.endpoint_name),
+                user_message_descriptor(&options.endpoint_name),
+            ],
+        },
+    )
+    .await?;
 
     eprintln!(
-        "beluna-cli connected: socket={} endpoint={} capability={}",
+        "beluna-cli connected: socket={} endpoint_name={} descriptor_id={}",
         options.socket_path.display(),
-        options.endpoint_id,
-        PRESENT_PLAIN_TEXT_CAPABILITY_ID
+        options.endpoint_name,
+        PRESENT_PLAIN_TEXT_NEURAL_SIGNAL_DESCRIPTOR_ID
     );
 
+    let (shutdown_tx, mut shutdown_rx) = mpsc::unbounded_channel::<()>();
     let sense_counter = Arc::new(AtomicU64::new(1));
     let stdin_task = tokio::spawn({
-        let endpoint_id = options.endpoint_id.clone();
+        let writer = Arc::clone(&writer);
         let counter = Arc::clone(&sense_counter);
         let mut stdin_lines = BufReader::new(tokio::io::stdin()).lines();
 
         async move {
-            while let Some(line) = stdin_lines.next_line().await? {
-                let message = line.trim();
-                if message.is_empty() {
-                    continue;
-                }
+            loop {
+                tokio::select! {
+                    _ = shutdown_rx.recv() => {
+                        break;
+                    }
+                    maybe_line = stdin_lines.next_line() => {
+                        let Some(line) = maybe_line? else {
+                            break;
+                        };
+                        let message = line.trim();
+                        if message.is_empty() {
+                            continue;
+                        }
 
-                let sense = BodyIngressMessage::Sense {
-                    sense_id: format!(
-                        "sense:cli:{}:{}",
-                        now_epoch_millis(),
-                        counter.fetch_add(1, Ordering::Relaxed)
-                    ),
-                    source: endpoint_id.clone(),
-                    payload: serde_json::json!({
-                        "kind": "user_message",
-                        "text": message
-                    }),
-                };
-                send_message(&mut write_half, &sense).await?;
+                        send_ndjson(
+                            Arc::clone(&writer),
+                            "sense",
+                            SenseBody {
+                                sense_id: uuid::Uuid::new_v4().to_string(),
+                                neural_signal_descriptor_id: USER_MESSAGE_NEURAL_SIGNAL_DESCRIPTOR_ID.to_string(),
+                                payload: serde_json::json!({
+                                    "kind": "user_message",
+                                    "text": message,
+                                    "seq_no": counter.fetch_add(1, Ordering::Relaxed),
+                                    "timestamp_ms": now_epoch_millis(),
+                                }),
+                            },
+                        )
+                        .await?;
+                    }
+                }
             }
 
             Ok::<(), anyhow::Error>(())
@@ -189,59 +225,75 @@ async fn main() -> Result<()> {
             continue;
         }
 
-        let message: BodyEgressMessage =
-            serde_json::from_str(trimmed).context("failed to decode NDJSON act message")?;
-        let BodyEgressMessage::Act { act } = message;
-
-        if act.endpoint_id != options.endpoint_id {
+        let envelope: InboundEnvelope =
+            serde_json::from_str(trimmed).context("failed to decode NDJSON envelope")?;
+        if envelope.method != "act" {
             continue;
         }
 
-        if act.capability_id != PRESENT_PLAIN_TEXT_CAPABILITY_ID {
+        let act_body: InboundActBody = serde_json::from_value(envelope.body)
+            .context("failed to decode NDJSON act body payload")?;
+        let act = act_body.act;
+
+        send_ndjson(
+            Arc::clone(&writer),
+            "act_ack",
+            ActAckBody {
+                act_id: act.act_id.clone(),
+            },
+        )
+        .await?;
+
+        if act.neural_signal_descriptor_id != PRESENT_PLAIN_TEXT_NEURAL_SIGNAL_DESCRIPTOR_ID {
             eprintln!(
-                "[warn] unsupported capability '{}' for act {}",
-                act.capability_id, act.act_id
+                "[warn] unsupported neural_signal_descriptor_id '{}' for act {}",
+                act.neural_signal_descriptor_id, act.act_id
             );
             continue;
         }
 
-        let Some(text) = act
-            .normalized_payload
-            .get("text")
-            .and_then(|value| value.as_str())
-        else {
-            return Err(anyhow!(
-                "act {} missing normalized_payload.text string",
-                act.act_id
-            ));
+        let Some(text) = extract_text_from_payload(&act.payload) else {
+            return Err(anyhow!("act {} missing payload text string", act.act_id));
         };
 
         println!("{text}");
     }
 
+    let _ = shutdown_tx.send(());
     stdin_task
         .await
         .context("stdin sender task join failed")??;
     Ok(())
 }
 
-async fn send_message<W>(writer: &mut W, message: &BodyIngressMessage) -> Result<()>
+async fn send_ndjson<T>(
+    writer: Arc<Mutex<tokio::net::unix::OwnedWriteHalf>>,
+    method: &str,
+    body: T,
+) -> Result<()>
 where
-    W: AsyncWrite + Unpin,
+    T: Serialize,
 {
-    let encoded = serde_json::to_string(message)?;
+    let envelope = NdjsonEnvelope {
+        method: method.to_string(),
+        id: uuid::Uuid::new_v4().to_string(),
+        timestamp: now_epoch_millis() as u64,
+        body,
+    };
+    let encoded = serde_json::to_string(&envelope)?;
+
+    let mut writer = writer.lock().await;
     writer.write_all(encoded.as_bytes()).await?;
     writer.write_all(b"\n").await?;
     writer.flush().await?;
     Ok(())
 }
 
-fn plain_text_descriptor(endpoint_id: &str) -> EndpointCapabilityDescriptor {
-    EndpointCapabilityDescriptor {
-        route: RouteKey {
-            endpoint_id: endpoint_id.to_string(),
-            capability_id: PRESENT_PLAIN_TEXT_CAPABILITY_ID.to_string(),
-        },
+fn plain_text_descriptor(endpoint_name: &str) -> NeuralSignalDescriptor {
+    NeuralSignalDescriptor {
+        r#type: NeuralSignalType::Act,
+        endpoint_id: endpoint_name.to_string(),
+        neural_signal_descriptor_id: PRESENT_PLAIN_TEXT_NEURAL_SIGNAL_DESCRIPTOR_ID.to_string(),
         payload_schema: serde_json::json!({
             "type": "object",
             "required": ["text"],
@@ -249,10 +301,38 @@ fn plain_text_descriptor(endpoint_id: &str) -> EndpointCapabilityDescriptor {
                 "text": { "type": "string" }
             }
         }),
-        max_payload_bytes: 64 * 1024,
-        default_cost: CostVector::default(),
-        metadata: BTreeMap::new(),
     }
+}
+
+fn user_message_descriptor(endpoint_name: &str) -> NeuralSignalDescriptor {
+    NeuralSignalDescriptor {
+        r#type: NeuralSignalType::Sense,
+        endpoint_id: endpoint_name.to_string(),
+        neural_signal_descriptor_id: USER_MESSAGE_NEURAL_SIGNAL_DESCRIPTOR_ID.to_string(),
+        payload_schema: serde_json::json!({
+            "type": "object",
+            "required": ["kind", "text"],
+            "properties": {
+                "kind": { "type": "string" },
+                "text": { "type": "string" },
+                "seq_no": { "type": "integer" },
+                "timestamp_ms": { "type": "integer" }
+            }
+        }),
+    }
+}
+
+fn extract_text_from_payload(payload: &serde_json::Value) -> Option<&str> {
+    if let Some(text) = payload.get("text").and_then(|value| value.as_str()) {
+        return Some(text);
+    }
+    if let Some(text) = payload.get("output_text").and_then(|value| value.as_str()) {
+        return Some(text);
+    }
+    payload
+        .get("response")
+        .and_then(|response| response.get("output_text"))
+        .and_then(|value| value.as_str())
 }
 
 fn now_epoch_millis() -> u128 {
@@ -272,21 +352,35 @@ mod tests {
         let args = vec!["--socket-path".to_string(), "./beluna.sock".to_string()].into_iter();
         let options = parse_cli_options(args).expect("options should parse");
         assert_eq!(options.socket_path, PathBuf::from("./beluna.sock"));
-        assert_eq!(options.endpoint_id, "body.cli");
+        assert_eq!(options.endpoint_name, "body.cli");
     }
 
     #[test]
-    fn parses_endpoint_override() {
+    fn parses_endpoint_name_override() {
         let args = vec![
             "--socket-path".to_string(),
             "/tmp/b.sock".to_string(),
-            "--endpoint-id".to_string(),
+            "--endpoint-name".to_string(),
             "body.cli.local".to_string(),
         ]
         .into_iter();
         let options = parse_cli_options(args).expect("options should parse");
         assert_eq!(options.socket_path, PathBuf::from("/tmp/b.sock"));
-        assert_eq!(options.endpoint_id, "body.cli.local");
+        assert_eq!(options.endpoint_name, "body.cli.local");
+    }
+
+    #[test]
+    fn parses_legacy_endpoint_id_flag_for_backward_compatibility() {
+        let args = vec![
+            "--socket-path".to_string(),
+            "/tmp/b.sock".to_string(),
+            "--endpoint-id".to_string(),
+            "body.cli.legacy".to_string(),
+        ]
+        .into_iter();
+        let options = parse_cli_options(args).expect("options should parse");
+        assert_eq!(options.socket_path, PathBuf::from("/tmp/b.sock"));
+        assert_eq!(options.endpoint_name, "body.cli.legacy");
     }
 
     #[test]

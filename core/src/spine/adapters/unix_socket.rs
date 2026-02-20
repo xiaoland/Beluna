@@ -20,9 +20,11 @@ use tracing::Instrument;
 
 use crate::{
     afferent_pathway::SenseAfferentPathway,
-    cortex::{is_uuid_v4, is_uuid_v7},
-    spine::{EndpointBinding, runtime::Spine, types::EndpointCapabilityDescriptor},
-    types::{Act, CapabilityDropPatch, CapabilityPatch, Sense, SenseDatum},
+    spine::{EndpointBinding, runtime::Spine, types::NeuralSignalDescriptor},
+    types::{
+        Act, NeuralSignalDescriptorDropPatch, NeuralSignalDescriptorPatch, Sense, SenseDatum,
+        is_uuid_v4, is_uuid_v7,
+    },
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -42,13 +44,20 @@ struct OutboundActBody {
 enum InboundBodyMessage {
     Auth {
         endpoint_name: String,
-        capabilities: Vec<EndpointCapabilityDescriptor>,
+        capabilities: Vec<NeuralSignalDescriptor>,
     },
-    Sense(SenseDatum),
+    Sense(InboundSenseFrame),
     ActAck {
         act_id: String,
     },
     Unplug,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct InboundSenseFrame {
+    sense_id: String,
+    neural_signal_descriptor_id: String,
+    payload: serde_json::Value,
 }
 
 #[derive(Debug, Deserialize)]
@@ -56,14 +65,14 @@ enum InboundBodyMessage {
 struct InboundAuthBody {
     endpoint_name: String,
     #[serde(default)]
-    capabilities: Vec<EndpointCapabilityDescriptor>,
+    capabilities: Vec<NeuralSignalDescriptor>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct InboundSenseBody {
     sense_id: String,
-    source: String,
+    neural_signal_descriptor_id: String,
     payload: serde_json::Value,
 }
 
@@ -104,9 +113,14 @@ fn parse_body_afferent_message(line: &str) -> Result<InboundBodyMessage, serde_j
                     "sense_id must be a valid uuid-v4 string",
                 ));
             }
-            InboundBodyMessage::Sense(SenseDatum {
+            if body.neural_signal_descriptor_id.trim().is_empty() {
+                return Err(invalid_correlated_sense_error(
+                    "neural_signal_descriptor_id must be a non-empty string",
+                ));
+            }
+            InboundBodyMessage::Sense(InboundSenseFrame {
                 sense_id: body.sense_id,
-                source: body.source,
+                neural_signal_descriptor_id: body.neural_signal_descriptor_id,
                 payload,
             })
         }
@@ -179,20 +193,6 @@ fn validate_correlated_sense_payload(payload: &serde_json::Value) -> Result<(), 
         return Err(invalid_correlated_sense_error(
             "act_id must be a valid uuid-v7 string",
         ));
-    }
-
-    for field in ["capability_instance_id", "endpoint_id", "capability_id"] {
-        let valid = object
-            .get(field)
-            .and_then(|value| value.as_str())
-            .map(|value| !value.trim().is_empty())
-            .unwrap_or(false);
-        if !valid {
-            return Err(invalid_correlated_sense_error(&format!(
-                "correlated sense missing required field '{}'",
-                field
-            )));
-        }
     }
 
     Ok(())
@@ -386,8 +386,8 @@ async fn handle_body_endpoint(
                     target: "spine.unix_socket",
                     channel_id = channel_id,
                     act_id = %act.act_id,
-                    endpoint_id = %act.body_endpoint_name,
-                    capability_id = %act.capability_id,
+                    endpoint_id = %act.endpoint_id,
+                    neural_signal_descriptor_id = %act.neural_signal_descriptor_id,
                     "dispatching_act_to_unix_socket_endpoint"
                 );
                 let mut acknowledged = false;
@@ -441,7 +441,7 @@ async fn handle_body_endpoint(
     );
 
     let mut lines = BufReader::new(read_half).lines();
-    let mut auth_endpoint_id: Option<uuid::Uuid> = None;
+    let mut auth_endpoint_id: Option<String> = None;
 
     while let Some(line) = lines.next_line().await? {
         let line = line.trim();
@@ -485,10 +485,10 @@ async fn handle_body_endpoint(
                             continue;
                         }
                     };
-                    auth_endpoint_id = Some(handle.body_endpoint_id);
+                    auth_endpoint_id = Some(handle.body_endpoint_id.clone());
 
                     let registered_entries =
-                        match spine.add_capabilities(handle.body_endpoint_id, capabilities) {
+                        match spine.add_capabilities(&handle.body_endpoint_id, capabilities) {
                             Ok(entries) => entries,
                             Err(err) => {
                                 tracing::warn!(
@@ -502,9 +502,11 @@ async fn handle_body_endpoint(
 
                     if !registered_entries.is_empty()
                         && let Err(err) = afferent_pathway
-                            .send(Sense::NewCapabilities(CapabilityPatch {
-                                entries: registered_entries,
-                            }))
+                            .send(Sense::NewNeuralSignalDescriptors(
+                                NeuralSignalDescriptorPatch {
+                                    entries: registered_entries,
+                                },
+                            ))
                             .await
                     {
                         tracing::warn!(
@@ -529,11 +531,13 @@ async fn handle_body_endpoint(
                     }
                 }
                 InboundBodyMessage::Unplug => {
-                    if let Some(body_endpoint_id) = auth_endpoint_id {
+                    if let Some(body_endpoint_id) = auth_endpoint_id.as_deref() {
                         let routes = spine.remove_endpoint(body_endpoint_id);
                         if !routes.is_empty()
                             && let Err(err) = afferent_pathway
-                                .send(Sense::DropCapabilities(CapabilityDropPatch { routes }))
+                                .send(Sense::DropNeuralSignalDescriptors(
+                                    NeuralSignalDescriptorDropPatch { routes },
+                                ))
                                 .await
                         {
                             tracing::warn!(
@@ -546,13 +550,21 @@ async fn handle_body_endpoint(
                     break;
                 }
                 InboundBodyMessage::Sense(sense) => {
-                    if auth_endpoint_id.is_none() {
+                    let Some(body_endpoint_id) = auth_endpoint_id.as_deref() else {
                         tracing::warn!(
                             target: "spine.unix_socket",
                             "sense_rejected_endpoint_must_auth_first"
                         );
                         continue;
-                    }
+                    };
+
+                    // Adapter injects endpoint_id from authenticated endpoint binding.
+                    let sense = SenseDatum {
+                        sense_id: sense.sense_id,
+                        endpoint_id: body_endpoint_id.to_string(),
+                        neural_signal_descriptor_id: sense.neural_signal_descriptor_id,
+                        payload: sense.payload,
+                    };
                     if let Err(err) = afferent_pathway.send(Sense::Domain(sense)).await {
                         tracing::warn!(
                             target: "spine.unix_socket",
@@ -575,7 +587,9 @@ async fn handle_body_endpoint(
     let routes = spine.on_adapter_channel_closed(channel_id);
     if !routes.is_empty() {
         let _ = afferent_pathway
-            .send(Sense::DropCapabilities(CapabilityDropPatch { routes }))
+            .send(Sense::DropNeuralSignalDescriptors(
+                NeuralSignalDescriptorDropPatch { routes },
+            ))
             .await;
     }
 
@@ -592,24 +606,24 @@ mod tests {
                 InboundBodyMessage, NdjsonEnvelope, OutboundActBody,
                 encode_body_egress_act_message, parse_body_afferent_message,
             },
-            types::EndpointCapabilityDescriptor,
+            types::NeuralSignalDescriptor,
         },
-        types::{Act, RequestedResources},
+        types::{Act, NeuralSignalType},
     };
 
     #[test]
     fn accepts_sense_message() {
         let parsed = parse_body_afferent_message(
-            r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"41f25f33-99f5-4250-99c3-020f8a92e199","source":"sensor","payload":{"v":1}}}"#,
+            r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"41f25f33-99f5-4250-99c3-020f8a92e199","neural_signal_descriptor_id":"chat.message","payload":{"v":1}}}"#,
         )
         .expect("sense message should parse");
         assert!(matches!(parsed, InboundBodyMessage::Sense(_)));
     }
 
     #[test]
-    fn accepts_correlated_sense_message_with_required_echo_fields() {
+    fn accepts_correlated_sense_message_without_legacy_echo_fields() {
         let parsed = parse_body_afferent_message(
-            r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"9d60f110-af6d-42cb-853b-bf6f6ce6f0dc","source":"body","payload":{"kind":"present_message_result","act_id":"0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a","capability_instance_id":"chat.1","endpoint_id":"macos-app.01","capability_id":"present.message"}}}"#,
+            r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"9d60f110-af6d-42cb-853b-bf6f6ce6f0dc","neural_signal_descriptor_id":"present.message.result","payload":{"kind":"present_message_result","act_id":"0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a"}}}"#,
         )
         .expect("correlated sense should parse");
         assert!(matches!(parsed, InboundBodyMessage::Sense(_)));
@@ -618,7 +632,7 @@ mod tests {
     #[test]
     fn accepts_legacy_correlated_sense_message_with_neural_signal_alias() {
         let parsed = parse_body_afferent_message(
-            r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"9d60f110-af6d-42cb-853b-bf6f6ce6f0dc","source":"body","payload":{"kind":"present_message_result","neural_signal_id":"0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a","capability_instance_id":"chat.1","endpoint_id":"macos-app.01","capability_id":"present.message"}}}"#,
+            r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"9d60f110-af6d-42cb-853b-bf6f6ce6f0dc","neural_signal_descriptor_id":"present.message.result","payload":{"kind":"present_message_result","neural_signal_id":"0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a"}}}"#,
         )
         .expect("legacy correlated sense should parse");
 
@@ -634,10 +648,10 @@ mod tests {
     }
 
     #[test]
-    fn rejects_correlated_sense_message_missing_echo_fields() {
+    fn rejects_correlated_sense_message_invalid_act_id() {
         assert!(
             parse_body_afferent_message(
-                r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"01234567-89ab-4cde-8f01-23456789abcd","source":"body","payload":{"kind":"present_message_result","act_id":"0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a","endpoint_id":"macos-app.01","capability_id":"present.message"}}}"#
+                r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"01234567-89ab-4cde-8f01-23456789abcd","neural_signal_descriptor_id":"present.message.result","payload":{"kind":"present_message_result","act_id":"not-a-uuid-v7"}}}"#
             )
             .is_err()
         );
@@ -657,17 +671,9 @@ mod tests {
     fn act_encoding_contains_act_and_target_fields() {
         let act = Act {
             act_id: "0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a".to_string(),
-            based_on: vec!["41f25f33-99f5-4250-99c3-020f8a92e199".to_string()],
-            body_endpoint_name: "macos-app.01".to_string(),
-            capability_id: "present.message".to_string(),
-            capability_instance_id: "chat.instance".to_string(),
-            normalized_payload: serde_json::json!({"ok": true}),
-            requested_resources: RequestedResources {
-                survival_micro: 120,
-                time_ms: 100,
-                io_units: 1,
-                token_units: 64,
-            },
+            endpoint_id: "macos-app.01".to_string(),
+            neural_signal_descriptor_id: "present.message".to_string(),
+            payload: serde_json::json!({"ok": true}),
         };
 
         let encoded = encode_body_egress_act_message(&act).expect("act should encode");
@@ -680,35 +686,27 @@ mod tests {
             message.body.act.act_id,
             "0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a"
         );
-        assert_eq!(message.body.act.capability_id, "present.message");
-        assert_eq!(message.body.act.requested_resources.survival_micro, 120);
-        assert_eq!(message.body.act.requested_resources.time_ms, 100);
-        assert_eq!(message.body.act.requested_resources.io_units, 1);
-        assert_eq!(message.body.act.requested_resources.token_units, 64);
+        assert_eq!(
+            message.body.act.neural_signal_descriptor_id,
+            "present.message"
+        );
+        assert_eq!(message.body.act.payload, serde_json::json!({"ok": true}));
         assert!(encoded.contains("\"method\":\"act\""));
         assert!(encoded.contains("\"body\":{"));
         assert!(encoded.contains("\"act_id\":\"0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a\""));
-        assert!(encoded.contains("\"capability_id\":\"present.message\""));
+        assert!(encoded.contains("\"neural_signal_descriptor_id\":\"present.message\""));
     }
 
     #[test]
     fn accepts_auth_message_with_capabilities() {
-        let descriptor: EndpointCapabilityDescriptor = serde_json::from_value(serde_json::json!({
-            "route": {
-                "endpoint_id": "macos-app.01",
-                "capability_id": "present.message"
-            },
-            "payload_schema": {"type":"object"},
-            "max_payload_bytes": 1024,
-            "default_cost": {
-                "survival_micro": 0,
-                "time_ms": 0,
-                "io_units": 0,
-                "token_units": 0
-            },
-            "metadata": {}
+        let descriptor: NeuralSignalDescriptor = serde_json::from_value(serde_json::json!({
+            "type": "act",
+            "endpoint_id": "macos-app.01",
+            "neural_signal_descriptor_id": "present.message",
+            "payload_schema": {"type":"object"}
         }))
         .expect("descriptor should decode");
+        assert_eq!(descriptor.r#type, NeuralSignalType::Act);
 
         let wire = serde_json::json!({
             "method": "auth",

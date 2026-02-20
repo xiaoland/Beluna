@@ -8,9 +8,11 @@ use beluna::{
     continuity::ContinuityEngine,
     cortex::{AttemptExtractorHook, Cortex, PrimaryReasonerHook, ProseIr, ReactionLimits},
     ledger::LedgerStage,
-    spine::{EndpointCapabilityDescriptor, RouteKey, Spine},
+    spine::Spine,
     stem::Stem,
-    types::{CapabilityPatch, PhysicalState, Sense},
+    types::{
+        NeuralSignalDescriptor, NeuralSignalDescriptorPatch, NeuralSignalType, PhysicalState, Sense,
+    },
 };
 
 fn test_spine() -> Arc<Spine> {
@@ -41,18 +43,16 @@ fn capture_cortex(physical_states: Arc<Mutex<Vec<PhysicalState>>>) -> Arc<Cortex
 async fn new_capabilities_patch_takes_effect_before_cortex() {
     let (sense_tx, sense_rx) = mpsc::channel(4);
     sense_tx
-        .send(Sense::NewCapabilities(CapabilityPatch {
-            entries: vec![EndpointCapabilityDescriptor {
-                route: RouteKey {
+        .send(Sense::NewNeuralSignalDescriptors(
+            NeuralSignalDescriptorPatch {
+                entries: vec![NeuralSignalDescriptor {
+                    r#type: NeuralSignalType::Act,
                     endpoint_id: "ep.patch".to_string(),
-                    capability_id: "cap.patch".to_string(),
-                },
-                payload_schema: serde_json::json!({"type":"object"}),
-                max_payload_bytes: 1024,
-                default_cost: beluna::spine::CostVector::default(),
-                metadata: Default::default(),
-            }],
-        }))
+                    neural_signal_descriptor_id: "cap.patch".to_string(),
+                    payload_schema: serde_json::json!({"type":"object"}),
+                }],
+            },
+        ))
         .await
         .expect("patch should be enqueued");
     sense_tx
@@ -76,14 +76,18 @@ async fn new_capabilities_patch_takes_effect_before_cortex() {
 
     let captured = physical_states.lock().await;
     assert_eq!(captured.len(), 1);
-    let affordance = captured[0]
+    let descriptor = captured[0]
         .capabilities
-        .resolve("ep.patch")
+        .entries
+        .iter()
+        .find(|entry| {
+            entry.r#type == NeuralSignalType::Act
+                && entry.endpoint_id == "ep.patch"
+                && entry.neural_signal_descriptor_id == "cap.patch"
+        })
         .expect("patched capability should be visible to cortex");
-    assert!(
-        affordance
-            .allowed_capability_ids
-            .iter()
-            .any(|value| value == "cap.patch")
+    assert_eq!(
+        descriptor.payload_schema["type"],
+        serde_json::json!("object")
     );
 }

@@ -282,27 +282,25 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
-    private func handleAct(_ action: AdmittedActionWire) async {
-        guard action.endpointID == appleEndpointID,
-              action.capabilityID == appleCapabilityID
-        else {
+    private func handleAct(_ action: InboundActWire) async {
+        guard action.neuralSignalDescriptorID == appleActNeuralSignalDescriptorID else {
             appendDebugMessage(
-                "Ignored act for unexpected route \(action.endpointID)::\(action.capabilityID)"
+                "Ignored act for unexpected descriptor \(action.neuralSignalDescriptorID) on endpoint \(action.endpointID)"
             )
             return
         }
 
-        guard rememberHandledAction(action.neuralSignalID) else {
-            appendDebugMessage("Ignored duplicate act \(action.neuralSignalID)")
+        guard rememberHandledAction(action.actID) else {
+            appendDebugMessage("Ignored duplicate act \(action.actID)")
             return
         }
 
         do {
-            let texts = try extractAssistantTexts(from: action.normalizedPayload)
+            let texts = try extractAssistantTexts(from: action.payload)
             if texts.isEmpty {
                 await rejectInvoke(action: action, reasonCode: "invalid_payload")
                 appendSystemMessage("Received chat invoke with empty assistant output.")
-                log("invalid assistant payload (empty text): \(action.normalizedPayload)")
+                log("invalid assistant payload (empty text): \(action.payload)")
                 return
             }
 
@@ -313,21 +311,21 @@ final class ChatViewModel: ObservableObject {
             try await spineBodyEndpoint.sendActResultSense(
                 action: action,
                 status: "applied",
-                referenceID: "apple-universal:chat:\(action.neuralSignalID)"
+                referenceID: "apple-universal:chat:\(action.actID)"
             )
         } catch {
             await rejectInvoke(action: action, reasonCode: "invalid_payload")
             appendSystemMessage("Failed to decode assistant payload: \(describeError(error))")
-            log("failed to decode assistant payload: \(describeError(error)), payload=\(action.normalizedPayload)")
+            log("failed to decode assistant payload: \(describeError(error)), payload=\(action.payload)")
         }
     }
 
-    private func rejectInvoke(action: AdmittedActionWire, reasonCode: String) async {
+    private func rejectInvoke(action: InboundActWire, reasonCode: String) async {
         do {
             try await spineBodyEndpoint.sendActResultSense(
                 action: action,
                 status: "rejected",
-                referenceID: "apple-universal:chat:reject:\(action.neuralSignalID)",
+                referenceID: "apple-universal:chat:reject:\(action.actID)",
                 reasonCode: reasonCode
             )
         } catch {

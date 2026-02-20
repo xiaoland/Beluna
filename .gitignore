@@ -17,20 +17,20 @@ __pycache__/
 # Rust
 /rust/target/
 /target/
+/core/target/
 
 # IDE
 .codex/
 .claude/
 .vscode/
-
-# Debug
 .firecrawl
 
-# Core's
+# Debug
+.env
 beluna.jsonc
 *.sock
 /logs/
-/core/target/
+
 
 
 # XCode & SPM & CocoaPods

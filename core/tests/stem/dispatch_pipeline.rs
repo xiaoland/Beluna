@@ -11,12 +11,9 @@ use beluna::{
         AttemptDraft, AttemptExtractorHook, Cortex, PrimaryReasonerHook, ProseIr, ReactionLimits,
     },
     ledger::LedgerStage,
-    spine::{
-        ActDispatchResult, CostVector, Endpoint, EndpointBinding, EndpointCapabilityDescriptor,
-        RouteKey, Spine,
-    },
+    spine::{ActDispatchResult, Endpoint, EndpointBinding, Spine},
     stem::Stem,
-    types::{Act, RequestedResources, Sense, SenseDatum},
+    types::{Act, NeuralSignalDescriptor, NeuralSignalType, Sense, SenseDatum},
 };
 
 #[derive(Default)]
@@ -34,32 +31,28 @@ impl Endpoint for SpyEndpoint {
     }
 }
 
-fn test_spine_with_spy() -> (Arc<Spine>, Arc<SpyEndpoint>) {
+fn test_spine_with_spy() -> (Arc<Spine>, Arc<SpyEndpoint>, String) {
     let config = SpineRuntimeConfig { adapters: vec![] };
     let spine = Spine::new(&config, SenseAfferentPathway::new(4).0);
     let spy_endpoint = Arc::new(SpyEndpoint::default());
 
-    spine
+    let handle = spine
         .add_endpoint(
             "ep.demo",
             EndpointBinding::Inline(spy_endpoint.clone()),
-            vec![EndpointCapabilityDescriptor {
-                route: RouteKey {
-                    endpoint_id: "placeholder".to_string(),
-                    capability_id: "cap.demo".to_string(),
-                },
+            vec![NeuralSignalDescriptor {
+                r#type: NeuralSignalType::Act,
+                endpoint_id: "placeholder".to_string(),
+                neural_signal_descriptor_id: "cap.demo".to_string(),
                 payload_schema: serde_json::json!({"type":"object"}),
-                max_payload_bytes: 1024,
-                default_cost: CostVector::default(),
-                metadata: Default::default(),
             }],
         )
         .expect("spy endpoint registration should succeed");
 
-    (spine, spy_endpoint)
+    (spine, spy_endpoint, handle.body_endpoint_id)
 }
 
-fn two_act_cortex() -> Arc<Cortex> {
+fn two_act_cortex(endpoint_id: String) -> Arc<Cortex> {
     let primary: PrimaryReasonerHook = Arc::new(|_req| {
         Box::pin(async {
             Ok(ProseIr {
@@ -67,39 +60,26 @@ fn two_act_cortex() -> Arc<Cortex> {
             })
         })
     });
-    let extractor: AttemptExtractorHook = Arc::new(|_req| {
-        Box::pin(async {
+    let extractor: AttemptExtractorHook = Arc::new(move |_req| {
+        let endpoint_id = endpoint_id.clone();
+        Box::pin(async move {
             Ok(vec![
                 AttemptDraft {
                     intent_span: "run".to_string(),
                     based_on: vec!["sense:1".to_string()],
                     attention_tags: vec![],
-                    endpoint_id: "ep.demo".to_string(),
-                    capability_id: "cap.demo".to_string(),
-                    capability_instance_id: "instance:1".to_string(),
-                    payload_draft: serde_json::json!({}),
-                    requested_resources: RequestedResources {
-                        survival_micro: 2_000_000,
-                        time_ms: 1,
-                        io_units: 1,
-                        token_units: 0,
-                    },
+                    endpoint_id: endpoint_id.clone(),
+                    neural_signal_descriptor_id: "cap.demo".to_string(),
+                    payload_draft: serde_json::json!({"draft":"first"}),
                     goal_hint: None,
                 },
                 AttemptDraft {
                     intent_span: "run".to_string(),
                     based_on: vec!["sense:1".to_string()],
                     attention_tags: vec![],
-                    endpoint_id: "ep.demo".to_string(),
-                    capability_id: "cap.demo".to_string(),
-                    capability_instance_id: "instance:2".to_string(),
-                    payload_draft: serde_json::json!({}),
-                    requested_resources: RequestedResources {
-                        survival_micro: 10,
-                        time_ms: 1,
-                        io_units: 1,
-                        token_units: 0,
-                    },
+                    endpoint_id: endpoint_id.clone(),
+                    neural_signal_descriptor_id: "cap.demo".to_string(),
+                    payload_draft: serde_json::json!({"draft":"second"}),
                     goal_hint: None,
                 },
             ])
@@ -114,12 +94,13 @@ fn two_act_cortex() -> Arc<Cortex> {
 }
 
 #[tokio::test]
-async fn break_stops_current_act_only_and_keeps_next_act() {
+async fn dispatches_all_acts_when_ledger_has_zero_reservation_policy() {
     let (sense_tx, sense_rx) = mpsc::channel(4);
     sense_tx
         .send(Sense::Domain(SenseDatum {
             sense_id: "sense:1".to_string(),
-            source: "test".to_string(),
+            endpoint_id: "ep.demo".to_string(),
+            neural_signal_descriptor_id: "sense.demo".to_string(),
             payload: serde_json::json!({}),
         }))
         .await
@@ -130,13 +111,20 @@ async fn break_stops_current_act_only_and_keeps_next_act() {
         .expect("sleep should enqueue");
     drop(sense_tx);
 
-    let (spine, spy_endpoint) = test_spine_with_spy();
+    let (spine, spy_endpoint, endpoint_id) = test_spine_with_spy();
     let continuity = Arc::new(Mutex::new(ContinuityEngine::with_defaults()));
     let ledger = Arc::new(Mutex::new(LedgerStage::new(1_000)));
-    let runtime = Stem::new(two_act_cortex(), continuity, ledger, spine, sense_rx);
+    let runtime = Stem::new(
+        two_act_cortex(endpoint_id),
+        continuity,
+        ledger,
+        spine,
+        sense_rx,
+    );
     runtime.run().await.expect("stem should run");
 
     let requests = spy_endpoint.requests.lock().await;
-    assert_eq!(requests.len(), 1, "only one act should be dispatched");
-    assert_eq!(requests[0].requested_resources.survival_micro, 10);
+    assert_eq!(requests.len(), 2, "both acts should be dispatched");
+    assert!(requests.iter().any(|act| act.payload["draft"] == "first"));
+    assert!(requests.iter().any(|act| act.payload["draft"] == "second"));
 }

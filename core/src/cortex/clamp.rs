@@ -6,14 +6,14 @@ use crate::{
         error::{CortexError, internal_error},
         types::{AttemptDraft, ClampResult, ClampViolation, ClampViolationCode},
     },
-    types::{Act, RequestedResources, SenseId},
+    types::{Act, NeuralSignalDescriptorCatalog, NeuralSignalType, SenseId},
 };
 
 #[derive(Debug, Clone)]
 pub struct AttemptClampRequest {
     pub cycle_id: u64,
     pub drafts: Vec<AttemptDraft>,
-    pub capability_catalog: crate::cortex::CapabilityCatalog,
+    pub neural_signal_descriptor_catalog: NeuralSignalDescriptorCatalog,
     pub known_sense_ids: Vec<SenseId>,
     pub limits: crate::cortex::ReactionLimits,
 }
@@ -27,8 +27,10 @@ impl DeterministicAttemptClamp {
         drafts.sort_by(|lhs, rhs| {
             lhs.endpoint_id
                 .cmp(&rhs.endpoint_id)
-                .then_with(|| lhs.capability_id.cmp(&rhs.capability_id))
-                .then_with(|| lhs.capability_instance_id.cmp(&rhs.capability_instance_id))
+                .then_with(|| {
+                    lhs.neural_signal_descriptor_id
+                        .cmp(&rhs.neural_signal_descriptor_id)
+                })
                 .then_with(|| {
                     canonicalize_json(&lhs.payload_draft)
                         .to_string()
@@ -61,7 +63,7 @@ impl DeterministicAttemptClamp {
         acts.sort_by(|lhs, rhs| lhs.act_id.cmp(&rhs.act_id));
         acts.truncate(req.limits.max_attempts);
 
-        let based_on = stable_union_based_on(&acts);
+        let based_on = stable_union_based_on_from_drafts(&req.drafts);
         let attention_tags = stable_attention_tags(&req.drafts);
 
         Ok(ClampResult {
@@ -109,35 +111,46 @@ impl DeterministicAttemptClamp {
             return Ok(None);
         }
 
-        let Some(profile) = req.capability_catalog.resolve(&draft.endpoint_id) else {
+        let endpoint_known = req
+            .neural_signal_descriptor_catalog
+            .entries
+            .iter()
+            .any(|entry| {
+                entry.r#type == NeuralSignalType::Act && entry.endpoint_id == draft.endpoint_id
+            });
+        if !endpoint_known {
             violations.push(ClampViolation {
                 code: ClampViolationCode::UnknownEndpointId,
                 message: format!("unknown endpoint_id '{}'", draft.endpoint_id),
             });
             return Ok(None);
-        };
+        }
 
-        if profile.allowed_capability_ids.is_empty()
-            || !profile
-                .allowed_capability_ids
-                .iter()
-                .any(|id| id == &draft.capability_id)
-        {
+        let Some(descriptor) = req
+            .neural_signal_descriptor_catalog
+            .entries
+            .iter()
+            .find(|entry| {
+                entry.r#type == NeuralSignalType::Act
+                    && entry.endpoint_id == draft.endpoint_id
+                    && entry.neural_signal_descriptor_id == draft.neural_signal_descriptor_id
+            })
+        else {
             violations.push(ClampViolation {
-                code: ClampViolationCode::UnsupportedCapabilityId,
+                code: ClampViolationCode::UnsupportedNeuralSignalDescriptorId,
                 message: format!(
-                    "unsupported capability_id '{}' for endpoint_id '{}'",
-                    draft.capability_id, draft.endpoint_id
+                    "unsupported neural_signal_descriptor_id '{}' for endpoint_id '{}'",
+                    draft.neural_signal_descriptor_id, draft.endpoint_id
                 ),
             });
             return Ok(None);
-        }
+        };
 
         let payload = canonicalize_json(&draft.payload_draft);
         let payload_bytes = serde_json::to_vec(&payload)
             .map_err(|err| internal_error(format!("payload serialization error: {err}")))?
             .len();
-        let payload_cap = req.limits.max_payload_bytes.min(profile.max_payload_bytes);
+        let payload_cap = req.limits.max_payload_bytes;
         if payload_bytes > payload_cap {
             violations.push(ClampViolation {
                 code: ClampViolationCode::PayloadTooLarge,
@@ -146,12 +159,12 @@ impl DeterministicAttemptClamp {
             return Ok(None);
         }
 
-        let compiled = match JSONSchema::compile(&profile.payload_schema) {
+        let compiled = match JSONSchema::compile(&descriptor.payload_schema) {
             Ok(compiled) => compiled,
             Err(err) => {
                 violations.push(ClampViolation {
                     code: ClampViolationCode::PayloadSchemaViolation,
-                    message: format!("invalid schema for '{}': {}", profile.endpoint_id, err),
+                    message: format!("invalid schema for '{}': {}", descriptor.endpoint_id, err),
                 });
                 return Ok(None);
             }
@@ -162,37 +175,26 @@ impl DeterministicAttemptClamp {
                 code: ClampViolationCode::PayloadSchemaViolation,
                 message: format!(
                     "payload does not conform to schema for '{}'",
-                    profile.endpoint_id
+                    descriptor.endpoint_id
                 ),
             });
             return Ok(None);
         }
 
-        let resources = clamp_resources(&draft.requested_resources);
         let based_on = stable_dedupe_sense_ids(&draft.based_on);
         let act_id = derive_act_id(
             cycle_id,
             &based_on,
             &draft.endpoint_id,
-            &draft.capability_id,
+            &draft.neural_signal_descriptor_id,
             &payload,
-            &resources,
         );
-
-        let capability_instance_id = if draft.capability_instance_id.trim().is_empty() {
-            act_id.clone()
-        } else {
-            draft.capability_instance_id.clone()
-        };
 
         Ok(Some(Act {
             act_id,
-            based_on,
-            body_endpoint_name: draft.endpoint_id.clone(),
-            capability_id: draft.capability_id.clone(),
-            capability_instance_id,
-            normalized_payload: payload,
-            requested_resources: resources,
+            endpoint_id: draft.endpoint_id.clone(),
+            neural_signal_descriptor_id: draft.neural_signal_descriptor_id.clone(),
+            payload,
         }))
     }
 }
@@ -201,28 +203,17 @@ pub fn derive_act_id(
     cycle_id: u64,
     based_on: &[SenseId],
     endpoint_id: &str,
-    capability_id: &str,
-    normalized_payload: &serde_json::Value,
-    requested_resources: &RequestedResources,
+    neural_signal_descriptor_id: &str,
+    payload: &serde_json::Value,
 ) -> String {
     let _ = (
         cycle_id,
         based_on,
         endpoint_id,
-        capability_id,
-        normalized_payload,
-        requested_resources,
+        neural_signal_descriptor_id,
+        payload,
     );
     Uuid::now_v7().to_string()
-}
-
-fn clamp_resources(resources: &RequestedResources) -> RequestedResources {
-    RequestedResources {
-        survival_micro: resources.survival_micro.max(0),
-        time_ms: resources.time_ms,
-        io_units: resources.io_units,
-        token_units: resources.token_units,
-    }
 }
 
 fn stable_dedupe_sense_ids(ids: &[SenseId]) -> Vec<SenseId> {
@@ -233,10 +224,10 @@ fn stable_dedupe_sense_ids(ids: &[SenseId]) -> Vec<SenseId> {
     seen.into_iter().collect()
 }
 
-fn stable_union_based_on(acts: &[Act]) -> Vec<SenseId> {
+fn stable_union_based_on_from_drafts(drafts: &[AttemptDraft]) -> Vec<SenseId> {
     let mut union = std::collections::BTreeSet::new();
-    for act in acts {
-        for sense_id in &act.based_on {
+    for draft in drafts {
+        for sense_id in &draft.based_on {
             union.insert(sense_id.clone());
         }
     }

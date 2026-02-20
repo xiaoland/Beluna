@@ -19,7 +19,7 @@ use crate::{
         },
         types::{AttemptDraft, CortexOutput, ProseIr, ReactionLimits},
     },
-    types::{Act, CognitionState, GoalFrame, PhysicalState, RequestedResources, Sense},
+    types::{Act, CognitionState, GoalFrame, NeuralSignalDescriptorCatalog, PhysicalState, Sense},
 };
 
 #[derive(Debug, Clone)]
@@ -35,7 +35,7 @@ pub struct PrimaryReasonerRequest {
 pub struct AttemptExtractorRequest {
     pub cycle_id: u64,
     pub prose_ir: ProseIr,
-    pub capability_catalog: crate::cortex::CapabilityCatalog,
+    pub neural_signal_descriptor_catalog: NeuralSignalDescriptorCatalog,
     pub senses: Vec<Sense>,
     pub cognition_state: CognitionState,
     pub limits: ReactionLimits,
@@ -180,7 +180,7 @@ impl Cortex {
         let extract_req = AttemptExtractorRequest {
             cycle_id: physical_state.cycle_id,
             prose_ir: ir,
-            capability_catalog: physical_state.capabilities.clone(),
+            neural_signal_descriptor_catalog: physical_state.capabilities.clone(),
             senses: senses.to_vec(),
             cognition_state: cognition_state.clone(),
             limits: self.limits.clone(),
@@ -346,51 +346,30 @@ fn drafts_to_acts(cycle_id: u64, drafts: Vec<AttemptDraft>, limits: &ReactionLim
         let AttemptDraft {
             based_on,
             endpoint_id,
-            capability_id,
-            capability_instance_id,
+            neural_signal_descriptor_id,
             payload_draft,
-            requested_resources,
             ..
         } = draft;
 
-        let requested_resources = clamp_resources(requested_resources);
         let act_id = derive_act_id(
             cycle_id,
             &based_on,
             &endpoint_id,
-            &capability_id,
+            &neural_signal_descriptor_id,
             &payload_draft,
-            &requested_resources,
         );
-        let capability_instance_id = if capability_instance_id.trim().is_empty() {
-            act_id.clone()
-        } else {
-            capability_instance_id
-        };
 
         acts.push(Act {
             act_id,
-            based_on,
-            body_endpoint_name: endpoint_id,
-            capability_id,
-            capability_instance_id,
-            normalized_payload: payload_draft,
-            requested_resources,
+            endpoint_id,
+            neural_signal_descriptor_id,
+            payload: payload_draft,
         });
     }
 
     acts.sort_by(|lhs, rhs| lhs.act_id.cmp(&rhs.act_id));
     acts.truncate(limits.max_attempts);
     acts
-}
-
-fn clamp_resources(resources: RequestedResources) -> RequestedResources {
-    RequestedResources {
-        survival_micro: resources.survival_micro.max(0),
-        time_ms: resources.time_ms,
-        io_units: resources.io_units,
-        token_units: resources.token_units,
-    }
 }
 
 fn evolve_cognition_state(previous: &CognitionState, senses: &[Sense]) -> CognitionState {
@@ -545,23 +524,16 @@ async fn extract_attempts_via_gateway(
                 "based_on": ["sense_id"],
                 "attention_tags": ["tag"],
                 "endpoint_id": "string",
-                "capability_id": "string",
-                "capability_instance_id": "optional string marker",
+                "neural_signal_descriptor_id": "string",
                 "payload_draft": {},
-                "requested_resources": {
-                    "survival_micro": 0,
-                    "time_ms": 0,
-                    "io_units": 0,
-                    "token_units": 0
-                },
                 "goal_hint": "optional string"
             }
         ]
     });
     let prompt = format!(
-        "Compile this prose IR into attempt drafts JSON.\nReturn strictly one JSON object matching this shape: {}\nAllowed endpoint capabilities: {}\nSenses: {}\nCognition: {}\nIR: {}",
+        "Compile this prose IR into attempt drafts JSON.\nReturn strictly one JSON object matching this shape: {}\nAllowed neural signal descriptors: {}\nSenses: {}\nCognition: {}\nIR: {}",
         schema_hint,
-        serde_json::to_string(&req.capability_catalog.affordances)
+        serde_json::to_string(&req.neural_signal_descriptor_catalog.entries)
             .unwrap_or_else(|_| "[]".to_string()),
         serde_json::to_string(&req.senses).unwrap_or_else(|_| "[]".to_string()),
         serde_json::to_string(&req.cognition_state).unwrap_or_else(|_| "{}".to_string()),

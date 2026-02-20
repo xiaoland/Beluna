@@ -6,13 +6,14 @@ use tokio::time::{Duration, timeout};
 
 use crate::{
     body::payloads::{WebFetchRequest, WebLimits},
+    spine::adapters::inline::InlineSenseDatum,
     spine::types::EndpointExecutionOutcome,
-    types::{Act, SenseDatum},
+    types::Act,
 };
 
 pub struct WebHandlerOutput {
     pub outcome: EndpointExecutionOutcome,
-    pub sense: Option<SenseDatum>,
+    pub sense: Option<InlineSenseDatum>,
 }
 
 pub async fn handle_web_invoke(
@@ -20,8 +21,7 @@ pub async fn handle_web_invoke(
     act: &Act,
     limits: &WebLimits,
 ) -> WebHandlerOutput {
-    let web_request: WebFetchRequest = match serde_json::from_value(act.normalized_payload.clone())
-    {
+    let web_request: WebFetchRequest = match serde_json::from_value(act.payload.clone()) {
         Ok(request) => request,
         Err(_) => {
             return WebHandlerOutput {
@@ -153,18 +153,16 @@ pub async fn handle_web_invoke(
 
     WebHandlerOutput {
         outcome: EndpointExecutionOutcome::Applied {
-            actual_cost_micro: act.requested_resources.survival_micro.max(0),
+            actual_cost_micro: 0,
             reference_id: format!("body.std.web:applied:{}", act.act_id),
         },
-        sense: Some(SenseDatum {
+        sense: Some(InlineSenseDatum {
             sense_id: uuid::Uuid::new_v4().to_string(),
-            source: "body.std.web".to_string(),
+            neural_signal_descriptor_id: "body.std.web.result".to_string(),
             payload: serde_json::json!({
                 "kind": "web_fetch_result",
                 "act_id": act.act_id,
-                "capability_instance_id": act.capability_instance_id,
-                "endpoint_id": act.body_endpoint_name,
-                "capability_id": act.capability_id,
+                "neural_signal_descriptor_id": act.neural_signal_descriptor_id,
                 "url": final_url,
                 "status_code": status_code,
                 "body_text": body_text,
@@ -203,27 +201,16 @@ mod tests {
         net::TcpListener,
     };
 
-    use crate::{
-        spine::types::EndpointExecutionOutcome,
-        types::{Act, RequestedResources},
-    };
+    use crate::{spine::types::EndpointExecutionOutcome, types::Act};
 
     use super::{WebLimits, handle_web_invoke};
 
     fn build_request(act_id: &str, payload: serde_json::Value) -> Act {
         Act {
             act_id: act_id.to_string(),
-            based_on: vec!["sense:1".to_string()],
-            body_endpoint_name: "ep:body:std:web".to_string(),
-            capability_id: "tool.web.fetch".to_string(),
-            capability_instance_id: "web.instance".to_string(),
-            normalized_payload: payload,
-            requested_resources: RequestedResources {
-                survival_micro: 321,
-                time_ms: 1,
-                io_units: 1,
-                token_units: 0,
-            },
+            endpoint_id: "ep:body:std:web".to_string(),
+            neural_signal_descriptor_id: "tool.web.fetch".to_string(),
+            payload: payload,
         }
     }
 
@@ -285,13 +272,16 @@ mod tests {
         assert!(matches!(
             output.outcome,
             EndpointExecutionOutcome::Applied {
-                actual_cost_micro: 321,
+                actual_cost_micro: 0,
                 ..
             }
         ));
 
         let sense = output.sense.expect("sense should be emitted");
-        assert_eq!(sense.source, "body.std.web");
+        assert_eq!(
+            sense.neural_signal_descriptor_id,
+            "body.std.web.result".to_string()
+        );
         assert_eq!(sense.payload["status_code"], serde_json::json!(200));
         assert_eq!(sense.payload["body_text"], serde_json::json!("hello"));
         assert_eq!(sense.payload["body_truncated"], serde_json::json!(true));

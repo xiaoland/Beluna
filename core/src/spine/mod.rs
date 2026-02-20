@@ -12,8 +12,8 @@ pub use endpoint::{Endpoint, NativeFunctionEndpoint};
 pub use error::{SpineError, SpineErrorKind};
 pub use runtime::{EndpointBinding, Spine, shutdown_global_spine};
 pub use types::{
-    ActDispatchResult, CostAttributionId, CostVector, EndpointCapabilityDescriptor,
-    EndpointExecutionOutcome, ReserveEntryId, RouteKey, SpineCapabilityCatalog, SpineEvent,
+    ActDispatchResult, CostAttributionId, EndpointExecutionOutcome, NeuralSignalDescriptor,
+    NeuralSignalDescriptorCatalog, NeuralSignalDescriptorRouteKey, ReserveEntryId, SpineEvent,
     SpineExecutionMode,
 };
 

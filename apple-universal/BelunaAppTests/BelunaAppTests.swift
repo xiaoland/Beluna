@@ -15,8 +15,8 @@ struct BelunaAppTests {
         let envelope = makeAppleEndpointRegisterEnvelope()
 
         #expect(envelope.method == "auth")
-        #expect(envelope.body.endpointName == appleEndpointID)
-        #expect(envelope.body.capabilities.count == 1)
+        #expect(envelope.body.endpointName == appleEndpointName)
+        #expect(envelope.body.capabilities.count == 3)
         #expect(UUID(uuidString: envelope.id) != nil)
         #expect(envelope.timestamp > 0)
     }
@@ -32,30 +32,28 @@ struct BelunaAppTests {
     }
 
     @Test func correlatedSenseUsesActID() throws {
-        let action = AdmittedActionWire(
-            neuralSignalID: "0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a",
-            capabilityInstanceID: "chat.instance",
-            endpointID: appleEndpointID,
-            capabilityID: appleCapabilityID,
-            normalizedPayload: .object(["text": .string("hello")]),
-            reservedCost: .zero
+        let action = InboundActWire(
+            actID: "0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a",
+            endpointID: "macos-app.1",
+            neuralSignalDescriptorID: appleActNeuralSignalDescriptorID,
+            payload: .object(["text": .string("hello")])
         )
         let envelope = makeActResultSenseEnvelope(
             action: action,
             status: "applied",
-            referenceID: "apple-universal:chat:0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a"
+            referenceID: "apple-universal:chat:\(action.actID)"
         )
 
         #expect(envelope.method == "sense")
+        #expect(envelope.body.neuralSignalDescriptorID == appleActResultSenseNeuralSignalDescriptorID)
         #expect(UUID(uuidString: envelope.body.senseID) != nil)
         guard let payload = envelope.body.payload.objectValue else {
             Issue.record("sense payload should be an object")
             return
         }
-        #expect(payload["act_id"]?.stringValue == action.neuralSignalID)
-        #expect(payload["capability_instance_id"]?.stringValue == action.capabilityInstanceID)
-        #expect(payload["endpoint_id"]?.stringValue == action.endpointID)
-        #expect(payload["capability_id"]?.stringValue == action.capabilityID)
+        #expect(payload["act_id"]?.stringValue == action.actID)
+        #expect(payload["status"]?.stringValue == "applied")
+        #expect(payload["reference_id"]?.stringValue == "apple-universal:chat:\(action.actID)")
     }
 
     @Test func decodesCoreActEnvelope() throws {
@@ -67,16 +65,9 @@ struct BelunaAppTests {
           "body":{
             "act":{
               "act_id":"0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a",
-              "body_endpoint_name":"macos-app.01",
-              "capability_id":"present.message",
-              "capability_instance_id":"chat.instance",
-              "normalized_payload":{"response":{"output_text":"hello"}},
-              "requested_resources":{
-                "survival_micro":120,
-                "time_ms":100,
-                "io_units":1,
-                "token_units":64
-              }
+              "endpoint_id":"macos-app.1",
+              "neural_signal_descriptor_id":"present.message",
+              "payload":{"response":{"output_text":"hello"}}
             }
           }
         }
@@ -87,10 +78,9 @@ struct BelunaAppTests {
             Issue.record("expected act message")
             return
         }
-        #expect(action.neuralSignalID == "0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a")
-        #expect(action.endpointID == "macos-app.01")
-        #expect(action.capabilityID == "present.message")
-        #expect(action.capabilityInstanceID == "chat.instance")
+        #expect(action.actID == "0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a")
+        #expect(action.endpointID == "macos-app.1")
+        #expect(action.neuralSignalDescriptorID == "present.message")
     }
 
     @Test func userSenseEnvelopeUsesUUIDv4SenseID() throws {
@@ -101,6 +91,7 @@ struct BelunaAppTests {
         }
 
         #expect(envelope.method == "sense")
+        #expect(envelope.body.neuralSignalDescriptorID == appleUserSenseNeuralSignalDescriptorID)
         #expect(uuidVersion(senseUUID) == 4)
     }
 

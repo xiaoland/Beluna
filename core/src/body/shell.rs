@@ -7,13 +7,14 @@ use tokio::{
 
 use crate::{
     body::payloads::{ShellExecRequest, ShellLimits},
+    spine::adapters::inline::InlineSenseDatum,
     spine::types::EndpointExecutionOutcome,
-    types::{Act, SenseDatum},
+    types::Act,
 };
 
 pub struct ShellHandlerOutput {
     pub outcome: EndpointExecutionOutcome,
-    pub sense: Option<SenseDatum>,
+    pub sense: Option<InlineSenseDatum>,
 }
 
 pub async fn handle_shell_invoke(
@@ -21,8 +22,7 @@ pub async fn handle_shell_invoke(
     act: &Act,
     limits: &ShellLimits,
 ) -> ShellHandlerOutput {
-    let parse_result: Result<ShellExecRequest, _> =
-        serde_json::from_value(act.normalized_payload.clone());
+    let parse_result: Result<ShellExecRequest, _> = serde_json::from_value(act.payload.clone());
     let command_request = match parse_result {
         Ok(request) => request,
         Err(_) => {
@@ -110,15 +110,13 @@ pub async fn handle_shell_invoke(
                 reason_code: "non_zero_exit".to_string(),
                 reference_id: format!("body.std.shell:non_zero_exit:{}:{}", exit_code, act.act_id),
             },
-            sense: Some(SenseDatum {
+            sense: Some(InlineSenseDatum {
                 sense_id: uuid::Uuid::new_v4().to_string(),
-                source: "body.std.shell".to_string(),
+                neural_signal_descriptor_id: "body.std.shell.result".to_string(),
                 payload: serde_json::json!({
                     "kind": "shell_result",
                     "act_id": act.act_id,
-                    "capability_instance_id": act.capability_instance_id,
-                    "endpoint_id": act.body_endpoint_name,
-                    "capability_id": act.capability_id,
+                    "neural_signal_descriptor_id": act.neural_signal_descriptor_id,
                     "exit_code": exit_code,
                     "stdout_text": stdout_text,
                     "stderr_text": stderr_text,
@@ -132,18 +130,16 @@ pub async fn handle_shell_invoke(
 
     ShellHandlerOutput {
         outcome: EndpointExecutionOutcome::Applied {
-            actual_cost_micro: act.requested_resources.survival_micro.max(0),
+            actual_cost_micro: 0,
             reference_id: format!("body.std.shell:applied:{}", act.act_id),
         },
-        sense: Some(SenseDatum {
+        sense: Some(InlineSenseDatum {
             sense_id: uuid::Uuid::new_v4().to_string(),
-            source: "body.std.shell".to_string(),
+            neural_signal_descriptor_id: "body.std.shell.result".to_string(),
             payload: serde_json::json!({
                 "kind": "shell_result",
                 "act_id": act.act_id,
-                "capability_instance_id": act.capability_instance_id,
-                "endpoint_id": act.body_endpoint_name,
-                "capability_id": act.capability_id,
+                "neural_signal_descriptor_id": act.neural_signal_descriptor_id,
                 "exit_code": exit_code,
                 "stdout_text": stdout_text,
                 "stderr_text": stderr_text,
@@ -165,27 +161,16 @@ fn truncate_to_text(bytes: &[u8], cap: usize) -> (String, bool) {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        spine::types::EndpointExecutionOutcome,
-        types::{Act, RequestedResources},
-    };
+    use crate::{spine::types::EndpointExecutionOutcome, types::Act};
 
     use super::{ShellLimits, handle_shell_invoke};
 
     fn build_request(act_id: &str, payload: serde_json::Value) -> Act {
         Act {
             act_id: act_id.to_string(),
-            based_on: vec!["sense:1".to_string()],
-            body_endpoint_name: "ep:body:std:shell".to_string(),
-            capability_id: "tool.shell.exec".to_string(),
-            capability_instance_id: "shell.instance".to_string(),
-            normalized_payload: payload,
-            requested_resources: RequestedResources {
-                survival_micro: 123,
-                time_ms: 1,
-                io_units: 1,
-                token_units: 0,
-            },
+            endpoint_id: "ep:body:std:shell".to_string(),
+            neural_signal_descriptor_id: "tool.shell.exec".to_string(),
+            payload: payload,
         }
     }
 
@@ -220,13 +205,16 @@ mod tests {
         assert!(matches!(
             output.outcome,
             EndpointExecutionOutcome::Applied {
-                actual_cost_micro: 123,
+                actual_cost_micro: 0,
                 ..
             }
         ));
 
         let sense = output.sense.expect("sense should be emitted");
-        assert_eq!(sense.source, "body.std.shell");
+        assert_eq!(
+            sense.neural_signal_descriptor_id,
+            "body.std.shell.result".to_string()
+        );
         assert_eq!(sense.payload["success"], serde_json::json!(true));
         assert_eq!(sense.payload["stdout_text"], serde_json::json!("hello"));
     }

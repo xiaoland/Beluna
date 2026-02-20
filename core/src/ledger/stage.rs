@@ -60,7 +60,8 @@ impl LedgerStage {
         act: &Act,
         ctx: &DispatchContext,
     ) -> Result<(DispatchDecision, Option<LedgerDispatchTicket>), ContinuityError> {
-        let reserve_survival_micro = act.requested_resources.survival_micro.max(0);
+        let _ = act;
+        let reserve_survival_micro = 0;
         if self.ledger.available_survival_micro() < reserve_survival_micro {
             return Ok((DispatchDecision::Break, None));
         }

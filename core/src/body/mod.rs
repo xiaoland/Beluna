@@ -5,10 +5,10 @@ use anyhow::{Result, anyhow};
 use crate::{
     body::payloads::{ShellLimits, WebLimits},
     spine::{
-        EndpointCapabilityDescriptor, RouteKey,
+        NeuralSignalDescriptor,
         adapters::inline::{InlineEndpointRuntimeHandles, SpineInlineAdapter},
-        types::CostVector,
     },
+    types::NeuralSignalType,
 };
 
 #[cfg(feature = "std-shell")]
@@ -192,12 +192,11 @@ async fn run_web_worker(mut handles: InlineEndpointRuntimeHandles, limits: WebLi
 }
 
 #[cfg(feature = "std-shell")]
-fn shell_registration_descriptor() -> EndpointCapabilityDescriptor {
-    EndpointCapabilityDescriptor {
-        route: RouteKey {
-            endpoint_id: SHELL_ENDPOINT_NAME.to_string(),
-            capability_id: SHELL_CAPABILITY_ID.to_string(),
-        },
+fn shell_registration_descriptor() -> NeuralSignalDescriptor {
+    NeuralSignalDescriptor {
+        r#type: NeuralSignalType::Act,
+        endpoint_id: SHELL_ENDPOINT_NAME.to_string(),
+        neural_signal_descriptor_id: SHELL_CAPABILITY_ID.to_string(),
         payload_schema: serde_json::json!({
             "type": "object",
             "required": ["argv"],
@@ -210,24 +209,15 @@ fn shell_registration_descriptor() -> EndpointCapabilityDescriptor {
                 "stderr_max_bytes": {"type": "integer", "minimum": 1}
             }
         }),
-        max_payload_bytes: 65_536,
-        default_cost: CostVector {
-            survival_micro: 500,
-            time_ms: 2_000,
-            io_units: 4,
-            token_units: 0,
-        },
-        metadata: Default::default(),
     }
 }
 
 #[cfg(feature = "std-web")]
-fn web_registration_descriptor() -> EndpointCapabilityDescriptor {
-    EndpointCapabilityDescriptor {
-        route: RouteKey {
-            endpoint_id: WEB_ENDPOINT_NAME.to_string(),
-            capability_id: WEB_CAPABILITY_ID.to_string(),
-        },
+fn web_registration_descriptor() -> NeuralSignalDescriptor {
+    NeuralSignalDescriptor {
+        r#type: NeuralSignalType::Act,
+        endpoint_id: WEB_ENDPOINT_NAME.to_string(),
+        neural_signal_descriptor_id: WEB_CAPABILITY_ID.to_string(),
         payload_schema: serde_json::json!({
             "type": "object",
             "required": ["url"],
@@ -240,13 +230,5 @@ fn web_registration_descriptor() -> EndpointCapabilityDescriptor {
                 "response_max_bytes": {"type": "integer", "minimum": 1}
             }
         }),
-        max_payload_bytes: 65_536,
-        default_cost: CostVector {
-            survival_micro: 450,
-            time_ms: 2_500,
-            io_units: 3,
-            token_units: 0,
-        },
-        metadata: Default::default(),
     }
 }

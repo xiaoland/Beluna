@@ -12,7 +12,8 @@ async fn shutdown_gate_rejects_new_senses_and_sleep_send_blocks_until_space() {
     afferent_pathway
         .send(Sense::Domain(SenseDatum {
             sense_id: "sense:1".to_string(),
-            source: "test".to_string(),
+            endpoint_id: "ep.demo".to_string(),
+            neural_signal_descriptor_id: "sense.demo".to_string(),
             payload: serde_json::json!({}),
         }))
         .await
@@ -23,7 +24,8 @@ async fn shutdown_gate_rejects_new_senses_and_sleep_send_blocks_until_space() {
     let err = afferent_pathway
         .send(Sense::Domain(SenseDatum {
             sense_id: "sense:2".to_string(),
-            source: "test".to_string(),
+            endpoint_id: "ep.demo".to_string(),
+            neural_signal_descriptor_id: "sense.demo".to_string(),
             payload: serde_json::json!({}),
         }))
         .await

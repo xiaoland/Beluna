@@ -1,34 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-use crate::types::{Act, CognitionState, RequestedResources, SenseId};
+use crate::types::{Act, CognitionState, SenseId};
 
 pub type AttentionTag = String;
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct AffordanceCapability {
-    pub endpoint_id: String,
-    #[serde(default)]
-    pub allowed_capability_ids: Vec<String>,
-    pub payload_schema: serde_json::Value,
-    pub max_payload_bytes: usize,
-    #[serde(default)]
-    pub default_resources: RequestedResources,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct CapabilityCatalog {
-    pub version: String,
-    #[serde(default)]
-    pub affordances: Vec<AffordanceCapability>,
-}
-
-impl CapabilityCatalog {
-    pub fn resolve(&self, endpoint_id: &str) -> Option<&AffordanceCapability> {
-        self.affordances
-            .iter()
-            .find(|item| item.endpoint_id == endpoint_id)
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReactionLimits {
@@ -70,13 +44,9 @@ pub struct AttemptDraft {
     #[serde(default)]
     pub attention_tags: Vec<AttentionTag>,
     pub endpoint_id: String,
-    pub capability_id: String,
-    #[serde(default)]
-    pub capability_instance_id: String,
+    pub neural_signal_descriptor_id: String,
     #[serde(default)]
     pub payload_draft: serde_json::Value,
-    #[serde(default)]
-    pub requested_resources: RequestedResources,
     #[serde(default)]
     pub goal_hint: Option<String>,
 }
@@ -88,7 +58,7 @@ pub enum ClampViolationCode {
     MissingBasedOn,
     UnknownSenseId,
     UnknownEndpointId,
-    UnsupportedCapabilityId,
+    UnsupportedNeuralSignalDescriptorId,
     PayloadTooLarge,
     PayloadSchemaViolation,
 }

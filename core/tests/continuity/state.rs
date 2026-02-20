@@ -1,58 +1,89 @@
 use beluna::{
     continuity::{ContinuityEngine, ContinuityState, DispatchContext},
-    spine::types::{EndpointCapabilityDescriptor, RouteKey, SpineEvent},
-    types::{Act, CapabilityDropPatch, CapabilityPatch, CognitionState, RequestedResources},
+    spine::types::SpineEvent,
+    types::{
+        Act, CognitionState, NeuralSignalDescriptor, NeuralSignalDescriptorDropPatch,
+        NeuralSignalDescriptorPatch, NeuralSignalDescriptorRouteKey, NeuralSignalType,
+    },
 };
 
 fn descriptor(
     endpoint_id: &str,
-    capability_id: &str,
-    max_payload_bytes: usize,
-) -> EndpointCapabilityDescriptor {
-    EndpointCapabilityDescriptor {
-        route: RouteKey {
-            endpoint_id: endpoint_id.to_string(),
-            capability_id: capability_id.to_string(),
-        },
-        payload_schema: serde_json::json!({"type":"object"}),
-        max_payload_bytes,
-        default_cost: beluna::spine::CostVector::default(),
-        metadata: Default::default(),
+    neural_signal_descriptor_id: &str,
+    schema_revision: u64,
+) -> NeuralSignalDescriptor {
+    NeuralSignalDescriptor {
+        r#type: NeuralSignalType::Act,
+        endpoint_id: endpoint_id.to_string(),
+        neural_signal_descriptor_id: neural_signal_descriptor_id.to_string(),
+        payload_schema: serde_json::json!({
+            "type": "object",
+            "schema_revision": schema_revision
+        }),
     }
 }
 
 #[test]
 fn arrival_order_wins_for_capability_patch_and_drop() {
     let mut engine = ContinuityEngine::new(ContinuityState::new());
-    engine.apply_capability_patch(&CapabilityPatch {
-        entries: vec![descriptor("ep.demo", "cap.demo", 256)],
+    engine.apply_neural_signal_descriptor_patch(&NeuralSignalDescriptorPatch {
+        entries: vec![descriptor("ep.demo", "cap.demo", 1)],
     });
-    engine.apply_capability_patch(&CapabilityPatch {
-        entries: vec![descriptor("ep.demo", "cap.demo", 512)],
+    engine.apply_neural_signal_descriptor_patch(&NeuralSignalDescriptorPatch {
+        entries: vec![descriptor("ep.demo", "cap.demo", 2)],
     });
 
-    let snapshot = engine.capabilities_snapshot();
-    let affordance = snapshot
-        .resolve("ep.demo")
-        .expect("ep.demo capability should exist");
-    assert_eq!(affordance.max_payload_bytes, 512);
+    let snapshot = engine.neural_signal_descriptor_snapshot();
+    let latest_descriptor = snapshot
+        .entries
+        .iter()
+        .find(|entry| {
+            entry.r#type == NeuralSignalType::Act
+                && entry.endpoint_id == "ep.demo"
+                && entry.neural_signal_descriptor_id == "cap.demo"
+        })
+        .expect("ep.demo/cap.demo descriptor should exist");
+    assert_eq!(
+        latest_descriptor.payload_schema["schema_revision"],
+        serde_json::json!(2)
+    );
 
-    engine.apply_capability_drop(&CapabilityDropPatch {
-        routes: vec![RouteKey {
+    engine.apply_neural_signal_descriptor_drop(&NeuralSignalDescriptorDropPatch {
+        routes: vec![NeuralSignalDescriptorRouteKey {
+            r#type: NeuralSignalType::Act,
             endpoint_id: "ep.demo".to_string(),
-            capability_id: "cap.demo".to_string(),
+            neural_signal_descriptor_id: "cap.demo".to_string(),
         }],
     });
-    assert!(engine.capabilities_snapshot().resolve("ep.demo").is_none());
+    assert!(
+        engine
+            .neural_signal_descriptor_snapshot()
+            .entries
+            .iter()
+            .all(|entry| {
+                !(entry.r#type == NeuralSignalType::Act
+                    && entry.endpoint_id == "ep.demo"
+                    && entry.neural_signal_descriptor_id == "cap.demo")
+            })
+    );
 
-    engine.apply_capability_patch(&CapabilityPatch {
-        entries: vec![descriptor("ep.demo", "cap.demo", 1024)],
+    engine.apply_neural_signal_descriptor_patch(&NeuralSignalDescriptorPatch {
+        entries: vec![descriptor("ep.demo", "cap.demo", 3)],
     });
-    let reintroduced_snapshot = engine.capabilities_snapshot();
+    let reintroduced_snapshot = engine.neural_signal_descriptor_snapshot();
     let reintroduced = reintroduced_snapshot
-        .resolve("ep.demo")
+        .entries
+        .iter()
+        .find(|entry| {
+            entry.r#type == NeuralSignalType::Act
+                && entry.endpoint_id == "ep.demo"
+                && entry.neural_signal_descriptor_id == "cap.demo"
+        })
         .expect("capability should be reintroduced after patch");
-    assert_eq!(reintroduced.max_payload_bytes, 1024);
+    assert_eq!(
+        reintroduced.payload_schema["schema_revision"],
+        serde_json::json!(3)
+    );
 }
 
 #[test]
@@ -75,12 +106,9 @@ fn spine_events_are_recorded() {
     let mut engine = ContinuityEngine::with_defaults();
     let act = Act {
         act_id: "act:1".to_string(),
-        based_on: vec!["sense:1".to_string()],
-        body_endpoint_name: "ep.demo".to_string(),
-        capability_id: "cap.demo".to_string(),
-        capability_instance_id: "instance:1".to_string(),
-        normalized_payload: serde_json::json!({}),
-        requested_resources: RequestedResources::default(),
+        endpoint_id: "ep.demo".to_string(),
+        neural_signal_descriptor_id: "cap.demo".to_string(),
+        payload: serde_json::json!({}),
     };
 
     engine
@@ -90,7 +118,6 @@ fn spine_events_are_recorded() {
                 cycle_id: 1,
                 seq_no: 1,
                 act_id: act.act_id.clone(),
-                capability_instance_id: act.capability_instance_id.clone(),
                 reserve_entry_id: "res:1".to_string(),
                 cost_attribution_id: "cat:1".to_string(),
                 actual_cost_micro: 1,

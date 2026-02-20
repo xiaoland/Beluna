@@ -1,20 +1,18 @@
 use beluna::{
     cortex::{
-        AttemptClampRequest, AttemptDraft, CapabilityCatalog, DeterministicAttemptClamp,
-        ReactionLimits, derive_act_id, is_uuid_v7,
+        AttemptClampRequest, AttemptDraft, DeterministicAttemptClamp, ReactionLimits, derive_act_id,
     },
-    types::RequestedResources,
+    types::{NeuralSignalDescriptor, NeuralSignalDescriptorCatalog, NeuralSignalType, is_uuid_v7},
 };
 
-fn catalog() -> CapabilityCatalog {
-    CapabilityCatalog {
+fn catalog() -> NeuralSignalDescriptorCatalog {
+    NeuralSignalDescriptorCatalog {
         version: "v1".to_string(),
-        affordances: vec![beluna::cortex::AffordanceCapability {
+        entries: vec![NeuralSignalDescriptor {
+            r#type: NeuralSignalType::Act,
             endpoint_id: "ep.demo".to_string(),
-            allowed_capability_ids: vec!["cap.demo".to_string()],
+            neural_signal_descriptor_id: "cap.demo".to_string(),
             payload_schema: serde_json::json!({"type":"object"}),
-            max_payload_bytes: 1024,
-            default_resources: RequestedResources::default(),
         }],
     }
 }
@@ -25,34 +23,20 @@ fn draft() -> AttemptDraft {
         based_on: vec!["sense:1".to_string()],
         attention_tags: vec!["a".to_string()],
         endpoint_id: "ep.demo".to_string(),
-        capability_id: "cap.demo".to_string(),
-        capability_instance_id: "".to_string(),
+        neural_signal_descriptor_id: "cap.demo".to_string(),
         payload_draft: serde_json::json!({"ok": true}),
-        requested_resources: RequestedResources {
-            survival_micro: 42,
-            time_ms: 1,
-            io_units: 1,
-            token_units: 0,
-        },
         goal_hint: None,
     }
 }
 
 #[test]
 fn act_id_is_uuid_v7() {
-    let resources = RequestedResources {
-        survival_micro: 12,
-        time_ms: 3,
-        io_units: 4,
-        token_units: 5,
-    };
     let lhs = derive_act_id(
         1,
         &["sense:1".to_string()],
         "ep.demo",
         "cap.demo",
         &serde_json::json!({"k":"v"}),
-        &resources,
     );
     let rhs = derive_act_id(
         1,
@@ -60,7 +44,6 @@ fn act_id_is_uuid_v7() {
         "ep.demo",
         "cap.demo",
         &serde_json::json!({"k":"v"}),
-        &resources,
     );
     assert!(is_uuid_v7(&lhs));
     assert!(is_uuid_v7(&rhs));
@@ -74,7 +57,7 @@ fn clamp_rejects_unknown_sense_ids() {
         .clamp(AttemptClampRequest {
             cycle_id: 1,
             drafts: vec![draft()],
-            capability_catalog: catalog(),
+            neural_signal_descriptor_catalog: catalog(),
             known_sense_ids: vec!["sense:other".to_string()],
             limits: ReactionLimits::default(),
         })
@@ -85,20 +68,21 @@ fn clamp_rejects_unknown_sense_ids() {
 }
 
 #[test]
-fn clamp_emits_act_with_non_negative_survival() {
+fn clamp_emits_act_with_payload() {
     let clamp = DeterministicAttemptClamp;
-    let mut bad = draft();
-    bad.requested_resources.survival_micro = -1;
+    let valid = draft();
     let result = clamp
         .clamp(AttemptClampRequest {
             cycle_id: 1,
-            drafts: vec![bad],
-            capability_catalog: catalog(),
+            drafts: vec![valid],
+            neural_signal_descriptor_catalog: catalog(),
             known_sense_ids: vec!["sense:1".to_string()],
             limits: ReactionLimits::default(),
         })
         .expect("clamp should succeed");
 
     assert_eq!(result.acts.len(), 1);
-    assert_eq!(result.acts[0].requested_resources.survival_micro, 0);
+    assert_eq!(result.acts[0].endpoint_id, "ep.demo");
+    assert_eq!(result.acts[0].neural_signal_descriptor_id, "cap.demo");
+    assert_eq!(result.acts[0].payload, serde_json::json!({"ok": true}));
 }

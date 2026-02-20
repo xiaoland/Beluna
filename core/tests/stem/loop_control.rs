@@ -75,7 +75,8 @@ async fn stem_drains_all_queued_senses_into_one_cortex_cycle() {
     sense_tx
         .send(Sense::Domain(SenseDatum {
             sense_id: "sense:1".to_string(),
-            source: "test".to_string(),
+            endpoint_id: "ep.demo".to_string(),
+            neural_signal_descriptor_id: "sense.demo".to_string(),
             payload: serde_json::json!({"a":1}),
         }))
         .await
@@ -83,7 +84,8 @@ async fn stem_drains_all_queued_senses_into_one_cortex_cycle() {
     sense_tx
         .send(Sense::Domain(SenseDatum {
             sense_id: "sense:2".to_string(),
-            source: "test".to_string(),
+            endpoint_id: "ep.demo".to_string(),
+            neural_signal_descriptor_id: "sense.demo".to_string(),
             payload: serde_json::json!({"b":2}),
         }))
         .await

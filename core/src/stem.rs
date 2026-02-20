@@ -5,14 +5,14 @@ use tokio::sync::{Mutex, mpsc};
 
 use crate::{
     continuity::{ContinuityEngine, DispatchContext as ContinuityDispatchContext},
-    cortex::{AffordanceCapability, CapabilityCatalog, Cortex},
+    cortex::Cortex,
     ledger::{DispatchContext as LedgerDispatchContext, LedgerDispatchTicket, LedgerStage},
-    spine::{
-        ActDispatchResult, EndpointBinding, EndpointCapabilityDescriptor, NativeFunctionEndpoint,
-        RouteKey, Spine, SpineEvent, adapters::catalog_bridge::to_cortex_catalog,
-        types::CostVector,
+    spine::{ActDispatchResult, EndpointBinding, NativeFunctionEndpoint, Spine, SpineEvent},
+    types::{
+        Act, CognitionState, DispatchDecision, NeuralSignalDescriptor,
+        NeuralSignalDescriptorCatalog, NeuralSignalDescriptorRouteKey, NeuralSignalType,
+        PhysicalState, Sense,
     },
-    types::{Act, CognitionState, DispatchDecision, PhysicalState, Sense},
 };
 
 pub struct Stem {
@@ -65,14 +65,17 @@ impl Stem {
 
             for sense in &sense_batch {
                 match sense {
-                    Sense::NewCapabilities(patch) => {
-                        self.continuity.lock().await.apply_capability_patch(patch);
-                    }
-                    Sense::DropCapabilities(drop_patch) => {
+                    Sense::NewNeuralSignalDescriptors(patch) => {
                         self.continuity
                             .lock()
                             .await
-                            .apply_capability_drop(drop_patch);
+                            .apply_neural_signal_descriptor_patch(patch);
+                    }
+                    Sense::DropNeuralSignalDescriptors(drop_patch) => {
+                        self.continuity
+                            .lock()
+                            .await
+                            .apply_neural_signal_descriptor_drop(drop_patch);
                     }
                     Sense::Domain(_) | Sense::Sleep => {}
                 }
@@ -137,11 +140,19 @@ impl Stem {
     )]
     async fn compose_physical_state(&self, cycle_id: u64) -> Result<PhysicalState> {
         let ledger_snapshot = self.ledger.lock().await.physical_snapshot();
-        let spine_catalog = to_cortex_catalog(&self.spine.capability_catalog_snapshot());
-        let continuity_catalog = self.continuity.lock().await.capabilities_snapshot();
-        let ledger_catalog = CapabilityCatalog::default();
-        let merged =
-            merge_capability_catalogs(cycle_id, spine_catalog, continuity_catalog, ledger_catalog);
+        let spine_catalog = self.spine.neural_signal_descriptor_catalog_snapshot();
+        let continuity_catalog = self
+            .continuity
+            .lock()
+            .await
+            .neural_signal_descriptor_snapshot();
+        let ledger_catalog = NeuralSignalDescriptorCatalog::default();
+        let merged = merge_neural_signal_descriptor_catalogs(
+            cycle_id,
+            spine_catalog,
+            continuity_catalog,
+            ledger_catalog,
+        );
 
         Ok(PhysicalState {
             cycle_id,
@@ -158,8 +169,8 @@ impl Stem {
             cycle_id = cycle_id,
             seq_no = seq_no,
             act_id = %act.act_id,
-            endpoint_id = %act.body_endpoint_name,
-            capability_id = %act.capability_id
+            endpoint_id = %act.endpoint_id,
+            neural_signal_descriptor_id = %act.neural_signal_descriptor_id
         )
     )]
     async fn dispatch_one_act_serial(
@@ -174,8 +185,8 @@ impl Stem {
             cycle_id = cycle_id,
             seq_no = seq_no,
             act_id = %act.act_id,
-            endpoint_id = %act.body_endpoint_name,
-            capability_id = %act.capability_id,
+            endpoint_id = %act.endpoint_id,
+            neural_signal_descriptor_id = %act.neural_signal_descriptor_id,
             "dispatch_attempt"
         );
         let ledger_ctx = LedgerDispatchContext {
@@ -236,8 +247,8 @@ impl Stem {
                     cycle_id = cycle_id,
                     seq_no = seq_no,
                     act_id = %act.act_id,
-                    endpoint_id = %act.body_endpoint_name,
-                    capability_id = %act.capability_id,
+                    endpoint_id = %act.endpoint_id,
+                    neural_signal_descriptor_id = %act.neural_signal_descriptor_id,
                     error = %err,
                     "dispatch_failed_with_spine_error"
                 );
@@ -251,8 +262,8 @@ impl Stem {
                     cycle_id = cycle_id,
                     seq_no = seq_no,
                     act_id = %act.act_id,
-                    endpoint_id = %act.body_endpoint_name,
-                    capability_id = %act.capability_id,
+                    endpoint_id = %act.endpoint_id,
+                    neural_signal_descriptor_id = %act.neural_signal_descriptor_id,
                     reference_id = %reference_id,
                     "dispatch_applied"
                 );
@@ -267,8 +278,8 @@ impl Stem {
                     cycle_id = cycle_id,
                     seq_no = seq_no,
                     act_id = %act.act_id,
-                    endpoint_id = %act.body_endpoint_name,
-                    capability_id = %act.capability_id,
+                    endpoint_id = %act.endpoint_id,
+                    neural_signal_descriptor_id = %act.neural_signal_descriptor_id,
                     reason_code = %reason_code,
                     reference_id = %reference_id,
                     "dispatch_rejected"
@@ -284,8 +295,8 @@ impl Stem {
                     cycle_id = cycle_id,
                     seq_no = seq_no,
                     act_id = %act.act_id,
-                    endpoint_id = %act.body_endpoint_name,
-                    capability_id = %act.capability_id,
+                    endpoint_id = %act.endpoint_id,
+                    neural_signal_descriptor_id = %act.neural_signal_descriptor_id,
                     reason_code = %reason_code,
                     reference_id = %reference_id,
                     "dispatch_deferred"
@@ -316,7 +327,6 @@ fn synthetic_continuity_break_event(
         cycle_id,
         seq_no,
         act_id: act.act_id.clone(),
-        capability_instance_id: act.capability_instance_id.clone(),
         reserve_entry_id: ticket.reserve_entry_id.clone(),
         cost_attribution_id: ticket.cost_attribution_id.clone(),
         reason_code: "continuity_break".to_string(),
@@ -335,7 +345,6 @@ fn map_spine_error_to_rejected_event(
         cycle_id,
         seq_no,
         act_id: act.act_id.clone(),
-        capability_instance_id: act.capability_instance_id.clone(),
         reserve_entry_id: ticket.reserve_entry_id.clone(),
         cost_attribution_id: ticket.cost_attribution_id.clone(),
         reason_code: "spine_error".to_string(),
@@ -358,10 +367,9 @@ fn map_dispatch_result_to_spine_event(
             cycle_id,
             seq_no,
             act_id: act.act_id.clone(),
-            capability_instance_id: act.capability_instance_id.clone(),
             reserve_entry_id: ticket.reserve_entry_id.clone(),
             cost_attribution_id: ticket.cost_attribution_id.clone(),
-            actual_cost_micro: act.requested_resources.survival_micro.max(0),
+            actual_cost_micro: 0,
             reference_id,
         },
         ActDispatchResult::Rejected {
@@ -371,7 +379,6 @@ fn map_dispatch_result_to_spine_event(
             cycle_id,
             seq_no,
             act_id: act.act_id.clone(),
-            capability_instance_id: act.capability_instance_id.clone(),
             reserve_entry_id: ticket.reserve_entry_id.clone(),
             cost_attribution_id: ticket.cost_attribution_id.clone(),
             reason_code,
@@ -380,30 +387,67 @@ fn map_dispatch_result_to_spine_event(
     }
 }
 
-fn merge_capability_catalogs(
+fn merge_neural_signal_descriptor_catalogs(
     cycle_id: u64,
-    spine_catalog: CapabilityCatalog,
-    continuity_catalog: CapabilityCatalog,
-    ledger_catalog: CapabilityCatalog,
-) -> CapabilityCatalog {
-    let mut merged: BTreeMap<String, AffordanceCapability> = BTreeMap::new();
+    spine_catalog: NeuralSignalDescriptorCatalog,
+    continuity_catalog: NeuralSignalDescriptorCatalog,
+    ledger_catalog: NeuralSignalDescriptorCatalog,
+) -> NeuralSignalDescriptorCatalog {
+    let spine_version = spine_catalog.version.clone();
+    let continuity_version = continuity_catalog.version.clone();
+    let ledger_version = ledger_catalog.version.clone();
 
-    for affordance in spine_catalog.affordances {
-        merged.insert(affordance.endpoint_id.clone(), affordance);
+    let mut merged: BTreeMap<NeuralSignalDescriptorRouteKey, NeuralSignalDescriptor> =
+        BTreeMap::new();
+
+    for descriptor in spine_catalog.entries {
+        merged.insert(
+            NeuralSignalDescriptorRouteKey {
+                r#type: descriptor.r#type,
+                endpoint_id: descriptor.endpoint_id.clone(),
+                neural_signal_descriptor_id: descriptor.neural_signal_descriptor_id.clone(),
+            },
+            descriptor,
+        );
     }
-    for affordance in continuity_catalog.affordances {
-        merged.insert(affordance.endpoint_id.clone(), affordance);
+    for descriptor in continuity_catalog.entries {
+        merged.insert(
+            NeuralSignalDescriptorRouteKey {
+                r#type: descriptor.r#type,
+                endpoint_id: descriptor.endpoint_id.clone(),
+                neural_signal_descriptor_id: descriptor.neural_signal_descriptor_id.clone(),
+            },
+            descriptor,
+        );
     }
-    for affordance in ledger_catalog.affordances {
-        merged.insert(affordance.endpoint_id.clone(), affordance);
+    for descriptor in ledger_catalog.entries {
+        merged.insert(
+            NeuralSignalDescriptorRouteKey {
+                r#type: descriptor.r#type,
+                endpoint_id: descriptor.endpoint_id.clone(),
+                neural_signal_descriptor_id: descriptor.neural_signal_descriptor_id.clone(),
+            },
+            descriptor,
+        );
     }
 
-    CapabilityCatalog {
+    let mut entries = merged.into_values().collect::<Vec<_>>();
+    entries.sort_by(|lhs, rhs| {
+        lhs.r#type
+            .cmp(&rhs.r#type)
+            .then_with(|| lhs.endpoint_id.cmp(&rhs.endpoint_id))
+            .then_with(|| {
+                lhs.neural_signal_descriptor_id
+                    .cmp(&rhs.neural_signal_descriptor_id)
+            })
+    });
+
+    NeuralSignalDescriptorCatalog {
         version: format!(
             "stem:{}:{}:{}:{}",
-            cycle_id, spine_catalog.version, continuity_catalog.version, ledger_catalog.version
+            cycle_id, spine_version, continuity_version, ledger_version
         ),
-        affordances: merged.into_values().collect(),
+        entries,
     }
 }
 
@@ -418,50 +462,23 @@ pub fn register_default_native_endpoints(spine: Arc<Spine>) -> Result<()> {
         "deliberate.plan",
         EndpointBinding::Inline(native_endpoint.clone()),
         vec![
-            EndpointCapabilityDescriptor {
-                route: RouteKey {
-                    endpoint_id: "placeholder".to_string(),
-                    capability_id: "cap.core".to_string(),
-                },
+            NeuralSignalDescriptor {
+                r#type: NeuralSignalType::Act,
+                endpoint_id: "placeholder".to_string(),
+                neural_signal_descriptor_id: "cap.core".to_string(),
                 payload_schema: serde_json::json!({"type":"object"}),
-                max_payload_bytes: 16_384,
-                default_cost: CostVector {
-                    survival_micro: 250,
-                    time_ms: 120,
-                    io_units: 1,
-                    token_units: 128,
-                },
-                metadata: Default::default(),
             },
-            EndpointCapabilityDescriptor {
-                route: RouteKey {
-                    endpoint_id: "placeholder".to_string(),
-                    capability_id: "cap.core.lite".to_string(),
-                },
+            NeuralSignalDescriptor {
+                r#type: NeuralSignalType::Act,
+                endpoint_id: "placeholder".to_string(),
+                neural_signal_descriptor_id: "cap.core.lite".to_string(),
                 payload_schema: serde_json::json!({"type":"object"}),
-                max_payload_bytes: 16_384,
-                default_cost: CostVector {
-                    survival_micro: 250,
-                    time_ms: 120,
-                    io_units: 1,
-                    token_units: 128,
-                },
-                metadata: Default::default(),
             },
-            EndpointCapabilityDescriptor {
-                route: RouteKey {
-                    endpoint_id: "placeholder".to_string(),
-                    capability_id: "cap.core.minimal".to_string(),
-                },
+            NeuralSignalDescriptor {
+                r#type: NeuralSignalType::Act,
+                endpoint_id: "placeholder".to_string(),
+                neural_signal_descriptor_id: "cap.core.minimal".to_string(),
                 payload_schema: serde_json::json!({"type":"object"}),
-                max_payload_bytes: 16_384,
-                default_cost: CostVector {
-                    survival_micro: 250,
-                    time_ms: 120,
-                    io_units: 1,
-                    token_units: 128,
-                },
-                metadata: Default::default(),
             },
         ],
     )?;
@@ -469,20 +486,11 @@ pub fn register_default_native_endpoints(spine: Arc<Spine>) -> Result<()> {
     let _execute = spine.add_endpoint(
         "execute.tool",
         EndpointBinding::Inline(native_endpoint),
-        vec![EndpointCapabilityDescriptor {
-            route: RouteKey {
-                endpoint_id: "placeholder".to_string(),
-                capability_id: "cap.core".to_string(),
-            },
+        vec![NeuralSignalDescriptor {
+            r#type: NeuralSignalType::Act,
+            endpoint_id: "placeholder".to_string(),
+            neural_signal_descriptor_id: "cap.core".to_string(),
             payload_schema: serde_json::json!({"type":"object"}),
-            max_payload_bytes: 16_384,
-            default_cost: CostVector {
-                survival_micro: 400,
-                time_ms: 200,
-                io_units: 2,
-                token_units: 256,
-            },
-            metadata: Default::default(),
         }],
     )?;
 

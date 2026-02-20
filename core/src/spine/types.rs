@@ -1,6 +1,8 @@
-use std::collections::BTreeMap;
-
 use serde::{Deserialize, Serialize};
+
+pub use crate::types::{
+    NeuralSignalDescriptor, NeuralSignalDescriptorCatalog, NeuralSignalDescriptorRouteKey,
+};
 
 pub type ReserveEntryId = String;
 pub type CostAttributionId = String;
@@ -11,44 +13,6 @@ pub type CycleId = u64;
 pub enum SpineExecutionMode {
     BestEffortReplayable,
     SerializedDeterministic,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub struct CostVector {
-    pub survival_micro: i64,
-    pub time_ms: u64,
-    pub io_units: u64,
-    pub token_units: u64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct RouteKey {
-    pub endpoint_id: String,
-    pub capability_id: String,
-}
-
-impl RouteKey {
-    pub fn fq_capability_id(&self) -> String {
-        format!("{}/{}", self.endpoint_id, self.capability_id)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct EndpointCapabilityDescriptor {
-    pub route: RouteKey,
-    pub payload_schema: serde_json::Value,
-    pub max_payload_bytes: usize,
-    #[serde(default)]
-    pub default_cost: CostVector,
-    #[serde(default)]
-    pub metadata: BTreeMap<String, String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SpineCapabilityCatalog {
-    pub version: u64,
-    #[serde(default)]
-    pub entries: Vec<EndpointCapabilityDescriptor>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -87,7 +51,6 @@ pub enum SpineEvent {
         cycle_id: CycleId,
         seq_no: u64,
         act_id: String,
-        capability_instance_id: String,
         reserve_entry_id: ReserveEntryId,
         cost_attribution_id: CostAttributionId,
         actual_cost_micro: i64,
@@ -97,7 +60,6 @@ pub enum SpineEvent {
         cycle_id: CycleId,
         seq_no: u64,
         act_id: String,
-        capability_instance_id: String,
         reserve_entry_id: ReserveEntryId,
         cost_attribution_id: CostAttributionId,
         reason_code: String,
@@ -107,7 +69,6 @@ pub enum SpineEvent {
         cycle_id: CycleId,
         seq_no: u64,
         act_id: String,
-        capability_instance_id: String,
         reserve_entry_id: ReserveEntryId,
         cost_attribution_id: CostAttributionId,
         reason_code: String,

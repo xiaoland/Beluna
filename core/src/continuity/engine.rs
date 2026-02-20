@@ -4,9 +4,11 @@ use crate::{
         state::ContinuityState,
         types::{ContinuityDispatchRecord, DispatchContext},
     },
-    cortex::CapabilityCatalog,
     spine::types::SpineEvent,
-    types::{Act, CapabilityDropPatch, CapabilityPatch, CognitionState, DispatchDecision},
+    types::{
+        Act, CognitionState, DispatchDecision, NeuralSignalDescriptorCatalog,
+        NeuralSignalDescriptorDropPatch, NeuralSignalDescriptorPatch,
+    },
 };
 
 #[derive(Debug, Clone, Default)]
@@ -41,16 +43,19 @@ impl ContinuityEngine {
         Ok(())
     }
 
-    pub fn apply_capability_patch(&mut self, patch: &CapabilityPatch) {
-        self.state.apply_capability_patch(patch);
+    pub fn apply_neural_signal_descriptor_patch(&mut self, patch: &NeuralSignalDescriptorPatch) {
+        self.state.apply_neural_signal_descriptor_patch(patch);
     }
 
-    pub fn apply_capability_drop(&mut self, drop_patch: &CapabilityDropPatch) {
-        self.state.apply_capability_drop(drop_patch);
+    pub fn apply_neural_signal_descriptor_drop(
+        &mut self,
+        drop_patch: &NeuralSignalDescriptorDropPatch,
+    ) {
+        self.state.apply_neural_signal_descriptor_drop(drop_patch);
     }
 
-    pub fn capabilities_snapshot(&self) -> CapabilityCatalog {
-        self.state.capabilities_snapshot()
+    pub fn neural_signal_descriptor_snapshot(&self) -> NeuralSignalDescriptorCatalog {
+        self.state.neural_signal_descriptor_snapshot()
     }
 
     pub fn pre_dispatch(
