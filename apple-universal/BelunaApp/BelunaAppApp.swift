@@ -1,8 +1,15 @@
+//
+//  BelunaAppApp.swift
+//  BelunaApp
+//
+//  Created by Lan_zhijiang on 2026/2/20.
+//
+
 import SwiftUI
 import AppKit
 
 @main
-struct BelunaApp: App {
+struct BelunaAppApp: App {
     init() {
         AppRuntimeGuard.shared.bootstrapOrTerminate()
     }
@@ -23,3 +30,4 @@ struct BelunaApp: App {
         }
     }
 }
+
