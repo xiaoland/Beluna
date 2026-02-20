@@ -19,10 +19,10 @@ Current runtime Body Endpoints:
 ## Runtime Flow
 
 1. Body Endpoint connects to Spine UnixSocket (if external).
-2. Body Endpoint sends `body_endpoint_register`.
+2. Body Endpoint sends `auth` envelope (endpoint name + capabilities).
 3. Spine sends `act` envelope.
-4. Body Endpoint routes capability internally and executes action.
-5. Body Endpoint can emit `sense` for execution observations.
+4. Body Endpoint sends `act_ack`, routes capability internally, and executes action.
+5. Body Endpoint emits `sense` for execution observations (and may send `unplug` before disconnect).
 
 ## Safety Controls
 

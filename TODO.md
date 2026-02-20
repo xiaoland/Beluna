@@ -4,7 +4,7 @@
 
 - [x] 把 beluan core 的配置文件合并进入 beluna runtime, beluna core 只是一个 crate，它没有 main
 - [x] Cortex 为核心，Stem 为枢纽；Organs (Spine, Continuity, Ledger, Motor) 为外围的有机结构
-- [ ] 移除所有的 TelemetrySink port, eprintln 等，全部改用 tracing，日志写入本地文件（采用 json log；rotate）
+- [x] 移除所有的 TelemetrySink port, eprintln 等，全部改用 tracing，日志写入本地文件（采用 json log；rotate）
 - [x] core/src/body 就是 std body 了，不用再包一层
 - [x] ingress 破坏了 Beluna 的生物学隐喻式命名，我建议命名为 afferent pathway
 - [x] ingress 应该包含创建 mpsc queue 的部分，而不是让 main 来创建

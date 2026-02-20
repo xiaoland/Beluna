@@ -27,5 +27,6 @@
 
 1. UnixSocket+NDJSON adapter owns bind/accept/read/write lifecycle.
 2. NDJSON framing/parser is part of `spine/adapters/unix_socket.rs` dialect implementation.
-3. `sense`, capability patch/drop, and endpoint register/unregister ingress are validated and forwarded.
-4. adapter does not own route/session dispatch policy state.
+3. `auth`, `sense`, `act_ack`, and `unplug` ingress are validated and forwarded.
+4. `act` egress is wrapped as NDJSON envelope and retried until `act_ack` or timeout.
+5. adapter does not own route/session dispatch policy state.

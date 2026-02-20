@@ -6,8 +6,38 @@ enum SpineBodyEndpointError: Error {
     case connectionFailed(String)
 }
 
+extension SpineBodyEndpointError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .notConnected:
+            return "not connected"
+        case let .connectionFailed(message):
+            return message
+        }
+    }
+}
+
 private func osErrorDescription(_ code: Int32) -> String {
     String(cString: strerror(code))
+}
+
+private func socketPathDiagnostics(_ path: String) -> String {
+    do {
+        let attributes = try FileManager.default.attributesOfItem(atPath: path)
+        let fileType = (attributes[.type] as? FileAttributeType)?.rawValue ?? "unknown"
+        let mode = (attributes[.posixPermissions] as? NSNumber)
+            .map { String(format: "%o", $0.intValue) } ?? "unknown"
+        let owner = (attributes[.ownerAccountName] as? String) ?? "unknown"
+        let group = (attributes[.groupOwnerAccountName] as? String) ?? "unknown"
+        return "path=\(path), exists=true, type=\(fileType), mode=\(mode), owner=\(owner):\(group)"
+    } catch {
+        let nsError = error as NSError
+        if nsError.domain == NSCocoaErrorDomain,
+           nsError.code == NSFileNoSuchFileError {
+            return "path=\(path), exists=false"
+        }
+        return "path=\(path), metadata_error=\(error.localizedDescription)"
+    }
 }
 
 actor SpineUnixSocketBodyEndpoint {
@@ -159,7 +189,7 @@ actor SpineUnixSocketBodyEndpoint {
             if chunk.isEmpty {
                 continue
             }
-            parseIncomingData(chunk)
+            try await parseIncomingData(chunk)
         }
 
         throw SpineBodyEndpointError.connectionFailed("connection closed")
@@ -201,8 +231,14 @@ actor SpineUnixSocketBodyEndpoint {
 
             if connectResult != 0 {
                 let code = errno
+                let sandboxHint: String
+                if code == EPERM {
+                    sandboxHint = "permission denied for socket path access"
+                } else {
+                    sandboxHint = "check socket path and core listener status"
+                }
                 throw SpineBodyEndpointError.connectionFailed(
-                    "connect failed: \(osErrorDescription(code)) (\(code))"
+                    "connect failed: \(osErrorDescription(code)) (\(code)); \(socketPathDiagnostics(path)); hint=\(sandboxHint)"
                 )
             }
 
@@ -293,7 +329,7 @@ actor SpineUnixSocketBodyEndpoint {
         }
     }
 
-    private func parseIncomingData(_ chunk: Data) {
+    private func parseIncomingData(_ chunk: Data) async throws {
         readerBuffer.append(chunk)
 
         while let newlineIndex = readerBuffer.firstIndex(of: 0x0A) {
@@ -304,18 +340,27 @@ actor SpineUnixSocketBodyEndpoint {
                 continue
             }
 
+            let message: ServerWireMessage
             do {
-                let message = try decodeServerMessage(from: Data(line))
-                switch message {
-                case .act:
-                    onServerMessage?(message)
-                case let .ignored(type):
-                    onDebug?("Ignored inbound \(type) message.")
-                }
+                message = try decodeServerMessage(from: Data(line))
             } catch {
                 onDebug?("Ignored malformed inbound message: \(error.localizedDescription)")
+                continue
+            }
+
+            switch message {
+            case let .act(action):
+                try await sendActAck(actID: action.neuralSignalID)
+                onServerMessage?(message)
+            case let .ignored(type):
+                onDebug?("Ignored inbound \(type) message.")
             }
         }
+    }
+
+    private func sendActAck(actID: String) async throws {
+        let envelope = makeActAckEnvelope(actID: actID)
+        try await sendLine(envelope)
     }
 
     private func sendLine<T: Encodable>(_ envelope: T) async throws {

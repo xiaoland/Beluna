@@ -230,19 +230,68 @@ impl Stem {
             Ok(dispatch_result) => {
                 map_dispatch_result_to_spine_event(cycle_id, seq_no, &act, &ticket, dispatch_result)
             }
-            Err(err) => map_spine_error_to_rejected_event(cycle_id, seq_no, &act, &ticket, err),
+            Err(err) => {
+                tracing::warn!(
+                    target: "stem.dispatch",
+                    cycle_id = cycle_id,
+                    seq_no = seq_no,
+                    act_id = %act.act_id,
+                    endpoint_id = %act.body_endpoint_name,
+                    capability_id = %act.capability_id,
+                    error = %err,
+                    "dispatch_failed_with_spine_error"
+                );
+                map_spine_error_to_rejected_event(cycle_id, seq_no, &act, &ticket, err)
+            }
         };
-        tracing::debug!(
-            target: "stem",
-            cycle_id = cycle_id,
-            seq_no = seq_no,
-            kind = match &event {
-                SpineEvent::ActApplied { .. } => "act_applied",
-                SpineEvent::ActRejected { .. } => "act_rejected",
-                SpineEvent::ActDeferred { .. } => "act_deferred",
-            },
-            "dispatch_event"
-        );
+        match &event {
+            SpineEvent::ActApplied { reference_id, .. } => {
+                tracing::info!(
+                    target: "stem.dispatch",
+                    cycle_id = cycle_id,
+                    seq_no = seq_no,
+                    act_id = %act.act_id,
+                    endpoint_id = %act.body_endpoint_name,
+                    capability_id = %act.capability_id,
+                    reference_id = %reference_id,
+                    "dispatch_applied"
+                );
+            }
+            SpineEvent::ActRejected {
+                reason_code,
+                reference_id,
+                ..
+            } => {
+                tracing::warn!(
+                    target: "stem.dispatch",
+                    cycle_id = cycle_id,
+                    seq_no = seq_no,
+                    act_id = %act.act_id,
+                    endpoint_id = %act.body_endpoint_name,
+                    capability_id = %act.capability_id,
+                    reason_code = %reason_code,
+                    reference_id = %reference_id,
+                    "dispatch_rejected"
+                );
+            }
+            SpineEvent::ActDeferred {
+                reason_code,
+                reference_id,
+                ..
+            } => {
+                tracing::warn!(
+                    target: "stem.dispatch",
+                    cycle_id = cycle_id,
+                    seq_no = seq_no,
+                    act_id = %act.act_id,
+                    endpoint_id = %act.body_endpoint_name,
+                    capability_id = %act.capability_id,
+                    reason_code = %reason_code,
+                    reference_id = %reference_id,
+                    "dispatch_deferred"
+                );
+            }
+        }
 
         self.ledger
             .lock()

@@ -23,6 +23,7 @@ Spine is split into:
 ## MVP Adapter
 
 1. UnixSocket+NDJSON adapter receives NDJSON envelopes over AF_UNIX.
-2. `sense`, `new_capabilities`, and `drop_capabilities` are first-class ingress envelopes.
-3. Body endpoint lifecycle updates are translated into capability patch/drop senses.
-4. Adapter handles transport+dialect only; ownership and dispatch maps live in registry.
+2. `auth`, `sense`, `act_ack`, and `unplug` are first-class ingress methods.
+3. `act` is the adapter egress method to body endpoints.
+4. Body endpoint lifecycle updates are translated into capability patch/drop senses.
+5. Adapter handles transport+dialect only; ownership and dispatch maps live in registry.

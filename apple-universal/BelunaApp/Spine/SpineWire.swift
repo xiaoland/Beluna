@@ -25,6 +25,8 @@ struct CostVectorWire: Codable, Equatable {
         case ioUnits = "io_units"
         case tokenUnits = "token_units"
     }
+
+    static let zero = CostVectorWire(survivalMicro: 0, timeMS: 0, ioUnits: 0, tokenUnits: 0)
 }
 
 struct EndpointDescriptorWire: Codable, Equatable {
@@ -43,29 +45,40 @@ struct EndpointDescriptorWire: Codable, Equatable {
     }
 }
 
-struct EndpointRegisterWire: Codable {
-    let type = "body_endpoint_register"
-    let endpointID: String
-    let descriptor: EndpointDescriptorWire
+struct NDJSONEnvelope<Body: Codable>: Codable {
+    let method: String
+    let id: String
+    let timestamp: UInt64
+    let body: Body
+}
+
+struct AuthBodyWire: Codable {
+    let endpointName: String
+    let capabilities: [EndpointDescriptorWire]
 
     enum CodingKeys: String, CodingKey {
-        case type
-        case endpointID = "endpoint_id"
-        case descriptor
+        case endpointName = "endpoint_name"
+        case capabilities
     }
 }
 
-struct SenseWire: Codable {
-    let type = "sense"
+struct SenseBodyWire: Codable {
     let senseID: String
     let source: String
     let payload: JSONValue
 
     enum CodingKeys: String, CodingKey {
-        case type
         case senseID = "sense_id"
         case source
         case payload
+    }
+}
+
+struct ActAckBodyWire: Codable {
+    let actID: String
+
+    enum CodingKeys: String, CodingKey {
+        case actID = "act_id"
     }
 }
 
@@ -89,26 +102,51 @@ struct AdmittedActionWire: Decodable, Equatable {
 
 struct CoreActWire: Decodable, Equatable {
     let actID: String
+    let bodyEndpointName: String
     let capabilityInstanceID: String
-    let endpointID: String
     let capabilityID: String
     let normalizedPayload: JSONValue
     let requestedResources: CostVectorWire
 
     enum CodingKeys: String, CodingKey {
         case actID = "act_id"
-        case capabilityInstanceID = "capability_instance_id"
+        case bodyEndpointName = "body_endpoint_name"
         case endpointID = "endpoint_id"
+        case capabilityInstanceID = "capability_instance_id"
         case capabilityID = "capability_id"
         case normalizedPayload = "normalized_payload"
         case requestedResources = "requested_resources"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        actID = try container.decode(String.self, forKey: .actID)
+        capabilityInstanceID = try container.decode(String.self, forKey: .capabilityInstanceID)
+        capabilityID = try container.decode(String.self, forKey: .capabilityID)
+        normalizedPayload = try container.decode(JSONValue.self, forKey: .normalizedPayload)
+        requestedResources =
+            try container.decodeIfPresent(CostVectorWire.self, forKey: .requestedResources)
+            ?? .zero
+        if let endpoint = try container.decodeIfPresent(String.self, forKey: .bodyEndpointName) {
+            bodyEndpointName = endpoint
+        } else if let legacyEndpoint = try container.decodeIfPresent(String.self, forKey: .endpointID) {
+            bodyEndpointName = legacyEndpoint
+        } else {
+            throw DecodingError.keyNotFound(
+                CodingKeys.bodyEndpointName,
+                DecodingError.Context(
+                    codingPath: container.codingPath,
+                    debugDescription: "missing both body_endpoint_name and endpoint_id"
+                )
+            )
+        }
     }
 
     var asAdmittedAction: AdmittedActionWire {
         AdmittedActionWire(
             neuralSignalID: actID,
             capabilityInstanceID: capabilityInstanceID,
-            endpointID: endpointID,
+            endpointID: bodyEndpointName,
             capabilityID: capabilityID,
             normalizedPayload: normalizedPayload,
             reservedCost: requestedResources
@@ -116,86 +154,88 @@ struct CoreActWire: Decodable, Equatable {
     }
 }
 
-enum ServerWireMessage: Decodable, Equatable {
-    case act(action: AdmittedActionWire)
-    case ignored(type: String)
-
-    enum CodingKeys: String, CodingKey {
-        case type
-        case action
-        case act
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        let type = try container.decode(String.self, forKey: .type)
-
-        guard type == "act" else {
-            self = .ignored(type: type)
-            return
-        }
-
-        if let action = try container.decodeIfPresent(AdmittedActionWire.self, forKey: .action) {
-            self = .act(action: action)
-            return
-        }
-
-        if let coreAct = try container.decodeIfPresent(CoreActWire.self, forKey: .act) {
-            self = .act(action: coreAct.asAdmittedAction)
-            return
-        }
-
-        throw DecodingError.dataCorruptedError(
-            forKey: .action,
-            in: container,
-            debugDescription: "act message is missing both action and act payload"
-        )
-    }
+private struct InboundEnvelopeWire: Decodable {
+    let method: String
+    let id: String
+    let timestamp: UInt64
+    let body: JSONValue
 }
 
-func makeAppleEndpointRegisterEnvelope() -> EndpointRegisterWire {
-    EndpointRegisterWire(
-        endpointID: appleEndpointID,
-        descriptor: EndpointDescriptorWire(
-            route: RouteDescriptor(
-                endpointID: appleEndpointID,
-                capabilityID: appleCapabilityID
-            ),
-            payloadSchema: .object([
-                "type": .string("object"),
-                "required": .array([.string("conversation_id"), .string("response")])
-            ]),
-            maxPayloadBytes: 32_768,
-            defaultCost: CostVectorWire(
-                survivalMicro: 120,
-                timeMS: 100,
-                ioUnits: 1,
-                tokenUnits: 64
-            ),
-            metadata: ["app": "apple-universal"]
+private struct InboundActBodyWire: Decodable {
+    let act: CoreActWire
+}
+
+private struct LegacyInboundMessageWire: Decodable {
+    let type: String
+    let action: AdmittedActionWire?
+    let act: CoreActWire?
+}
+
+enum ServerWireMessage: Equatable {
+    case act(action: AdmittedActionWire)
+    case ignored(type: String)
+}
+
+private func makeEnvelope<Body: Codable>(method: String, body: Body) -> NDJSONEnvelope<Body> {
+    NDJSONEnvelope(
+        method: method,
+        id: UUID().uuidString.lowercased(),
+        timestamp: UInt64(Date().timeIntervalSince1970 * 1_000),
+        body: body
+    )
+}
+
+func makeAppleEndpointRegisterEnvelope() -> NDJSONEnvelope<AuthBodyWire> {
+    makeEnvelope(
+        method: "auth",
+        body: AuthBodyWire(
+            endpointName: appleEndpointID,
+            capabilities: [
+                EndpointDescriptorWire(
+                    route: RouteDescriptor(
+                        endpointID: appleEndpointID,
+                        capabilityID: appleCapabilityID
+                    ),
+                    payloadSchema: .object([
+                        "type": .string("object"),
+                        "required": .array([.string("conversation_id"), .string("response")])
+                    ]),
+                    maxPayloadBytes: 32_768,
+                    defaultCost: CostVectorWire(
+                        survivalMicro: 120,
+                        timeMS: 100,
+                        ioUnits: 1,
+                        tokenUnits: 64
+                    ),
+                    metadata: ["app": "apple-universal"]
+                )
+            ]
         )
     )
 }
 
-func makeUserSenseEnvelope(conversationID: String, text: String) -> SenseWire {
-    SenseWire(
-        senseID: "sense:apple:\(UUID().uuidString.lowercased())",
-        source: "apple.universal.chat",
-        payload: .object([
-            "conversation_id": .string(conversationID),
-            "input": .array([
-                .object([
-                    "type": .string("message"),
-                    "role": .string("user"),
-                    "content": .array([
-                        .object([
-                            "type": .string("input_text"),
-                            "text": .string(text)
+func makeUserSenseEnvelope(conversationID: String, text: String) -> NDJSONEnvelope<SenseBodyWire> {
+    makeEnvelope(
+        method: "sense",
+        body: SenseBodyWire(
+            senseID: UUID().uuidString.lowercased(),
+            source: "apple.universal.chat",
+            payload: .object([
+                "conversation_id": .string(conversationID),
+                "input": .array([
+                    .object([
+                        "type": .string("message"),
+                        "role": .string("user"),
+                        "content": .array([
+                            .object([
+                                "type": .string("input_text"),
+                                "text": .string(text)
+                            ])
                         ])
                     ])
                 ])
             ])
-        ])
+        )
     )
 }
 
@@ -204,11 +244,11 @@ func makeActResultSenseEnvelope(
     status: String,
     referenceID: String,
     reasonCode: String? = nil
-) -> SenseWire {
+) -> NDJSONEnvelope<SenseBodyWire> {
     var payload: [String: JSONValue] = [
         "kind": .string("present_message_result"),
         "status": .string(status),
-        "neural_signal_id": .string(action.neuralSignalID),
+        "act_id": .string(action.neuralSignalID),
         "capability_instance_id": .string(action.capabilityInstanceID),
         "endpoint_id": .string(action.endpointID),
         "capability_id": .string(action.capabilityID),
@@ -218,11 +258,18 @@ func makeActResultSenseEnvelope(
         payload["reason_code"] = .string(reasonCode)
     }
 
-    return SenseWire(
-        senseID: "sense:apple:\(UUID().uuidString.lowercased())",
-        source: "apple.universal.chat",
-        payload: .object(payload)
+    return makeEnvelope(
+        method: "sense",
+        body: SenseBodyWire(
+            senseID: UUID().uuidString.lowercased(),
+            source: "apple.universal.chat",
+            payload: .object(payload)
+        )
     )
+}
+
+func makeActAckEnvelope(actID: String) -> NDJSONEnvelope<ActAckBodyWire> {
+    makeEnvelope(method: "act_ack", body: ActAckBodyWire(actID: actID))
 }
 
 func extractAssistantTexts(from normalizedPayload: JSONValue) throws -> [String] {
@@ -404,5 +451,34 @@ func encodeLine<T: Encodable>(_ value: T) throws -> Data {
 }
 
 func decodeServerMessage(from line: Data) throws -> ServerWireMessage {
-    try JSONDecoder().decode(ServerWireMessage.self, from: line)
+    let decoder = JSONDecoder()
+
+    do {
+        let envelope = try decoder.decode(InboundEnvelopeWire.self, from: line)
+        guard envelope.method == "act" else {
+            return .ignored(type: envelope.method)
+        }
+
+        let bodyData = try JSONEncoder().encode(envelope.body)
+        let actBody = try decoder.decode(InboundActBodyWire.self, from: bodyData)
+        return .act(action: actBody.act.asAdmittedAction)
+    } catch {
+        let legacy = try decoder.decode(LegacyInboundMessageWire.self, from: line)
+        guard legacy.type == "act" else {
+            return .ignored(type: legacy.type)
+        }
+        if let action = legacy.action {
+            return .act(action: action)
+        }
+        if let act = legacy.act {
+            return .act(action: act.asAdmittedAction)
+        }
+
+        throw DecodingError.dataCorrupted(
+            DecodingError.Context(
+                codingPath: [],
+                debugDescription: "legacy act message is missing both action and act payload"
+            )
+        )
+    }
 }

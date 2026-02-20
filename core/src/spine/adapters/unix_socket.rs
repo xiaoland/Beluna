@@ -381,6 +381,15 @@ async fn handle_body_endpoint(
     let writer_task = tokio::spawn(
         async move {
             while let Some(act) = outbound_rx.recv().await {
+                let dispatch_started_at = Instant::now();
+                tracing::debug!(
+                    target: "spine.unix_socket",
+                    channel_id = channel_id,
+                    act_id = %act.act_id,
+                    endpoint_id = %act.body_endpoint_name,
+                    capability_id = %act.capability_id,
+                    "dispatching_act_to_unix_socket_endpoint"
+                );
                 let mut acknowledged = false;
                 for attempt in 0..=ACT_ACK_MAX_RETRIES {
                     let encoded = encode_body_egress_act_message(&act)?;
@@ -389,6 +398,14 @@ async fn handle_body_endpoint(
 
                     if wait_for_act_ack(&mut ack_rx, &act.act_id, ACT_ACK_TIMEOUT_MS).await {
                         acknowledged = true;
+                        tracing::info!(
+                            target: "spine.unix_socket",
+                            channel_id = channel_id,
+                            act_id = %act.act_id,
+                            attempts = attempt + 1,
+                            latency_ms = dispatch_started_at.elapsed().as_millis() as u64,
+                            "act_dispatch_acknowledged_by_body_endpoint"
+                        );
                         break;
                     }
 
@@ -403,6 +420,14 @@ async fn handle_body_endpoint(
                 }
 
                 if !acknowledged {
+                    tracing::error!(
+                        target: "spine.unix_socket",
+                        channel_id = channel_id,
+                        act_id = %act.act_id,
+                        attempts = ACT_ACK_MAX_RETRIES + 1,
+                        latency_ms = dispatch_started_at.elapsed().as_millis() as u64,
+                        "act_dispatch_failed_after_ack_retries"
+                    );
                     return Err(anyhow::anyhow!(
                         "failed to receive act_ack after retries for act_id={}",
                         act.act_id
@@ -490,6 +515,12 @@ async fn handle_body_endpoint(
                     }
                 }
                 InboundBodyMessage::ActAck { act_id } => {
+                    tracing::debug!(
+                        target: "spine.unix_socket",
+                        channel_id = channel_id,
+                        act_id = %act_id,
+                        "received_act_ack_from_body_endpoint"
+                    );
                     if ack_tx.send(act_id).is_err() {
                         tracing::warn!(
                             target: "spine.unix_socket",

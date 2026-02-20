@@ -25,5 +25,5 @@ It is transport-agnostic and performs mechanical route dispatch only.
 ## MVP Scope
 
 1. Spine core routing kernel, singleton lifecycle hooks, and in-memory registry.
-2. UnixSocket+NDJSON body endpoint dialect adapter for sense/capability ingress and endpoint lifecycle.
+2. UnixSocket+NDJSON body endpoint dialect adapter for `auth`/`sense`/`act_ack` ingress, `act` egress, and endpoint lifecycle.
 3. No WebSocket+Protobuf adapter in this MVP iteration.

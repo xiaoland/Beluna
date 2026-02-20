@@ -187,12 +187,25 @@ impl SpineInlineAdapter {
 
     async fn enqueue_act(&self, endpoint_name: &str, act: Act) -> Result<ActDispatchResult> {
         let act_id = act.act_id.clone();
+        tracing::debug!(
+            target: "spine.inline_adapter",
+            endpoint_id = endpoint_name,
+            act_id = %act_id,
+            capability_id = %act.capability_id,
+            "enqueue_act_for_inline_endpoint"
+        );
 
         let tx = {
             let state = self.endpoints.lock().await;
             state.get(endpoint_name).map(|entry| entry.act_tx.clone())
         };
         let Some(tx) = tx else {
+            tracing::warn!(
+                target: "spine.inline_adapter",
+                endpoint_id = endpoint_name,
+                act_id = %act_id,
+                "inline_endpoint_not_found_for_dispatch"
+            );
             return Ok(ActDispatchResult::Rejected {
                 reason_code: "endpoint_not_found".to_string(),
                 reference_id: format!("inline_adapter:endpoint_not_found:{act_id}"),
@@ -200,6 +213,12 @@ impl SpineInlineAdapter {
         };
 
         if tx.send(Arc::new(act)).await.is_err() {
+            tracing::warn!(
+                target: "spine.inline_adapter",
+                endpoint_id = endpoint_name,
+                act_id = %act_id,
+                "inline_endpoint_unavailable_during_dispatch"
+            );
             self.remove_endpoint_by_name(endpoint_name, Uuid::nil(), true)
                 .await;
             return Ok(ActDispatchResult::Rejected {
@@ -208,6 +227,12 @@ impl SpineInlineAdapter {
             });
         }
 
+        tracing::debug!(
+            target: "spine.inline_adapter",
+            endpoint_id = endpoint_name,
+            act_id = %act_id,
+            "act_enqueued_for_inline_endpoint"
+        );
         Ok(ActDispatchResult::Acknowledged {
             reference_id: format!("inline_adapter:enqueued:{act_id}"),
         })
@@ -267,6 +292,12 @@ struct InlineAdapterEndpointProxy {
 impl Endpoint for InlineAdapterEndpointProxy {
     async fn invoke(&self, act: Act) -> Result<ActDispatchResult, crate::spine::SpineError> {
         let Some(adapter) = self.adapter.upgrade() else {
+            tracing::warn!(
+                target: "spine.inline_adapter",
+                endpoint_id = %self.endpoint_name,
+                act_id = %act.act_id,
+                "inline_adapter_unavailable_for_dispatch"
+            );
             return Ok(ActDispatchResult::Rejected {
                 reason_code: "adapter_unavailable".to_string(),
                 reference_id: format!("inline_adapter:unavailable:{}", act.act_id),

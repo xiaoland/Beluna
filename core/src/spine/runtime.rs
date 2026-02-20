@@ -217,33 +217,91 @@ impl Spine {
         self.inline_adapter.get().cloned()
     }
 
+    #[tracing::instrument(
+        name = "spine_dispatch_act",
+        target = "spine.dispatch",
+        skip(self, act),
+        fields(
+            act_id = %act.act_id,
+            endpoint_id = %act.body_endpoint_name,
+            capability_id = %act.capability_id,
+            capability_instance_id = %act.capability_instance_id
+        )
+    )]
     pub async fn dispatch_act(&self, act: Act) -> Result<ActDispatchResult, SpineError> {
         if act.act_id.trim().is_empty() || act.body_endpoint_name.trim().is_empty() {
+            tracing::warn!(
+                target: "spine.dispatch",
+                "act_dispatch_invalid_input"
+            );
             return Err(invalid_batch("act dispatch is missing act_id/endpoint_id"));
         }
 
         let Some(dispatch) = self.resolve_dispatch(&act.body_endpoint_name) else {
-            return Ok(ActDispatchResult::Rejected {
+            let outcome = ActDispatchResult::Rejected {
                 reason_code: "endpoint_not_found".to_string(),
                 reference_id: format!("spine:missing_endpoint:{}", act.act_id),
-            });
+            };
+            Self::log_dispatch_outcome(&act, "unknown", None, &outcome);
+            return Ok(outcome);
         };
 
         match dispatch {
-            EndpointDispatch::Inline(endpoint) => match endpoint.invoke(act.clone()).await {
-                Ok(outcome) => Ok(outcome),
-                Err(_) => Ok(ActDispatchResult::Rejected {
-                    reason_code: "endpoint_error".to_string(),
-                    reference_id: format!("spine:error:{}", act.act_id),
-                }),
-            },
+            EndpointDispatch::Inline(endpoint) => {
+                tracing::debug!(
+                    target: "spine.dispatch",
+                    dispatch_binding = "inline",
+                    "dispatching_act_to_inline_endpoint"
+                );
+
+                match endpoint.invoke(act.clone()).await {
+                    Ok(outcome) => {
+                        Self::log_dispatch_outcome(&act, "inline", None, &outcome);
+                        Ok(outcome)
+                    }
+                    Err(err) => {
+                        tracing::warn!(
+                            target: "spine.dispatch",
+                            dispatch_binding = "inline",
+                            error = %err,
+                            "inline_endpoint_invoke_failed"
+                        );
+                        let outcome = ActDispatchResult::Rejected {
+                            reason_code: "endpoint_error".to_string(),
+                            reference_id: format!("spine:error:{}", act.act_id),
+                        };
+                        Self::log_dispatch_outcome(&act, "inline", None, &outcome);
+                        Ok(outcome)
+                    }
+                }
+            }
             EndpointDispatch::AdapterChannel(channel_id) => {
+                tracing::debug!(
+                    target: "spine.dispatch",
+                    dispatch_binding = "adapter",
+                    adapter_channel_id = channel_id,
+                    "dispatching_act_to_adapter_channel"
+                );
                 match self.invoke_adapter_endpoint(channel_id, act.clone()) {
-                    Ok(outcome) => Ok(outcome),
-                    Err(_) => Ok(ActDispatchResult::Rejected {
-                        reason_code: "endpoint_error".to_string(),
-                        reference_id: format!("spine:error:{}", act.act_id),
-                    }),
+                    Ok(outcome) => {
+                        Self::log_dispatch_outcome(&act, "adapter", Some(channel_id), &outcome);
+                        Ok(outcome)
+                    }
+                    Err(err) => {
+                        tracing::warn!(
+                            target: "spine.dispatch",
+                            dispatch_binding = "adapter",
+                            adapter_channel_id = channel_id,
+                            error = %err,
+                            "adapter_channel_invoke_failed"
+                        );
+                        let outcome = ActDispatchResult::Rejected {
+                            reason_code: "endpoint_error".to_string(),
+                            reference_id: format!("spine:error:{}", act.act_id),
+                        };
+                        Self::log_dispatch_outcome(&act, "adapter", Some(channel_id), &outcome);
+                        Ok(outcome)
+                    }
                 }
             }
         }
@@ -492,15 +550,99 @@ impl Spine {
             })?;
 
         if tx.send(act.clone()).is_err() {
+            tracing::warn!(
+                target: "spine.dispatch",
+                dispatch_binding = "adapter",
+                adapter_channel_id = channel_id,
+                act_id = %act.act_id,
+                "adapter_channel_send_failed"
+            );
             return Err(backend_failure(format!(
                 "failed to dispatch act {} to adapter channel {}",
                 act.act_id, channel_id
             )));
         }
 
+        tracing::debug!(
+            target: "spine.dispatch",
+            dispatch_binding = "adapter",
+            adapter_channel_id = channel_id,
+            act_id = %act.act_id,
+            "act_enqueued_to_adapter_channel"
+        );
         Ok(ActDispatchResult::Acknowledged {
             reference_id: format!("adapter:act_sent:{}", act.act_id),
         })
+    }
+
+    fn log_dispatch_outcome(
+        act: &Act,
+        dispatch_binding: &'static str,
+        channel_id: Option<u64>,
+        outcome: &ActDispatchResult,
+    ) {
+        match (outcome, channel_id) {
+            (ActDispatchResult::Acknowledged { reference_id }, Some(channel_id)) => {
+                tracing::info!(
+                    target: "spine.dispatch",
+                    act_id = %act.act_id,
+                    endpoint_id = %act.body_endpoint_name,
+                    capability_id = %act.capability_id,
+                    dispatch_binding = dispatch_binding,
+                    adapter_channel_id = channel_id,
+                    reference_id = %reference_id,
+                    "act_dispatch_acknowledged"
+                );
+            }
+            (ActDispatchResult::Acknowledged { reference_id }, None) => {
+                tracing::info!(
+                    target: "spine.dispatch",
+                    act_id = %act.act_id,
+                    endpoint_id = %act.body_endpoint_name,
+                    capability_id = %act.capability_id,
+                    dispatch_binding = dispatch_binding,
+                    reference_id = %reference_id,
+                    "act_dispatch_acknowledged"
+                );
+            }
+            (
+                ActDispatchResult::Rejected {
+                    reason_code,
+                    reference_id,
+                },
+                Some(channel_id),
+            ) => {
+                tracing::warn!(
+                    target: "spine.dispatch",
+                    act_id = %act.act_id,
+                    endpoint_id = %act.body_endpoint_name,
+                    capability_id = %act.capability_id,
+                    dispatch_binding = dispatch_binding,
+                    adapter_channel_id = channel_id,
+                    reason_code = %reason_code,
+                    reference_id = %reference_id,
+                    "act_dispatch_rejected"
+                );
+            }
+            (
+                ActDispatchResult::Rejected {
+                    reason_code,
+                    reference_id,
+                },
+                None,
+            ) => {
+                tracing::warn!(
+                    target: "spine.dispatch",
+                    act_id = %act.act_id,
+                    endpoint_id = %act.body_endpoint_name,
+                    capability_id = %act.capability_id,
+                    dispatch_binding = dispatch_binding,
+                    reason_code = %reason_code,
+                    reference_id = %reference_id,
+                    "act_dispatch_rejected"
+                );
+            }
+        }
     }
 
     fn upsert_route(

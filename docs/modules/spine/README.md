@@ -12,9 +12,9 @@ Current scope:
 3. capability catalog snapshot owned by Spine registry
 4. Spine executor is process-wide singleton
 5. UnixSocket+NDJSON body endpoint dialect adapter for:
-   - body endpoint register/unregister/disconnect lifecycle
-   - external sense ingress
-   - capability patch/drop ingress
+   - `auth` ingress (endpoint registration + capability publish)
+   - `sense` ingress and `act_ack` ingress
+   - `act` egress and disconnect/unplug lifecycle handling
 6. In-process inline body endpoints (`core/src/body/*`) attach through Spine Inline Adapter during runtime boot
 7. body endpoint capabilities are reflected to runtime through `new_capabilities` / `drop_capabilities` senses
 
