@@ -10,6 +10,7 @@
 - [x] ingress 应该包含创建 mpsc queue 的部分，而不是让 main 来创建
 - [ ] 有 legder/ledger.rs，那为什么没有 cortex/cortex.rs 和 spine/spine.rs 呢
 - [ ] 可不可以在 Spine, Cortex runtime 内实现 singleton 而不是 module 级别呢？
+- [ ] config.rs 过耦合了其它业务，我认为就根据 json schema 来检查就可以了
 
 ### Cortex
 
@@ -28,6 +29,7 @@
 - [ ] 为什么要在 Spine runtime 中维护 adapter channel?
 - [ ] 测试应该在 tests/ 下面，有什么特殊的理由要 aside src 吗？
 - [ ] new spine 不代表马上就要 start 啊
+- [ ] 让 adapter 自己处理自己的 config
 
 ### Observability
 

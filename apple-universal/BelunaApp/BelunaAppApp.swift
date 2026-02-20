@@ -15,6 +15,7 @@ struct BelunaAppApp: App {
     }
 
     @StateObject private var viewModel = ChatViewModel()
+    @StateObject private var observabilityViewModel = ObservabilityViewModel()
 
     var body: some Scene {
         Window("Beluna", id: "main") {
@@ -25,9 +26,13 @@ struct BelunaAppApp: App {
             SidebarCommands() // macOS 特有的菜单栏命令
         }
 
+        Window("Observability", id: "observability") {
+            ObservabilityView(viewModel: observabilityViewModel)
+        }
+        .windowStyle(.titleBar)
+
         Settings {
             SettingView(viewModel: viewModel)
         }
     }
 }
-

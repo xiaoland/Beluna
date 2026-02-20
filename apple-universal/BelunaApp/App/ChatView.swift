@@ -3,6 +3,7 @@ import SwiftUI
 struct ChatView: View {
     @ObservedObject var viewModel: ChatViewModel
     @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(spacing: 0) {
@@ -72,6 +73,14 @@ struct ChatView: View {
             }
             .buttonStyle(.bordered)
             .disabled(!viewModel.canRetry)
+
+            Button {
+                openWindow(id: "observability")
+            } label: {
+                Image(systemName: "doc.text.magnifyingglass")
+            }
+            .buttonStyle(.bordered)
+            .help("Open Observability")
 
             Button {
                 openSettings()

@@ -13,9 +13,12 @@ Minimal SwiftUI chat-style Body Endpoint for Beluna Spine UnixSocket.
 7. In Xcode debug sessions, defaults to manual connect to avoid accidental side effects.
 8. Registers body endpoint route:
    - `macos-app.01` / `present.message`
-9. Sends user messages as `sense` payloads aligned with the OpenAI Responses subset.
-10. Receives `act` and renders assistant chat bubbles.
-11. Sends invoke outcome back as correlated `sense` (echoes `neural_signal_id` and route markers).
+9. Authenticates over NDJSON envelope (`method=auth`) with declared capabilities.
+10. Sends user messages as `sense` envelopes aligned with the OpenAI Responses subset.
+11. Receives `act` envelopes, sends `act_ack`, and renders assistant chat bubbles.
+12. Sends invoke outcome back as correlated `sense` (echoes `act_id` and route markers).
+13. Provides a dedicated Observability window to browse Beluna Core local log files in a table (timestamp-descending).
+14. Supports configurable log folder path (manual input + macOS folder picker with security-scoped bookmark).
 
 ## Run
 
