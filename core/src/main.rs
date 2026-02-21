@@ -18,7 +18,7 @@ use beluna::{
     ledger::LedgerStage,
     logging::init_tracing,
     spine::{Spine, global_spine, install_global_spine, shutdown_global_spine},
-    stem::{Stem, register_default_native_endpoints},
+    stem::Stem,
 };
 
 #[tokio::main]
@@ -52,8 +52,6 @@ async fn main() -> Result<()> {
     let spine_runtime = Spine::new(&config.spine, afferent_pathway.clone());
     install_global_spine(Arc::clone(&spine_runtime))
         .context("failed to initialize process-wide spine singleton")?;
-    let spine = global_spine().context("spine singleton is not initialized")?;
-    register_default_native_endpoints(spine)?;
     let inline_adapter = spine_runtime
         .inline_adapter()
         .context("inline body endpoints require spine.adapters entry with type=inline")?;

@@ -31,6 +31,13 @@ Single cycle execution:
   - `goal_stack_helper`
 - Every helper is one LLM call.
 - Helper model route is configurable per-helper with default fallback.
+- Helper outputs are cognitive transforms only; deterministic data assembly stays in Rust.
+- `act_descriptor_helper` takes one `<act-descriptor>` payload and returns markdown only; runtime wraps those markdown fragments into `<act-descriptor-catalog>` XML.
+- Input helper prompts are built from semantic projections:
+  - `sense_id` and similar transport-only ids are removed.
+  - `sense` / `act` names are used instead of `neural_signal_descriptor`.
+  - runtime context includes capability summary instead of repeating full capability catalog.
+- Identical capability descriptors are deduplicated before helper input assembly.
 
 ## Cache
 

@@ -7,11 +7,10 @@ use crate::{
     continuity::{ContinuityEngine, DispatchContext as ContinuityDispatchContext},
     cortex::Cortex,
     ledger::{DispatchContext as LedgerDispatchContext, LedgerDispatchTicket, LedgerStage},
-    spine::{ActDispatchResult, EndpointBinding, NativeFunctionEndpoint, Spine, SpineEvent},
+    spine::{ActDispatchResult, Spine, SpineEvent},
     types::{
         Act, CognitionState, DispatchDecision, NeuralSignalDescriptor,
-        NeuralSignalDescriptorCatalog, NeuralSignalDescriptorRouteKey, NeuralSignalType,
-        PhysicalState, Sense,
+        NeuralSignalDescriptorCatalog, NeuralSignalDescriptorRouteKey, PhysicalState, Sense,
     },
 };
 
@@ -449,50 +448,4 @@ fn merge_neural_signal_descriptor_catalogs(
         ),
         entries,
     }
-}
-
-pub fn register_default_native_endpoints(spine: Arc<Spine>) -> Result<()> {
-    let native_endpoint = Arc::new(NativeFunctionEndpoint::new(Arc::new(|act| {
-        Ok(crate::spine::types::ActDispatchResult::Acknowledged {
-            reference_id: format!("native:settle:{}", act.act_id),
-        })
-    })));
-
-    let _deliberate = spine.add_endpoint(
-        "deliberate.plan",
-        EndpointBinding::Inline(native_endpoint.clone()),
-        vec![
-            NeuralSignalDescriptor {
-                r#type: NeuralSignalType::Act,
-                endpoint_id: "placeholder".to_string(),
-                neural_signal_descriptor_id: "cap.core".to_string(),
-                payload_schema: serde_json::json!({"type":"object"}),
-            },
-            NeuralSignalDescriptor {
-                r#type: NeuralSignalType::Act,
-                endpoint_id: "placeholder".to_string(),
-                neural_signal_descriptor_id: "cap.core.lite".to_string(),
-                payload_schema: serde_json::json!({"type":"object"}),
-            },
-            NeuralSignalDescriptor {
-                r#type: NeuralSignalType::Act,
-                endpoint_id: "placeholder".to_string(),
-                neural_signal_descriptor_id: "cap.core.minimal".to_string(),
-                payload_schema: serde_json::json!({"type":"object"}),
-            },
-        ],
-    )?;
-
-    let _execute = spine.add_endpoint(
-        "execute.tool",
-        EndpointBinding::Inline(native_endpoint),
-        vec![NeuralSignalDescriptor {
-            r#type: NeuralSignalType::Act,
-            endpoint_id: "placeholder".to_string(),
-            neural_signal_descriptor_id: "cap.core".to_string(),
-            payload_schema: serde_json::json!({"type":"object"}),
-        }],
-    )?;
-
-    Ok(())
 }

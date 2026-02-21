@@ -11,6 +11,7 @@
 - [ ] 有 legder/ledger.rs，那为什么没有 cortex/cortex.rs 和 spine/spine.rs 呢
 - [ ] 可不可以在 Spine, Cortex runtime 内实现 singleton 而不是 module 级别呢？
 - [ ] config.rs 过耦合了其它业务，我认为就根据 json schema 来检查就可以了
+- [ ] Stem Loop 按时间运行；cortex 可以触发 act sleep （注意区分休眠和睡眠）
 
 ### Cortex
 
@@ -18,8 +19,14 @@
 - [ ] Cortex 的实现需要简化，目前搞得好混乱，不好调试还很慢
 - [ ] Cognition State 还包含 context （但这是当前实现特定的，就作为一个字段就可以了）
 - [ ] CortexCollaborators 是什么，和 AI Gateway 强耦合是预期行为
-- [ ] Cortex Config 来配置用什么 ai-provider-string 为 Primary, Serialize, Deserialize 等等
+- [x] Cortex Config 来配置用什么 ai-provider-string 为 Primary, Serialize, Deserialize 等等
 - [ ] 可以输出 cognition state，但是要注意不是整个栈都可以操作的，continuity可能会拒绝一些变化
+- [ ] 我注意到给 input helper 的 neural signal descriptor 中有很多的转义符号，这很糟糕；type: act 应该过滤掉。
+- [ ] 不要在 sense 中包含 uuid 等非语义性的内容，减少非语义噪音
+- [ ] input helper 输出的是 json ，不是 output ir ... 让程序来组装数据，而不是 LLM 来组装
+- [ ] text helper 是什么鬼，这是对 helper 的错误理解
+- [ ] Metrics: cycle id, neural-signal-descriptor catalog, token consumed
+- [ ] llm input / output log 是什么鬼，不应该让 ai gateway 来吗
 
 ### Spine
 
@@ -37,8 +44,8 @@
 
 - [ ] 拥抱 OpenTelemetry
 - [x] Request ID
-- [ ] RED Metrics
 - [x] O11y in Error Handling
+- [ ] Pull Metrics Endpoint
 
 ### AI Gateway
 
