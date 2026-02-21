@@ -5,6 +5,9 @@ Cortex is a stateless cognition boundary that consumes a drained sense batch plu
 ## Invariants
 - Progression is input-event driven only.
 - Cortex does not durably persist cognition/goal state internally.
-- Primary output is prose IR; sub-stages compile to structured drafts.
-- Deterministic clamp is final authority before act emission.
-- `act_id` derivation follows current contract constraints defined by product direction.
+- Input IR root is `<input-ir>` and Output IR root is `<output-ir>`.
+- Input helpers (`sense_helper`, `act_descriptor_helper`) run concurrently to assemble Input IR sections.
+- Output helpers (`acts_helper`, `goal_stack_helper`) run concurrently from Output IR sections.
+- `act_descriptor_helper` cache is in-memory and process-scoped, keyed by act-descriptor MD5 input hash.
+- Primary failure/timeout is fail-closed noop; helper failures degrade by fallback sections/empty outputs.
+- `act_id` is generated in code (UUIDv7), not by LLM.

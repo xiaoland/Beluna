@@ -3,8 +3,8 @@ use std::collections::BTreeMap;
 use beluna::ai_gateway::{
     request_normalizer::RequestNormalizer,
     types_chat::{
-        BelunaContentPart, BelunaMessage, BelunaRole, BelunaToolDefinition, ChatRequest,
-        OutputMode, RequestLimitOverrides, ToolChoice,
+        BelunaContentPart, BelunaMessage, BelunaRole, BelunaToolDefinition, CanonicalOutputMode,
+        ChatRequest, OutputMode, RequestLimitOverrides, ToolChoice,
     },
 };
 
@@ -107,4 +107,45 @@ fn given_tool_schema_with_unknown_keyword_when_normalized_then_invalid_request_i
         .normalize_chat(request, true)
         .expect_err("normalization should fail");
     assert!(err.message.contains("unsupported keyword"));
+}
+
+#[test]
+fn given_json_schema_output_mode_when_normalized_then_canonical_json_schema_is_preserved() {
+    let normalizer = RequestNormalizer;
+    let mut request = base_request();
+    request.output_mode = OutputMode::JsonSchema {
+        name: "acts_helper_output".to_string(),
+        schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "acts": { "type": "array" }
+            },
+            "required": ["acts"]
+        }),
+        strict: true,
+    };
+
+    let normalized = normalizer
+        .normalize_chat(request, true)
+        .expect("normalization should succeed");
+    assert!(matches!(
+        normalized.output_mode,
+        CanonicalOutputMode::JsonSchema { strict: true, .. }
+    ));
+}
+
+#[test]
+fn given_json_schema_output_mode_with_non_object_schema_when_normalized_then_invalid_request() {
+    let normalizer = RequestNormalizer;
+    let mut request = base_request();
+    request.output_mode = OutputMode::JsonSchema {
+        name: "acts_helper_output".to_string(),
+        schema: serde_json::json!(["not", "an", "object"]),
+        strict: true,
+    };
+
+    let err = normalizer
+        .normalize_chat(request, true)
+        .expect_err("normalization should fail");
+    assert!(err.message.contains("schema to be an object"));
 }

@@ -1,17 +1,14 @@
 #![allow(dead_code)]
 
-pub mod clamp;
-pub mod error;
-pub mod runtime;
-pub mod types;
+mod clamp;
+mod error;
+mod helpers_input;
+mod helpers_output;
+mod ir;
+mod runtime;
+pub mod testing;
+mod types;
 
-pub use clamp::{AttemptClampRequest, DeterministicAttemptClamp, derive_act_id};
 pub use error::{CortexError, CortexErrorKind};
-pub use runtime::{
-    AttemptExtractorHook, AttemptExtractorRequest, Cortex, CortexTelemetryEvent,
-    CortexTelemetryHook, PrimaryReasonerHook, PrimaryReasonerRequest,
-};
-pub use types::{
-    AttemptDraft, AttentionTag, ClampResult, ClampViolation, ClampViolationCode, CortexOutput,
-    ProseIr, ReactionLimits,
-};
+pub use runtime::{Cortex, CortexTelemetryEvent, CortexTelemetryHook};
+pub use types::{CortexOutput, ReactionLimits};

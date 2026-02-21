@@ -64,6 +64,12 @@ pub enum ToolChoice {
 pub enum OutputMode {
     Text,
     JsonObject,
+    JsonSchema {
+        name: String,
+        schema: serde_json::Value,
+        #[serde(default = "default_json_schema_strict_true")]
+        strict: bool,
+    },
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -80,6 +86,10 @@ fn default_tool_choice() -> ToolChoice {
 
 fn default_output_mode() -> OutputMode {
     OutputMode::Text
+}
+
+fn default_json_schema_strict_true() -> bool {
+    true
 }
 
 #[derive(Debug, Clone)]
@@ -166,6 +176,11 @@ pub enum CanonicalToolChoice {
 pub enum CanonicalOutputMode {
     Text,
     JsonObject,
+    JsonSchema {
+        name: String,
+        schema: serde_json::Value,
+        strict: bool,
+    },
 }
 
 #[derive(Debug, Clone, Default)]

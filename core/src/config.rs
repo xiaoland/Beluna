@@ -163,6 +163,35 @@ pub struct UnixSocketNdjsonAdapterConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CortexHelperRoutesConfig {
+    #[serde(default)]
+    pub default: Option<String>,
+    #[serde(default)]
+    pub primary: Option<String>,
+    #[serde(default)]
+    pub sense_helper: Option<String>,
+    #[serde(default)]
+    pub act_descriptor_helper: Option<String>,
+    #[serde(default)]
+    pub acts_helper: Option<String>,
+    #[serde(default)]
+    pub goal_stack_helper: Option<String>,
+}
+
+impl Default for CortexHelperRoutesConfig {
+    fn default() -> Self {
+        Self {
+            default: None,
+            primary: None,
+            sense_helper: None,
+            act_descriptor_helper: None,
+            acts_helper: None,
+            goal_stack_helper: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CortexRuntimeConfig {
     #[serde(default = "default_cortex_inbox_capacity")]
     pub inbox_capacity: usize,
@@ -171,9 +200,7 @@ pub struct CortexRuntimeConfig {
     #[serde(default)]
     pub default_limits: ReactionLimits,
     #[serde(default)]
-    pub primary_route: Option<String>,
-    #[serde(default)]
-    pub sub_route: Option<String>,
+    pub helper_routes: CortexHelperRoutesConfig,
 }
 
 impl Default for CortexRuntimeConfig {
@@ -182,8 +209,7 @@ impl Default for CortexRuntimeConfig {
             inbox_capacity: default_cortex_inbox_capacity(),
             outbox_capacity: default_cortex_outbox_capacity(),
             default_limits: ReactionLimits::default(),
-            primary_route: None,
-            sub_route: None,
+            helper_routes: CortexHelperRoutesConfig::default(),
         }
     }
 }
@@ -401,6 +427,58 @@ mod tests {
         let err = Config::load(&config_path).expect_err("retention_days=0 should fail schema");
         assert!(
             err.to_string().contains("minimum"),
+            "unexpected error: {err}",
+        );
+
+        let _ = fs::remove_file(&config_path);
+        let _ = fs::remove_dir(&work_dir);
+    }
+
+    #[test]
+    fn config_load_rejects_deprecated_cortex_route_fields() {
+        let work_dir = std::env::temp_dir().join(format!("beluna-config-test-{}", Uuid::now_v7()));
+        fs::create_dir_all(&work_dir).expect("temp work dir should be created");
+
+        let config_path = work_dir.join("beluna.jsonc");
+        let schema_path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("beluna.schema.json");
+        let config_text = format!(
+            r#"{{
+  "$schema": "{}",
+  "ai_gateway": {{
+    "backends": [
+      {{
+        "id": "backend-default",
+        "dialect": "openai_compatible",
+        "credential": {{
+          "type": "none"
+        }},
+        "models": [
+          {{
+            "id": "m1"
+          }}
+        ]
+      }}
+    ],
+    "route_aliases": {{
+      "default": {{
+        "backend_id": "backend-default",
+        "model_id": "m1"
+      }}
+    }}
+  }},
+  "cortex": {{
+    "primary_route": "default"
+  }}
+}}"#,
+            schema_path.display(),
+        );
+        fs::write(&config_path, config_text).expect("config should be written");
+
+        let err = Config::load(&config_path)
+            .expect_err("deprecated primary_route should fail schema validation");
+        assert!(
+            err.to_string().contains("Additional properties"),
             "unexpected error: {err}",
         );
 

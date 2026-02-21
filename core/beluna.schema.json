@@ -205,6 +205,9 @@
                   "json_mode": {
                     "type": "boolean"
                   },
+                  "json_schema_mode": {
+                    "type": "boolean"
+                  },
                   "vision": {
                     "type": "boolean"
                   },
@@ -343,17 +346,47 @@
           },
           "additionalProperties": false
         },
-        "primary_route": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "sub_route": {
-          "type": [
-            "string",
-            "null"
-          ]
+        "helper_routes": {
+          "type": "object",
+          "properties": {
+            "default": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "primary": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "sense_helper": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "act_descriptor_helper": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "acts_helper": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "goal_stack_helper": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

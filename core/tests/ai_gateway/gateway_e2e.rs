@@ -58,6 +58,7 @@ impl BackendAdapter for RetryOnceMockAdapter {
             streaming: true,
             tool_calls: false,
             json_mode: false,
+            json_schema_mode: false,
             vision: false,
             resumable_streaming: false,
         }
@@ -112,6 +113,7 @@ impl BackendAdapter for OutputThenFailAdapter {
             streaming: true,
             tool_calls: false,
             json_mode: false,
+            json_schema_mode: false,
             vision: false,
             resumable_streaming: false,
         }
@@ -156,6 +158,7 @@ impl BackendAdapter for UsageOverBudgetThenCompleteAdapter {
             streaming: true,
             tool_calls: false,
             json_mode: false,
+            json_schema_mode: false,
             vision: false,
             resumable_streaming: false,
         }
@@ -209,6 +212,7 @@ impl BackendAdapter for CancelAwarePendingAdapter {
             streaming: true,
             tool_calls: false,
             json_mode: false,
+            json_schema_mode: false,
             vision: false,
             resumable_streaming: false,
         }
@@ -263,6 +267,7 @@ fn gateway_config_with_budget(budget: BudgetConfig) -> AIGatewayConfig {
                 streaming: true,
                 tool_calls: false,
                 json_mode: false,
+                json_schema_mode: false,
                 vision: false,
                 resumable_streaming: false,
             }),
@@ -301,6 +306,36 @@ fn request() -> ChatRequest {
         metadata: BTreeMap::new(),
         cost_attribution_id: None,
     }
+}
+
+#[tokio::test]
+async fn given_json_schema_output_when_backend_lacks_schema_capability_then_request_fails_fast() {
+    let adapter = Arc::new(RetryOnceMockAdapter {
+        calls: Arc::new(AtomicUsize::new(0)),
+    });
+    let mut adapters: HashMap<BackendDialect, Arc<dyn BackendAdapter>> = HashMap::new();
+    adapters.insert(BackendDialect::OpenAiCompatible, adapter);
+
+    let gateway = AIGateway::new(gateway_config(), Arc::new(StaticCredentialProvider))
+        .expect("gateway should build")
+        .with_adapters(adapters);
+
+    let mut req = request();
+    req.output_mode = OutputMode::JsonSchema {
+        name: "acts_helper_output".to_string(),
+        schema: serde_json::json!({
+            "type": "object",
+            "properties": { "acts": { "type": "array" } },
+            "required": ["acts"]
+        }),
+        strict: true,
+    };
+
+    let err = gateway
+        .chat_once(req)
+        .await
+        .expect_err("json schema request should fail on unsupported capability");
+    assert_eq!(err.kind, GatewayErrorKind::UnsupportedCapability);
 }
 
 #[tokio::test]

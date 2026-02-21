@@ -6,7 +6,10 @@ use beluna::{
     afferent_pathway::SenseAfferentPathway,
     config::SpineRuntimeConfig,
     continuity::ContinuityEngine,
-    cortex::{AttemptExtractorHook, Cortex, PrimaryReasonerHook, ProseIr, ReactionLimits},
+    cortex::{
+        ReactionLimits,
+        testing::{TestActsHelperOutput, TestGoalStackPatch, TestHooks, boxed, cortex_with_hooks},
+    },
     ledger::LedgerStage,
     spine::Spine,
     stem::Stem,
@@ -20,21 +23,31 @@ fn test_spine() -> Arc<Spine> {
     Spine::new(&config, SenseAfferentPathway::new(4).0)
 }
 
-fn capture_cortex(physical_states: Arc<Mutex<Vec<PhysicalState>>>) -> Arc<Cortex> {
-    let primary: PrimaryReasonerHook = Arc::new(move |req| {
+fn valid_output_ir() -> String {
+    "<output-ir><acts>body</acts><goal-stack-patch>body</goal-stack-patch></output-ir>".to_string()
+}
+
+fn capture_cortex(physical_states: Arc<Mutex<Vec<PhysicalState>>>) -> Arc<beluna::cortex::Cortex> {
+    let sense_helper = Arc::new(|_req| boxed(async { Ok("senses".to_string()) }));
+    let act_descriptor_helper = Arc::new(|_req| boxed(async { Ok("catalog".to_string()) }));
+    let primary = Arc::new(move |req: beluna::cortex::testing::PrimaryRequest| {
         let physical_states = Arc::clone(&physical_states);
-        Box::pin(async move {
+        boxed(async move {
             physical_states.lock().await.push(req.physical_state);
-            Ok(ProseIr {
-                text: "ir".to_string(),
-            })
+            Ok(valid_output_ir())
         })
     });
-    let extractor: AttemptExtractorHook = Arc::new(|_req| Box::pin(async { Ok(Vec::new()) }));
+    let acts_helper = Arc::new(|_req| boxed(async { Ok(TestActsHelperOutput::default()) }));
+    let goal_stack_helper = Arc::new(|_req| boxed(async { Ok(TestGoalStackPatch::default()) }));
 
-    Arc::new(Cortex::for_test_with_hooks(
-        primary,
-        extractor,
+    Arc::new(cortex_with_hooks(
+        TestHooks::new(
+            sense_helper,
+            act_descriptor_helper,
+            primary,
+            acts_helper,
+            goal_stack_helper,
+        ),
         ReactionLimits::default(),
     ))
 }

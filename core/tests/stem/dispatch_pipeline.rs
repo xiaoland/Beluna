@@ -8,7 +8,11 @@ use beluna::{
     config::SpineRuntimeConfig,
     continuity::ContinuityEngine,
     cortex::{
-        AttemptDraft, AttemptExtractorHook, Cortex, PrimaryReasonerHook, ProseIr, ReactionLimits,
+        ReactionLimits,
+        testing::{
+            TestActDraft, TestActsHelperOutput, TestGoalStackPatch, TestHooks, boxed,
+            cortex_with_hooks,
+        },
     },
     ledger::LedgerStage,
     spine::{ActDispatchResult, Endpoint, EndpointBinding, Spine},
@@ -52,43 +56,43 @@ fn test_spine_with_spy() -> (Arc<Spine>, Arc<SpyEndpoint>, String) {
     (spine, spy_endpoint, handle.body_endpoint_id)
 }
 
-fn two_act_cortex(endpoint_id: String) -> Arc<Cortex> {
-    let primary: PrimaryReasonerHook = Arc::new(|_req| {
-        Box::pin(async {
-            Ok(ProseIr {
-                text: "ir".to_string(),
+fn valid_output_ir() -> String {
+    "<output-ir><acts>body</acts><goal-stack-patch>body</goal-stack-patch></output-ir>".to_string()
+}
+
+fn two_act_cortex(endpoint_id: String) -> Arc<beluna::cortex::Cortex> {
+    let sense_helper = Arc::new(|_req| boxed(async { Ok("senses".to_string()) }));
+    let act_descriptor_helper = Arc::new(|_req| boxed(async { Ok("catalog".to_string()) }));
+    let primary = Arc::new(|_req| boxed(async { Ok(valid_output_ir()) }));
+    let acts_helper = Arc::new(move |_req| {
+        let endpoint_id = endpoint_id.clone();
+        boxed(async move {
+            Ok(TestActsHelperOutput {
+                acts: vec![
+                    TestActDraft {
+                        endpoint_id: endpoint_id.clone(),
+                        neural_signal_descriptor_id: "cap.demo".to_string(),
+                        payload: serde_json::json!({"draft":"first"}),
+                    },
+                    TestActDraft {
+                        endpoint_id,
+                        neural_signal_descriptor_id: "cap.demo".to_string(),
+                        payload: serde_json::json!({"draft":"second"}),
+                    },
+                ],
             })
         })
     });
-    let extractor: AttemptExtractorHook = Arc::new(move |_req| {
-        let endpoint_id = endpoint_id.clone();
-        Box::pin(async move {
-            Ok(vec![
-                AttemptDraft {
-                    intent_span: "run".to_string(),
-                    based_on: vec!["sense:1".to_string()],
-                    attention_tags: vec![],
-                    endpoint_id: endpoint_id.clone(),
-                    neural_signal_descriptor_id: "cap.demo".to_string(),
-                    payload_draft: serde_json::json!({"draft":"first"}),
-                    goal_hint: None,
-                },
-                AttemptDraft {
-                    intent_span: "run".to_string(),
-                    based_on: vec!["sense:1".to_string()],
-                    attention_tags: vec![],
-                    endpoint_id: endpoint_id.clone(),
-                    neural_signal_descriptor_id: "cap.demo".to_string(),
-                    payload_draft: serde_json::json!({"draft":"second"}),
-                    goal_hint: None,
-                },
-            ])
-        })
-    });
+    let goal_stack_helper = Arc::new(|_req| boxed(async { Ok(TestGoalStackPatch::default()) }));
 
-    Arc::new(Cortex::for_test_with_hooks(
-        primary,
-        extractor,
+    Arc::new(cortex_with_hooks(
+        TestHooks::new(
+            sense_helper,
+            act_descriptor_helper,
+            primary,
+            acts_helper,
+            goal_stack_helper,
+        ),
         ReactionLimits::default(),
     ))
 }

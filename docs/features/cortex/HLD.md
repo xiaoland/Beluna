@@ -15,15 +15,19 @@ Outputs:
 ## Key Components
 
 - `CortexPipeline`: single-cycle cognition orchestration.
-- Cognition ports:
-  - `PrimaryReasonerPort`
-  - `AttemptExtractorPort`
-  - `PayloadFillerPort`
-- `DeterministicAttemptClamp`: final schema/catalog/capability authority.
+- Input helper stage:
+  - `sense_helper`
+  - `act_descriptor_helper` (process-level in-memory cache)
+- Primary stage:
+  - `primary(<input-ir>) -> <output-ir>`
+- Output helper stage:
+  - `acts_helper` (JSON Schema strict mode)
+  - `goal_stack_helper` (JSON Schema strict mode)
 
 ## Invariants
 
 - Cortex state is externalized; no durable internal persistence.
 - `Act` remains non-binding and world-relative.
-- deterministic clamp guards all emitted acts.
+- primary failure/timeout is fail-closed noop.
+- helper failure degrades to fallback section/empty helper result.
 - business output remains clean (telemetry out-of-band).

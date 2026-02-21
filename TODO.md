@@ -19,6 +19,7 @@
 - [ ] Cognition State 还包含 context （但这是当前实现特定的，就作为一个字段就可以了）
 - [ ] CortexCollaborators 是什么，和 AI Gateway 强耦合是预期行为
 - [ ] Cortex Config 来配置用什么 ai-provider-string 为 Primary, Serialize, Deserialize 等等
+- [ ] 可以输出 cognition state，但是要注意不是整个栈都可以操作的，continuity可能会拒绝一些变化
 
 ### Spine
 
@@ -46,6 +47,7 @@
   - 配置文件要基于 backend 为首的结构
   - 提供能力特定的接口，而不是 infer_once, infer_stream 这样通用的接口。对于 result Ok 可以没有通用定义，但是 result Err 可以有。
 - [ ] 移除 Credential Provider
+- [ ] 啥是 attempt ?
 
 ## Apple Universal
 

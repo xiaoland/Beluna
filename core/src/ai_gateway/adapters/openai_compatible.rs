@@ -51,6 +51,7 @@ impl BackendAdapter for OpenAiCompatibleAdapter {
             streaming: true,
             tool_calls: true,
             json_mode: true,
+            json_schema_mode: true,
             vision: false,
             resumable_streaming: false,
         }
@@ -115,8 +116,25 @@ impl BackendAdapter for OpenAiCompatibleAdapter {
                     body["tool_choice"] = http_common::tool_choice_to_openai(&req.tool_choice);
                 }
 
-                if matches!(req.output_mode, CanonicalOutputMode::JsonObject) {
-                    body["response_format"] = json!({"type": "json_object"});
+                match &req.output_mode {
+                    CanonicalOutputMode::JsonObject => {
+                        body["response_format"] = json!({"type": "json_object"});
+                    }
+                    CanonicalOutputMode::JsonSchema {
+                        name,
+                        schema,
+                        strict,
+                    } => {
+                        body["response_format"] = json!({
+                            "type": "json_schema",
+                            "json_schema": {
+                                "name": name,
+                                "schema": schema,
+                                "strict": strict
+                            }
+                        });
+                    }
+                    CanonicalOutputMode::Text => {}
                 }
 
                 if let Some(max_tokens) = req.limits.max_output_tokens {

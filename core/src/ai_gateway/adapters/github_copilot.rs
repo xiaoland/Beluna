@@ -37,6 +37,7 @@ impl BackendAdapter for GitHubCopilotAdapter {
             streaming: true,
             tool_calls: false,
             json_mode: false,
+            json_schema_mode: false,
             vision: false,
             resumable_streaming: false,
         }

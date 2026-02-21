@@ -1,7 +1,16 @@
-use std::{collections::BTreeMap, future::Future, pin::Pin, sync::Arc, time::Instant};
+use std::{
+    collections::{BTreeMap, HashMap},
+    future::Future,
+    pin::Pin,
+    sync::Arc,
+    time::Instant,
+};
 
 use serde::Deserialize;
-use tokio::time::{Duration, timeout};
+use tokio::{
+    sync::RwLock,
+    time::{Duration, timeout},
+};
 
 use crate::{
     ai_gateway::{
@@ -11,35 +20,26 @@ use crate::{
             RequestLimitOverrides, ToolChoice,
         },
     },
+    config::CortexHelperRoutesConfig,
     cortex::{
         clamp::derive_act_id,
-        error::{
-            CortexError, budget_exceeded, cycle_timeout, extractor_failed, invalid_input,
-            primary_failed,
+        error::{CortexError, extractor_failed, filler_failed, invalid_input, primary_failed},
+        helpers_input,
+        helpers_output::{
+            GoalStackHelperOutput, acts_json_schema, apply_goal_stack_patch,
+            empty_goal_stack_patch, goal_stack_patch_json_schema,
         },
-        types::{AttemptDraft, CortexOutput, ProseIr, ReactionLimits},
+        ir,
+        testing::{
+            ActDescriptorHelperRequest as TestActDescriptorHelperRequest,
+            ActsHelperRequest as TestActsHelperRequest, GoalStackHelperRequest as TestGoalRequest,
+            PrimaryRequest as TestPrimaryRequest, SenseHelperRequest as TestSenseHelperRequest,
+            TestGoalStackPatch, TestGoalStackPatchOp, TestHooks,
+        },
+        types::{ActsHelperOutput, CortexOutput, GoalStackPatch, GoalStackPatchOp, ReactionLimits},
     },
-    types::{Act, CognitionState, GoalFrame, NeuralSignalDescriptorCatalog, PhysicalState, Sense},
+    types::{Act, CognitionState, NeuralSignalDescriptor, PhysicalState, Sense},
 };
-
-#[derive(Debug, Clone)]
-pub struct PrimaryReasonerRequest {
-    pub cycle_id: u64,
-    pub senses: Vec<Sense>,
-    pub physical_state: PhysicalState,
-    pub cognition_state: CognitionState,
-    pub limits: ReactionLimits,
-}
-
-#[derive(Debug, Clone)]
-pub struct AttemptExtractorRequest {
-    pub cycle_id: u64,
-    pub prose_ir: ProseIr,
-    pub neural_signal_descriptor_catalog: NeuralSignalDescriptorCatalog,
-    pub senses: Vec<Sense>,
-    pub cognition_state: CognitionState,
-    pub limits: ReactionLimits,
-}
 
 #[derive(Debug, Clone)]
 pub enum CortexTelemetryEvent {
@@ -51,25 +51,22 @@ pub enum CortexTelemetryEvent {
 
 pub type CortexTelemetryHook = Arc<dyn Fn(CortexTelemetryEvent) + Send + Sync>;
 
-type PrimaryReasonerFuture = Pin<Box<dyn Future<Output = Result<ProseIr, CortexError>> + Send>>;
-type AttemptExtractorFuture =
-    Pin<Box<dyn Future<Output = Result<Vec<AttemptDraft>, CortexError>> + Send>>;
-
-pub type PrimaryReasonerHook =
-    Arc<dyn Fn(PrimaryReasonerRequest) -> PrimaryReasonerFuture + Send + Sync>;
-pub type AttemptExtractorHook =
-    Arc<dyn Fn(AttemptExtractorRequest) -> AttemptExtractorFuture + Send + Sync>;
+type SenseSectionFuture = Pin<Box<dyn Future<Output = Result<String, CortexError>> + Send>>;
+type ActDescriptorSectionFuture = Pin<Box<dyn Future<Output = Result<String, CortexError>> + Send>>;
+type PrimaryFuture = Pin<Box<dyn Future<Output = Result<String, CortexError>> + Send>>;
+type ActsHelperFuture = Pin<Box<dyn Future<Output = Result<ActsHelperOutput, CortexError>> + Send>>;
+type GoalHelperFuture = Pin<Box<dyn Future<Output = Result<GoalStackPatch, CortexError>> + Send>>;
 
 #[derive(Clone)]
 enum CortexCollaborators {
     Gateway {
         gateway: Arc<AIGateway>,
-        primary_route: Option<String>,
-        sub_route: Option<String>,
+        helper_routes: CortexHelperRoutesConfig,
+        act_descriptor_cache: Arc<RwLock<HashMap<String, String>>>,
     },
     Hooks {
-        primary: PrimaryReasonerHook,
-        extractor: AttemptExtractorHook,
+        hooks: TestHooks,
+        act_descriptor_cache: Arc<RwLock<HashMap<String, String>>>,
     },
 }
 
@@ -78,6 +75,15 @@ pub struct Cortex {
     collaborators: CortexCollaborators,
     telemetry_hook: Option<CortexTelemetryHook>,
     limits: ReactionLimits,
+}
+
+#[derive(Clone, Copy)]
+enum HelperStage {
+    Primary,
+    SenseHelper,
+    ActDescriptorHelper,
+    ActsHelper,
+    GoalStackHelper,
 }
 
 impl Cortex {
@@ -89,21 +95,20 @@ impl Cortex {
         Self {
             collaborators: CortexCollaborators::Gateway {
                 gateway,
-                primary_route: config.primary_route.clone(),
-                sub_route: config.sub_route.clone(),
+                helper_routes: config.helper_routes.clone(),
+                act_descriptor_cache: Arc::new(RwLock::new(HashMap::new())),
             },
             telemetry_hook,
             limits: config.default_limits.clone(),
         }
     }
 
-    pub fn for_test_with_hooks(
-        primary: PrimaryReasonerHook,
-        extractor: AttemptExtractorHook,
-        limits: ReactionLimits,
-    ) -> Self {
+    pub(crate) fn for_test_with_hooks(hooks: TestHooks, limits: ReactionLimits) -> Self {
         Self {
-            collaborators: CortexCollaborators::Hooks { primary, extractor },
+            collaborators: CortexCollaborators::Hooks {
+                hooks,
+                act_descriptor_cache: Arc::new(RwLock::new(HashMap::new())),
+            },
             telemetry_hook: None,
             limits,
         }
@@ -126,36 +131,79 @@ impl Cortex {
             cycle_id: physical_state.cycle_id,
         });
 
-        if let Err(err) = validate_input_bounds(&self.limits) {
-            self.emit(CortexTelemetryEvent::StageFailed {
-                cycle_id: physical_state.cycle_id,
-                stage: "input_validation",
-            });
-            return Err(err);
-        }
-
         let deadline = Duration::from_millis(self.limits.max_cycle_time_ms.max(1));
-        let mut budget = CycleBudgetGuard::new(&self.limits);
+        let sense_descriptors = helpers_input::sense_descriptors(physical_state);
+        let act_descriptors = helpers_input::act_descriptors(physical_state);
 
-        if let Err(err) = budget.record_primary_call() {
-            return Err(err);
-        }
+        let (sense_section_result, act_catalog_result) = tokio::join!(
+            timeout(
+                deadline,
+                self.build_senses_section(
+                    physical_state.cycle_id,
+                    senses.to_vec(),
+                    sense_descriptors.clone()
+                )
+            ),
+            timeout(
+                deadline,
+                self.build_act_descriptor_catalog_section(
+                    physical_state.cycle_id,
+                    act_descriptors.clone()
+                )
+            )
+        );
 
-        let primary_req = PrimaryReasonerRequest {
-            cycle_id: physical_state.cycle_id,
-            senses: senses.to_vec(),
-            physical_state: physical_state.clone(),
-            cognition_state: cognition_state.clone(),
-            limits: self.limits.clone(),
-        };
-        let ir = match timeout(deadline, self.infer_ir(primary_req)).await {
-            Ok(Ok(ir)) => ir,
+        let senses_section = self.resolve_input_helper_fallback(
+            physical_state.cycle_id,
+            "sense_helper",
+            sense_section_result,
+            helpers_input::fallback_senses_section(senses, &sense_descriptors),
+        );
+        let act_descriptor_catalog_section = self.resolve_input_helper_fallback(
+            physical_state.cycle_id,
+            "act_descriptor_helper",
+            act_catalog_result,
+            helpers_input::fallback_act_descriptor_catalog_section(&act_descriptors),
+        );
+        let goal_stack_section = helpers_input::goal_stack_section(cognition_state);
+        let context_section = helpers_input::context_section(physical_state, cognition_state);
+
+        let input_ir = ir::build_input_ir(
+            &senses_section,
+            &act_descriptor_catalog_section,
+            &goal_stack_section,
+            &context_section,
+        );
+
+        let primary_result = timeout(
+            deadline,
+            self.run_primary_helper(
+                physical_state.cycle_id,
+                senses.to_vec(),
+                physical_state.clone(),
+                cognition_state.clone(),
+                input_ir.text.clone(),
+            ),
+        )
+        .await;
+        let primary_output = match primary_result {
+            Ok(Ok(output)) => output,
             Ok(Err(err)) => {
                 self.emit(CortexTelemetryEvent::StageFailed {
                     cycle_id: physical_state.cycle_id,
                     stage: "primary",
                 });
-                return Err(err);
+                tracing::warn!(
+                    target: "cortex",
+                    cycle_id = physical_state.cycle_id,
+                    error = %err,
+                    "primary_failed_noop"
+                );
+                return Ok(self.noop_output(
+                    cognition_state,
+                    physical_state.cycle_id,
+                    "primary_failed",
+                ));
             }
             Err(_) => {
                 self.emit(CortexTelemetryEvent::StageFailed {
@@ -166,65 +214,127 @@ impl Cortex {
                     target: "cortex",
                     cycle_id = physical_state.cycle_id,
                     deadline_ms = deadline.as_millis() as u64,
-                    max_cycle_time_ms = self.limits.max_cycle_time_ms,
-                    "primary_timeout"
+                    "primary_timeout_noop"
                 );
-                return Err(cycle_timeout("primary call timed out"));
+                return Ok(self.noop_output(
+                    cognition_state,
+                    physical_state.cycle_id,
+                    "primary_timeout",
+                ));
             }
         };
 
-        if let Err(err) = budget.record_sub_call() {
-            return Err(err);
-        }
-
-        let extract_req = AttemptExtractorRequest {
-            cycle_id: physical_state.cycle_id,
-            prose_ir: ir,
-            neural_signal_descriptor_catalog: physical_state.capabilities.clone(),
-            senses: senses.to_vec(),
-            cognition_state: cognition_state.clone(),
-            limits: self.limits.clone(),
+        let (output_ir, output_sections) = match ir::parse_output_ir(&primary_output) {
+            Ok(parsed) => parsed,
+            Err(err) => {
+                self.emit(CortexTelemetryEvent::StageFailed {
+                    cycle_id: physical_state.cycle_id,
+                    stage: "primary_contract",
+                });
+                tracing::warn!(
+                    target: "cortex",
+                    cycle_id = physical_state.cycle_id,
+                    error = %err,
+                    "primary_contract_failed_noop"
+                );
+                return Ok(self.noop_output(
+                    cognition_state,
+                    physical_state.cycle_id,
+                    "primary_contract",
+                ));
+            }
         };
-        let drafts = match timeout(deadline, self.extract_attempts(extract_req)).await {
-            Ok(Ok(drafts)) => drafts,
+
+        let (acts_result, goal_patch_result) = tokio::join!(
+            timeout(
+                deadline,
+                self.run_acts_helper(
+                    physical_state.cycle_id,
+                    output_ir.text.clone(),
+                    output_sections.acts_section.clone(),
+                    act_descriptors.clone()
+                )
+            ),
+            timeout(
+                deadline,
+                self.run_goal_stack_helper(
+                    physical_state.cycle_id,
+                    output_ir.text.clone(),
+                    output_sections.goal_stack_patch_section.clone(),
+                    cognition_state.clone()
+                )
+            )
+        );
+
+        let acts = match acts_result {
+            Ok(Ok(acts_helper_output)) => {
+                self.make_acts(physical_state.cycle_id, acts_helper_output.acts)
+            }
             Ok(Err(err)) => {
                 self.emit(CortexTelemetryEvent::StageFailed {
                     cycle_id: physical_state.cycle_id,
-                    stage: "extractor",
+                    stage: "acts_helper",
                 });
-                return Err(err);
+                tracing::warn!(
+                    target: "cortex",
+                    cycle_id = physical_state.cycle_id,
+                    error = %err,
+                    "acts_helper_failed_fallback_empty"
+                );
+                Vec::new()
             }
             Err(_) => {
                 self.emit(CortexTelemetryEvent::StageFailed {
                     cycle_id: physical_state.cycle_id,
-                    stage: "extractor_timeout",
+                    stage: "acts_helper_timeout",
                 });
                 tracing::warn!(
                     target: "cortex",
                     cycle_id = physical_state.cycle_id,
                     deadline_ms = deadline.as_millis() as u64,
-                    max_cycle_time_ms = self.limits.max_cycle_time_ms,
-                    "extractor_timeout"
+                    "acts_helper_timeout_fallback_empty"
                 );
-                return Err(cycle_timeout("extractor call timed out"));
+                Vec::new()
             }
         };
 
-        let acts = drafts_to_acts(physical_state.cycle_id, drafts, &self.limits);
-        tracing::debug!(
-            target: "cortex",
-            cycle_id = physical_state.cycle_id,
-            act_count = acts.len(),
-            "drafts_to_acts"
-        );
+        let goal_stack_patch = match goal_patch_result {
+            Ok(Ok(patch)) => patch,
+            Ok(Err(err)) => {
+                self.emit(CortexTelemetryEvent::StageFailed {
+                    cycle_id: physical_state.cycle_id,
+                    stage: "goal_stack_helper",
+                });
+                tracing::warn!(
+                    target: "cortex",
+                    cycle_id = physical_state.cycle_id,
+                    error = %err,
+                    "goal_stack_helper_failed_fallback_empty"
+                );
+                empty_goal_stack_patch()
+            }
+            Err(_) => {
+                self.emit(CortexTelemetryEvent::StageFailed {
+                    cycle_id: physical_state.cycle_id,
+                    stage: "goal_stack_helper_timeout",
+                });
+                tracing::warn!(
+                    target: "cortex",
+                    cycle_id = physical_state.cycle_id,
+                    deadline_ms = deadline.as_millis() as u64,
+                    "goal_stack_helper_timeout_fallback_empty"
+                );
+                empty_goal_stack_patch()
+            }
+        };
+
+        let new_cognition_state = apply_goal_stack_patch(cognition_state, &goal_stack_patch);
         if acts.is_empty() {
             self.emit(CortexTelemetryEvent::NoopFallback {
                 cycle_id: physical_state.cycle_id,
-                reason: "extractor_no_drafts",
+                reason: "acts_helper_empty",
             });
         }
-
-        let new_cognition_state = evolve_cognition_state(cognition_state, senses);
         self.emit(CortexTelemetryEvent::ReactionCompleted {
             cycle_id: physical_state.cycle_id,
             act_count: acts.len(),
@@ -236,26 +346,343 @@ impl Cortex {
         })
     }
 
-    async fn infer_ir(&self, req: PrimaryReasonerRequest) -> Result<ProseIr, CortexError> {
+    async fn build_senses_section(
+        &self,
+        cycle_id: u64,
+        senses: Vec<Sense>,
+        sense_descriptors: Vec<NeuralSignalDescriptor>,
+    ) -> Result<String, CortexError> {
         match &self.collaborators {
-            CortexCollaborators::Gateway {
-                gateway,
-                primary_route,
-                ..
-            } => infer_ir_via_gateway(gateway, primary_route.clone(), req).await,
-            CortexCollaborators::Hooks { primary, .. } => (primary)(req).await,
+            CortexCollaborators::Gateway { gateway, .. } => {
+                let prompt = format!(
+                    "Generate the body for <senses> section in <input-ir>.\nReturn plain text body only.\nSenses:\n{}\nSense descriptors:\n{}",
+                    serde_json::to_string_pretty(&senses).unwrap_or_else(|_| "[]".to_string()),
+                    serde_json::to_string_pretty(&sense_descriptors)
+                        .unwrap_or_else(|_| "[]".to_string()),
+                );
+                call_text_helper_via_gateway(
+                    gateway,
+                    self.resolve_route(HelperStage::SenseHelper),
+                    cycle_id,
+                    "sense_helper",
+                    self.limits.max_sub_output_tokens,
+                    self.limits.max_cycle_time_ms,
+                    prompt,
+                )
+                .await
+            }
+            CortexCollaborators::Hooks { hooks, .. } => {
+                (hooks.sense_helper)(TestSenseHelperRequest {
+                    cycle_id,
+                    senses,
+                    sense_descriptors,
+                })
+                .await
+            }
         }
     }
 
-    async fn extract_attempts(
+    async fn build_act_descriptor_catalog_section(
         &self,
-        req: AttemptExtractorRequest,
-    ) -> Result<Vec<AttemptDraft>, CortexError> {
+        cycle_id: u64,
+        act_descriptors: Vec<NeuralSignalDescriptor>,
+    ) -> Result<String, CortexError> {
+        let cache_key = helpers_input::act_descriptor_cache_key(&act_descriptors);
+        if let Some(cached) = self.get_cached_act_descriptor_section(&cache_key).await {
+            tracing::debug!(
+                target: "cortex",
+                cycle_id = cycle_id,
+                cache_key = %cache_key,
+                "act_descriptor_helper_cache_hit"
+            );
+            return Ok(cached);
+        }
+
+        let generated = match &self.collaborators {
+            CortexCollaborators::Gateway { gateway, .. } => {
+                let prompt = format!(
+                    "Generate the body for <act-descriptor-catalog> section in <input-ir>.\nReturn plain text body only.\nAct descriptors:\n{}",
+                    serde_json::to_string_pretty(&act_descriptors)
+                        .unwrap_or_else(|_| "[]".to_string()),
+                );
+                call_text_helper_via_gateway(
+                    gateway,
+                    self.resolve_route(HelperStage::ActDescriptorHelper),
+                    cycle_id,
+                    "act_descriptor_helper",
+                    self.limits.max_sub_output_tokens,
+                    self.limits.max_cycle_time_ms,
+                    prompt,
+                )
+                .await?
+            }
+            CortexCollaborators::Hooks { hooks, .. } => {
+                (hooks.act_descriptor_helper)(TestActDescriptorHelperRequest {
+                    cycle_id,
+                    act_descriptors,
+                })
+                .await?
+            }
+        };
+
+        if !generated.trim().is_empty() {
+            self.cache_act_descriptor_section(cache_key, generated.clone())
+                .await;
+        }
+        Ok(generated)
+    }
+
+    async fn run_primary_helper(
+        &self,
+        cycle_id: u64,
+        senses: Vec<Sense>,
+        physical_state: PhysicalState,
+        cognition_state: CognitionState,
+        input_ir: String,
+    ) -> Result<String, CortexError> {
+        match &self.collaborators {
+            CortexCollaborators::Gateway { gateway, .. } => {
+                let prompt = format!(
+                    "Transform <input-ir> into <output-ir>.\nRules:\n1) Return valid XML-like text with exact root <output-ir>.\n2) Must include first-level sections <acts> and <goal-stack-patch>.\n3) Section body may contain XML or Markdown.\n4) Return only IR.\n\nInput IR:\n{}",
+                    input_ir
+                );
+                call_text_helper_via_gateway(
+                    gateway,
+                    self.resolve_route(HelperStage::Primary),
+                    cycle_id,
+                    "primary",
+                    self.limits.max_primary_output_tokens,
+                    self.limits.max_cycle_time_ms,
+                    prompt,
+                )
+                .await
+            }
+            CortexCollaborators::Hooks { hooks, .. } => {
+                (hooks.primary)(TestPrimaryRequest {
+                    cycle_id,
+                    senses,
+                    physical_state,
+                    cognition_state,
+                    input_ir,
+                })
+                .await
+            }
+        }
+    }
+
+    async fn run_acts_helper(
+        &self,
+        cycle_id: u64,
+        output_ir: String,
+        acts_section: String,
+        act_descriptors: Vec<NeuralSignalDescriptor>,
+    ) -> Result<ActsHelperOutput, CortexError> {
+        match &self.collaborators {
+            CortexCollaborators::Gateway { gateway, .. } => {
+                let prompt = format!(
+                    "Parse <acts> section from output IR and produce structured acts.\nAllowed act descriptors:\n{}\nOutput IR:\n{}\nActs section:\n{}",
+                    serde_json::to_string_pretty(&act_descriptors)
+                        .unwrap_or_else(|_| "[]".to_string()),
+                    output_ir,
+                    acts_section
+                );
+                let response = call_helper_via_gateway(
+                    gateway,
+                    self.resolve_route(HelperStage::ActsHelper),
+                    cycle_id,
+                    "acts_helper",
+                    self.limits.max_sub_output_tokens,
+                    self.limits.max_cycle_time_ms,
+                    prompt,
+                    OutputMode::JsonSchema {
+                        name: "acts_helper_output".to_string(),
+                        schema: acts_json_schema(),
+                        strict: true,
+                    },
+                )
+                .await?;
+                let parsed = parse_json_output::<ActsHelperOutput>(&response.output_text)
+                    .map_err(|err| extractor_failed(err.to_string()))?;
+                Ok(parsed)
+            }
+            CortexCollaborators::Hooks { hooks, .. } => {
+                let raw = (hooks.acts_helper)(TestActsHelperRequest {
+                    cycle_id,
+                    output_ir,
+                    acts_section,
+                })
+                .await?;
+                Ok(ActsHelperOutput {
+                    acts: raw
+                        .acts
+                        .into_iter()
+                        .map(|act| crate::cortex::types::ActDraft {
+                            endpoint_id: act.endpoint_id,
+                            neural_signal_descriptor_id: act.neural_signal_descriptor_id,
+                            payload: act.payload,
+                        })
+                        .collect(),
+                })
+            }
+        }
+    }
+
+    async fn run_goal_stack_helper(
+        &self,
+        cycle_id: u64,
+        output_ir: String,
+        goal_stack_patch_section: String,
+        cognition_state: CognitionState,
+    ) -> Result<GoalStackPatch, CortexError> {
+        match &self.collaborators {
+            CortexCollaborators::Gateway { gateway, .. } => {
+                let prompt = format!(
+                    "Parse <goal-stack-patch> section from output IR and produce goal stack patch ops.\nCurrent goal stack:\n{}\nOutput IR:\n{}\nGoal stack patch section:\n{}",
+                    serde_json::to_string_pretty(&cognition_state.goal_stack)
+                        .unwrap_or_else(|_| "[]".to_string()),
+                    output_ir,
+                    goal_stack_patch_section
+                );
+                let response = call_helper_via_gateway(
+                    gateway,
+                    self.resolve_route(HelperStage::GoalStackHelper),
+                    cycle_id,
+                    "goal_stack_helper",
+                    self.limits.max_sub_output_tokens,
+                    self.limits.max_cycle_time_ms,
+                    prompt,
+                    OutputMode::JsonSchema {
+                        name: "goal_stack_patch_output".to_string(),
+                        schema: goal_stack_patch_json_schema(),
+                        strict: true,
+                    },
+                )
+                .await?;
+                let parsed = parse_json_output::<GoalStackHelperOutput>(&response.output_text)
+                    .map_err(|err| filler_failed(err.to_string()))?;
+                Ok(parsed.patch)
+            }
+            CortexCollaborators::Hooks { hooks, .. } => {
+                let raw = (hooks.goal_stack_helper)(TestGoalRequest {
+                    cycle_id,
+                    output_ir,
+                    goal_stack_patch_section,
+                    cognition_state,
+                })
+                .await?;
+                Ok(convert_test_patch(raw))
+            }
+        }
+    }
+
+    fn make_acts(&self, cycle_id: u64, drafts: Vec<crate::cortex::types::ActDraft>) -> Vec<Act> {
+        let mut acts = Vec::with_capacity(drafts.len());
+        for draft in drafts {
+            let act_id = derive_act_id(
+                cycle_id,
+                &[],
+                &draft.endpoint_id,
+                &draft.neural_signal_descriptor_id,
+                &draft.payload,
+            );
+            acts.push(Act {
+                act_id,
+                endpoint_id: draft.endpoint_id,
+                neural_signal_descriptor_id: draft.neural_signal_descriptor_id,
+                payload: draft.payload,
+            });
+        }
+        acts
+    }
+
+    fn resolve_input_helper_fallback(
+        &self,
+        cycle_id: u64,
+        stage: &'static str,
+        result: Result<Result<String, CortexError>, tokio::time::error::Elapsed>,
+        fallback: String,
+    ) -> String {
+        match result {
+            Ok(Ok(text)) if !text.trim().is_empty() => text,
+            Ok(Ok(_)) => fallback,
+            Ok(Err(err)) => {
+                self.emit(CortexTelemetryEvent::StageFailed { cycle_id, stage });
+                tracing::warn!(
+                    target: "cortex",
+                    cycle_id = cycle_id,
+                    stage = stage,
+                    error = %err,
+                    "input_helper_failed_fallback_raw"
+                );
+                fallback
+            }
+            Err(_) => {
+                self.emit(CortexTelemetryEvent::StageFailed { cycle_id, stage });
+                tracing::warn!(
+                    target: "cortex",
+                    cycle_id = cycle_id,
+                    stage = stage,
+                    "input_helper_timeout_fallback_raw"
+                );
+                fallback
+            }
+        }
+    }
+
+    fn noop_output(
+        &self,
+        cognition_state: &CognitionState,
+        cycle_id: u64,
+        reason: &'static str,
+    ) -> CortexOutput {
+        self.emit(CortexTelemetryEvent::NoopFallback { cycle_id, reason });
+        CortexOutput {
+            acts: Vec::new(),
+            new_cognition_state: cognition_state.clone(),
+        }
+    }
+
+    fn resolve_route(&self, stage: HelperStage) -> Option<String> {
+        let routes = match &self.collaborators {
+            CortexCollaborators::Gateway { helper_routes, .. } => helper_routes,
+            CortexCollaborators::Hooks { .. } => return None,
+        };
+
+        let stage_route = match stage {
+            HelperStage::Primary => routes.primary.clone(),
+            HelperStage::SenseHelper => routes.sense_helper.clone(),
+            HelperStage::ActDescriptorHelper => routes.act_descriptor_helper.clone(),
+            HelperStage::ActsHelper => routes.acts_helper.clone(),
+            HelperStage::GoalStackHelper => routes.goal_stack_helper.clone(),
+        };
+        stage_route.or_else(|| routes.default.clone())
+    }
+
+    async fn get_cached_act_descriptor_section(&self, cache_key: &str) -> Option<String> {
         match &self.collaborators {
             CortexCollaborators::Gateway {
-                gateway, sub_route, ..
-            } => extract_attempts_via_gateway(gateway, sub_route.clone(), req).await,
-            CortexCollaborators::Hooks { extractor, .. } => (extractor)(req).await,
+                act_descriptor_cache,
+                ..
+            }
+            | CortexCollaborators::Hooks {
+                act_descriptor_cache,
+                ..
+            } => act_descriptor_cache.read().await.get(cache_key).cloned(),
+        }
+    }
+
+    async fn cache_act_descriptor_section(&self, cache_key: String, value: String) {
+        match &self.collaborators {
+            CortexCollaborators::Gateway {
+                act_descriptor_cache,
+                ..
+            }
+            | CortexCollaborators::Hooks {
+                act_descriptor_cache,
+                ..
+            } => {
+                act_descriptor_cache.write().await.insert(cache_key, value);
+            }
         }
     }
 
@@ -299,301 +726,107 @@ impl Cortex {
     }
 }
 
-struct CycleBudgetGuard {
-    primary_calls: u8,
-    sub_calls: u8,
-    max_primary_calls: u8,
-    max_sub_calls: u8,
-}
-
-impl CycleBudgetGuard {
-    fn new(limits: &ReactionLimits) -> Self {
-        Self {
-            primary_calls: 0,
-            sub_calls: 0,
-            max_primary_calls: limits.max_primary_calls,
-            max_sub_calls: limits.max_sub_calls,
-        }
-    }
-
-    fn record_primary_call(&mut self) -> Result<(), CortexError> {
-        if self.primary_calls >= self.max_primary_calls {
-            return Err(budget_exceeded("primary call budget exceeded"));
-        }
-        self.primary_calls = self.primary_calls.saturating_add(1);
-        Ok(())
-    }
-
-    fn record_sub_call(&mut self) -> Result<(), CortexError> {
-        if self.sub_calls >= self.max_sub_calls {
-            return Err(budget_exceeded("sub-call budget exceeded"));
-        }
-        self.sub_calls = self.sub_calls.saturating_add(1);
-        Ok(())
+fn convert_test_patch(raw: TestGoalStackPatch) -> GoalStackPatch {
+    GoalStackPatch {
+        ops: raw
+            .ops
+            .into_iter()
+            .map(|op| match op {
+                TestGoalStackPatchOp::Push { goal_id, summary } => {
+                    GoalStackPatchOp::Push { goal_id, summary }
+                }
+                TestGoalStackPatchOp::Pop => GoalStackPatchOp::Pop,
+                TestGoalStackPatchOp::ReplaceTop { goal_id, summary } => {
+                    GoalStackPatchOp::ReplaceTop { goal_id, summary }
+                }
+                TestGoalStackPatchOp::Clear => GoalStackPatchOp::Clear,
+            })
+            .collect(),
     }
 }
 
-fn validate_input_bounds(limits: &ReactionLimits) -> Result<(), CortexError> {
-    if limits.max_primary_calls != 1 {
-        return Err(invalid_input("max_primary_calls must be exactly 1"));
-    }
-    Ok(())
-}
-
-fn drafts_to_acts(cycle_id: u64, drafts: Vec<AttemptDraft>, limits: &ReactionLimits) -> Vec<Act> {
-    let mut acts = Vec::with_capacity(drafts.len());
-    for draft in drafts {
-        let AttemptDraft {
-            based_on,
-            endpoint_id,
-            neural_signal_descriptor_id,
-            payload_draft,
-            ..
-        } = draft;
-
-        let act_id = derive_act_id(
-            cycle_id,
-            &based_on,
-            &endpoint_id,
-            &neural_signal_descriptor_id,
-            &payload_draft,
-        );
-
-        acts.push(Act {
-            act_id,
-            endpoint_id,
-            neural_signal_descriptor_id,
-            payload: payload_draft,
-        });
-    }
-
-    acts.sort_by(|lhs, rhs| lhs.act_id.cmp(&rhs.act_id));
-    acts.truncate(limits.max_attempts);
-    acts
-}
-
-fn evolve_cognition_state(previous: &CognitionState, senses: &[Sense]) -> CognitionState {
-    let mut next = previous.clone();
-    next.revision = next.revision.saturating_add(1);
-
-    for sense in senses {
-        if let Sense::Domain(datum) = sense {
-            if let Some(goal_push) = datum.payload.get("goal_push") {
-                let goal_id = goal_push
-                    .get("goal_id")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("goal:auto")
-                    .to_string();
-                let summary = goal_push
-                    .get("summary")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("auto goal")
-                    .to_string();
-                next.goal_stack.push(GoalFrame { goal_id, summary });
-            }
-
-            if datum
-                .payload
-                .get("goal_pop")
-                .and_then(|value| value.as_bool())
-                .unwrap_or(false)
-            {
-                next.goal_stack.pop();
-            }
-        }
-    }
-
-    next
-}
-
-#[derive(Debug, Deserialize)]
-struct AttemptDraftEnvelope {
-    attempts: Vec<AttemptDraft>,
-}
-
-async fn infer_ir_via_gateway(
+async fn call_text_helper_via_gateway(
     gateway: &AIGateway,
     route: Option<String>,
-    req: PrimaryReasonerRequest,
-) -> Result<ProseIr, CortexError> {
-    let helper_request_id = format!("cortex-helper-{}", req.cycle_id);
-    let request_id = format!("cortex-primary-{}", req.cycle_id);
-    let started_at = Instant::now();
-    let helper_timeout_ms = (req.limits.max_cycle_time_ms / 2).max(1);
-    let primary_timeout_ms = req
-        .limits
-        .max_cycle_time_ms
-        .saturating_sub(helper_timeout_ms)
-        .max(1);
-    tracing::debug!(
-        target: "cortex",
-        cycle_id = req.cycle_id,
-        helper_request_id = %helper_request_id,
-        request_id = %request_id,
-        route_hint = route.as_deref().unwrap_or("-"),
-        helper_timeout_ms = helper_timeout_ms,
-        primary_timeout_ms = primary_timeout_ms,
-        max_output_tokens = req.limits.max_primary_output_tokens,
-        "cortex_primary_start"
-    );
-
-    let helper_request = build_text_request(
-        helper_request_id.clone(),
-        route.clone(),
-        req.limits.max_primary_output_tokens,
-        helper_timeout_ms,
-        build_helper_prompt(&req),
-        Some("helper".to_string()),
-        OutputMode::Text,
-    );
-    log_llm_input("helper", req.cycle_id, &helper_request);
-    let helper_response = gateway.chat_once(helper_request).await.map_err(|err| {
-        tracing::debug!(
-            target: "cortex",
-            cycle_id = req.cycle_id,
-            request_id = %helper_request_id,
-            elapsed_ms = started_at.elapsed().as_millis() as u64,
-            error_kind = ?err.kind,
-            error = %err.message,
-            "cortex_helper_failed"
-        );
-        primary_failed(err.to_string())
-    })?;
-    log_llm_output("helper", req.cycle_id, &helper_request_id, &helper_response);
-    let helper_text = helper_response.output_text.trim().to_string();
-    if helper_text.is_empty() {
-        return Err(primary_failed("helper produced empty context"));
-    }
-
-    let request = build_text_request(
-        request_id.clone(),
+    cycle_id: u64,
+    stage: &'static str,
+    max_output_tokens: u64,
+    max_request_time_ms: u64,
+    prompt: String,
+) -> Result<String, CortexError> {
+    let response = call_helper_via_gateway(
+        gateway,
         route,
-        req.limits.max_primary_output_tokens,
-        primary_timeout_ms,
-        build_primary_prompt(&helper_text),
-        Some("primary".to_string()),
+        cycle_id,
+        stage,
+        max_output_tokens,
+        max_request_time_ms,
+        prompt,
         OutputMode::Text,
-    );
-    log_llm_input("primary", req.cycle_id, &request);
-    let response = gateway.chat_once(request).await.map_err(|err| {
-        tracing::debug!(
-            target: "cortex",
-            cycle_id = req.cycle_id,
-            request_id = %request_id,
-            elapsed_ms = started_at.elapsed().as_millis() as u64,
-            error_kind = ?err.kind,
-            error = %err.message,
-            "cortex_primary_failed"
-        );
-        primary_failed(err.to_string())
-    })?;
-    log_llm_output("primary", req.cycle_id, &request_id, &response);
-    let finish_reason = response.finish_reason;
+    )
+    .await?;
+
     let text = response.output_text.trim().to_string();
     if text.is_empty() {
-        tracing::debug!(
-            target: "cortex",
-            cycle_id = req.cycle_id,
-            request_id = %request_id,
-            elapsed_ms = started_at.elapsed().as_millis() as u64,
-            "cortex_primary_empty"
-        );
-        return Err(primary_failed("primary reasoner produced empty IR"));
+        return Err(extractor_failed(format!("{stage} produced empty output")));
     }
-    tracing::debug!(
-        target: "cortex",
-        cycle_id = req.cycle_id,
-        request_id = %request_id,
-        elapsed_ms = started_at.elapsed().as_millis() as u64,
-        finish_reason = ?finish_reason,
-        output_chars = text.len(),
-        "cortex_primary_completed"
-    );
-    Ok(ProseIr { text })
+    Ok(text)
 }
 
-async fn extract_attempts_via_gateway(
+async fn call_helper_via_gateway(
     gateway: &AIGateway,
     route: Option<String>,
-    req: AttemptExtractorRequest,
-) -> Result<Vec<AttemptDraft>, CortexError> {
-    let schema_hint = serde_json::json!({
-        "attempts": [
-            {
-                "intent_span": "string",
-                "based_on": ["sense_id"],
-                "attention_tags": ["tag"],
-                "endpoint_id": "string",
-                "neural_signal_descriptor_id": "string",
-                "payload_draft": {},
-                "goal_hint": "optional string"
-            }
-        ]
-    });
-    let prompt = format!(
-        "Compile this prose IR into attempt drafts JSON.\nReturn strictly one JSON object matching this shape: {}\nAllowed neural signal descriptors: {}\nSenses: {}\nCognition: {}\nIR: {}",
-        schema_hint,
-        serde_json::to_string(&req.neural_signal_descriptor_catalog.entries)
-            .unwrap_or_else(|_| "[]".to_string()),
-        serde_json::to_string(&req.senses).unwrap_or_else(|_| "[]".to_string()),
-        serde_json::to_string(&req.cognition_state).unwrap_or_else(|_| "{}".to_string()),
-        req.prose_ir.text
-    );
-
-    let request_id = format!("cortex-extractor-{}", req.cycle_id);
-    let request = build_text_request(
+    cycle_id: u64,
+    stage: &'static str,
+    max_output_tokens: u64,
+    max_request_time_ms: u64,
+    prompt: String,
+    output_mode: OutputMode,
+) -> Result<ChatResponse, CortexError> {
+    let request_id = format!("cortex-{stage}-{cycle_id}");
+    let started_at = Instant::now();
+    let request = build_request(
         request_id.clone(),
         route,
-        req.limits.max_sub_output_tokens,
-        req.limits.max_cycle_time_ms,
+        max_output_tokens,
+        max_request_time_ms,
         prompt,
-        Some("extractor".to_string()),
-        OutputMode::JsonObject,
+        stage,
+        output_mode,
     );
-    log_llm_input("extractor", req.cycle_id, &request);
+    log_llm_input(stage, cycle_id, &request);
     let response = gateway.chat_once(request).await.map_err(|err| {
         tracing::debug!(
             target: "cortex",
-            stage = "extractor",
-            cycle_id = req.cycle_id,
+            stage = stage,
+            cycle_id = cycle_id,
             request_id = %request_id,
+            elapsed_ms = started_at.elapsed().as_millis() as u64,
             error_kind = ?err.kind,
             error = %err.message,
             "llm_call_failed"
         );
-        extractor_failed(err.to_string())
+        match stage {
+            "primary" => primary_failed(err.to_string()),
+            "goal_stack_helper" => filler_failed(err.to_string()),
+            _ => extractor_failed(err.to_string()),
+        }
     })?;
-    log_llm_output("extractor", req.cycle_id, &request_id, &response);
-
-    let parsed =
-        parse_json_output::<AttemptDraftEnvelope>(&response.output_text).map_err(|err| {
-            tracing::debug!(
-                target: "cortex",
-                stage = "extractor",
-                cycle_id = req.cycle_id,
-                request_id = %request_id,
-                error = %err,
-                raw_output = %response.output_text,
-                "llm_output_parse_failed"
-            );
-            extractor_failed(err.to_string())
-        })?;
-    Ok(parsed.attempts)
+    log_llm_output(stage, cycle_id, &request_id, &response);
+    Ok(response)
 }
 
-fn build_text_request(
+fn build_request(
     request_id: String,
     route: Option<String>,
     max_output_tokens: u64,
     max_request_time_ms: u64,
     user_prompt: String,
-    stage: Option<String>,
+    stage: &'static str,
     output_mode: OutputMode,
 ) -> ChatRequest {
     let mut metadata = BTreeMap::new();
-    if let Some(stage) = stage {
-        metadata.insert("cortex_stage".to_string(), stage);
-    }
+    metadata.insert("cortex_stage".to_string(), stage.to_string());
     ChatRequest {
         request_id: Some(request_id),
         route,
@@ -601,8 +834,7 @@ fn build_text_request(
             BelunaMessage {
                 role: BelunaRole::System,
                 parts: vec![BelunaContentPart::Text {
-                    text: "You are a Cortex cognition organ. Return only what is asked."
-                        .to_string(),
+                    text: "You are a Cortex helper. Return only what is asked.".to_string(),
                 }],
                 tool_call_id: None,
                 tool_name: None,
@@ -624,22 +856,6 @@ fn build_text_request(
         metadata,
         cost_attribution_id: None,
     }
-}
-
-fn build_primary_prompt(helper_context: &str) -> String {
-    format!(
-        "Given helper context, produce prose IR only.\nThe prose IR must describe intent, attention, and action sketches.\nDo not include JSON, markdown, or explanations.\nHelper context:\n{}",
-        helper_context
-    )
-}
-
-fn build_helper_prompt(req: &PrimaryReasonerRequest) -> String {
-    format!(
-        "Translate runtime context into concise natural-language cognition notes for the primary reasoner.\nPreserve all sense_id values exactly as provided.\nOutput plain text only.\nSenses: {}\nPhysical state: {}\nCognition state: {}",
-        serde_json::to_string(&req.senses).unwrap_or_else(|_| "[]".to_string()),
-        serde_json::to_string(&req.physical_state).unwrap_or_else(|_| "{}".to_string()),
-        serde_json::to_string(&req.cognition_state).unwrap_or_else(|_| "{}".to_string()),
-    )
 }
 
 fn log_llm_input(stage: &str, cycle_id: u64, request: &ChatRequest) {

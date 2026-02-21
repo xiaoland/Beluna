@@ -32,6 +32,8 @@ impl RequestNormalizer {
             Self::validate_tool_schema_keywords(tool)?;
         }
 
+        Self::validate_output_mode(&request.output_mode)?;
+
         let route_hint = Self::resolve_route_hint(&request)?;
         let request_id = request
             .request_id
@@ -207,6 +209,34 @@ impl RequestNormalizer {
         match mode {
             OutputMode::Text => CanonicalOutputMode::Text,
             OutputMode::JsonObject => CanonicalOutputMode::JsonObject,
+            OutputMode::JsonSchema {
+                name,
+                schema,
+                strict,
+            } => CanonicalOutputMode::JsonSchema {
+                name,
+                schema,
+                strict,
+            },
+        }
+    }
+
+    fn validate_output_mode(mode: &OutputMode) -> Result<(), GatewayError> {
+        match mode {
+            OutputMode::Text | OutputMode::JsonObject => Ok(()),
+            OutputMode::JsonSchema { name, schema, .. } => {
+                if name.trim().is_empty() {
+                    return Err(invalid_request(
+                        "json_schema output mode requires non-empty name",
+                    ));
+                }
+                if !schema.is_object() {
+                    return Err(invalid_request(
+                        "json_schema output mode requires schema to be an object",
+                    ));
+                }
+                Ok(())
+            }
         }
     }
 }

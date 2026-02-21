@@ -8,6 +8,7 @@ Code:
 Key properties:
 - pure runtime boundary: `cortex(senses, physical_state, cognition_state) -> (acts, new_cognition_state)`
 - no internal durable persistence of cognition state
-- primary prose IR + sub-compile pipeline
-- deterministic clamp as final authority
+- input/output IR pipeline (`<input-ir>` -> `<output-ir>`)
+- input helpers (`sense_helper`, `act_descriptor_helper`) and output helpers (`acts_helper`, `goal_stack_helper`) are concurrent
+- primary failure is fail-closed noop; helper failures degrade via fallback/empty output
 - emitted `Act[]` is deterministic and non-binding

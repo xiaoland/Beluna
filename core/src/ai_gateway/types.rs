@@ -26,6 +26,8 @@ pub struct BackendCapabilities {
     #[serde(default)]
     pub json_mode: bool,
     #[serde(default)]
+    pub json_schema_mode: bool,
+    #[serde(default)]
     pub vision: bool,
     #[serde(default)]
     pub resumable_streaming: bool,
@@ -37,6 +39,7 @@ impl Default for BackendCapabilities {
             streaming: true,
             tool_calls: false,
             json_mode: false,
+            json_schema_mode: false,
             vision: false,
             resumable_streaming: false,
         }

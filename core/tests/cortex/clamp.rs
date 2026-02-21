@@ -1,88 +1,277 @@
-use beluna::{
-    cortex::{
-        AttemptClampRequest, AttemptDraft, DeterministicAttemptClamp, ReactionLimits, derive_act_id,
-    },
-    types::{NeuralSignalDescriptor, NeuralSignalDescriptorCatalog, NeuralSignalType, is_uuid_v7},
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
 };
 
-fn catalog() -> NeuralSignalDescriptorCatalog {
-    NeuralSignalDescriptorCatalog {
-        version: "v1".to_string(),
-        entries: vec![NeuralSignalDescriptor {
-            r#type: NeuralSignalType::Act,
-            endpoint_id: "ep.demo".to_string(),
-            neural_signal_descriptor_id: "cap.demo".to_string(),
-            payload_schema: serde_json::json!({"type":"object"}),
-        }],
+use tokio::time::{Duration, Instant};
+
+use beluna::{
+    cortex::{
+        ReactionLimits,
+        testing::{
+            TestActsHelperOutput, TestGoalStackPatch, TestGoalStackPatchOp, TestHooks, boxed,
+            cortex_with_hooks,
+        },
+    },
+    types::{
+        CognitionState, NeuralSignalDescriptor, NeuralSignalDescriptorCatalog, NeuralSignalType,
+        PhysicalLedgerSnapshot, PhysicalState, Sense, SenseDatum,
+    },
+};
+
+fn output_ir() -> String {
+    "<output-ir><acts>body</acts><goal-stack-patch>body</goal-stack-patch></output-ir>".to_string()
+}
+
+fn physical_state_with_descriptor(descriptor_id: &str) -> PhysicalState {
+    PhysicalState {
+        cycle_id: 1,
+        ledger: PhysicalLedgerSnapshot::default(),
+        capabilities: NeuralSignalDescriptorCatalog {
+            version: "v1".to_string(),
+            entries: vec![NeuralSignalDescriptor {
+                r#type: NeuralSignalType::Act,
+                endpoint_id: "ep.demo".to_string(),
+                neural_signal_descriptor_id: descriptor_id.to_string(),
+                payload_schema: serde_json::json!({"type":"object"}),
+            }],
+        },
     }
 }
 
-fn draft() -> AttemptDraft {
-    AttemptDraft {
-        intent_span: "do thing".to_string(),
-        based_on: vec!["sense:1".to_string()],
-        attention_tags: vec!["a".to_string()],
+fn domain_sense() -> Sense {
+    Sense::Domain(SenseDatum {
+        sense_id: "sense:1".to_string(),
         endpoint_id: "ep.demo".to_string(),
-        neural_signal_descriptor_id: "cap.demo".to_string(),
-        payload_draft: serde_json::json!({"ok": true}),
-        goal_hint: None,
-    }
+        neural_signal_descriptor_id: "sense.demo".to_string(),
+        payload: serde_json::json!({"x":1}),
+    })
 }
 
-#[test]
-fn act_id_is_uuid_v7() {
-    let lhs = derive_act_id(
-        1,
-        &["sense:1".to_string()],
-        "ep.demo",
-        "cap.demo",
-        &serde_json::json!({"k":"v"}),
+#[tokio::test]
+async fn act_descriptor_helper_cache_hits_when_descriptor_input_unchanged() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let sense_helper = Arc::new(|_req| boxed(async { Ok("senses".to_string()) }));
+    let act_descriptor_helper = Arc::new({
+        let calls = Arc::clone(&calls);
+        move |_req| {
+            let calls = Arc::clone(&calls);
+            boxed(async move {
+                calls.fetch_add(1, Ordering::Relaxed);
+                Ok("catalog".to_string())
+            })
+        }
+    });
+    let primary = Arc::new(|_req| boxed(async move { Ok(output_ir()) }));
+    let acts_helper = Arc::new(|_req| boxed(async { Ok(TestActsHelperOutput::default()) }));
+    let goal_stack_helper = Arc::new(|_req| boxed(async { Ok(TestGoalStackPatch::default()) }));
+
+    let cortex = cortex_with_hooks(
+        TestHooks::new(
+            sense_helper,
+            act_descriptor_helper,
+            primary,
+            acts_helper,
+            goal_stack_helper,
+        ),
+        ReactionLimits::default(),
     );
-    let rhs = derive_act_id(
-        1,
-        &["sense:1".to_string()],
-        "ep.demo",
-        "cap.demo",
-        &serde_json::json!({"k":"v"}),
+
+    let state = physical_state_with_descriptor("cap.demo");
+    cortex
+        .cortex(&[domain_sense()], &state, &CognitionState::default())
+        .await
+        .expect("first run should succeed");
+    cortex
+        .cortex(&[domain_sense()], &state, &CognitionState::default())
+        .await
+        .expect("second run should succeed");
+
+    assert_eq!(calls.load(Ordering::Relaxed), 1);
+}
+
+#[tokio::test]
+async fn act_descriptor_helper_cache_misses_when_descriptor_input_changes() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let sense_helper = Arc::new(|_req| boxed(async { Ok("senses".to_string()) }));
+    let act_descriptor_helper = Arc::new({
+        let calls = Arc::clone(&calls);
+        move |_req| {
+            let calls = Arc::clone(&calls);
+            boxed(async move {
+                calls.fetch_add(1, Ordering::Relaxed);
+                Ok("catalog".to_string())
+            })
+        }
+    });
+    let primary = Arc::new(|_req| boxed(async move { Ok(output_ir()) }));
+    let acts_helper = Arc::new(|_req| boxed(async { Ok(TestActsHelperOutput::default()) }));
+    let goal_stack_helper = Arc::new(|_req| boxed(async { Ok(TestGoalStackPatch::default()) }));
+
+    let cortex = cortex_with_hooks(
+        TestHooks::new(
+            sense_helper,
+            act_descriptor_helper,
+            primary,
+            acts_helper,
+            goal_stack_helper,
+        ),
+        ReactionLimits::default(),
     );
-    assert!(is_uuid_v7(&lhs));
-    assert!(is_uuid_v7(&rhs));
-    assert_ne!(lhs, rhs);
+
+    cortex
+        .cortex(
+            &[domain_sense()],
+            &physical_state_with_descriptor("cap.demo"),
+            &CognitionState::default(),
+        )
+        .await
+        .expect("first run should succeed");
+    cortex
+        .cortex(
+            &[domain_sense()],
+            &physical_state_with_descriptor("cap.demo.v2"),
+            &CognitionState::default(),
+        )
+        .await
+        .expect("second run should succeed");
+
+    assert_eq!(calls.load(Ordering::Relaxed), 2);
 }
 
-#[test]
-fn clamp_rejects_unknown_sense_ids() {
-    let clamp = DeterministicAttemptClamp;
-    let result = clamp
-        .clamp(AttemptClampRequest {
-            cycle_id: 1,
-            drafts: vec![draft()],
-            neural_signal_descriptor_catalog: catalog(),
-            known_sense_ids: vec!["sense:other".to_string()],
-            limits: ReactionLimits::default(),
+#[tokio::test]
+async fn goal_stack_patch_ops_are_applied_in_order() {
+    let sense_helper = Arc::new(|_req| boxed(async { Ok("senses".to_string()) }));
+    let act_descriptor_helper = Arc::new(|_req| boxed(async { Ok("catalog".to_string()) }));
+    let primary = Arc::new(|_req| boxed(async move { Ok(output_ir()) }));
+    let acts_helper = Arc::new(|_req| boxed(async { Ok(TestActsHelperOutput::default()) }));
+    let goal_stack_helper = Arc::new(|_req| {
+        boxed(async {
+            Ok(TestGoalStackPatch {
+                ops: vec![
+                    TestGoalStackPatchOp::Push {
+                        goal_id: "g1".to_string(),
+                        summary: "s1".to_string(),
+                    },
+                    TestGoalStackPatchOp::ReplaceTop {
+                        goal_id: "g1b".to_string(),
+                        summary: "s1b".to_string(),
+                    },
+                    TestGoalStackPatchOp::Push {
+                        goal_id: "g2".to_string(),
+                        summary: "s2".to_string(),
+                    },
+                    TestGoalStackPatchOp::Pop,
+                    TestGoalStackPatchOp::Clear,
+                ],
+            })
         })
-        .expect("clamp should not hard-fail");
+    });
 
-    assert!(result.acts.is_empty());
-    assert_eq!(result.violations.len(), 1);
+    let cortex = cortex_with_hooks(
+        TestHooks::new(
+            sense_helper,
+            act_descriptor_helper,
+            primary,
+            acts_helper,
+            goal_stack_helper,
+        ),
+        ReactionLimits::default(),
+    );
+
+    let output = cortex
+        .cortex(
+            &[domain_sense()],
+            &physical_state_with_descriptor("cap.demo"),
+            &CognitionState::default(),
+        )
+        .await
+        .expect("run should succeed");
+
+    assert_eq!(output.new_cognition_state.revision, 1);
+    assert!(output.new_cognition_state.goal_stack.is_empty());
 }
 
-#[test]
-fn clamp_emits_act_with_payload() {
-    let clamp = DeterministicAttemptClamp;
-    let valid = draft();
-    let result = clamp
-        .clamp(AttemptClampRequest {
-            cycle_id: 1,
-            drafts: vec![valid],
-            neural_signal_descriptor_catalog: catalog(),
-            known_sense_ids: vec!["sense:1".to_string()],
-            limits: ReactionLimits::default(),
+#[tokio::test]
+async fn input_helpers_run_concurrently() {
+    let sense_helper = Arc::new(|_req| {
+        boxed(async {
+            tokio::time::sleep(Duration::from_millis(120)).await;
+            Ok("senses".to_string())
         })
-        .expect("clamp should succeed");
+    });
+    let act_descriptor_helper = Arc::new(|_req| {
+        boxed(async {
+            tokio::time::sleep(Duration::from_millis(120)).await;
+            Ok("catalog".to_string())
+        })
+    });
+    let primary = Arc::new(|_req| boxed(async { Ok(output_ir()) }));
+    let acts_helper = Arc::new(|_req| boxed(async { Ok(TestActsHelperOutput::default()) }));
+    let goal_stack_helper = Arc::new(|_req| boxed(async { Ok(TestGoalStackPatch::default()) }));
+    let cortex = cortex_with_hooks(
+        TestHooks::new(
+            sense_helper,
+            act_descriptor_helper,
+            primary,
+            acts_helper,
+            goal_stack_helper,
+        ),
+        ReactionLimits::default(),
+    );
 
-    assert_eq!(result.acts.len(), 1);
-    assert_eq!(result.acts[0].endpoint_id, "ep.demo");
-    assert_eq!(result.acts[0].neural_signal_descriptor_id, "cap.demo");
-    assert_eq!(result.acts[0].payload, serde_json::json!({"ok": true}));
+    let started = Instant::now();
+    cortex
+        .cortex(
+            &[domain_sense()],
+            &physical_state_with_descriptor("cap.demo"),
+            &CognitionState::default(),
+        )
+        .await
+        .expect("run should succeed");
+    let elapsed = started.elapsed();
+
+    assert!(elapsed < Duration::from_millis(230), "elapsed={elapsed:?}");
+}
+
+#[tokio::test]
+async fn output_helpers_run_concurrently() {
+    let sense_helper = Arc::new(|_req| boxed(async { Ok("senses".to_string()) }));
+    let act_descriptor_helper = Arc::new(|_req| boxed(async { Ok("catalog".to_string()) }));
+    let primary = Arc::new(|_req| boxed(async { Ok(output_ir()) }));
+    let acts_helper = Arc::new(|_req| {
+        boxed(async {
+            tokio::time::sleep(Duration::from_millis(120)).await;
+            Ok(TestActsHelperOutput::default())
+        })
+    });
+    let goal_stack_helper = Arc::new(|_req| {
+        boxed(async {
+            tokio::time::sleep(Duration::from_millis(120)).await;
+            Ok(TestGoalStackPatch::default())
+        })
+    });
+    let cortex = cortex_with_hooks(
+        TestHooks::new(
+            sense_helper,
+            act_descriptor_helper,
+            primary,
+            acts_helper,
+            goal_stack_helper,
+        ),
+        ReactionLimits::default(),
+    );
+
+    let started = Instant::now();
+    cortex
+        .cortex(
+            &[domain_sense()],
+            &physical_state_with_descriptor("cap.demo"),
+            &CognitionState::default(),
+        )
+        .await
+        .expect("run should succeed");
+    let elapsed = started.elapsed();
+
+    assert!(elapsed < Duration::from_millis(230), "elapsed={elapsed:?}");
 }

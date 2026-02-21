@@ -38,6 +38,13 @@ impl CapabilityGuard {
                 "backend does not support json output mode",
             ));
         }
+        if matches!(request.output_mode, CanonicalOutputMode::JsonSchema { .. })
+            && !capabilities.json_schema_mode
+        {
+            return Err(unsupported_capability(
+                "backend does not support json schema output mode",
+            ));
+        }
 
         let needs_vision = request.messages.iter().any(|message| {
             message

@@ -1,8 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::types::{Act, CognitionState, SenseId};
-
-pub type AttentionTag = String;
+use crate::types::{Act, CognitionState};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReactionLimits {
@@ -31,56 +29,48 @@ impl Default for ReactionLimits {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ProseIr {
-    pub text: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct AttemptDraft {
-    pub intent_span: String,
-    #[serde(default)]
-    pub based_on: Vec<SenseId>,
-    #[serde(default)]
-    pub attention_tags: Vec<AttentionTag>,
-    pub endpoint_id: String,
-    pub neural_signal_descriptor_id: String,
-    #[serde(default)]
-    pub payload_draft: serde_json::Value,
-    #[serde(default)]
-    pub goal_hint: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ClampViolationCode {
-    MissingIntentSpan,
-    MissingBasedOn,
-    UnknownSenseId,
-    UnknownEndpointId,
-    UnsupportedNeuralSignalDescriptorId,
-    PayloadTooLarge,
-    PayloadSchemaViolation,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ClampViolation {
-    pub code: ClampViolationCode,
-    pub message: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ClampResult {
-    pub acts: Vec<Act>,
-    pub based_on: Vec<SenseId>,
-    pub attention_tags: Vec<AttentionTag>,
-    pub violations: Vec<ClampViolation>,
-    pub original_drafts: Vec<AttemptDraft>,
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CortexOutput {
     #[serde(default)]
     pub acts: Vec<Act>,
     pub new_cognition_state: CognitionState,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct InputIr {
+    pub text: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct OutputIr {
+    pub text: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub(crate) struct ActDraft {
+    pub endpoint_id: String,
+    pub neural_signal_descriptor_id: String,
+    #[serde(default)]
+    pub payload: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub(crate) struct ActsHelperOutput {
+    #[serde(default)]
+    pub acts: Vec<ActDraft>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub(crate) struct GoalStackPatch {
+    #[serde(default)]
+    pub ops: Vec<GoalStackPatchOp>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "op", rename_all = "snake_case")]
+pub(crate) enum GoalStackPatchOp {
+    Push { goal_id: String, summary: String },
+    Pop,
+    ReplaceTop { goal_id: String, summary: String },
+    Clear,
 }
