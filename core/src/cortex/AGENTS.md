@@ -6,6 +6,8 @@ Cortex is a stateless cognition boundary that consumes a drained sense batch plu
 - Progression is input-event driven only.
 - Cortex does not durably persist cognition/goal state internally.
 - Input IR root is `<input-ir>` and Output IR root is `<output-ir>`.
+- Primary is the cognition core: it reasons from `<input-ir>` context and decides intent; it is not a generic IR transformation engine.
+- `<input-ir>` / `<output-ir>` are protocol envelopes around cognition, while deterministic Rust code enforces shape and orchestration.
 - Input helpers (`sense_helper`, `act_descriptor_helper`) run concurrently to assemble Input IR sections.
 - Output helpers (`acts_helper`, `goal_stack_helper`) run concurrently from Output IR sections.
 - `act_descriptor_helper` cache is in-memory and process-scoped, keyed by act-descriptor MD5 input hash.

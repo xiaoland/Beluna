@@ -12,7 +12,7 @@ Minimal SwiftUI chat-style Body Endpoint for Beluna Spine UnixSocket.
 6. Enforces single-instance runtime lock to avoid duplicate app instances.
 7. In Xcode debug sessions, defaults to manual connect to avoid accidental side effects.
 8. Registers body endpoint route:
-   - `macos-app.01` / `present.message`
+   - `macos-app` / `present_text_message` (string payload)
 9. Authenticates over NDJSON envelope (`method=auth`) with declared capabilities.
 10. Sends user messages as `sense` envelopes aligned with the OpenAI Responses subset.
 11. Receives `act` envelopes, sends `act_ack`, and renders assistant chat bubbles.

@@ -27,7 +27,7 @@ Beluna Apple Universal App is the app that bridges human interaction with Beluna
 
 ## Current State
 
-> Last Updated At: 2026-02-20T14:46+08:00
+> Last Updated At: 2026-02-21T13:31+08:00
 
 ### Live Capabilities
 
@@ -37,6 +37,7 @@ Beluna Apple Universal App is the app that bridges human interaction with Beluna
 - App enforces single-instance runtime lock on macOS.
 - Xcode debug sessions default to manual connect.
 - Socket path is configured directly from `SettingView` and applied immediately on reconnect.
+- Auth capability descriptors publish explicit payload schemas, including `present_text_message` with a string payload.
 - Dedicated Observability window browses Core local log files from configurable directory path.
   - Supports manual path apply and macOS folder picker (`NSOpenPanel`).
   - Uses security-scoped bookmark for sandbox-compatible read access.

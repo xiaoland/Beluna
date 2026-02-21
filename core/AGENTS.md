@@ -18,22 +18,23 @@ Beluna Core is the runnable runtime and domain agent implementation.
 └── src/
     ├── main.rs
     ├── cli.rs
-    ├── body/
     ├── config.rs
-    ├── cortex/
-    ├── continuity/
-    ├── ingress.rs
-    ├── ledger/
-    ├── runtime_types.rs
-    ├── spine/
+    ├── afferent_pathway.rs
+    ├── types.rs                 # Sense, Act, Neural-Signal Descriptor and other shared types
     ├── stem.rs
+    ├── cortex/                  # The highness, cognition engine of Beluna
+    ├── continuity/
+    ├── ledger/
+    ├── spine/
+    ├── body/
+    ├── observaiblity/
     └── ai_gateway/
 ```
 
 ## Coding Guidelines
 
-- Avoid loose protocol design.
-- Use behavior-driven development: User Story -> Acceptance Criteria -> BDT Contract -> Tests -> Implementation.
+- Prohibit implicit fallbacks and inline default assignments used to mask missing states.
+- Use `concat!` to split long strings across multiple lines for better readability without introducing unwanted whitespace or runtime overhead.
 
 ## Current State
 

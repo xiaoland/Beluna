@@ -21,12 +21,16 @@
 - [ ] CortexCollaborators 是什么，和 AI Gateway 强耦合是预期行为
 - [x] Cortex Config 来配置用什么 ai-provider-string 为 Primary, Serialize, Deserialize 等等
 - [ ] 可以输出 cognition state，但是要注意不是整个栈都可以操作的，continuity可能会拒绝一些变化
-- [ ] 我注意到给 input helper 的 neural signal descriptor 中有很多的转义符号，这很糟糕；type: act 应该过滤掉。
-- [ ] 不要在 sense 中包含 uuid 等非语义性的内容，减少非语义噪音
-- [ ] input helper 输出的是 json ，不是 output ir ... 让程序来组装数据，而不是 LLM 来组装
-- [ ] text helper 是什么鬼，这是对 helper 的错误理解
-- [ ] Metrics: cycle id, neural-signal-descriptor catalog, token consumed
-- [ ] llm input / output log 是什么鬼，不应该让 ai gateway 来吗
+- [x] 我注意到给 input helper 的 neural signal descriptor 中有很多的转义符号，这很糟糕；type: act 应该过滤掉。
+- [x] 不要在 sense 中包含 uuid 等非语义性的内容，减少非语义噪音
+- [x] input helper 输出的是 json ，不是 output ir ... 让程序来组装数据，而不是 LLM 来组装
+- [x] text helper 是什么鬼，这是对 helper 的错误理解
+- [x] Metrics: cycle id, neural-signal-descriptor catalog, token consumed
+- [x] llm input / output log 是什么鬼，不应该让 ai gateway 来吗
+- [ ] Input IR act-descriptor 存在 tag attrubutes 和 body markdown 重复的问题。
+  整个 Input IR act-descriptor 就应该是 markdown ，并且避免使用各种 text style markup。
+  规定 Pyload Schema ？这里有一个 Gap，那就是 Act Payload 和 Primary Intent 直接的 Gap；或者说在复杂 json 下，markdown 的 representation 显得无力。
+- [ ] Primary LLM 不是 transform , sir... 所以 Primary 的 LLM Prompt 应该是什么
 
 ### Spine
 
@@ -55,6 +59,7 @@
   - 提供能力特定的接口，而不是 infer_once, infer_stream 这样通用的接口。对于 result Ok 可以没有通用定义，但是 result Err 可以有。
 - [ ] 移除 Credential Provider
 - [ ] 啥是 attempt ?
+- [ ] 太多有的没的日志了
 
 ## Apple Universal
 

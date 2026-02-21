@@ -1,7 +1,7 @@
 import Foundation
 
 let appleEndpointName = "macos-app"
-let appleActNeuralSignalDescriptorID = "present.message"
+let appleActNeuralSignalDescriptorID = "present_text_message"
 let appleUserSenseNeuralSignalDescriptorID = "apple.chat.user_message"
 let appleActResultSenseNeuralSignalDescriptorID = "apple.chat.present_message_result"
 
@@ -111,7 +111,8 @@ func makeAppleEndpointRegisterEnvelope() -> NDJSONEnvelope<AuthBodyWire> {
                     endpointID: appleEndpointName,
                     neuralSignalDescriptorID: appleActNeuralSignalDescriptorID,
                     payloadSchema: .object([
-                        "type": .string("object")
+                        "type": .string("string"),
+                        "description": .string("The text message you want to present")
                     ])
                 ),
                 NeuralSignalDescriptorWire(
@@ -120,7 +121,45 @@ func makeAppleEndpointRegisterEnvelope() -> NDJSONEnvelope<AuthBodyWire> {
                     neuralSignalDescriptorID: appleUserSenseNeuralSignalDescriptorID,
                     payloadSchema: .object([
                         "type": .string("object"),
-                        "required": .array([.string("conversation_id"), .string("input")])
+                        "required": .array([.string("conversation_id"), .string("input")]),
+                        "properties": .object([
+                            "conversation_id": .object([
+                                "type": .string("string")
+                            ]),
+                            "input": .object([
+                                "type": .string("array"),
+                                "items": .object([
+                                    "type": .string("object"),
+                                    "required": .array([.string("type"), .string("role"), .string("content")]),
+                                    "properties": .object([
+                                        "type": .object([
+                                            "type": .string("string"),
+                                            "const": .string("message")
+                                        ]),
+                                        "role": .object([
+                                            "type": .string("string"),
+                                            "const": .string("user")
+                                        ]),
+                                        "content": .object([
+                                            "type": .string("array"),
+                                            "items": .object([
+                                                "type": .string("object"),
+                                                "required": .array([.string("type"), .string("text")]),
+                                                "properties": .object([
+                                                    "type": .object([
+                                                        "type": .string("string"),
+                                                        "const": .string("input_text")
+                                                    ]),
+                                                    "text": .object([
+                                                        "type": .string("string")
+                                                    ])
+                                                ])
+                                            ])
+                                        ])
+                                    ])
+                                ])
+                            ])
+                        ])
                     ])
                 ),
                 NeuralSignalDescriptorWire(
@@ -129,7 +168,30 @@ func makeAppleEndpointRegisterEnvelope() -> NDJSONEnvelope<AuthBodyWire> {
                     neuralSignalDescriptorID: appleActResultSenseNeuralSignalDescriptorID,
                     payloadSchema: .object([
                         "type": .string("object"),
-                        "required": .array([.string("act_id"), .string("status"), .string("reference_id")])
+                        "required": .array([
+                            .string("kind"),
+                            .string("act_id"),
+                            .string("status"),
+                            .string("reference_id")
+                        ]),
+                        "properties": .object([
+                            "kind": .object([
+                                "type": .string("string"),
+                                "const": .string("present_message_result")
+                            ]),
+                            "act_id": .object([
+                                "type": .string("string")
+                            ]),
+                            "status": .object([
+                                "type": .string("string")
+                            ]),
+                            "reference_id": .object([
+                                "type": .string("string")
+                            ]),
+                            "reason_code": .object([
+                                "type": .string("string")
+                            ])
+                        ])
                     ])
                 )
             ]
@@ -192,177 +254,29 @@ func makeActAckEnvelope(actID: String) -> NDJSONEnvelope<ActAckBodyWire> {
     makeEnvelope(method: "act_ack", body: ActAckBodyWire(actID: actID))
 }
 
-func extractAssistantTexts(from payload: JSONValue) throws -> [String] {
-    guard let object = payload.objectValue else {
-        return []
-    }
+enum PresentTextPayloadError: LocalizedError, Equatable {
+    case expectedString
+    case emptyText
 
-    var result: [String] = []
-    result.append(contentsOf: extractTextsFromResponsesOutput(object["response"]))
-    result.append(contentsOf: extractTextsFromOutputItems(object["output"]?.arrayValue))
-    result.append(contentsOf: extractTextsFromChoices(object["choices"]?.arrayValue))
-
-    for key in ["output_text", "text", "message"] {
-        if let value = object[key]?.stringValue {
-            result.append(value)
+    var errorDescription: String? {
+        switch self {
+        case .expectedString:
+            return "present_text_message payload must be a string"
+        case .emptyText:
+            return "present_text_message payload must not be empty"
         }
     }
-
-    return dedupeNonEmptyTexts(result)
 }
 
-private func extractTextsFromResponsesOutput(_ response: JSONValue?) -> [String] {
-    guard let response else {
-        return []
+func extractPresentedText(from payload: JSONValue) throws -> String {
+    guard let text = payload.stringValue else {
+        throw PresentTextPayloadError.expectedString
     }
-
-    var result: [String] = []
-    if let object = response.objectValue {
-        if let outputText = object["output_text"]?.stringValue {
-            result.append(outputText)
-        }
-        if let text = object["text"]?.stringValue {
-            result.append(text)
-        }
-        if let message = object["message"] {
-            result.append(contentsOf: extractTextsFromMessage(message, role: object["role"]?.stringValue))
-        }
-        result.append(contentsOf: extractTextsFromOutputItems(object["output"]?.arrayValue))
-        result.append(contentsOf: extractTextsFromChoices(object["choices"]?.arrayValue))
-    } else {
-        result.append(contentsOf: extractTextsFromMessage(response, role: nil))
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else {
+        throw PresentTextPayloadError.emptyText
     }
-    return result
-}
-
-private func extractTextsFromOutputItems(_ items: [JSONValue]?) -> [String] {
-    guard let items else {
-        return []
-    }
-
-    var result: [String] = []
-    for item in items {
-        guard let object = item.objectValue else {
-            continue
-        }
-
-        if let role = object["role"]?.stringValue,
-           !role.isEmpty,
-           role != "assistant"
-        {
-            continue
-        }
-
-        if let text = object["output_text"]?.stringValue {
-            result.append(text)
-        }
-        if let text = object["text"]?.stringValue {
-            result.append(text)
-        }
-
-        if let message = object["message"] {
-            result.append(contentsOf: extractTextsFromMessage(message, role: object["role"]?.stringValue))
-        }
-
-        if let content = object["content"] {
-            result.append(contentsOf: extractTextsFromMessage(content, role: object["role"]?.stringValue))
-        }
-    }
-
-    return result
-}
-
-private func extractTextsFromChoices(_ choices: [JSONValue]?) -> [String] {
-    guard let choices else {
-        return []
-    }
-
-    var result: [String] = []
-    for choice in choices {
-        guard let object = choice.objectValue else {
-            continue
-        }
-
-        if let message = object["message"] {
-            let role = message.objectValue?["role"]?.stringValue
-            result.append(contentsOf: extractTextsFromMessage(message, role: role))
-            continue
-        }
-
-        if let text = object["text"]?.stringValue {
-            result.append(text)
-        }
-    }
-    return result
-}
-
-private func extractTextsFromMessage(_ message: JSONValue, role: String?) -> [String] {
-    if let role, !role.isEmpty, role != "assistant" {
-        return []
-    }
-
-    if let text = message.stringValue {
-        return [text]
-    }
-
-    if let array = message.arrayValue {
-        var result: [String] = []
-        for entry in array {
-            guard let content = entry.objectValue else {
-                if let text = entry.stringValue {
-                    result.append(text)
-                }
-                continue
-            }
-
-            if let entryRole = content["role"]?.stringValue,
-               !entryRole.isEmpty,
-               entryRole != "assistant"
-            {
-                continue
-            }
-
-            if let text = content["text"]?.stringValue {
-                result.append(text)
-            }
-            if let text = content["output_text"]?.stringValue {
-                result.append(text)
-            }
-            if let nested = content["content"] {
-                result.append(contentsOf: extractTextsFromMessage(nested, role: content["role"]?.stringValue))
-            }
-        }
-        return result
-    }
-
-    guard let object = message.objectValue else {
-        return []
-    }
-
-    if let text = object["text"]?.stringValue {
-        return [text]
-    }
-    if let text = object["output_text"]?.stringValue {
-        return [text]
-    }
-    if let nested = object["content"] {
-        return extractTextsFromMessage(nested, role: object["role"]?.stringValue)
-    }
-    return []
-}
-
-private func dedupeNonEmptyTexts(_ texts: [String]) -> [String] {
-    var seen = Set<String>()
-    var result: [String] = []
-    for text in texts {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, !seen.contains(trimmed) else {
-            continue
-        }
-        seen.insert(trimmed)
-        result.append(trimmed)
-    }
-    return result
+    return trimmed
 }
 
 func encodeLine<T: Encodable>(_ value: T) throws -> Data {

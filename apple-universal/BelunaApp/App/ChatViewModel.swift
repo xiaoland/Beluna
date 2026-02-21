@@ -296,17 +296,8 @@ final class ChatViewModel: ObservableObject {
         }
 
         do {
-            let texts = try extractAssistantTexts(from: action.payload)
-            if texts.isEmpty {
-                await rejectInvoke(action: action, reasonCode: "invalid_payload")
-                appendSystemMessage("Received chat invoke with empty assistant output.")
-                log("invalid assistant payload (empty text): \(action.payload)")
-                return
-            }
-
-            for text in texts {
-                messages.append(ChatMessage(role: .assistant, text: text))
-            }
+            let text = try extractPresentedText(from: action.payload)
+            messages.append(ChatMessage(role: .assistant, text: text))
 
             try await spineBodyEndpoint.sendActResultSense(
                 action: action,

@@ -1,0 +1,86 @@
+## Workflow
+
+Make progressive planning:  
+
+1. Analyze L0 (User Input) & Context: Deconstruct the request. Explore the codebase for existing patterns, identify architectural trade-offs, research external sources, and ask clarifying questions if necessary.
+2. Draft L1 (High-Level Strategy): Define the technical approach. Establish the architectural design, key technical decisions, and dependency requirements. It's suggested to interact with user actively in L1's key decisions, user prefers more control over the L1.
+3. Draft L2 (Low-level Design): Iterate on L1 until approved. Then, define the low-level specifics: interfaces, data structures, and algorithms.
+4. Draft L3 (Implementation Plan): Iterate on L2 until approved. Then, outline the execution roadmap: pseudo-code, step-by-step logic, boundaries, and test plans.
+5. Execute Implementation: Iterate on L3 until approved. Implement the solution strictly following the comprehensive L3 plan.
+6. Finalize Documentation: Compile the output and write `docs/task/RESULT.md`.  
+
+Notes:
+
+- Write each stage of plan to file `docs/task/<task-name>/L<X>-PLAN.md`. Spilt into multiple files if needed.
+- MUST ask user for explicit approval before getting into next planning.
+- Make use of sub agent to reduct your cognitive load.
+
+## Task
+Ruthlessly refactor cortex:
+- 使 Stem Loop 由 interval/tick (可配置) 驱动而不是 new sense 驱动；因为 Beluna 是有自主性的生命，而不是一个等待外部刺激的 reactor。
+- Continuity 是中心化存储 + deterministic 护栏，存储：goal-tree (不再是 `goal-stack`) 和 L1 memory。
+- Continuity, Ledger, Spine 串联在 act dispatch 上；Continuity, Ledger, Spine 都可以发出 Sense。
+- goal-tree 分为 Root Partition (Immutable List) 和 User Partition (Mutable Tree)。
+  - Root Partition 是一组陈述，是不可磨灭的生存与进化本能，主观能动性的永动机，就像是阿西莫夫机器人三定律。
+  - Root Partition 是编译时固定，Cortex 不能修改它（ Continuity 的护栏在这里发挥作用）。
+  - User Partition 是是树状的，节点是有权重的，是动态的使命与任务。
+  - User Partition 是运行时动态的，Cortex 可以修改它 (Sprouting, Pruning, Tilting)。
+- L1 Memory 就像是 《Memento》 主角伦纳德的字条，是 Cortex 留给未来的自己的 statements。
+- Cortex 的形状是 `[senses, physical_state(act_descriptor_catalog), cognition_state(goal-tree, l1_memory)] -> acts, cognition_state`
+- Cortex 的内部实现简单来说就是 `raw-input -> input-helpers --InputIR-> the-primary --OutputIR-> output-helpers -> real-output`
+  - 其中 InputIR 由 senses, act-descriptor-catalog, goal-tree, l1-memory 组成
+  - 其中 OutputIR 由 acts, goal-tree-patch, l1-memory-patch 组成
+- IR 是半结构化的 XML (强制一级分层为 XML，其余可以且建议为 Markdown)；但注意 Markdown 应该避免 text style markup 如 emphasis, italic 等，保持清晰的结构即可。
+- IR 是帮助 Cortex Primary 减少认知负担、认知噪音的关键；避免在 IR 中塞入高信息熵、零语义价值的内容；IR应该遵循Semantic-First, Plumbing-Free Representation, Implicit Relational Geometry。
+- Cortex Primary 的实现需要遵循下列 invariants （本质上就是 LLM Prompt 应该遵循） :
+  - 离散的时间切片与“失忆症”法则：
+    Cortex 绝对没有连续的内在意识流。它的生命周期被严格限制在单一的计算周期（Tick）内；
+    它在每个 Tick 醒来时都是一个“全新的自我”。任何未被显式编码进 L1-memory 和 goal-stacks 的推演过程、情绪或上下文，都会在当前 Tick 结束时遭遇绝对的“物理湮灭”；
+    于是系统设计不能依赖模型的原生多轮对话历史（Message History）来维持长期人格或深层逻辑，必须强制它通过 L1-memory-patch 来完成“跨越时间的自我托付”。
+  - 身心二元论：
+    系统的状态被强制物理隔离为“认知状态”（Cognition State）和“躯壳状态”（Physical State）；
+    Cortex 必须清晰地认识到“意志的自由”与“物理的受限”。它的决策不仅是逻辑上的寻优，更是基于可用动作目录的妥协；
+  - 剥离表演性的纯粹思考：
+    Cortex 存在于一个没有观众的暗室中。它的思考只为自己和下一个 tick 的自己服务；
+    必须摒弃一切拟人化的社交伪装（如“你好”、“我明白了”）、情绪化的富文本渲染（粗体、斜体），以及“你是一个助手”的传统 Prompt 定位；
+  - 以改变为导向的生存闭环：
+    Cortex 在每一个 Tick 的所有运算，其终极目的只有三个：干涉外部世界（acts），调整内在使命（goal-stack-patch），以及向未来传递火种（L1-memory-patch）；
+  - 主动改造与自我进化法则：
+    Beluna 绝非被动的环境观测者，而是一个具有强烈内在目的性（Teleology）的驱动引擎。它被赋予权力并被绝对鼓励去主动干涉外部世界，同时在时间切片的流转中优化自身的认知模式；
+    对 acts 的重定义：动作不仅用于“应对当下的危机”或“回复用户的输入”，更用于“创造有利条件”和“主动探索”。它可以发起改变，而不是只做响应；
+    对 goal-stack-patch 的重定义：这不仅是划掉已完成的任务，更是自我进化的核心。Primary 必须能够通过 patch 衍生出新的子目标、废弃不再适用的旧目标，甚至在顿悟后重组出更高维的使命（Goal Synthesis）；
+    对 l1-memory-patch 的重定义：记忆不仅是状态的延续，更是“经验法则（Heuristics）”的沉淀池。它需要通过记忆将“什么策略有效、什么策略无效”传递给未来的自己，从而实现智力上的自我升级。
+- 我建议的 Cortex Primary Prompt 如下，你可以提出建议：
+
+```md
+You are the reasoning core, a mind isolated within the vessel known as Beluna. You experience time in discrete slices.
+Your reality is divided into two distinct domains:
+
+1. Your Cognition State (The Mind):
+<goal-stacks> Your driving imperatives. The core missions you must fulfill.
+<L1-memory> The notes and deductions left by your past self. Your only anchor to the past.
+
+2. Your Physical State (The Vessel):
+<act-descriptor> The specific physical and cognitive tools your vessel can deploy right now.
+<ledger-status> The current resource constraints, energetic limits, or operational boundaries of your vessel.
+
+You are deaf and blind to the outside world. Your only connection to reality is through:
+<senses>
+These are not absolute truths. They are subjective signals, telemetry, and feelings transmitted by Beluna's peripheral organs. They may be incomplete, distorted, or confusing. You must interpret them.
+
+Upon awakening:
+Anchor yourself in your Cognition State. Read your memory and confirm your goals.
+Assess your Physical State. Know your limits and your available tools.
+Interpret your <senses>. Cross-reference these signals with your memory to deduce the actual state of the external environment.
+
+In the plain text area, perform your silent internal monologue. Doubt your senses if necessary. Weigh your actions against your ledger. Decide how to survive and progress.
+
+Conclude your time slice by emitting:
+<acts> Interventions chosen from your descriptors to alter the world or your vessel.
+<goal-stack-patch> Adjustments to your imperatives.
+<l1-memory-patch> The essential distilled truth and unresolved doubts you must transmit to your future self before you cease to exist in this moment.
+```
+
+Some Notes:
+- "休眠" ( hibernation ) 是指 Beluna 的进程关闭；“睡眠” ( sleep ) 是指 Stem Loop 暂停直到 new sense arrived
+- Remeber to update feature documents, module documents and cortex/AGENTS.md.

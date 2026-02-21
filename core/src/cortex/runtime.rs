@@ -512,7 +512,7 @@ impl Cortex {
         }
 
         let prompt = format!(
-            "Transform <input-ir> into <output-ir>.\nRules:\n1) Return valid XML-like text with exact root <output-ir>.\n2) Must include first-level sections <acts> and <goal-stack-patch>.\n3) Section body may contain XML or Markdown.\n4) Return only IR.\n\nInput IR:\n{}",
+            "Primary is the Cortex cognition core. Deliberate on the situation in <input-ir>, then express your cognition result using <output-ir>.\nRules:\n1) Treat <input-ir> as reasoning context, not as a text transformation task.\n2) Return valid XML-like text with exact root <output-ir>.\n3) Must include first-level sections <acts> and <goal-stack-patch>.\n4) Section body may contain XML or Markdown.\n5) Return only IR.\n\nInput IR:\n{}",
             input_ir
         );
 

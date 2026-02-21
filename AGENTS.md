@@ -12,10 +12,6 @@ Beluna is now organized as a multi-component repository.
 └── docs/               # Product, BDT contracts, modules, ADR and tasks
 ```
 
-## Component Guides
-
-When editing a component, treat its local `AGENTS.md` as authoritative for that scope.
-
 ## Documents
 
 Read following documents if needed, and keep them current:
@@ -24,15 +20,16 @@ Read following documents if needed, and keep them current:
 - [Glossary](./docs/glossary.md): Product top-level glossary.
 - [Feature Document](./docs/features/README.md): Feature document, answers "What to do", each feature has its PRD, HLD and LLD.
 - [Modules](./docs/modules/README.md)
-- [BDT Contract](./docs/contracts/README.md)
 - [ADR](./docs/descisions/README.md)
 - [Core's AGENTS.md](./core/AGENTS.md)
 - [Apple Universal App's AGENTS.md](./apple-universal/AGENTS.md)
+- [CLI's AGENTS.md](./core/AGENTS.md)
 
-Note that documents are for communication only, code are the single source of truth.
+## Development Workflow
 
-You are encouraged to add an AGENTS.md file under modules with significant complexity when needed.
-Whenever new understanding emerges during implementation, you should decide whether that knowledge is reusable. If yes, it must be promoted from working memory to documentation.
+- You are encouraged to add an AGENTS.md file under modules with significant complexity when needed.
+- Whenever new understanding emerges during implementation, you should decide whether that knowledge is reusable. If yes, it must be promoted from working memory to documentation.
+- Stop maintaining/running tests for all projects, just make sure the build passes.
 
 ## Coding Guidelines
 
@@ -40,18 +37,5 @@ Whenever new understanding emerges during implementation, you should decide whet
 
 ### Naming Conventions
 
-- Directory names: Omit "Beluna" prefix. Use short, descriptive names.
-  - ✅ `cli/`, `core/`, `apple-universal/`
-  - ❌ `beluna-cli/`, `beluna-core/`
-
-- Package names: Include "Beluna" for user clarity and discoverability.
-  - ✅ `beluna-cli` (in Cargo.toml)
-  - ❌ `cli` (too generic for package registries)
-
-- User-facing documentation: Include "Beluna" branding for clarity.
-  - ✅ "Beluna CLI", "Beluna Core" (in README.md, user guides)
-  - ❌ "CLI", "Core" (too vague for users)
-
-- Internal documentation: Use shorter names for agent efficiency.
-  - ✅ "Core", "CLI" (in AGENTS.md, architecture docs)
-  - Purpose: Keeps agent context concise
+- Omit "Beluna" prefix in directory name, file name and internal documents. Use short, descriptive names. eg. use `cli/`, instead of `beluna-cli`.
+- Include "Beluna" in package name (eg. `Cargo.toml`), user-facing documentation for user clarity and discoverability. eg. use `Beluna CLI` instead of `CLI`.

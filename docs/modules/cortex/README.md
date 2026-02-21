@@ -8,7 +8,9 @@ Code:
 Key properties:
 - pure runtime boundary: `cortex(senses, physical_state, cognition_state) -> (acts, new_cognition_state)`
 - no internal durable persistence of cognition state
-- input/output IR pipeline (`<input-ir>` -> `<output-ir>`)
+- Primary is the cognition core: it deliberates over sensed context and current goals to decide acts and goal-stack updates
+- `<input-ir>` and `<output-ir>` are boundary contracts, not a generic transformation objective
+- deterministic Rust code assembles/parses IR contracts; cognition organs perform semantic reasoning/extraction
 - input helpers (`sense_helper`, `act_descriptor_helper`) and output helpers (`acts_helper`, `goal_stack_helper`) are concurrent
 - helpers are cognition organs: LLM handles semantic conversion/extraction, while deterministic assembly (catalog XML, IDs) is in Rust
 - input helper payloads remove transport noise (for example `sense_id`) and use semantic `sense`/`act` naming for primary cognition
