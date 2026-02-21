@@ -8,6 +8,7 @@ pub mod continuity;
 pub mod cortex;
 pub mod ledger;
 pub mod logging;
+pub mod observability;
 pub mod spine;
 pub mod stem;
 pub mod types;

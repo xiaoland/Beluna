@@ -1,7 +1,15 @@
 import SwiftUI
 
+private enum ObservabilityPane: String, CaseIterable, Identifiable {
+    case metrics = "Metrics"
+    case logs = "Logs"
+
+    var id: String { rawValue }
+}
+
 struct ObservabilityView: View {
     @ObservedObject var viewModel: ObservabilityViewModel
+    @State private var selectedPane: ObservabilityPane = .metrics
 
     private let byteCountFormatter: ByteCountFormatter = {
         let formatter = ByteCountFormatter()
@@ -36,6 +44,63 @@ struct ObservabilityView: View {
 
                 Spacer(minLength: 12)
 
+                Picker("Pane", selection: $selectedPane) {
+                    ForEach(ObservabilityPane.allCases) { pane in
+                        Text(pane.rawValue).tag(pane)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 220)
+            }
+
+            if selectedPane == .metrics {
+                metricsHeaderControls
+            } else {
+                logsHeaderControls
+            }
+        }
+        .padding(12)
+    }
+
+    private var metricsHeaderControls: some View {
+        VStack(spacing: 8) {
+            HStack(alignment: .center, spacing: 10) {
+                TextField("http://127.0.0.1:9464/metrics", text: $viewModel.metricsEndpointDraft)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.body.monospaced())
+
+                Button("Apply") {
+                    viewModel.applyMetricsEndpointDraft()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!viewModel.canApplyMetricsEndpoint)
+
+                Button("Refresh") {
+                    viewModel.refreshMetrics()
+                }
+                .buttonStyle(.bordered)
+                .disabled(viewModel.isMetricsRefreshing)
+            }
+
+            HStack(spacing: 8) {
+                Text(viewModel.metricsStatusText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                if let refreshedAt = viewModel.metricsLastRefreshedAt {
+                    Text("Updated \(refreshedAt, style: .time)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private var logsHeaderControls: some View {
+        VStack(spacing: 8) {
+            HStack(alignment: .center, spacing: 10) {
                 TextField("Beluna Core log directory", text: $viewModel.logDirectoryPathDraft)
                     .textFieldStyle(.roundedBorder)
                     .font(.body.monospaced())
@@ -74,10 +139,56 @@ struct ObservabilityView: View {
                 }
             }
         }
-        .padding(12)
     }
 
     private var content: some View {
+        Group {
+            if selectedPane == .metrics {
+                metricsContent
+            } else {
+                logsContent
+            }
+        }
+    }
+
+    private var metricsContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 12) {
+                    metricCard(
+                        title: "Cortex Cycle ID",
+                        value: formatMetricValue(viewModel.metricsCycleID)
+                    )
+                    metricCard(
+                        title: "Act Catalog Count",
+                        value: formatMetricValue(viewModel.metricsActDescriptorCatalogCount)
+                    )
+                }
+
+                Divider()
+
+                Text("Raw Metrics Excerpt")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                Text(
+                    viewModel.metricsRawExcerpt.isEmpty
+                        ? "No metrics payload captured yet."
+                        : viewModel.metricsRawExcerpt
+                )
+                .font(.system(.caption, design: .monospaced))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+                .background(Color.primary.opacity(0.03))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var logsContent: some View {
         NavigationSplitView {
             List(
                 selection: Binding(
@@ -208,6 +319,32 @@ struct ObservabilityView: View {
                 }
             }
         }
+    }
+
+    private func metricCard(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.title2.monospacedDigit())
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color.primary.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func formatMetricValue(_ value: Double?) -> String {
+        guard let value else {
+            return "-"
+        }
+        if value == value.rounded() {
+            return String(Int64(value))
+        }
+        return String(value)
     }
 
     private func formattedTimestamp(for entry: ObservabilityLogEntry) -> String {

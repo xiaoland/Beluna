@@ -17,6 +17,7 @@ use beluna::{
     cortex::Cortex,
     ledger::LedgerStage,
     logging::init_tracing,
+    observability::metrics::{MetricsRuntime, start_prometheus_exporter},
     spine::{Spine, global_spine, install_global_spine, shutdown_global_spine},
     stem::Stem,
 };
@@ -28,6 +29,25 @@ async fn main() -> Result<()> {
         .with_context(|| format!("failed to load config from {}", config_path.display()))?;
     let _logging_guard =
         init_tracing(&config.logging).context("failed to initialize tracing logging")?;
+    let _metrics_runtime = match start_prometheus_exporter(MetricsRuntime::default_listen_addr()) {
+        Ok(runtime) => {
+            tracing::info!(
+                target: "observability",
+                listen_addr = %runtime.listen_addr,
+                "prometheus_metrics_exporter_started"
+            );
+            Some(runtime)
+        }
+        Err(err) => {
+            tracing::warn!(
+                target: "observability",
+                listen_addr = %MetricsRuntime::default_listen_addr(),
+                error = %err,
+                "prometheus_metrics_exporter_disabled"
+            );
+            None
+        }
+    };
     let _run_span = tracing::info_span!("core_run", run_id = %_logging_guard.run_id()).entered();
     tracing::info!(
         target: "core",

@@ -65,18 +65,35 @@ impl AIGateway {
     }
 
     pub async fn chat_once(&self, request: ChatRequest) -> Result<ChatResponse, GatewayError> {
+        let stage = request
+            .metadata
+            .get("cortex_stage")
+            .map(String::as_str)
+            .unwrap_or("primary")
+            .to_string();
+        let route = request.route.clone();
+        log_llm_input(&stage, &request);
+
         let mut stream = self.chat_stream_internal(request, false).await?;
         let mut output_text = String::new();
         let mut tool_calls = Vec::new();
         let mut usage: Option<UsageStats> = None;
         let mut finish_reason: Option<FinishReason> = None;
         let mut request_id: Option<String> = None;
+        let mut backend_id: Option<String> = None;
+        let mut model_id: Option<String> = None;
 
         while let Some(item) = stream.next().await {
             let event = item?;
             match event {
-                ChatEvent::Started { request_id: id, .. } => {
+                ChatEvent::Started {
+                    request_id: id,
+                    backend_id: started_backend_id,
+                    model_id: started_model_id,
+                } => {
                     request_id = Some(id);
+                    backend_id = Some(started_backend_id);
+                    model_id = Some(started_model_id);
                 }
                 ChatEvent::TextDelta { delta, .. } => {
                     output_text.push_str(&delta);
@@ -118,14 +135,23 @@ impl AIGateway {
             .with_retryable(false)
         })?;
 
-        Ok(ChatResponse {
+        let response = ChatResponse {
             request_id,
             output_text,
             tool_calls,
             usage,
             finish_reason,
             backend_metadata: Default::default(),
-        })
+        };
+        log_llm_output(
+            &stage,
+            route.as_deref(),
+            backend_id.as_deref(),
+            model_id.as_deref(),
+            &response,
+        );
+
+        Ok(response)
     }
 
     async fn chat_stream_internal(
@@ -763,4 +789,50 @@ fn release_lease(budget_enforcer: &BudgetEnforcer, lease: &mut Option<BudgetLeas
     if let Some(current) = lease.take() {
         budget_enforcer.release(current);
     }
+}
+
+fn log_llm_input(stage: &str, request: &ChatRequest) {
+    let request_json = serde_json::to_string_pretty(request)
+        .unwrap_or_else(|err| format!("{{\"serialization_error\":\"{}\"}}", err));
+    tracing::debug!(
+        target: "ai_gateway",
+        stage = stage,
+        request_id = request.request_id.as_deref().unwrap_or("-"),
+        route = request.route.as_deref().unwrap_or("-"),
+        output_mode = ?request.output_mode,
+        max_output_tokens = ?request.limits.max_output_tokens,
+        max_request_time_ms = ?request.limits.max_request_time_ms,
+        request_json = %request_json,
+        "llm_input"
+    );
+}
+
+fn log_llm_output(
+    stage: &str,
+    route: Option<&str>,
+    backend_id: Option<&str>,
+    model_id: Option<&str>,
+    response: &ChatResponse,
+) {
+    let (input_tokens, output_tokens, total_tokens) = response
+        .usage
+        .as_ref()
+        .map(|u| (u.input_tokens, u.output_tokens, u.total_tokens))
+        .unwrap_or((None, None, None));
+    tracing::debug!(
+        target: "ai_gateway",
+        stage = stage,
+        request_id = %response.request_id,
+        route = route.unwrap_or("-"),
+        backend_id = backend_id.unwrap_or("-"),
+        model = model_id.unwrap_or("-"),
+        finish_reason = ?response.finish_reason,
+        usage_input_tokens = ?input_tokens,
+        usage_output_tokens = ?output_tokens,
+        usage_total_tokens = ?total_tokens,
+        tool_calls = response.tool_calls.len(),
+        output_chars = response.output_text.len(),
+        output_text = %response.output_text,
+        "llm_output"
+    );
 }

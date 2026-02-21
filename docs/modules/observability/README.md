@@ -38,7 +38,15 @@ Initialization is fail-fast for invalid filter or unusable log directory.
 - Structured events include `request_id` to correlate:
   - gateway lifecycle events
   - adapter dispatch logs
-  - cortex llm input/output logs
+  - ai-gateway `llm_input`/`llm_output` logs
+
+## Metrics Pull Endpoint
+
+- Core exposes a Prometheus pull endpoint on `127.0.0.1:9464`.
+- Scrape path: `/metrics`.
+- Initial gauges:
+  - `beluna_cortex_cycle_id`
+  - `beluna_cortex_input_ir_act_descriptor_catalog_count`
 
 ## AI Gateway Telemetry Shape
 
@@ -46,9 +54,21 @@ Initialization is fail-fast for invalid filter or unusable log directory.
   - `gateway_request`
   - `gateway_stream_task`
   - adapter dispatch spans (`openai_dispatch`, `ollama_dispatch`, `copilot_dispatch`)
+- LLM payload logs (ownership boundary):
+  - `llm_input`
+  - `llm_output`
 - Event levels:
   - `info`: request/attempt lifecycle, first stream event, completion/cancellation
   - `warn`: attempt failure, request failure
+
+## Cortex Logging Shape
+
+- Cortex keeps IR/act-focused structured logs:
+  - `input_ir_sense`
+  - `input_ir_act_descriptor_catalog`
+  - `output_ir_acts`
+  - `final_returned_acts`
+- Cortex does not log `llm_input` / `llm_output`; those are emitted by AI Gateway.
 
 ## Recommended Filter Profiles
 

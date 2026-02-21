@@ -17,8 +17,10 @@ Minimal SwiftUI chat-style Body Endpoint for Beluna Spine UnixSocket.
 10. Sends user messages as `sense` envelopes aligned with the OpenAI Responses subset.
 11. Receives `act` envelopes, sends `act_ack`, and renders assistant chat bubbles.
 12. Sends invoke outcome back as correlated `sense` (echoes `act_id` and route markers).
-13. Provides a dedicated Observability window to browse Beluna Core local log files in a table (timestamp-descending).
-14. Supports configurable log folder path (manual input + macOS folder picker with security-scoped bookmark).
+13. Provides a dedicated Observability window with `Metrics` and `Logs` panes.
+14. Metrics pane pulls Core Prometheus endpoint (`http://127.0.0.1:9464/metrics` by default) and shows Cortex gauges.
+15. Logs pane browses Beluna Core local log files in a timestamp-descending table.
+16. Supports configurable log folder path (manual input + macOS folder picker with security-scoped bookmark).
 
 ## Run
 

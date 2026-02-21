@@ -14,3 +14,5 @@ Key properties:
 - input helper payloads remove transport noise (for example `sense_id`) and use semantic `sense`/`act` naming for primary cognition
 - primary failure is fail-closed noop; helper failures degrade via fallback/empty output
 - emitted `Act[]` is deterministic and non-binding
+- observability events include `input_ir_sense`, `input_ir_act_descriptor_catalog`, `output_ir_acts`, and `final_returned_acts`
+- Cortex metrics include `beluna_cortex_cycle_id` and `beluna_cortex_input_ir_act_descriptor_catalog_count`

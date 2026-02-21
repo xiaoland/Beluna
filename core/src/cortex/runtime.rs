@@ -38,6 +38,7 @@ use crate::{
         },
         types::{ActsHelperOutput, CortexOutput, GoalStackPatch, GoalStackPatchOp, ReactionLimits},
     },
+    observability::metrics as observability_metrics,
     types::{Act, CognitionState, NeuralSignalDescriptor, PhysicalState, Sense},
 };
 
@@ -131,6 +132,7 @@ impl Cortex {
         self.emit(CortexTelemetryEvent::ReactionStarted {
             cycle_id: physical_state.cycle_id,
         });
+        observability_metrics::record_cortex_cycle_id(physical_state.cycle_id);
 
         let deadline = Duration::from_millis(self.limits.max_cycle_time_ms.max(1));
         let sense_descriptors = helpers_input::sense_descriptors(physical_state);
@@ -168,6 +170,21 @@ impl Cortex {
         );
         let goal_stack_section = helpers_input::goal_stack_section(cognition_state);
         let context_section = helpers_input::context_section(physical_state, cognition_state);
+        observability_metrics::record_cortex_input_ir_act_descriptor_catalog_count(
+            act_descriptors.len(),
+        );
+        tracing::debug!(
+            target: "cortex",
+            cycle_id = physical_state.cycle_id,
+            input_ir_sense = %senses_section,
+            "input_ir_sense"
+        );
+        tracing::debug!(
+            target: "cortex",
+            cycle_id = physical_state.cycle_id,
+            input_ir_act_descriptor_catalog = %act_descriptor_catalog_section,
+            "input_ir_act_descriptor_catalog"
+        );
 
         let input_ir = ir::build_input_ir(
             &senses_section,
@@ -245,6 +262,12 @@ impl Cortex {
                 ));
             }
         };
+        tracing::debug!(
+            target: "cortex",
+            cycle_id = physical_state.cycle_id,
+            output_ir_acts = %output_sections.acts_section,
+            "output_ir_acts"
+        );
 
         let (acts_result, goal_patch_result) = tokio::join!(
             timeout(
@@ -330,6 +353,15 @@ impl Cortex {
         };
 
         let new_cognition_state = apply_goal_stack_patch(cognition_state, &goal_stack_patch);
+        let acts_json = serde_json::to_string(&acts)
+            .unwrap_or_else(|err| format!("{{\"serialization_error\":\"{}\"}}", err));
+        tracing::debug!(
+            target: "cortex",
+            cycle_id = physical_state.cycle_id,
+            act_count = acts.len(),
+            final_returned_acts = %acts_json,
+            "final_returned_acts"
+        );
         if acts.is_empty() {
             self.emit(CortexTelemetryEvent::NoopFallback {
                 cycle_id: physical_state.cycle_id,
@@ -628,7 +660,6 @@ impl Cortex {
             stage,
             output_mode,
         );
-        log_llm_input(stage, cycle_id, &request);
 
         let gateway = self.gateway.as_ref().ok_or_else(|| {
             CortexError::new(
@@ -657,7 +688,6 @@ impl Cortex {
             }
         })?;
 
-        log_llm_output(stage, cycle_id, &request_id, &response);
         Ok(response)
     }
 
@@ -854,45 +884,6 @@ fn build_request(
         metadata,
         cost_attribution_id: None,
     }
-}
-
-fn log_llm_input(stage: &str, cycle_id: u64, request: &ChatRequest) {
-    let request_json = serde_json::to_string_pretty(request)
-        .unwrap_or_else(|err| format!("{{\"serialization_error\":\"{}\"}}", err));
-    tracing::debug!(
-        target: "cortex",
-        stage = stage,
-        cycle_id = cycle_id,
-        request_id = request.request_id.as_deref().unwrap_or("-"),
-        route = request.route.as_deref().unwrap_or("-"),
-        output_mode = ?request.output_mode,
-        max_output_tokens = ?request.limits.max_output_tokens,
-        max_request_time_ms = ?request.limits.max_request_time_ms,
-        request_json = %request_json,
-        "llm_input"
-    );
-}
-
-fn log_llm_output(stage: &str, cycle_id: u64, request_id: &str, response: &ChatResponse) {
-    let (input_tokens, output_tokens, total_tokens) = response
-        .usage
-        .as_ref()
-        .map(|u| (u.input_tokens, u.output_tokens, u.total_tokens))
-        .unwrap_or((None, None, None));
-    tracing::debug!(
-        target: "cortex",
-        stage = stage,
-        cycle_id = cycle_id,
-        request_id = request_id,
-        finish_reason = ?response.finish_reason,
-        usage_input_tokens = ?input_tokens,
-        usage_output_tokens = ?output_tokens,
-        usage_total_tokens = ?total_tokens,
-        tool_calls = response.tool_calls.len(),
-        output_chars = response.output_text.len(),
-        output_text = %response.output_text,
-        "llm_output"
-    );
 }
 
 fn escape_xml_attr(value: &str) -> String {
