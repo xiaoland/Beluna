@@ -1,5 +1,6 @@
-use crate::types::{
-    CognitionState, NeuralSignalDescriptor, NeuralSignalType, PhysicalState, Sense,
+use crate::{
+    cortex::cognition::CognitionState,
+    types::{NeuralSignalDescriptor, NeuralSignalType, PhysicalState, Sense},
 };
 use serde::Serialize;
 
@@ -44,36 +45,30 @@ pub(crate) fn fallback_act_descriptor_catalog_section(
         .unwrap_or_else(|_| "[]".to_string())
 }
 
-pub(crate) fn goal_stack_section(cognition_state: &CognitionState) -> String {
-    serde_json::to_string_pretty(&cognition_state.goal_stack).unwrap_or_else(|_| "[]".to_string())
+pub(crate) fn fallback_goal_tree_section(cognition_state: &CognitionState) -> String {
+    let root_json = serde_json::to_string_pretty(&cognition_state.goal_tree.root_partition)
+        .unwrap_or_else(|_| "[]".to_string());
+    let user_json = serde_json::to_string_pretty(&cognition_state.goal_tree.user_partition)
+        .unwrap_or_else(|_| "{}".to_string());
+    format!(
+        "## root partition\n{}\n\n## user partition\n{}",
+        root_json, user_json
+    )
 }
 
-pub(crate) fn context_section(
-    physical_state: &PhysicalState,
-    cognition_state: &CognitionState,
-) -> String {
-    let (sense_count, act_count) = physical_state.capabilities.entries.iter().fold(
-        (0usize, 0usize),
-        |(sense_count, act_count), entry| match entry.r#type {
-            NeuralSignalType::Sense => (sense_count + 1, act_count),
-            NeuralSignalType::Act => (sense_count, act_count + 1),
-        },
-    );
+pub(crate) fn l1_memory_section(cognition_state: &CognitionState) -> String {
+    serde_json::to_string_pretty(&cognition_state.l1_memory.entries)
+        .unwrap_or_else(|_| "[]".to_string())
+}
 
-    format!(
-        "## runtime_context\n{}",
-        serde_json::to_string_pretty(&serde_json::json!({
-            "cycle_id": physical_state.cycle_id,
-            "ledger": physical_state.ledger,
-            "capability_summary": {
-                "version": physical_state.capabilities.version,
-                "sense_count": sense_count,
-                "act_count": act_count
-            },
-            "cognition_revision": cognition_state.revision
-        }))
+pub(crate) fn goal_tree_user_partition_json(cognition_state: &CognitionState) -> String {
+    serde_json::to_string_pretty(&cognition_state.goal_tree.user_partition)
         .unwrap_or_else(|_| "{}".to_string())
-    )
+}
+
+pub(crate) fn l1_memory_json(cognition_state: &CognitionState) -> String {
+    serde_json::to_string_pretty(&cognition_state.l1_memory.entries)
+        .unwrap_or_else(|_| "[]".to_string())
 }
 
 pub(crate) fn semantic_sense_events(senses: &[Sense]) -> Vec<PrimarySenseEvent> {
@@ -168,5 +163,11 @@ pub(crate) fn act_descriptors(physical_state: &PhysicalState) -> Vec<NeuralSigna
 
 pub(crate) fn act_descriptor_cache_key(act_descriptors: &[NeuralSignalDescriptor]) -> String {
     let canonical = serde_json::to_string(act_descriptors).unwrap_or_else(|_| "[]".to_string());
+    format!("{:x}", md5::compute(canonical.as_bytes()))
+}
+
+pub(crate) fn goal_tree_cache_key(cognition_state: &CognitionState) -> String {
+    let canonical = serde_json::to_string(&cognition_state.goal_tree.user_partition)
+        .unwrap_or_else(|_| "{}".to_string());
     format!("{:x}", md5::compute(canonical.as_bytes()))
 }

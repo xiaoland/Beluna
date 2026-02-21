@@ -1,15 +1,29 @@
 # Continuity HLD
 
-Boundary:
-- Inputs: capability patch/drop senses, cognition state updates, dispatch callbacks.
-- Outputs: cognition snapshot/persist API, capability snapshot, pre-dispatch decisions.
+## Boundary
 
-Design:
-1. State container tracks:
-   - `cognition_state`
-   - capability entries by route key
+Inputs:
+- full `CognitionState` from Cortex output
+- capability patch/drop senses
+- per-act middleware callback (`on_act`)
+
+Outputs:
+- cognition snapshot/persist API
+- capability overlay catalog snapshot
+- middleware decision (`Continue`/`Break`)
+
+## Design
+
+1. `ContinuityState` tracks:
+   - cognition state
+   - capability entries keyed by route
    - tombstoned routes
-   - dispatch event records
-2. Patch/drop updates mutate capability state in receive order.
-3. Capability snapshot is grouped by endpoint and exposed as Cortex-facing catalog shape.
-4. Dispatch callbacks are mechanical and deterministic.
+2. `ContinuityPersistence` handles JSON load/save with atomic replace.
+3. `ContinuityEngine` is store + guardrail orchestrator.
+4. `on_act` is currently no-op and deterministic `Continue`.
+
+## Guardrails
+
+- Root partition must match compile-time constants exactly.
+- User partition root node id must be `user-root`.
+- Goal node ids must be globally unique in user tree.

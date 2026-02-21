@@ -38,20 +38,26 @@ Beluna Core is the runnable runtime and domain agent implementation.
 
 ## Current State
 
-> Last Updated At: 2026-02-20T11:30+08:00
+> Last Updated At: 2026-02-21T16:40+08:00
 
 ### Live Capabilities
 
 - Core runs as a foreground binary: `beluna [--config <path>]`.
 - Config defaults to `./beluna.jsonc` and validates against `core/beluna.schema.json`.
 - Runtime uses one bounded Rust MPSC sense queue with native sender backpressure.
-- `main` boots continuity/ledger/spine/cortex, starts the Stem loop, and listens for SIGTERM/SIGINT.
-- Shutdown closes ingress gate first, then blocks until `sleep` sense is enqueued.
+- `main` boots continuity/spine/cortex, starts the Stem loop, and listens for SIGTERM/SIGINT.
+- Shutdown closes ingress gate first, then blocks until `hibernate` sense is enqueued.
 - Runtime logging is `tracing`-only: JSON file logs with rotation/retention and optional stderr warn/error mirroring via `logging.*` config.
-- Stem consumes one sense at a time, composes physical+cognition state, invokes pure cortex boundary, then dispatches acts serially through Ledger -> Continuity -> Spine.
+- Stem is tick-driven (`loop.tick_interval_ms`, default 1s) with missed tick skip behavior.
+- Stem can invoke Cortex with empty domain senses on timer ticks.
+- Stem composes physical+cognition state, invokes pure Cortex boundary, persists returned cognition state, then dispatches acts serially through Continuity -> Spine.
 - Control senses:
-  - `sleep` breaks loop without calling Cortex.
-  - `new_capabilities` / `drop_capabilities` mutate capability state before same-cycle Cortex call.
+  - `hibernate` breaks loop immediately.
+  - `new_neural_signal_descriptors` / `drop_neural_signal_descriptors` mutate capability state before same-cycle Cortex call.
+- Stem exposes a built-in act descriptor `core.control/sleep` with payload `{seconds}` for timed sleep mode.
+- Continuity persists cognition state (`goal-tree` + `l1-memory`) to JSON and enforces deterministic guardrails.
+- Continuity and Spine both hold afferent-pathway sender handles.
+- Spine `on_act` emits dispatch-failure senses to afferent pathway on reject/error.
 - Built-in inline body endpoints (shell/web under `core/src/body`) are started by `main` after Spine boot, each on a dedicated thread, and attach through Spine Inline Adapter configured in `spine.adapters`.
 - External body endpoints register over UnixSocket and publish senses/capability patches.
 - AI Gateway MVP provides deterministic routing, strict normalization, reliability controls, budget enforcement, and tracing-structured telemetry events.

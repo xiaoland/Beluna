@@ -22,6 +22,8 @@ pub struct Config {
     #[serde(default)]
     pub cortex: CortexRuntimeConfig,
     #[serde(default)]
+    pub continuity: ContinuityRuntimeConfig,
+    #[serde(default)]
     pub spine: SpineRuntimeConfig,
     #[serde(default)]
     pub r#loop: CoreLoopConfig,
@@ -47,6 +49,10 @@ fn default_cortex_inbox_capacity() -> usize {
 
 fn default_cortex_outbox_capacity() -> usize {
     32
+}
+
+fn default_continuity_state_path() -> PathBuf {
+    PathBuf::from("./state/continuity.json")
 }
 
 fn default_enabled_true() -> bool {
@@ -175,7 +181,11 @@ pub struct CortexHelperRoutesConfig {
     #[serde(default)]
     pub acts_helper: Option<String>,
     #[serde(default)]
-    pub goal_stack_helper: Option<String>,
+    pub goal_tree_helper: Option<String>,
+    #[serde(default)]
+    pub goal_tree_patch_helper: Option<String>,
+    #[serde(default)]
+    pub l1_memory_patch_helper: Option<String>,
 }
 
 impl Default for CortexHelperRoutesConfig {
@@ -186,7 +196,9 @@ impl Default for CortexHelperRoutesConfig {
             sense_helper: None,
             act_descriptor_helper: None,
             acts_helper: None,
-            goal_stack_helper: None,
+            goal_tree_helper: None,
+            goal_tree_patch_helper: None,
+            l1_memory_patch_helper: None,
         }
     }
 }
@@ -215,15 +227,49 @@ impl Default for CortexRuntimeConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContinuityRuntimeConfig {
+    #[serde(default = "default_continuity_state_path")]
+    pub state_path: PathBuf,
+}
+
+impl Default for ContinuityRuntimeConfig {
+    fn default() -> Self {
+        Self {
+            state_path: default_continuity_state_path(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TickMissedBehavior {
+    Skip,
+}
+
+fn default_tick_interval_ms() -> u64 {
+    1_000
+}
+
+fn default_tick_missed_behavior() -> TickMissedBehavior {
+    TickMissedBehavior::Skip
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CoreLoopConfig {
     #[serde(default = "default_sense_queue_capacity")]
     pub sense_queue_capacity: usize,
+    #[serde(default = "default_tick_interval_ms")]
+    pub tick_interval_ms: u64,
+    #[serde(default = "default_tick_missed_behavior")]
+    pub tick_missed_behavior: TickMissedBehavior,
 }
 
 impl Default for CoreLoopConfig {
     fn default() -> Self {
         Self {
             sense_queue_capacity: default_sense_queue_capacity(),
+            tick_interval_ms: default_tick_interval_ms(),
+            tick_missed_behavior: default_tick_missed_behavior(),
         }
     }
 }
@@ -297,6 +343,9 @@ impl Config {
                     }
                 }
             }
+        }
+        if !config.continuity.state_path.is_absolute() {
+            config.continuity.state_path = config_base.join(&config.continuity.state_path);
         }
 
         Ok(config)

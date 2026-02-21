@@ -2,31 +2,31 @@
 
 ## Purpose
 
-Stem is Beluna's runtime orchestrator for afferent sense processing and efferent act dispatch.
+Stem is Beluna's tick-driven runtime orchestrator.
 
 ## Requirements
 
-- One bounded Rust MPSC sense queue is the runtime ingress.
-- No act queue exists; acts are dispatched inline and serially in Stem.
-- Main process responsibilities:
-  1. build queue and runtime components,
-  2. start Stem loop,
-  3. listen for SIGINT/SIGTERM.
-- On shutdown:
-  1. close ingress gate,
-  2. block until `sleep` sense is enqueued,
-  3. await stem completion and run cleanup.
-- Control sense behavior:
-  - `sleep`: stop loop, do not call Cortex.
-  - `new_capabilities`: apply patch immediately, then call Cortex in same cycle.
-  - `drop_capabilities`: apply drop immediately, then call Cortex in same cycle.
-- Dispatch pipeline behavior:
-  - order is Ledger -> Continuity -> Spine.
-  - stage decision contract is `Continue` or `Break`.
-  - `Break` cancels current act dispatch only.
-- Capability patch conflicts use arrival-order-wins.
+- Runtime loop is driven by interval ticks, not only new incoming senses.
+- Default tick interval is `1s`.
+- Missed ticks are skipped.
+- One bounded MPSC sense queue is the afferent ingress.
+- No act queue exists; acts are dispatched inline and serially per cycle.
+- `hibernate` is shutdown control sense and terminates the loop.
+- Capability control senses:
+  - `new_neural_signal_descriptors`: apply before same-cycle Cortex call
+  - `drop_neural_signal_descriptors`: apply before same-cycle Cortex call
+- Stem publishes a built-in sleep act descriptor:
+  - endpoint: `core.control`
+  - act id: `sleep`
+  - payload: `{ "seconds": integer >= 1 }`
+- Sleep act semantics:
+  - enters sleeping mode until deadline
+  - new sense arrival wakes early and triggers immediate cycle
+- Dispatch path is per act middleware:
+  - `Continuity.on_act -> Spine.on_act`
+  - each stage returns `Continue|Break` for current act only
 
 ## Out of Scope
 
 - Semantic planning policy.
-- Long-term cognition memory model beyond current goal stack persistence.
+- Ledger settlement path in dispatch chain.

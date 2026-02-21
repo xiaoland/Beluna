@@ -15,7 +15,6 @@ use beluna::{
     config::Config,
     continuity::ContinuityEngine,
     cortex::Cortex,
-    ledger::LedgerStage,
     logging::init_tracing,
     observability::metrics::{MetricsRuntime, start_prometheus_exporter},
     spine::{Spine, global_spine, install_global_spine, shutdown_global_spine},
@@ -83,10 +82,22 @@ async fn main() -> Result<()> {
         config.body.std_web.limits.clone(),
     )?;
 
-    let continuity = Arc::new(Mutex::new(ContinuityEngine::with_defaults()));
-    let ledger = Arc::new(Mutex::new(LedgerStage::new(1_000_000)));
+    let continuity = Arc::new(Mutex::new(
+        ContinuityEngine::with_defaults_at(
+            config.continuity.state_path.clone(),
+            afferent_pathway.clone(),
+        )
+        .context("failed to initialize continuity engine")?,
+    ));
 
-    let stem_runtime = Stem::new(cortex, continuity.clone(), ledger, spine_runtime, sense_rx);
+    let stem_runtime = Stem::new(
+        cortex,
+        continuity.clone(),
+        spine_runtime,
+        sense_rx,
+        config.r#loop.tick_interval_ms,
+        config.r#loop.tick_missed_behavior.clone(),
+    );
     let stem_task = tokio::spawn(
         async move { stem_runtime.run().await }
             .instrument(tracing::info_span!(target: "core", "stem_task")),
@@ -107,12 +118,12 @@ async fn main() -> Result<()> {
         "received_signal_closing_sense_afferent_pathway_gate"
     );
     afferent_pathway.close_gate().await;
-    tracing::info!(target: "core", "enqueueing_sleep_sense");
+    tracing::info!(target: "core", "enqueueing_hibernate_sense");
     afferent_pathway
-        .send_sleep_blocking()
+        .send_hibernate_blocking()
         .await
-        .context("failed to enqueue sleep sense")?;
-    tracing::info!(target: "core", "sleep_sense_enqueued");
+        .context("failed to enqueue hibernate sense")?;
+    tracing::info!(target: "core", "hibernate_sense_enqueued");
 
     stem_task.await.context("stem task join failed")??;
     continuity.lock().await.flush()?;

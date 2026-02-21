@@ -1,16 +1,20 @@
 # Continuity PRD
 
-Continuity owns persisted operational state for runtime orchestration.
+Continuity owns deterministic persistence and guardrails for runtime cognition state.
 
-Invariants:
+## Requirements
 
-- Cognition persistence is deterministic and side-effect free outside Continuity boundaries.
-- Capability patch/drop state is deterministic and replay-safe.
-- Continuity does not perform semantic planning.
+- Persist/retrieve full `CognitionState` as JSON on local disk.
+- Validate cognition guardrails before accepting persisted or runtime updates.
+- Keep capability overlay state from:
+  - `new_neural_signal_descriptors`
+  - `drop_neural_signal_descriptors`
+- Provide capability snapshot contribution for Stem physical-state composition.
+- Participate in per-act middleware dispatch with `on_act -> Continue|Break`.
+- Hold afferent-pathway sender for future continuity-generated senses.
 
-Requirements:
+## Non-Requirements
 
-- Persist/retrieve `CognitionState`.
-- Apply `new_capabilities` and `drop_capabilities` with arrival-order-wins policy.
-- Provide capability snapshot contribution for physical state composition.
-- Provide pre-dispatch gate decision (`Continue` / `Break`) and consume spine events.
+- No semantic planning.
+- No patch application API (patches are applied inside Cortex).
+- No spine event ingestion or act execution record tracking.

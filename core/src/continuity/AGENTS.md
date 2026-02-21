@@ -6,4 +6,6 @@ Continuity persists operational runtime state for Stem orchestration.
 - Cognition state snapshot/persist must be deterministic.
 - Capability patch/drop application follows arrival order.
 - Dispatch gate decision contract is strictly `Continue` or `Break`.
-- Spine event ingestion is deterministic and non-semantic.
+- Continuity is store + guardrail only; patch application stays inside Cortex.
+- Continuity does not ingest Spine events or track act execution records.
+- Continuity holds afferent-pathway sender for future sense emission capability.

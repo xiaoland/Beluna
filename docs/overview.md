@@ -7,9 +7,9 @@ Beluna is a survival-oriented digital life runtime, not a chatbot.
 1. Natural language is the protocol across cognition and body affordances.
 2. Cortex is stateless and pure at runtime boundary.
 3. Cortex emits non-binding `Act[]`.
-4. Continuity persists cognition state (goal stack today).
-5. Ledger enforces survival resources.
-6. Spine executes acts and emits ordered settlement events.
+4. Continuity persists cognition state (`goal-tree` + `l1-memory`) with deterministic guardrails.
+5. Spine executes acts and can emit dispatch-failure senses.
+6. Stem loop is tick-driven (default 1s, missed tick skip).
 7. Body endpoints are Beluna's world interfaces.
 
 ## Runtime Topology
@@ -22,8 +22,8 @@ Beluna Core top-level components:
 1. Cortex (cognition)
 2. Stem (runtime loop/orchestrator)
 3. Continuity (operational memory + capability overlay)
-4. Ledger (resource control)
-5. Spine (execution routing)
+4. Ledger (resource control, currently short-circuited from Stem dispatch path)
+5. Spine (execution routing + dispatch-failure sense producer)
 
 Operational flow:
 
@@ -33,18 +33,18 @@ Stem:
   drained senses -> compose(physical_state + cognition_state) -> Cortex
   Cortex -> (acts, new_cognition_state)
   new_cognition_state -> Continuity persist
-  acts -> serial dispatch: Ledger -> Continuity -> Spine
+  acts -> serial dispatch: Continuity -> Spine
 ```
 
 Control senses:
-1. `sleep`: stops Stem loop; Cortex is not called.
-2. `new_capabilities`: applies patch before same-cycle Cortex call.
-3. `drop_capabilities`: applies drop patch before same-cycle Cortex call.
+1. `hibernate`: stops Stem loop.
+2. `new_neural_signal_descriptors`: applies patch before same-cycle Cortex call.
+3. `drop_neural_signal_descriptors`: applies drop patch before same-cycle Cortex call.
 
 Shutdown flow:
 1. `main` catches SIGINT/SIGTERM.
 2. closes ingress gate (rejects producer sends).
-3. blocks until `sleep` is enqueued.
+3. blocks until `hibernate` is enqueued.
 4. waits for Stem completion and runs cleanup.
 
 ## Runtime Logging

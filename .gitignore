@@ -30,7 +30,7 @@ __pycache__/
 beluna.jsonc
 *.sock
 /logs/
-
+/state/
 
 
 # XCode & SPM & CocoaPods

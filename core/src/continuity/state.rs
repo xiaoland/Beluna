@@ -1,25 +1,33 @@
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
-    continuity::types::{ContinuityDispatchRecord, DispatchContext},
-    spine::types::SpineEvent,
+    continuity::error::{ContinuityError, invariant_violation},
+    cortex::{CognitionState, GoalNode, ROOT_PARTITION},
     types::{
-        Act, CognitionState, DispatchDecision, NeuralSignalDescriptor,
-        NeuralSignalDescriptorCatalog, NeuralSignalDescriptorDropPatch,
-        NeuralSignalDescriptorPatch, NeuralSignalDescriptorRouteKey,
+        Act, DispatchDecision, NeuralSignalDescriptor, NeuralSignalDescriptorCatalog,
+        NeuralSignalDescriptorDropPatch, NeuralSignalDescriptorPatch,
+        NeuralSignalDescriptorRouteKey,
     },
 };
 
-const MAX_DISPATCH_RECORDS: usize = 256;
-
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct ContinuityState {
     pub cognition_state: CognitionState,
     neural_signal_descriptor_version: u64,
     neural_signal_descriptor_entries:
         BTreeMap<NeuralSignalDescriptorRouteKey, NeuralSignalDescriptor>,
     tombstoned_routes: BTreeSet<NeuralSignalDescriptorRouteKey>,
-    dispatch_records: VecDeque<ContinuityDispatchRecord>,
+}
+
+impl Default for ContinuityState {
+    fn default() -> Self {
+        Self {
+            cognition_state: CognitionState::default(),
+            neural_signal_descriptor_version: 0,
+            neural_signal_descriptor_entries: BTreeMap::new(),
+            tombstoned_routes: BTreeSet::new(),
+        }
+    }
 }
 
 impl ContinuityState {
@@ -27,12 +35,24 @@ impl ContinuityState {
         Self::default()
     }
 
+    pub fn with_cognition_state(cognition_state: CognitionState) -> Self {
+        Self {
+            cognition_state,
+            ..Self::default()
+        }
+    }
+
     pub fn cognition_state_snapshot(&self) -> CognitionState {
         self.cognition_state.clone()
     }
 
-    pub fn persist_cognition_state(&mut self, state: CognitionState) {
+    pub fn persist_cognition_state(
+        &mut self,
+        state: CognitionState,
+    ) -> Result<(), ContinuityError> {
+        validate_cognition_state(&state)?;
         self.cognition_state = state;
+        Ok(())
     }
 
     pub fn apply_neural_signal_descriptor_patch(&mut self, patch: &NeuralSignalDescriptorPatch) {
@@ -83,41 +103,40 @@ impl ContinuityState {
         }
     }
 
-    pub fn pre_dispatch(
-        &self,
-        _act: &Act,
-        _cognition_state: &CognitionState,
-        _ctx: &DispatchContext,
-    ) -> DispatchDecision {
+    pub fn on_act(&self, _act: &Act) -> DispatchDecision {
         DispatchDecision::Continue
     }
+}
 
-    pub fn on_spine_event(&mut self, act: &Act, event: &SpineEvent, ctx: &DispatchContext) {
-        let (event_name, reference_id) = match event {
-            SpineEvent::ActApplied { reference_id, .. } => {
-                ("act_applied".to_string(), Some(reference_id.clone()))
-            }
-            SpineEvent::ActRejected { reference_id, .. } => {
-                ("act_rejected".to_string(), Some(reference_id.clone()))
-            }
-            SpineEvent::ActDeferred { reference_id, .. } => {
-                ("act_deferred".to_string(), Some(reference_id.clone()))
-            }
-        };
-
-        self.dispatch_records.push_back(ContinuityDispatchRecord {
-            cycle_id: ctx.cycle_id,
-            seq_no: ctx.act_seq_no,
-            act_id: act.act_id.clone(),
-            event: event_name,
-            reference_id,
-        });
-        while self.dispatch_records.len() > MAX_DISPATCH_RECORDS {
-            self.dispatch_records.pop_front();
-        }
+pub fn validate_cognition_state(state: &CognitionState) -> Result<(), ContinuityError> {
+    let root_expected: Vec<String> = ROOT_PARTITION.iter().map(|s| (*s).to_string()).collect();
+    if state.goal_tree.root_partition != root_expected {
+        return Err(invariant_violation(
+            "goal-tree root partition must match compile-time constants",
+        ));
     }
 
-    pub fn dispatch_records(&self) -> Vec<ContinuityDispatchRecord> {
-        self.dispatch_records.iter().cloned().collect()
+    if state.goal_tree.user_partition.node_id != "user-root" {
+        return Err(invariant_violation(
+            "goal-tree user partition root node_id must be 'user-root'",
+        ));
     }
+
+    let mut ids = BTreeSet::new();
+    collect_node_ids(&state.goal_tree.user_partition, &mut ids)?;
+
+    Ok(())
+}
+
+fn collect_node_ids(node: &GoalNode, ids: &mut BTreeSet<String>) -> Result<(), ContinuityError> {
+    if !ids.insert(node.node_id.clone()) {
+        return Err(invariant_violation(format!(
+            "duplicate goal node id '{}'",
+            node.node_id
+        )));
+    }
+    for child in &node.children {
+        collect_node_ids(child, ids)?;
+    }
+    Ok(())
 }

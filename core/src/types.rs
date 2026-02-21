@@ -85,7 +85,7 @@ pub struct SenseDatum {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Sense {
     Domain(SenseDatum),
-    Sleep,
+    Hibernate,
     NewNeuralSignalDescriptors(NeuralSignalDescriptorPatch),
     DropNeuralSignalDescriptors(NeuralSignalDescriptorDropPatch),
 }
@@ -96,19 +96,6 @@ pub struct Act {
     pub endpoint_id: String,
     pub neural_signal_descriptor_id: String,
     pub payload: serde_json::Value,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GoalFrame {
-    pub goal_id: String,
-    pub summary: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub struct CognitionState {
-    pub revision: u64,
-    #[serde(default)]
-    pub goal_stack: Vec<GoalFrame>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

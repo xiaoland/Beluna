@@ -1,30 +1,58 @@
+use std::path::PathBuf;
+
 use crate::{
+    afferent_pathway::SenseAfferentPathway,
     continuity::{
         error::ContinuityError,
-        state::ContinuityState,
-        types::{ContinuityDispatchRecord, DispatchContext},
+        persistence::ContinuityPersistence,
+        state::{ContinuityState, validate_cognition_state},
+        types::DispatchContext,
     },
-    spine::types::SpineEvent,
+    cortex::CognitionState,
     types::{
-        Act, CognitionState, DispatchDecision, NeuralSignalDescriptorCatalog,
-        NeuralSignalDescriptorDropPatch, NeuralSignalDescriptorPatch,
+        Act, DispatchDecision, NeuralSignalDescriptorCatalog, NeuralSignalDescriptorDropPatch,
+        NeuralSignalDescriptorPatch,
     },
 };
 
-#[derive(Debug, Clone, Default)]
+#[derive(Clone)]
 pub struct ContinuityEngine {
     state: ContinuityState,
+    persistence: ContinuityPersistence,
+    afferent_pathway: SenseAfferentPathway,
 }
 
 impl ContinuityEngine {
-    pub fn new(state: ContinuityState) -> Self {
-        Self { state }
+    pub fn new(
+        state: ContinuityState,
+        persistence: ContinuityPersistence,
+        afferent_pathway: SenseAfferentPathway,
+    ) -> Self {
+        Self {
+            state,
+            persistence,
+            afferent_pathway,
+        }
     }
 
-    pub fn with_defaults() -> Self {
-        Self {
-            state: ContinuityState::new(),
-        }
+    pub fn with_defaults_at(
+        path: PathBuf,
+        afferent_pathway: SenseAfferentPathway,
+    ) -> Result<Self, ContinuityError> {
+        let persistence = ContinuityPersistence::new(path);
+        let cognition_state = match persistence.load()? {
+            Some(state) => {
+                validate_cognition_state(&state)?;
+                state
+            }
+            None => CognitionState::default(),
+        };
+
+        Ok(Self {
+            state: ContinuityState::with_cognition_state(cognition_state),
+            persistence,
+            afferent_pathway,
+        })
     }
 
     pub fn state(&self) -> &ContinuityState {
@@ -39,8 +67,9 @@ impl ContinuityEngine {
         &mut self,
         state: CognitionState,
     ) -> Result<(), ContinuityError> {
-        self.state.persist_cognition_state(state);
-        Ok(())
+        self.state.persist_cognition_state(state)?;
+        self.persistence
+            .save(&self.state.cognition_state_snapshot())
     }
 
     pub fn apply_neural_signal_descriptor_patch(&mut self, patch: &NeuralSignalDescriptorPatch) {
@@ -58,30 +87,17 @@ impl ContinuityEngine {
         self.state.neural_signal_descriptor_snapshot()
     }
 
-    pub fn pre_dispatch(
+    pub fn on_act(
         &self,
         act: &Act,
-        cognition_state: &CognitionState,
-        ctx: &DispatchContext,
+        _ctx: &DispatchContext,
     ) -> Result<DispatchDecision, ContinuityError> {
-        Ok(self.state.pre_dispatch(act, cognition_state, ctx))
-    }
-
-    pub fn on_spine_event(
-        &mut self,
-        act: &Act,
-        event: &SpineEvent,
-        ctx: &DispatchContext,
-    ) -> Result<(), ContinuityError> {
-        self.state.on_spine_event(act, event, ctx);
-        Ok(())
-    }
-
-    pub fn dispatch_records(&self) -> Vec<ContinuityDispatchRecord> {
-        self.state.dispatch_records()
+        let _ = &self.afferent_pathway;
+        Ok(self.state.on_act(act))
     }
 
     pub fn flush(&mut self) -> Result<(), ContinuityError> {
-        Ok(())
+        self.persistence
+            .save(&self.state.cognition_state_snapshot())
     }
 }

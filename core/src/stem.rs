@@ -1,134 +1,250 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use anyhow::Result;
-use tokio::sync::{Mutex, mpsc};
+use tokio::{
+    sync::{Mutex, mpsc},
+    time::{Instant, MissedTickBehavior},
+};
 
 use crate::{
+    config::TickMissedBehavior,
     continuity::{ContinuityEngine, DispatchContext as ContinuityDispatchContext},
     cortex::Cortex,
-    ledger::{DispatchContext as LedgerDispatchContext, LedgerDispatchTicket, LedgerStage},
-    spine::{ActDispatchResult, Spine, SpineEvent},
+    spine::Spine,
     types::{
-        Act, CognitionState, DispatchDecision, NeuralSignalDescriptor,
-        NeuralSignalDescriptorCatalog, NeuralSignalDescriptorRouteKey, PhysicalState, Sense,
+        Act, DispatchDecision, NeuralSignalDescriptor, NeuralSignalDescriptorCatalog,
+        NeuralSignalDescriptorRouteKey, NeuralSignalType, PhysicalLedgerSnapshot, PhysicalState,
+        Sense,
     },
 };
+
+enum StemMode {
+    Active,
+    SleepingUntil(Instant),
+}
 
 pub struct Stem {
     cycle_id: u64,
     cortex: Arc<Cortex>,
     continuity: Arc<Mutex<ContinuityEngine>>,
-    ledger: Arc<Mutex<LedgerStage>>,
     spine: Arc<Spine>,
     sense_rx: mpsc::Receiver<Sense>,
+    tick_interval_ms: u64,
+    tick_missed_behavior: TickMissedBehavior,
 }
 
 impl Stem {
     pub fn new(
         cortex: Arc<Cortex>,
         continuity: Arc<Mutex<ContinuityEngine>>,
-        ledger: Arc<Mutex<LedgerStage>>,
         spine: Arc<Spine>,
         sense_rx: mpsc::Receiver<Sense>,
+        tick_interval_ms: u64,
+        tick_missed_behavior: TickMissedBehavior,
     ) -> Self {
         Self {
             cycle_id: 0,
             cortex,
             continuity,
-            ledger,
             spine,
             sense_rx,
+            tick_interval_ms: tick_interval_ms.max(1),
+            tick_missed_behavior,
         }
     }
 
     #[tracing::instrument(name = "stem_run", target = "stem", skip(self))]
     pub async fn run(mut self) -> Result<()> {
+        let mut mode = StemMode::Active;
+        let mut tick = tokio::time::interval(Duration::from_millis(self.tick_interval_ms));
+        tick.set_missed_tick_behavior(match self.tick_missed_behavior {
+            TickMissedBehavior::Skip => MissedTickBehavior::Skip,
+        });
+
         loop {
-            let Some(first_sense) = self.sense_rx.recv().await else {
-                break;
-            };
+            match mode {
+                StemMode::Active => {
+                    tick.tick().await;
 
-            if matches!(first_sense, Sense::Sleep) {
-                break;
-            }
-
-            let mut sense_batch = vec![first_sense];
-            let mut stop_after_cycle = false;
-            while let Ok(next_sense) = self.sense_rx.try_recv() {
-                if matches!(next_sense, Sense::Sleep) {
-                    stop_after_cycle = true;
-                    break;
-                }
-                sense_batch.push(next_sense);
-            }
-
-            for sense in &sense_batch {
-                match sense {
-                    Sense::NewNeuralSignalDescriptors(patch) => {
-                        self.continuity
-                            .lock()
-                            .await
-                            .apply_neural_signal_descriptor_patch(patch);
+                    let senses = self.drain_senses_nonblocking();
+                    if senses.iter().any(|sense| matches!(sense, Sense::Hibernate)) {
+                        break;
                     }
-                    Sense::DropNeuralSignalDescriptors(drop_patch) => {
-                        self.continuity
-                            .lock()
-                            .await
-                            .apply_neural_signal_descriptor_drop(drop_patch);
+
+                    if let Some(deadline) = self.execute_cycle(senses).await? {
+                        mode = StemMode::SleepingUntil(deadline);
                     }
-                    Sense::Domain(_) | Sense::Sleep => {}
                 }
-            }
+                StemMode::SleepingUntil(deadline) => {
+                    let now = Instant::now();
+                    if now >= deadline {
+                        if let Some(next_deadline) = self.execute_cycle(Vec::new()).await? {
+                            mode = StemMode::SleepingUntil(next_deadline);
+                        } else {
+                            mode = StemMode::Active;
+                        }
+                        continue;
+                    }
 
-            self.cycle_id = self.cycle_id.saturating_add(1);
+                    let wait = deadline.saturating_duration_since(now);
+                    tokio::select! {
+                        _ = tokio::time::sleep(wait) => {
+                            if let Some(next_deadline) = self.execute_cycle(Vec::new()).await? {
+                                mode = StemMode::SleepingUntil(next_deadline);
+                            } else {
+                                mode = StemMode::Active;
+                            }
+                        }
+                        maybe_sense = self.sense_rx.recv() => {
+                            let Some(first_sense) = maybe_sense else {
+                                break;
+                            };
+                            if matches!(first_sense, Sense::Hibernate) {
+                                break;
+                            }
 
-            let cognition_state = self.continuity.lock().await.cognition_state_snapshot();
-            let physical_state = self.compose_physical_state(self.cycle_id).await?;
+                            let mut senses = vec![first_sense];
+                            senses.extend(self.drain_senses_nonblocking());
+                            if senses.iter().any(|sense| matches!(sense, Sense::Hibernate)) {
+                                break;
+                            }
 
-            let output = match self
-                .cortex
-                .cortex(&sense_batch, &physical_state, &cognition_state)
-                .await
-            {
-                Ok(output) => output,
-                Err(err) => {
-                    tracing::warn!(
-                        target: "stem",
-                        cycle_id = self.cycle_id,
-                        error = %err,
-                        "cortex_failed_for_cycle"
-                    );
-                    continue;
+                            if let Some(next_deadline) = self.execute_cycle(senses).await? {
+                                mode = StemMode::SleepingUntil(next_deadline);
+                            } else {
+                                mode = StemMode::Active;
+                            }
+                        }
+                    }
                 }
-            };
-
-            self.continuity
-                .lock()
-                .await
-                .persist_cognition_state(output.new_cognition_state.clone())?;
-            tracing::debug!(
-                target: "stem",
-                cycle_id = self.cycle_id,
-                generated_acts = output.acts.len(),
-                "cycle_generated_acts"
-            );
-
-            for (index, act) in output.acts.into_iter().enumerate() {
-                self.dispatch_one_act_serial(
-                    self.cycle_id,
-                    (index as u64) + 1,
-                    act,
-                    &output.new_cognition_state,
-                )
-                .await?;
-            }
-
-            if stop_after_cycle {
-                break;
             }
         }
 
         Ok(())
+    }
+
+    async fn execute_cycle(&mut self, sense_batch: Vec<Sense>) -> Result<Option<Instant>> {
+        for sense in &sense_batch {
+            match sense {
+                Sense::NewNeuralSignalDescriptors(patch) => {
+                    self.continuity
+                        .lock()
+                        .await
+                        .apply_neural_signal_descriptor_patch(patch);
+                }
+                Sense::DropNeuralSignalDescriptors(drop_patch) => {
+                    self.continuity
+                        .lock()
+                        .await
+                        .apply_neural_signal_descriptor_drop(drop_patch);
+                }
+                Sense::Domain(_) | Sense::Hibernate => {}
+            }
+        }
+
+        self.cycle_id = self.cycle_id.saturating_add(1);
+
+        let domain_senses: Vec<_> = sense_batch
+            .iter()
+            .filter_map(|sense| match sense {
+                Sense::Domain(_) => Some(sense.clone()),
+                _ => None,
+            })
+            .collect();
+
+        let cognition_state = self.continuity.lock().await.cognition_state_snapshot();
+        let physical_state = self.compose_physical_state(self.cycle_id).await?;
+
+        let output = match self
+            .cortex
+            .cortex(&domain_senses, &physical_state, &cognition_state)
+            .await
+        {
+            Ok(output) => output,
+            Err(err) => {
+                tracing::warn!(
+                    target: "stem",
+                    cycle_id = self.cycle_id,
+                    error = %err,
+                    "cortex_failed_for_cycle"
+                );
+                return Ok(None);
+            }
+        };
+
+        self.continuity
+            .lock()
+            .await
+            .persist_cognition_state(output.new_cognition_state)?;
+
+        tracing::debug!(
+            target: "stem",
+            cycle_id = self.cycle_id,
+            generated_acts = output.acts.len(),
+            "cycle_generated_acts"
+        );
+
+        let mut sleep_deadline = None;
+        for (index, act) in output.acts.into_iter().enumerate() {
+            let seq_no = (index as u64) + 1;
+            if let Some(deadline) = self.try_handle_sleep_act(&act) {
+                sleep_deadline = Some(deadline);
+                tracing::info!(
+                    target: "stem",
+                    cycle_id = self.cycle_id,
+                    seq_no = seq_no,
+                    act_id = %act.act_id,
+                    "sleep_act_intercepted"
+                );
+                break;
+            }
+
+            let ctx = ContinuityDispatchContext {
+                cycle_id: self.cycle_id,
+                act_seq_no: seq_no,
+            };
+            let continuity_decision = self.continuity.lock().await.on_act(&act, &ctx)?;
+            if matches!(continuity_decision, DispatchDecision::Break) {
+                tracing::info!(
+                    target: "stem.dispatch",
+                    cycle_id = self.cycle_id,
+                    seq_no = seq_no,
+                    reason = "continuity_break",
+                    "dispatch_break"
+                );
+                continue;
+            }
+
+            let spine_decision = self.spine.on_act(act.clone()).await?;
+            if matches!(spine_decision, DispatchDecision::Break) {
+                tracing::info!(
+                    target: "stem.dispatch",
+                    cycle_id = self.cycle_id,
+                    seq_no = seq_no,
+                    reason = "spine_break",
+                    "dispatch_break"
+                );
+            }
+        }
+
+        Ok(sleep_deadline)
+    }
+
+    fn drain_senses_nonblocking(&mut self) -> Vec<Sense> {
+        let mut drained = Vec::new();
+        while let Ok(next) = self.sense_rx.try_recv() {
+            drained.push(next);
+        }
+        drained
+    }
+
+    fn try_handle_sleep_act(&self, act: &Act) -> Option<Instant> {
+        if act.endpoint_id != "core.control" || act.neural_signal_descriptor_id != "sleep" {
+            return None;
+        }
+
+        let seconds = act.payload.get("seconds")?.as_u64()?.max(1);
+        Some(Instant::now() + Duration::from_secs(seconds))
     }
 
     #[tracing::instrument(
@@ -138,251 +254,25 @@ impl Stem {
         fields(cycle_id = cycle_id)
     )]
     async fn compose_physical_state(&self, cycle_id: u64) -> Result<PhysicalState> {
-        let ledger_snapshot = self.ledger.lock().await.physical_snapshot();
         let spine_catalog = self.spine.neural_signal_descriptor_catalog_snapshot();
         let continuity_catalog = self
             .continuity
             .lock()
             .await
             .neural_signal_descriptor_snapshot();
-        let ledger_catalog = NeuralSignalDescriptorCatalog::default();
+        let stem_catalog = stem_control_descriptor_catalog();
         let merged = merge_neural_signal_descriptor_catalogs(
             cycle_id,
             spine_catalog,
             continuity_catalog,
-            ledger_catalog,
+            stem_catalog,
         );
 
         Ok(PhysicalState {
             cycle_id,
-            ledger: ledger_snapshot,
+            ledger: PhysicalLedgerSnapshot::default(),
             capabilities: merged,
         })
-    }
-
-    #[tracing::instrument(
-        name = "stem_dispatch_one_act_serial",
-        target = "stem",
-        skip(self, act, cognition_state),
-        fields(
-            cycle_id = cycle_id,
-            seq_no = seq_no,
-            act_id = %act.act_id,
-            endpoint_id = %act.endpoint_id,
-            neural_signal_descriptor_id = %act.neural_signal_descriptor_id
-        )
-    )]
-    async fn dispatch_one_act_serial(
-        &self,
-        cycle_id: u64,
-        seq_no: u64,
-        act: Act,
-        cognition_state: &CognitionState,
-    ) -> Result<()> {
-        tracing::debug!(
-            target: "stem",
-            cycle_id = cycle_id,
-            seq_no = seq_no,
-            act_id = %act.act_id,
-            endpoint_id = %act.endpoint_id,
-            neural_signal_descriptor_id = %act.neural_signal_descriptor_id,
-            "dispatch_attempt"
-        );
-        let ledger_ctx = LedgerDispatchContext {
-            cycle_id,
-            act_seq_no: seq_no,
-        };
-        let continuity_ctx = ContinuityDispatchContext {
-            cycle_id,
-            act_seq_no: seq_no,
-        };
-
-        let (ledger_decision, ticket_opt) =
-            self.ledger.lock().await.pre_dispatch(&act, &ledger_ctx)?;
-        if matches!(ledger_decision, DispatchDecision::Break) {
-            tracing::info!(
-                target: "stem",
-                cycle_id = cycle_id,
-                seq_no = seq_no,
-                reason = "ledger_break",
-                "dispatch_break"
-            );
-            return Ok(());
-        }
-        let ticket = ticket_opt.expect("ledger continue must return ticket");
-
-        let continuity_decision =
-            self.continuity
-                .lock()
-                .await
-                .pre_dispatch(&act, cognition_state, &continuity_ctx)?;
-        if matches!(continuity_decision, DispatchDecision::Break) {
-            tracing::info!(
-                target: "stem",
-                cycle_id = cycle_id,
-                seq_no = seq_no,
-                reason = "continuity_break",
-                "dispatch_break"
-            );
-            let event = synthetic_continuity_break_event(cycle_id, seq_no, &act, &ticket);
-            self.ledger
-                .lock()
-                .await
-                .settle_from_spine(&ticket, &event, &ledger_ctx)?;
-            self.continuity
-                .lock()
-                .await
-                .on_spine_event(&act, &event, &continuity_ctx)?;
-            return Ok(());
-        }
-
-        let event = match self.spine.dispatch_act(act.clone()).await {
-            Ok(dispatch_result) => {
-                map_dispatch_result_to_spine_event(cycle_id, seq_no, &act, &ticket, dispatch_result)
-            }
-            Err(err) => {
-                tracing::warn!(
-                    target: "stem.dispatch",
-                    cycle_id = cycle_id,
-                    seq_no = seq_no,
-                    act_id = %act.act_id,
-                    endpoint_id = %act.endpoint_id,
-                    neural_signal_descriptor_id = %act.neural_signal_descriptor_id,
-                    error = %err,
-                    "dispatch_failed_with_spine_error"
-                );
-                map_spine_error_to_rejected_event(cycle_id, seq_no, &act, &ticket, err)
-            }
-        };
-        match &event {
-            SpineEvent::ActApplied { reference_id, .. } => {
-                tracing::info!(
-                    target: "stem.dispatch",
-                    cycle_id = cycle_id,
-                    seq_no = seq_no,
-                    act_id = %act.act_id,
-                    endpoint_id = %act.endpoint_id,
-                    neural_signal_descriptor_id = %act.neural_signal_descriptor_id,
-                    reference_id = %reference_id,
-                    "dispatch_applied"
-                );
-            }
-            SpineEvent::ActRejected {
-                reason_code,
-                reference_id,
-                ..
-            } => {
-                tracing::warn!(
-                    target: "stem.dispatch",
-                    cycle_id = cycle_id,
-                    seq_no = seq_no,
-                    act_id = %act.act_id,
-                    endpoint_id = %act.endpoint_id,
-                    neural_signal_descriptor_id = %act.neural_signal_descriptor_id,
-                    reason_code = %reason_code,
-                    reference_id = %reference_id,
-                    "dispatch_rejected"
-                );
-            }
-            SpineEvent::ActDeferred {
-                reason_code,
-                reference_id,
-                ..
-            } => {
-                tracing::warn!(
-                    target: "stem.dispatch",
-                    cycle_id = cycle_id,
-                    seq_no = seq_no,
-                    act_id = %act.act_id,
-                    endpoint_id = %act.endpoint_id,
-                    neural_signal_descriptor_id = %act.neural_signal_descriptor_id,
-                    reason_code = %reason_code,
-                    reference_id = %reference_id,
-                    "dispatch_deferred"
-                );
-            }
-        }
-
-        self.ledger
-            .lock()
-            .await
-            .settle_from_spine(&ticket, &event, &ledger_ctx)?;
-        self.continuity
-            .lock()
-            .await
-            .on_spine_event(&act, &event, &continuity_ctx)?;
-
-        Ok(())
-    }
-}
-
-fn synthetic_continuity_break_event(
-    cycle_id: u64,
-    seq_no: u64,
-    act: &Act,
-    ticket: &LedgerDispatchTicket,
-) -> SpineEvent {
-    SpineEvent::ActRejected {
-        cycle_id,
-        seq_no,
-        act_id: act.act_id.clone(),
-        reserve_entry_id: ticket.reserve_entry_id.clone(),
-        cost_attribution_id: ticket.cost_attribution_id.clone(),
-        reason_code: "continuity_break".to_string(),
-        reference_id: format!("stem:break:{}:{}:{}", cycle_id, seq_no, act.act_id),
-    }
-}
-
-fn map_spine_error_to_rejected_event(
-    cycle_id: u64,
-    seq_no: u64,
-    act: &Act,
-    ticket: &LedgerDispatchTicket,
-    err: crate::spine::SpineError,
-) -> SpineEvent {
-    SpineEvent::ActRejected {
-        cycle_id,
-        seq_no,
-        act_id: act.act_id.clone(),
-        reserve_entry_id: ticket.reserve_entry_id.clone(),
-        cost_attribution_id: ticket.cost_attribution_id.clone(),
-        reason_code: "spine_error".to_string(),
-        reference_id: format!(
-            "stem:spine_error:{}:{}:{}:{}",
-            cycle_id, seq_no, act.act_id, err.kind as u8
-        ),
-    }
-}
-
-fn map_dispatch_result_to_spine_event(
-    cycle_id: u64,
-    seq_no: u64,
-    act: &Act,
-    ticket: &LedgerDispatchTicket,
-    dispatch_result: ActDispatchResult,
-) -> SpineEvent {
-    match dispatch_result {
-        ActDispatchResult::Acknowledged { reference_id } => SpineEvent::ActApplied {
-            cycle_id,
-            seq_no,
-            act_id: act.act_id.clone(),
-            reserve_entry_id: ticket.reserve_entry_id.clone(),
-            cost_attribution_id: ticket.cost_attribution_id.clone(),
-            actual_cost_micro: 0,
-            reference_id,
-        },
-        ActDispatchResult::Rejected {
-            reason_code,
-            reference_id,
-        } => SpineEvent::ActRejected {
-            cycle_id,
-            seq_no,
-            act_id: act.act_id.clone(),
-            reserve_entry_id: ticket.reserve_entry_id.clone(),
-            cost_attribution_id: ticket.cost_attribution_id.clone(),
-            reason_code,
-            reference_id,
-        },
     }
 }
 
@@ -390,11 +280,11 @@ fn merge_neural_signal_descriptor_catalogs(
     cycle_id: u64,
     spine_catalog: NeuralSignalDescriptorCatalog,
     continuity_catalog: NeuralSignalDescriptorCatalog,
-    ledger_catalog: NeuralSignalDescriptorCatalog,
+    stem_catalog: NeuralSignalDescriptorCatalog,
 ) -> NeuralSignalDescriptorCatalog {
     let spine_version = spine_catalog.version.clone();
     let continuity_version = continuity_catalog.version.clone();
-    let ledger_version = ledger_catalog.version.clone();
+    let stem_version = stem_catalog.version.clone();
 
     let mut merged: BTreeMap<NeuralSignalDescriptorRouteKey, NeuralSignalDescriptor> =
         BTreeMap::new();
@@ -419,7 +309,7 @@ fn merge_neural_signal_descriptor_catalogs(
             descriptor,
         );
     }
-    for descriptor in ledger_catalog.entries {
+    for descriptor in stem_catalog.entries {
         merged.insert(
             NeuralSignalDescriptorRouteKey {
                 r#type: descriptor.r#type,
@@ -444,8 +334,27 @@ fn merge_neural_signal_descriptor_catalogs(
     NeuralSignalDescriptorCatalog {
         version: format!(
             "stem:{}:{}:{}:{}",
-            cycle_id, spine_version, continuity_version, ledger_version
+            cycle_id, spine_version, continuity_version, stem_version
         ),
         entries,
+    }
+}
+
+fn stem_control_descriptor_catalog() -> NeuralSignalDescriptorCatalog {
+    NeuralSignalDescriptorCatalog {
+        version: "stem-control:v1".to_string(),
+        entries: vec![NeuralSignalDescriptor {
+            r#type: NeuralSignalType::Act,
+            endpoint_id: "core.control".to_string(),
+            neural_signal_descriptor_id: "sleep".to_string(),
+            payload_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "seconds": { "type": "integer", "minimum": 1 }
+                },
+                "required": ["seconds"],
+                "additionalProperties": false
+            }),
+        }],
     }
 }

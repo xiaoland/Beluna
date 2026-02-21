@@ -21,7 +21,7 @@ use crate::{
         error::{SpineError, backend_failure, invalid_batch, registration_invalid},
         types::{ActDispatchResult, NeuralSignalDescriptor, NeuralSignalDescriptorRouteKey},
     },
-    types::{Act, NeuralSignalDescriptorCatalog},
+    types::{Act, DispatchDecision, NeuralSignalDescriptorCatalog, Sense, SenseDatum},
 };
 
 #[derive(Debug, Clone)]
@@ -111,6 +111,7 @@ pub struct Spine {
     tasks: Mutex<Vec<JoinHandle<Result<()>>>>,
     endpoint_state: Mutex<EndpointState>,
     inline_adapter: OnceLock<Arc<SpineInlineAdapter>>,
+    afferent_pathway: SenseAfferentPathway,
 }
 
 impl Spine {
@@ -124,6 +125,7 @@ impl Spine {
             tasks: Mutex::new(Vec::new()),
             endpoint_state: Mutex::new(EndpointState::default()),
             inline_adapter: OnceLock::new(),
+            afferent_pathway: afferent_pathway.clone(),
         });
 
         spine.start_adapters(config, afferent_pathway);
@@ -214,6 +216,39 @@ impl Spine {
     }
 
     #[tracing::instrument(
+        name = "spine_on_act",
+        target = "spine.dispatch",
+        skip(self, act),
+        fields(
+            act_id = %act.act_id,
+            endpoint_id = %act.endpoint_id,
+            neural_signal_descriptor_id = %act.neural_signal_descriptor_id
+        )
+    )]
+    pub async fn on_act(&self, act: Act) -> Result<DispatchDecision, SpineError> {
+        match self.dispatch_act(act.clone()).await {
+            Ok(ActDispatchResult::Acknowledged { .. }) => Ok(DispatchDecision::Continue),
+            Ok(ActDispatchResult::Rejected {
+                reason_code,
+                reference_id,
+            }) => {
+                self.emit_dispatch_failure_sense(&act, &reason_code, &reference_id)
+                    .await;
+                Ok(DispatchDecision::Break)
+            }
+            Err(err) => {
+                self.emit_dispatch_failure_sense(
+                    &act,
+                    "spine_dispatch_error",
+                    &format!("spine:error:{}:{}", act.act_id, err.kind as u8),
+                )
+                .await;
+                Ok(DispatchDecision::Break)
+            }
+        }
+    }
+
+    #[tracing::instrument(
         name = "spine_dispatch_act",
         target = "spine.dispatch",
         skip(self, act),
@@ -299,6 +334,29 @@ impl Spine {
                     }
                 }
             }
+        }
+    }
+
+    async fn emit_dispatch_failure_sense(&self, act: &Act, reason_code: &str, reference_id: &str) {
+        let sense = Sense::Domain(SenseDatum {
+            sense_id: uuid::Uuid::new_v4().to_string(),
+            endpoint_id: "core.spine".to_string(),
+            neural_signal_descriptor_id: "dispatch.failed".to_string(),
+            payload: serde_json::json!({
+                "act_id": act.act_id,
+                "endpoint_id": act.endpoint_id,
+                "neural_signal_descriptor_id": act.neural_signal_descriptor_id,
+                "reason_code": reason_code,
+                "reference_id": reference_id,
+            }),
+        });
+        if let Err(err) = self.afferent_pathway.send(sense).await {
+            tracing::warn!(
+                target: "spine.dispatch",
+                act_id = %act.act_id,
+                error = %err,
+                "failed_to_emit_dispatch_failure_sense"
+            );
         }
     }
 

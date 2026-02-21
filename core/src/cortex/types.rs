@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-use crate::types::{Act, CognitionState};
+use crate::{
+    cortex::cognition::{CognitionState, GoalTreePatchOp, L1MemoryPatchOp},
+    types::Act,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReactionLimits {
@@ -54,23 +57,6 @@ pub(crate) struct ActDraft {
     pub payload: serde_json::Value,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub(crate) struct ActsHelperOutput {
-    #[serde(default)]
-    pub acts: Vec<ActDraft>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub(crate) struct GoalStackPatch {
-    #[serde(default)]
-    pub ops: Vec<GoalStackPatchOp>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "op", rename_all = "snake_case")]
-pub(crate) enum GoalStackPatchOp {
-    Push { goal_id: String, summary: String },
-    Pop,
-    ReplaceTop { goal_id: String, summary: String },
-    Clear,
-}
+pub(crate) type ActsHelperOutput = Vec<ActDraft>;
+pub(crate) type GoalTreePatchHelperOutput = Vec<GoalTreePatchOp>;
+pub(crate) type L1MemoryPatchHelperOutput = Vec<L1MemoryPatchOp>;

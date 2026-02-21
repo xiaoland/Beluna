@@ -1,56 +1,59 @@
 # Cortex LLD
 
-## Pipeline
+## Domain Types
 
-Single cycle execution:
+- `GoalTree`
+  - `root_partition: string[]` (immutable, compile-time constant mirror)
+  - `user_partition: GoalNode` (mutable tree)
+- `GoalNode`
+  - `node_id: string`
+  - `summary: string`
+  - `weight: i32`
+  - `children: GoalNode[]`
+- `L1Memory`
+  - `entries: string[]`
+- `CognitionState`
+  - `revision: u64`
+  - `goal_tree: GoalTree`
+  - `l1_memory: L1Memory`
 
-1. `input_helpers(senses, physical_state, cognition_state) -> <input-ir>`
-2. `primary(<input-ir>) -> <output-ir>`
-3. `output_helpers(<output-ir>) -> acts + goal_stack_patch`
-4. `goal_stack_patch` is applied to current cognition state to produce `new_cognition_state`
+Patch ops:
+- `GoalTreePatchOp`: `sprout | prune | tilt`
+- `L1MemoryPatchOp`: `append | insert | remove`
 
-## IR Contract
+## Tick Algorithm
 
-- Input IR must contain root `<input-ir>` and first-level sections:
-  - `<senses>`
-  - `<act-descriptor-catalog>`
-  - `<goal-stack>`
-  - `<context>`
-- Output IR must contain root `<output-ir>` and first-level sections:
+1. Build semantic helper inputs from `senses`, act descriptors, user goal tree.
+2. Build `<input-ir>` with strict first-level XML sections.
+3. Run primary to get `<output-ir>`.
+4. Parse sections:
   - `<acts>`
-  - `<goal-stack-patch>`
-- Section body is semi-structured XML/Markdown.
+  - `<goal-tree-patch>`
+  - `<l1-memory-patch>`
+5. Run three output helpers in parallel with strict JSON Schema outputs.
+6. Materialize `Act[]` and apply patch arrays in deterministic order.
+7. Return `CortexOutput { acts, new_cognition_state }`.
 
-## Helper Semantics
+## IR Rules
 
-- Input helpers run concurrently:
-  - `sense_helper`
-  - `act_descriptor_helper`
-- Output helpers run concurrently:
-  - `acts_helper`
-  - `goal_stack_helper`
-- Every helper is one LLM call.
-- Helper model route is configurable per-helper with default fallback.
-- Helper outputs are cognitive transforms only; deterministic data assembly stays in Rust.
-- `act_descriptor_helper` takes one `<act-descriptor>` payload and returns markdown only; runtime wraps those markdown fragments into `<act-descriptor-catalog>` XML.
-- Input helper prompts are built from semantic projections:
-  - `sense_id` and similar transport-only ids are removed.
-  - `sense` / `act` names are used instead of `neural_signal_descriptor`.
-  - runtime context includes capability summary instead of repeating full capability catalog.
-- Identical capability descriptors are deduplicated before helper input assembly.
+- XML enforces only first-level boundaries.
+- Section bodies are semi-structured markdown/plain text.
+- Avoid high-entropy plumbing noise in IR.
+- Keep semantic-first representation and implicit relational structure.
 
-## Cache
+## Helper JSON Contracts
 
-- `act_descriptor_helper` cache key is MD5 of canonical act-descriptor input.
-- Cache store is in-memory, process-scoped.
+- `acts_helper`: `ActDraft[]`
+- `goal_tree_patch_helper`: `GoalTreePatchOp[]`
+- `l1_memory_patch_helper`: `L1MemoryPatchOp[]`
 
-## Failure Policy
+No envelope wrapper objects are allowed around helper outputs.
 
-- Primary failure or timeout: fail-closed noop (`acts=[]`) and cognition state remains unchanged.
-- Input helper failure: fallback to raw section content.
-- Output helper failure: fallback to empty output for that helper (`acts=[]` or empty patch).
+## Deterministic Patch Rules
 
-## Output Constraints
-
-- `acts_helper` and `goal_stack_helper` use AI Gateway JSON Schema strict mode.
-- `act_id` is generated in code as UUIDv7.
+- Goal-tree ops are applied to user partition only.
+- `sprout` fails closed if parent is missing or node_id already exists.
+- `prune` cannot remove `user-root`.
+- `tilt` clamps weight to configured bounds.
+- L1 ops apply on ordered list index semantics.
+- `revision` increments only when state changed.

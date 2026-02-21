@@ -16,13 +16,3 @@ pub struct DispatchContext {
     pub cycle_id: u64,
     pub act_seq_no: u64,
 }
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ContinuityDispatchRecord {
-    pub cycle_id: u64,
-    pub seq_no: u64,
-    pub act_id: String,
-    pub event: String,
-    #[serde(default)]
-    pub reference_id: Option<String>,
-}

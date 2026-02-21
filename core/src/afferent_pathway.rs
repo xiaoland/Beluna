@@ -87,10 +87,10 @@ impl SenseAfferentPathway {
         self.gate_open.store(false, Ordering::Release);
     }
 
-    pub async fn send_sleep_blocking(&self) -> Result<(), AfferentPathwayError> {
+    pub async fn send_hibernate_blocking(&self) -> Result<(), AfferentPathwayError> {
         let _guard = self.send_lock.lock().await;
         self.tx
-            .send(Sense::Sleep)
+            .send(Sense::Hibernate)
             .await
             .map_err(|_| AfferentPathwayError::queue_closed())
     }
