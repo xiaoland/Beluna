@@ -218,15 +218,15 @@ private struct MessageRow: View {
 
     var body: some View {
         switch message.body {
-        case let .toolCall(payload):
-            ToolCallMessageView(message: message, payload: payload)
+        case let .cortexCycle(payload):
+            CortexCycleMessageView(message: message, payload: payload)
         case .text:
             switch message.role {
             case .system, .debug:
                 CenterNoticeBubble(message: message)
             case .user, .assistant:
                 MessageBubble(message: message)
-            case .tool:
+            case .organActivity:
                 CenterNoticeBubble(message: message)
             }
         }
@@ -257,7 +257,7 @@ private struct CenterNoticeBubble: View {
             return Color.orange.opacity(0.18)
         case .debug:
             return Color.gray.opacity(0.2)
-        case .user, .assistant, .tool:
+        case .user, .assistant, .organActivity:
             return .clear
         }
     }
@@ -306,8 +306,8 @@ private struct MessageBubble: View {
             return "System"
         case .debug:
             return "Debug"
-        case .tool:
-            return "Tool"
+        case .organActivity:
+            return "Organ Activity"
         }
     }
 
@@ -321,7 +321,7 @@ private struct MessageBubble: View {
             return Color.orange.opacity(0.18)
         case .debug:
             return Color.gray.opacity(0.2)
-        case .tool:
+        case .organActivity:
             return Color.primary.opacity(0.1)
         }
     }
@@ -330,7 +330,7 @@ private struct MessageBubble: View {
         switch message.role {
         case .user:
             return .white
-        case .assistant, .system, .tool:
+        case .assistant, .system, .organActivity:
             return .primary
         case .debug:
             return .secondary

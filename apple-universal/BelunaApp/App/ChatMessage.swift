@@ -5,26 +5,46 @@ enum ChatRole: String {
     case assistant
     case system
     case debug
-    case tool
+    case organActivity
 }
 
-struct ToolCallMessagePayload: Equatable {
-    let cycleID: UInt64
+struct OrganActivityMessagePayload: Identifiable, Equatable {
+    let id: UUID
     let stage: String
     let inputPayload: String
     let outputPayload: String
+    let timestamp: Date
+
+    init(
+        id: UUID = UUID(),
+        stage: String,
+        inputPayload: String,
+        outputPayload: String,
+        timestamp: Date
+    ) {
+        self.id = id
+        self.stage = stage
+        self.inputPayload = inputPayload
+        self.outputPayload = outputPayload
+        self.timestamp = timestamp
+    }
+}
+
+struct CortexCycleMessagePayload: Equatable {
+    let cycleID: UInt64
+    var organActivityMessages: [OrganActivityMessagePayload]
 }
 
 enum ChatMessageBody: Equatable {
     case text(String)
-    case toolCall(ToolCallMessagePayload)
+    case cortexCycle(CortexCycleMessagePayload)
 }
 
 struct ChatMessage: Identifiable, Equatable {
     let id: UUID
     let role: ChatRole
-    let body: ChatMessageBody
-    let timestamp: Date
+    var body: ChatMessageBody
+    var timestamp: Date
 
     init(id: UUID = UUID(), role: ChatRole, text: String, timestamp: Date = Date()) {
         self.id = id
@@ -33,10 +53,10 @@ struct ChatMessage: Identifiable, Equatable {
         self.timestamp = timestamp
     }
 
-    init(id: UUID = UUID(), toolCall: ToolCallMessagePayload, timestamp: Date = Date()) {
+    init(id: UUID = UUID(), cortexCycle: CortexCycleMessagePayload, timestamp: Date = Date()) {
         self.id = id
-        self.role = .tool
-        self.body = .toolCall(toolCall)
+        self.role = .organActivity
+        self.body = .cortexCycle(cortexCycle)
         self.timestamp = timestamp
     }
 
@@ -44,8 +64,8 @@ struct ChatMessage: Identifiable, Equatable {
         switch body {
         case let .text(text):
             return text
-        case let .toolCall(payload):
-            return "[tool] cycle \(payload.cycleID) \(payload.stage)"
+        case let .cortexCycle(payload):
+            return "[cortex cycle] \(payload.cycleID), \(payload.organActivityMessages.count) organ activity message(s)"
         }
     }
 }

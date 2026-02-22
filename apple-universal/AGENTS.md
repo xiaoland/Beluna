@@ -40,21 +40,22 @@ Beluna Apple Universal App is the app that bridges human interaction with Beluna
 - Xcode debug sessions default to manual connect.
 - Socket path is configured directly from `SettingView` and applied immediately on reconnect.
 - Metrics are rendered in Chat header (`cortex_cycle_id`, `input_ir_act_descriptor_catalog_count`), auto-refreshed every 5s only when socket-connected, with manual refresh.
-- Core log polling runs every 3s and pairs `cortex_organ_input` + `cortex_organ_output` into standalone tool-call widgets in Chat view.
+- Core log polling runs every 3s and pairs `cortex_organ_input` + `cortex_organ_output` into cycle-level cortex cycle cards in Chat view.
+- Clicking a cortex cycle card opens a popup that lists per-stage organ activity messages with selectable input/output payload text.
 - Chat view keeps a bounded in-memory message ring buffer and incrementally loads older/newer pages on scroll.
 - Beluna lifecycle state uses `Hibernate` (instead of `Sleeping`) when Core is unavailable after connection history exists.
 - Auth capability descriptors publish explicit payload schemas, including `present_text_message` with a string payload.
 
 ### Known Limitations & Mocks
 
-- Tool-call log rendering is polling-based (3s), not filesystem watch-based tail streaming.
+- Organ activity log rendering is polling-based (3s), not filesystem watch-based tail streaming.
 - Organ-log pairing relies on `(cycle_id, stage)` FIFO and may skip unmatched events when source files rotate aggressively.
-- No in-chat filter/search for tool-call widgets yet.
+- No in-chat filter/search for cortex cycle cards yet.
 - Chat history pagination currently loads from in-memory ring buffer only (no disk-backed history replay).
 - Protocol/lifecycle tests should be expanded for metrics and organ-log polling flows.
 
 ### Immediate Next Focus
 
 - Add test coverage for metrics polling and organ-log pairing behavior.
-- Add in-chat filtering/search for tool-call widgets and large-payload truncation controls.
+- Add in-chat filtering/search for cortex cycle cards and large-payload truncation controls.
 - Evaluate filesystem-watch based log streaming to reduce polling latency and repeated tail scans.

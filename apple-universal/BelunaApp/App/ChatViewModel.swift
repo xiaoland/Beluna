@@ -128,6 +128,7 @@ final class ChatViewModel: ObservableObject {
     private var messageBuffer: [ChatMessage] = []
     private var visibleMessageRange: Range<Int> = 0..<0
 
+    private var cortexCycleMessageIDs: [UInt64: UUID] = [:]
     private var pendingOrganInputs: [String: [OrganLogEvent]] = [:]
     private var pendingOrganOutputs: [String: [OrganLogEvent]] = [:]
     private var seenOrganEventIDs = Set<String>()
@@ -678,28 +679,59 @@ final class ChatViewModel: ObservableObject {
         switch event.kind {
         case .input:
             if let output = popPendingEvent(from: &pendingOrganOutputs, key: key) {
-                appendToolCallMessage(input: event, output: output)
+                appendOrganActivityMessage(input: event, output: output)
             } else {
                 appendPendingEvent(event, to: &pendingOrganInputs, key: key)
             }
         case .output:
             if let input = popPendingEvent(from: &pendingOrganInputs, key: key) {
-                appendToolCallMessage(input: input, output: event)
+                appendOrganActivityMessage(input: input, output: event)
             } else {
                 appendPendingEvent(event, to: &pendingOrganOutputs, key: key)
             }
         }
     }
 
-    private func appendToolCallMessage(input: OrganLogEvent, output: OrganLogEvent) {
-        let payload = ToolCallMessagePayload(
-            cycleID: input.cycleID,
+    private func appendOrganActivityMessage(input: OrganLogEvent, output: OrganLogEvent) {
+        let timestamp = output.timestamp ?? input.timestamp ?? Date()
+        let organActivityMessage = OrganActivityMessagePayload(
             stage: input.stage,
             inputPayload: input.payload,
-            outputPayload: output.payload
+            outputPayload: output.payload,
+            timestamp: timestamp
         )
-        let timestamp = output.timestamp ?? input.timestamp ?? Date()
-        appendBufferedMessage(ChatMessage(toolCall: payload, timestamp: timestamp))
+
+        appendCortexCycleMessage(
+            cycleID: input.cycleID,
+            organActivityMessage: organActivityMessage,
+            timestamp: timestamp
+        )
+    }
+
+    private func appendCortexCycleMessage(
+        cycleID: UInt64,
+        organActivityMessage: OrganActivityMessagePayload,
+        timestamp: Date
+    ) {
+        if let existingMessageID = cortexCycleMessageIDs[cycleID],
+           let existingIndex = messageBuffer.firstIndex(where: { $0.id == existingMessageID }),
+           case var .cortexCycle(existingPayload) = messageBuffer[existingIndex].body {
+            existingPayload.organActivityMessages.append(organActivityMessage)
+            messageBuffer[existingIndex].body = .cortexCycle(existingPayload)
+            messageBuffer[existingIndex].timestamp = timestamp
+            publishVisibleMessages(autoScrollToLatest: false)
+            return
+        }
+
+        cortexCycleMessageIDs.removeValue(forKey: cycleID)
+
+        let payload = CortexCycleMessagePayload(
+            cycleID: cycleID,
+            organActivityMessages: [organActivityMessage]
+        )
+        let cycleMessage = ChatMessage(cortexCycle: payload, timestamp: timestamp)
+        cortexCycleMessageIDs[cycleID] = cycleMessage.id
+        appendBufferedMessage(cycleMessage)
     }
 
     private func appendBufferedMessage(_ message: ChatMessage, preferredAutoScroll: Bool? = nil) {
@@ -753,7 +785,9 @@ final class ChatViewModel: ObservableObject {
         }
 
         let overflow = messageBuffer.count - messageCapacity
+        let removedMessages = Array(messageBuffer.prefix(overflow))
         messageBuffer.removeFirst(overflow)
+        forgetCortexCycleMessages(removedMessages)
 
         let shiftedLowerBound = max(0, visibleMessageRange.lowerBound - overflow)
         let shiftedUpperBound = max(shiftedLowerBound, visibleMessageRange.upperBound - overflow)
@@ -855,10 +889,27 @@ final class ChatViewModel: ObservableObject {
     }
 
     private func resetOrganLogTracking() {
+        cortexCycleMessageIDs.removeAll(keepingCapacity: false)
         pendingOrganInputs.removeAll(keepingCapacity: false)
         pendingOrganOutputs.removeAll(keepingCapacity: false)
         seenOrganEventIDs.removeAll(keepingCapacity: false)
         seenOrganEventOrder.removeAll(keepingCapacity: false)
+    }
+
+    private func forgetCortexCycleMessages(_ messages: [ChatMessage]) {
+        guard !messages.isEmpty else {
+            return
+        }
+
+        for message in messages {
+            guard case let .cortexCycle(payload) = message.body else {
+                continue
+            }
+
+            if cortexCycleMessageIDs[payload.cycleID] == message.id {
+                cortexCycleMessageIDs.removeValue(forKey: payload.cycleID)
+            }
+        }
     }
 
     private func persistConnectionSettings() {
