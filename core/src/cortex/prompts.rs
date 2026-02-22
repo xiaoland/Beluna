@@ -49,33 +49,47 @@ pub fn build_sense_helper_prompt(
     semantic_senses_json: &str,
     semantic_sense_catalog_json: &str,
 ) -> String {
-    format!("Convert senses and sense catalog into cognition-friendly markdown.\n",)
-        + "Rules:\n"
-        + "1) Keep semantic content only.\n"
-        + "2) Do not output transport ids like sense_id.\n"
-        + "3) Use terms sense/act instead of neural_signal_descriptor.\n"
-        + "4) Return markdown only.\n"
-        + "5) Avoid markdown style markup such as bold or italic.\n"
-        + &format!(
-            "\nSenses:\n{}\n\nSense catalog:\n{}",
-            semantic_senses_json, semantic_sense_catalog_json
-        )
+    format!(
+        concat!(
+            "Convert senses and sense catalog into cognition-friendly markdown.\n",
+            "Rules:\n",
+            "1) Keep semantic content only.\n",
+            "2) Do not output transport ids like sense_id.\n",
+            "3) Use terms sense/act instead of neural_signal_descriptor.\n",
+            "4) Return markdown only.\n",
+            "5) Avoid markdown style markup such as bold or italic.\n",
+            "Senses:\n{}\n\n",
+            "Sense catalog:\n{}"
+        ),
+        semantic_senses_json, semantic_sense_catalog_json
+    )
 }
 
 pub fn build_act_descriptor_markdown_prompt(semantic_act_descriptor_json: &str) -> String {
     format!(
-        "Convert this act descriptor to markdown. Return only markdown.\n<act-descriptor>\n{}\n</act-descriptor>",
+        concat!(
+            "Convert this act descriptor to markdown. Return only markdown.\n",
+            "<act-descriptor>\n{}\n</act-descriptor>"
+        ),
         semantic_act_descriptor_json
     )
 }
 
 pub fn build_goal_tree_helper_prompt(user_partition_json: &str) -> String {
-    format!("Convert the goal-tree user partition into compact cognition-friendly markdown.\n",)
-        + "Rules:\n"
-        + "1) Keep structure and node identity semantics.\n"
-        + "2) Keep weights.\n"
-        + "3) Return markdown only.\n"
-        + &format!("\nUser partition:\n{}", user_partition_json)
+    format!(
+        // We must not leaks "user goal" semantic, or the Primary will fall into a "helpful agent", not a "life".
+        concat!(
+            "Convert <goal-forest> into compact cognition-friendly markdown.\n",
+            "Rules:\n",
+            "1) Keep structure and node identity semantics.\n",
+            "2) Use `(w=)` representing weight.\n",
+            "3) Each node a line.\n",
+            "4) Return markdown only.\n",
+            "5) Avoid bold or italic.\n\n",
+            "<goal-forest>\n{}\n</goal-forest>"
+        ),
+        user_partition_json
+    )
 }
 
 pub fn build_acts_helper_prompt(
@@ -83,13 +97,17 @@ pub fn build_acts_helper_prompt(
     output_ir: &str,
     acts_section: &str,
 ) -> String {
-    format!("Convert <acts> cognition output into structured act drafts. Return JSON array only.\n",)
-        + &format!(
-            "Act catalog:\n{}\n\nOutput IR:\n{}\n\nActs section:\n{}",
-            serde_json::to_string_pretty(semantic_act_catalog).unwrap_or_else(|_| "[]".to_string()),
-            output_ir,
-            acts_section
-        )
+    format!(
+        concat!(
+            "Convert <acts> cognition output into structured act drafts. Return JSON array only.\n",
+            "Act catalog:\n{}\n\n",
+            "Output IR:\n{}\n\n",
+            "Acts section:\n{}"
+        ),
+        serde_json::to_string_pretty(semantic_act_catalog).unwrap_or_else(|_| "[]".to_string()),
+        output_ir,
+        acts_section
+    )
 }
 
 pub fn build_goal_tree_patch_helper_prompt(
@@ -98,9 +116,15 @@ pub fn build_goal_tree_patch_helper_prompt(
     user_partition_json: &str,
 ) -> String {
     format!(
-        "Convert <goal-tree-patch> section into GoalTreePatchOp JSON array. Return JSON array only.\n",
-    ) + &format!(
-        "Current user partition:\n{}\n\nOutput IR:\n{}\n\nGoal-tree-patch section:\n{}",
+        concat!(
+            "Convert <goal-tree-patch> section into GoalTreePatchOp JSON array. Return JSON array only.\n",
+            "Current user partition:\n",
+            "{}\n",
+            "Output IR:\n",
+            "{}\n\n",
+            "Goal-tree-patch section:\n",
+            "{}"
+        ),
         user_partition_json, output_ir, goal_tree_patch_section
     )
 }
@@ -111,9 +135,10 @@ pub fn build_l1_memory_patch_helper_prompt(
     l1_memory_json: &str,
 ) -> String {
     format!(
-        "Convert <l1-memory-patch> section into L1MemoryPatchOp JSON array. Return JSON array only.\n",
-    ) + &format!(
-        "Current l1-memory (string[]):\n{}\n\nOutput IR:\n{}\n\nL1-memory-patch section:\n{}",
+        concat!(
+            "Convert <l1-memory-patch> section into L1MemoryPatchOp JSON array. Return JSON array only.\n",
+            "Current l1-memory (string[]):\n{}\n\nOutput IR:\n{}\n\nL1-memory-patch section:\n{}"
+        ),
         l1_memory_json, output_ir, l1_memory_patch_section
     )
 }

@@ -33,7 +33,7 @@
   - 整个 Input IR act-descriptor 就应该是 markdown ，并且避免使用各种 text style markup。
   - 规定 Pyload Schema ？这里有一个 Gap，那就是 Act Payload 和 Primary Intent 直接的 Gap；或者说在复杂 json 下，markdown 的 representation 显得无力。
 - [ ] Primary LLM 不是 transform , sir... 所以 Primary 的 LLM Prompt 应该是什么
-- [ ] InputIR GoalTree 现在什么情况，感觉很混乱
+- [x] InputIR GoalTree 现在什么情况，感觉很混乱
 
 ### Spine
 
