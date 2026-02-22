@@ -6,12 +6,27 @@ final class ChatViewModel: ObservableObject {
     @Published var draft: String = ""
     @Published var connectionState: ConnectionState = .disconnected
     @Published var belunaState: BelunaState = .unknown
+
     @Published var socketPathDraft: String
     @Published private(set) var socketPath: String
     @Published private(set) var isConnectionEnabled: Bool
 
-    var isSleeping: Bool {
-        belunaState == .sleeping
+    @Published var metricsEndpointDraft: String
+    @Published private(set) var metricsEndpoint: String
+    @Published private(set) var metricsStatusText: String = "Metrics ready"
+    @Published private(set) var metricsLastRefreshedAt: Date?
+    @Published private(set) var metricsCycleID: Double?
+    @Published private(set) var metricsActDescriptorCatalogCount: Double?
+    @Published private(set) var isMetricsRefreshing: Bool = false
+
+    @Published var logDirectoryPathDraft: String
+    @Published private(set) var logDirectoryPath: String
+    @Published private(set) var logStatusText: String = "Logs ready"
+    @Published private(set) var logLastRefreshedAt: Date?
+    @Published private(set) var isLogRefreshing: Bool = false
+
+    var isHibernating: Bool {
+        belunaState == .hibernate
     }
 
     var canSend: Bool {
@@ -23,6 +38,16 @@ final class ChatViewModel: ObservableObject {
         return !normalized.isEmpty && normalized != socketPath
     }
 
+    var canApplyMetricsEndpoint: Bool {
+        let normalized = Self.normalizeMetricsEndpoint(metricsEndpointDraft)
+        return !normalized.isEmpty && normalized != metricsEndpoint
+    }
+
+    var canApplyLogDirectoryPath: Bool {
+        let normalized = Self.normalizeDirectoryPath(logDirectoryPathDraft)
+        return !normalized.isEmpty && normalized != logDirectoryPath
+    }
+
     var connectButtonTitle: String {
         isConnectionEnabled ? "Disconnect" : "Connect"
     }
@@ -31,18 +56,18 @@ final class ChatViewModel: ObservableObject {
         isConnectionEnabled && connectionState != .connected
     }
 
-    var sleepingTitle: String {
+    var hibernateTitle: String {
         switch belunaState {
         case .awake:
             return "Beluna is awake"
-        case .sleeping:
-            return "Beluna is sleeping"
+        case .hibernate:
+            return "Beluna is in Hibernate"
         case .unknown:
             return isConnectionEnabled ? "Beluna status unknown" : "Beluna is disconnected"
         }
     }
 
-    var sleepingHint: String {
+    var hibernateHint: String {
         if !isConnectionEnabled {
             return "Click Connect to reconnect."
         }
@@ -57,40 +82,98 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
+    var metricsCycleIDText: String {
+        Self.formatMetricValue(metricsCycleID)
+    }
+
+    var metricsActDescriptorCatalogCountText: String {
+        Self.formatMetricValue(metricsActDescriptorCatalogCount)
+    }
+
+    var metricsLastUpdatedLabel: String? {
+        guard let metricsLastRefreshedAt else {
+            return nil
+        }
+        return "Updated \(Self.metricsTimeFormatter.string(from: metricsLastRefreshedAt))"
+    }
+
     private let conversationID: String
     private let spineBodyEndpoint: SpineUnixSocketBodyEndpoint
-    private let sleepingNoticeText = "Beluna is sleeping."
+    private let hibernateNoticeText = "Beluna entered Hibernate."
     private let disconnectedNoticeText = "Beluna is disconnected. Click Connect to reconnect."
+
     private var started = false
     private var hasEverConnected = false
     private var handledActionIDs = Set<String>()
     private var handledActionOrder: [String] = []
+
+    private var metricsPollingTask: Task<Void, Never>?
+    private var logPollingTask: Task<Void, Never>?
+
+    private var pendingOrganInputs: [String: [OrganLogEvent]] = [:]
+    private var pendingOrganOutputs: [String: [OrganLogEvent]] = [:]
+    private var seenOrganEventIDs = Set<String>()
+    private var seenOrganEventOrder: [String] = []
+
     private let handledActionLimit = 256
+    private let pendingOrganEventLimitPerKey = 32
+    private let seenOrganEventLimit = 8_192
+
     private static let defaultSocketPath = "/tmp/beluna.sock"
+    private static let defaultMetricsEndpoint = "http://127.0.0.1:9464/metrics"
+    private static let defaultLogDirectoryPath = "~/logs/core"
+
     private static let socketPathDefaultsKey = "beluna.apple-universal.socket_path"
     private static let autoConnectDefaultsKey = "beluna.apple-universal.auto_connect"
+    private static let metricsEndpointDefaultsKey = "beluna.apple-universal.metrics_endpoint"
+    private static let logDirectoryPathDefaultsKey = "beluna.apple-universal.log_directory_path"
+
+    private nonisolated static let maxLogReadBytes: Int64 = 512 * 1024
+
+    private static let metricsTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter
+    }()
 
     init(socketPath: String? = nil) {
         let persistedSocketPath = Self.normalizeSocketPath(
             UserDefaults.standard.string(forKey: Self.socketPathDefaultsKey)
         )
         let requestedSocketPath = Self.normalizeSocketPath(socketPath)
-        let resolvedSocketPath = requestedSocketPath.isEmpty
-            ? persistedSocketPath
-            : requestedSocketPath
-        let initialSocketPath = resolvedSocketPath.isEmpty
-            ? Self.defaultSocketPath
-            : resolvedSocketPath
-        let persistedAutoConnect = UserDefaults.standard.object(forKey: Self.autoConnectDefaultsKey)
-            as? Bool
-        let initialAutoConnect = persistedAutoConnect
-            ?? !AppRuntimeEnvironment.isXcodeSession
+        let resolvedSocketPath = requestedSocketPath.isEmpty ? persistedSocketPath : requestedSocketPath
+        let initialSocketPath = resolvedSocketPath.isEmpty ? Self.defaultSocketPath : resolvedSocketPath
+
+        let persistedAutoConnect = UserDefaults.standard.object(forKey: Self.autoConnectDefaultsKey) as? Bool
+        let initialAutoConnect = persistedAutoConnect ?? !AppRuntimeEnvironment.isXcodeSession
+
+        let persistedMetricsEndpoint = Self.normalizeMetricsEndpoint(
+            UserDefaults.standard.string(forKey: Self.metricsEndpointDefaultsKey)
+        )
+        let initialMetricsEndpoint = persistedMetricsEndpoint.isEmpty
+            ? Self.defaultMetricsEndpoint
+            : persistedMetricsEndpoint
+
+        let persistedLogDirectory = Self.normalizeDirectoryPath(
+            UserDefaults.standard.string(forKey: Self.logDirectoryPathDefaultsKey)
+        )
+        let initialLogDirectory = persistedLogDirectory.isEmpty
+            ? Self.normalizeDirectoryPath(Self.defaultLogDirectoryPath)
+            : persistedLogDirectory
 
         self.conversationID = "conv_\(UUID().uuidString.lowercased())"
         self.spineBodyEndpoint = SpineUnixSocketBodyEndpoint(socketPath: initialSocketPath)
+
         self.socketPath = initialSocketPath
         self.socketPathDraft = initialSocketPath
         self.isConnectionEnabled = initialAutoConnect
+
+        self.metricsEndpoint = initialMetricsEndpoint
+        self.metricsEndpointDraft = initialMetricsEndpoint
+
+        self.logDirectoryPath = initialLogDirectory
+        self.logDirectoryPathDraft = initialLogDirectory
 
         messages.append(
             ChatMessage(
@@ -103,6 +186,9 @@ final class ChatViewModel: ObservableObject {
     }
 
     deinit {
+        metricsPollingTask?.cancel()
+        logPollingTask?.cancel()
+
         let bodyEndpoint = spineBodyEndpoint
         Task {
             await bodyEndpoint.stop()
@@ -115,6 +201,8 @@ final class ChatViewModel: ObservableObject {
         }
 
         started = true
+        startMetricsPollingIfNeeded()
+        startLogPollingIfNeeded()
 
         guard isConnectionEnabled else {
             log("startup with connection disabled")
@@ -127,10 +215,7 @@ final class ChatViewModel: ObservableObject {
 
     func applySocketPathDraft() {
         let normalized = Self.normalizeSocketPath(socketPathDraft)
-        guard !normalized.isEmpty else {
-            return
-        }
-        guard normalized != socketPath else {
+        guard !normalized.isEmpty, normalized != socketPath else {
             return
         }
 
@@ -140,6 +225,51 @@ final class ChatViewModel: ObservableObject {
         appendSystemMessage("Socket path set to \(normalized)")
         log("socket path updated to \(normalized)")
         reconnectForCurrentSettings(announce: true)
+    }
+
+    func applyMetricsEndpointDraft() {
+        let normalized = Self.normalizeMetricsEndpoint(metricsEndpointDraft)
+        guard !normalized.isEmpty else {
+            metricsStatusText = "Metrics endpoint cannot be empty."
+            return
+        }
+        guard normalized != metricsEndpoint else {
+            return
+        }
+
+        metricsEndpoint = normalized
+        metricsEndpointDraft = normalized
+        persistMetricsSettings()
+
+        Task {
+            await refreshMetricsNow()
+        }
+    }
+
+    func applyLogDirectoryPathDraft() {
+        let normalized = Self.normalizeDirectoryPath(logDirectoryPathDraft)
+        guard !normalized.isEmpty else {
+            logStatusText = "Log directory cannot be empty."
+            return
+        }
+        guard normalized != logDirectoryPath else {
+            return
+        }
+
+        logDirectoryPath = normalized
+        logDirectoryPathDraft = normalized
+        resetOrganLogTracking()
+        persistLogDirectorySettings()
+
+        Task {
+            await pollOrganLogsNow()
+        }
+    }
+
+    func refreshMetrics() {
+        Task {
+            await refreshMetricsNow()
+        }
     }
 
     func toggleConnection() {
@@ -183,6 +313,29 @@ final class ChatViewModel: ObservableObject {
         reconnectForCurrentSettings(announce: false)
     }
 
+    func sendCurrentDraft() {
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else {
+            return
+        }
+
+        guard canSend else {
+            appendSystemMessage(isConnectionEnabled ? hibernateHelpText() : disconnectedNoticeText)
+            return
+        }
+
+        draft = ""
+        messages.append(ChatMessage(role: .user, text: text))
+
+        Task {
+            do {
+                try await spineBodyEndpoint.sendUserSense(conversationID: conversationID, text: text)
+            } catch {
+                appendSystemMessage("Failed to send user message to core: \(describeError(error))")
+            }
+        }
+    }
+
     private func connectInternal(announce: Bool) {
         belunaState = .unknown
         if announce {
@@ -220,29 +373,6 @@ final class ChatViewModel: ObservableObject {
                     appendSystemMessage("Connecting to \(updatedSocketPath)...")
                 }
                 await spineBodyEndpoint.start()
-            }
-        }
-    }
-
-    func sendCurrentDraft() {
-        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else {
-            return
-        }
-
-        guard canSend else {
-            appendSystemMessage(isConnectionEnabled ? sleepingHelpText() : disconnectedNoticeText)
-            return
-        }
-
-        draft = ""
-        messages.append(ChatMessage(role: .user, text: text))
-
-        Task {
-            do {
-                try await spineBodyEndpoint.sendUserSense(conversationID: conversationID, text: text)
-            } catch {
-                appendSystemMessage("Failed to send user message to core: \(describeError(error))")
             }
         }
     }
@@ -345,12 +475,15 @@ final class ChatViewModel: ObservableObject {
             hasEverConnected = true
             belunaState = .awake
             appendSystemMessage("Beluna is awake.")
+            Task {
+                await refreshMetricsNow()
+            }
             return
         }
 
         if previousState == .connected, state == .disconnected, isConnectionEnabled {
-            belunaState = .sleeping
-            appendSystemMessage(sleepingNoticeText)
+            belunaState = .hibernate
+            appendSystemMessage(hibernateNoticeText)
             return
         }
 
@@ -360,13 +493,200 @@ final class ChatViewModel: ObservableObject {
         }
 
         if state == .connecting {
-            belunaState = hasEverConnected ? .sleeping : .unknown
+            belunaState = hasEverConnected ? .hibernate : .unknown
             return
         }
 
         if state == .disconnected {
-            belunaState = hasEverConnected ? .sleeping : .unknown
+            belunaState = hasEverConnected ? .hibernate : .unknown
         }
+    }
+
+    private func startMetricsPollingIfNeeded() {
+        guard metricsPollingTask == nil else {
+            return
+        }
+
+        metricsPollingTask = Task { [weak self] in
+            guard let self else {
+                return
+            }
+
+            while !Task.isCancelled {
+                if self.isMetricsAutoPollingEnabled {
+                    await self.refreshMetricsNow()
+                } else {
+                    self.setMetricsPollingPausedStatus()
+                }
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                if Task.isCancelled {
+                    break
+                }
+            }
+        }
+    }
+
+    private func startLogPollingIfNeeded() {
+        guard logPollingTask == nil else {
+            return
+        }
+
+        logPollingTask = Task { [weak self] in
+            guard let self else {
+                return
+            }
+
+            await self.pollOrganLogsNow()
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                if Task.isCancelled {
+                    break
+                }
+                await self.pollOrganLogsNow()
+            }
+        }
+    }
+
+    private func refreshMetricsNow() async {
+        guard !isMetricsRefreshing else {
+            return
+        }
+
+        isMetricsRefreshing = true
+        metricsStatusText = "Refreshing metrics..."
+
+        let endpoint = metricsEndpoint
+        let snapshot = await Self.loadMetricsSnapshot(endpoint: endpoint)
+        if Task.isCancelled {
+            isMetricsRefreshing = false
+            return
+        }
+
+        isMetricsRefreshing = false
+        metricsLastRefreshedAt = Date()
+        metricsStatusText = snapshot.statusText
+        metricsCycleID = snapshot.cycleID
+        metricsActDescriptorCatalogCount = snapshot.actDescriptorCatalogCount
+    }
+
+    private var isMetricsAutoPollingEnabled: Bool {
+        isConnectionEnabled && connectionState == .connected
+    }
+
+    private func setMetricsPollingPausedStatus() {
+        if metricsStatusText != "Metrics polling paused (socket disconnected)." {
+            metricsStatusText = "Metrics polling paused (socket disconnected)."
+        }
+    }
+
+    private func pollOrganLogsNow() async {
+        guard !isLogRefreshing else {
+            return
+        }
+
+        isLogRefreshing = true
+        let directoryPath = logDirectoryPath
+        let snapshot = await Task.detached(priority: .utility) {
+            Self.loadOrganLogsSnapshot(directoryPath: directoryPath)
+        }.value
+
+        if Task.isCancelled {
+            isLogRefreshing = false
+            return
+        }
+
+        isLogRefreshing = false
+        logLastRefreshedAt = Date()
+        logStatusText = snapshot.statusText
+
+        for event in snapshot.events {
+            guard rememberSeenOrganEvent(event.eventID) else {
+                continue
+            }
+            handleOrganLogEvent(event)
+        }
+    }
+
+    private func handleOrganLogEvent(_ event: OrganLogEvent) {
+        let key = Self.organPairKey(cycleID: event.cycleID, stage: event.stage)
+
+        switch event.kind {
+        case .input:
+            if let output = popPendingEvent(from: &pendingOrganOutputs, key: key) {
+                appendToolCallMessage(input: event, output: output)
+            } else {
+                appendPendingEvent(event, to: &pendingOrganInputs, key: key)
+            }
+        case .output:
+            if let input = popPendingEvent(from: &pendingOrganInputs, key: key) {
+                appendToolCallMessage(input: input, output: event)
+            } else {
+                appendPendingEvent(event, to: &pendingOrganOutputs, key: key)
+            }
+        }
+    }
+
+    private func appendToolCallMessage(input: OrganLogEvent, output: OrganLogEvent) {
+        let payload = ToolCallMessagePayload(
+            cycleID: input.cycleID,
+            stage: input.stage,
+            inputPayload: input.payload,
+            outputPayload: output.payload
+        )
+        let timestamp = output.timestamp ?? input.timestamp ?? Date()
+        messages.append(ChatMessage(toolCall: payload, timestamp: timestamp))
+    }
+
+    private func appendPendingEvent(
+        _ event: OrganLogEvent,
+        to storage: inout [String: [OrganLogEvent]],
+        key: String
+    ) {
+        var queue = storage[key] ?? []
+        queue.append(event)
+        if queue.count > pendingOrganEventLimitPerKey {
+            queue.removeFirst(queue.count - pendingOrganEventLimitPerKey)
+        }
+        storage[key] = queue
+    }
+
+    private func popPendingEvent(
+        from storage: inout [String: [OrganLogEvent]],
+        key: String
+    ) -> OrganLogEvent? {
+        guard var queue = storage[key], !queue.isEmpty else {
+            return nil
+        }
+        let event = queue.removeFirst()
+        if queue.isEmpty {
+            storage.removeValue(forKey: key)
+        } else {
+            storage[key] = queue
+        }
+        return event
+    }
+
+    private func rememberSeenOrganEvent(_ eventID: String) -> Bool {
+        if seenOrganEventIDs.contains(eventID) {
+            return false
+        }
+
+        seenOrganEventIDs.insert(eventID)
+        seenOrganEventOrder.append(eventID)
+
+        if seenOrganEventOrder.count > seenOrganEventLimit {
+            let removed = seenOrganEventOrder.removeFirst()
+            seenOrganEventIDs.remove(removed)
+        }
+
+        return true
+    }
+
+    private func resetOrganLogTracking() {
+        pendingOrganInputs.removeAll(keepingCapacity: false)
+        pendingOrganOutputs.removeAll(keepingCapacity: false)
+        seenOrganEventIDs.removeAll(keepingCapacity: false)
+        seenOrganEventOrder.removeAll(keepingCapacity: false)
     }
 
     private func persistConnectionSettings() {
@@ -374,19 +694,41 @@ final class ChatViewModel: ObservableObject {
         UserDefaults.standard.set(isConnectionEnabled, forKey: Self.autoConnectDefaultsKey)
     }
 
-    private static func normalizeSocketPath(_ value: String?) -> String {
+    private func persistMetricsSettings() {
+        UserDefaults.standard.set(metricsEndpoint, forKey: Self.metricsEndpointDefaultsKey)
+    }
+
+    private func persistLogDirectorySettings() {
+        UserDefaults.standard.set(logDirectoryPath, forKey: Self.logDirectoryPathDefaultsKey)
+    }
+
+    private nonisolated static func normalizeSocketPath(_ value: String?) -> String {
         (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func sleepingHelpText() -> String {
-        "Beluna is sleeping. Start Beluna Core to wake it up."
+    private nonisolated static func normalizeMetricsEndpoint(_ value: String?) -> String {
+        (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private nonisolated static func normalizeDirectoryPath(_ value: String?) -> String {
+        let trimmed = (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return ""
+        }
+
+        let expanded = (trimmed as NSString).expandingTildeInPath
+        return URL(fileURLWithPath: expanded).standardizedFileURL.path
+    }
+
+    private func hibernateHelpText() -> String {
+        "Beluna is in Hibernate. Start Beluna Core to wake it up."
     }
 
     private func initialMessageText(initialAutoConnect: Bool) -> String {
         if AppRuntimeEnvironment.isXcodeSession && !initialAutoConnect {
             return "Debug launch: auto-connect is off. Click Connect when ready."
         }
-        return initialAutoConnect ? sleepingHelpText() : disconnectedNoticeText
+        return initialAutoConnect ? hibernateHelpText() : disconnectedNoticeText
     }
 
     private func log(_ message: String) {
@@ -435,4 +777,379 @@ final class ChatViewModel: ObservableObject {
         }
         return error.localizedDescription
     }
+
+    private nonisolated static func formatMetricValue(_ value: Double?) -> String {
+        guard let value else {
+            return "-"
+        }
+
+        if value.rounded() == value {
+            return String(Int(value))
+        }
+
+        return String(format: "%.2f", value)
+    }
+
+    private nonisolated static func loadMetricsSnapshot(endpoint: String) async -> MetricsSnapshot {
+        guard let url = URL(string: endpoint) else {
+            return MetricsSnapshot(
+                cycleID: nil,
+                actDescriptorCatalogCount: nil,
+                statusText: "Invalid metrics endpoint URL: \(endpoint)"
+            )
+        }
+        guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
+            return MetricsSnapshot(
+                cycleID: nil,
+                actDescriptorCatalogCount: nil,
+                statusText: "Metrics endpoint must start with http:// or https://."
+            )
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 5
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            guard (200..<300).contains(statusCode) else {
+                return MetricsSnapshot(
+                    cycleID: nil,
+                    actDescriptorCatalogCount: nil,
+                    statusText: "Metrics endpoint returned HTTP \(statusCode)."
+                )
+            }
+
+            let body = String(decoding: data, as: UTF8.self)
+            let cycleID = parsePrometheusGauge(named: "beluna_cortex_cycle_id", in: body)
+            let catalogCount = parsePrometheusGauge(
+                named: "beluna_cortex_input_ir_act_descriptor_catalog_count",
+                in: body
+            )
+
+            let status: String
+            if cycleID == nil && catalogCount == nil {
+                status = "Metrics fetched, but target gauges were not found."
+            } else {
+                status = "Metrics loaded from \(endpoint)."
+            }
+
+            return MetricsSnapshot(
+                cycleID: cycleID,
+                actDescriptorCatalogCount: catalogCount,
+                statusText: status
+            )
+        } catch {
+            return MetricsSnapshot(
+                cycleID: nil,
+                actDescriptorCatalogCount: nil,
+                statusText: "Failed to fetch metrics: \(error.localizedDescription)"
+            )
+        }
+    }
+
+    private nonisolated static func parsePrometheusGauge(
+        named metricName: String,
+        in payload: String
+    ) -> Double? {
+        var latestValue: Double?
+        for rawLine in payload.split(whereSeparator: \.isNewline) {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            if line.isEmpty || line.hasPrefix("#") || !line.hasPrefix(metricName) {
+                continue
+            }
+
+            let valueText: Substring
+            if let closeBrace = line.firstIndex(of: "}") {
+                valueText = line[line.index(after: closeBrace)...]
+            } else {
+                valueText = line.dropFirst(metricName.count)
+            }
+
+            let parts = valueText.split(whereSeparator: \.isWhitespace)
+            guard let valueLiteral = parts.first, let value = Double(valueLiteral) else {
+                continue
+            }
+            latestValue = value
+        }
+        return latestValue
+    }
+
+    private nonisolated static func loadOrganLogsSnapshot(directoryPath: String) -> OrganLogsSnapshot {
+        let normalizedDirectoryPath = normalizeDirectoryPath(directoryPath)
+        guard !normalizedDirectoryPath.isEmpty else {
+            return OrganLogsSnapshot(events: [], statusText: "Log directory path is empty.")
+        }
+
+        let directoryURL = URL(fileURLWithPath: normalizedDirectoryPath).standardizedFileURL
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: directoryURL.path, isDirectory: &isDirectory) else {
+            return OrganLogsSnapshot(
+                events: [],
+                statusText: "Log directory does not exist: \(directoryURL.path)"
+            )
+        }
+        guard isDirectory.boolValue else {
+            return OrganLogsSnapshot(
+                events: [],
+                statusText: "Configured log directory is not a directory: \(directoryURL.path)"
+            )
+        }
+
+        do {
+            let files = try listLogFiles(in: directoryURL)
+            guard !files.isEmpty else {
+                return OrganLogsSnapshot(events: [], statusText: "No log files found in \(directoryURL.path)")
+            }
+
+            let candidates = Array(files.suffix(2))
+            var events: [OrganLogEvent] = []
+            events.reserveCapacity(512)
+
+            for file in candidates {
+                let content = loadTailContent(fileURL: file.url, maxReadBytes: maxLogReadBytes)
+                let fileEvents = parseOrganLogEvents(from: content, sourcePath: file.url.path)
+                events.append(contentsOf: fileEvents)
+            }
+
+            events.sort { lhs, rhs in
+                let leftTimestamp = lhs.timestamp ?? .distantPast
+                let rightTimestamp = rhs.timestamp ?? .distantPast
+                if leftTimestamp != rightTimestamp {
+                    return leftTimestamp < rightTimestamp
+                }
+                if lhs.cycleID != rhs.cycleID {
+                    return lhs.cycleID < rhs.cycleID
+                }
+                if lhs.stage != rhs.stage {
+                    return lhs.stage < rhs.stage
+                }
+                return lhs.kind.sortOrder < rhs.kind.sortOrder
+            }
+
+            return OrganLogsSnapshot(
+                events: events,
+                statusText: "Loaded \(events.count) organ log events from \(candidates.count) file(s)."
+            )
+        } catch {
+            return OrganLogsSnapshot(
+                events: [],
+                statusText: "Failed to read log directory: \(error.localizedDescription)"
+            )
+        }
+    }
+
+    private nonisolated static func listLogFiles(in directoryURL: URL) throws -> [LogFileMetadata] {
+        let resourceKeys: [URLResourceKey] = [
+            .isRegularFileKey,
+            .contentModificationDateKey,
+        ]
+
+        let entries = try FileManager.default.contentsOfDirectory(
+            at: directoryURL,
+            includingPropertiesForKeys: resourceKeys,
+            options: [.skipsHiddenFiles]
+        )
+
+        var files: [LogFileMetadata] = []
+        files.reserveCapacity(entries.count)
+
+        for url in entries {
+            let values = try url.resourceValues(forKeys: Set(resourceKeys))
+            guard values.isRegularFile == true else {
+                continue
+            }
+
+            files.append(
+                LogFileMetadata(
+                    url: url.standardizedFileURL,
+                    modifiedAt: values.contentModificationDate
+                )
+            )
+        }
+
+        files.sort { lhs, rhs in
+            let leftDate = lhs.modifiedAt ?? .distantPast
+            let rightDate = rhs.modifiedAt ?? .distantPast
+            if leftDate != rightDate {
+                return leftDate < rightDate
+            }
+            return lhs.url.lastPathComponent < rhs.url.lastPathComponent
+        }
+
+        return files
+    }
+
+    private nonisolated static func loadTailContent(fileURL: URL, maxReadBytes: Int64) -> String {
+        do {
+            let attributes = try FileManager.default.attributesOfItem(atPath: fileURL.path)
+            let sizeBytes = (attributes[.size] as? NSNumber)?.int64Value ?? 0
+
+            let handle = try FileHandle(forReadingFrom: fileURL)
+            defer { try? handle.close() }
+
+            let offset = sizeBytes > maxReadBytes ? sizeBytes - maxReadBytes : 0
+            try handle.seek(toOffset: UInt64(offset))
+            let data = try handle.readToEnd() ?? Data()
+            return String(decoding: data, as: UTF8.self)
+        } catch {
+            return ""
+        }
+    }
+
+    private nonisolated static func parseOrganLogEvents(
+        from content: String,
+        sourcePath: String
+    ) -> [OrganLogEvent] {
+        var events: [OrganLogEvent] = []
+
+        for rawLineSlice in content.split(whereSeparator: \.isNewline) {
+            let rawLine = String(rawLineSlice).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard rawLine.first == "{" else {
+                continue
+            }
+            guard let data = rawLine.data(using: .utf8),
+                  let payload = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+                  let fields = payload["fields"] as? [String: Any],
+                  let message = fields["message"] as? String
+            else {
+                continue
+            }
+
+            let kind: OrganLogEventKind
+            let payloadField: String
+            switch message {
+            case "cortex_organ_input":
+                kind = .input
+                payloadField = "input_payload"
+            case "cortex_organ_output":
+                kind = .output
+                payloadField = "output_payload"
+            default:
+                continue
+            }
+
+            guard let cycleID = parseUInt64(fields["cycle_id"]),
+                  let stage = fields["stage"] as? String,
+                  !stage.isEmpty,
+                  let eventPayload = stringifyLogField(fields[payloadField])
+            else {
+                continue
+            }
+
+            let timestampRaw = payload["timestamp"] as? String ?? ""
+            let eventID = "\(sourcePath)|\(timestampRaw)|\(message)|\(cycleID)|\(stage)|\(eventPayload.hashValue)"
+
+            events.append(
+                OrganLogEvent(
+                    eventID: eventID,
+                    kind: kind,
+                    timestamp: parseTimestamp(timestampRaw),
+                    cycleID: cycleID,
+                    stage: stage,
+                    payload: eventPayload
+                )
+            )
+        }
+
+        return events
+    }
+
+    private nonisolated static func parseUInt64(_ value: Any?) -> UInt64? {
+        switch value {
+        case let number as NSNumber:
+            return number.uint64Value
+        case let string as String:
+            return UInt64(string)
+        case let intValue as Int where intValue >= 0:
+            return UInt64(intValue)
+        case let int64Value as Int64 where int64Value >= 0:
+            return UInt64(int64Value)
+        case let uintValue as UInt:
+            return UInt64(uintValue)
+        case let uint64Value as UInt64:
+            return uint64Value
+        default:
+            return nil
+        }
+    }
+
+    private nonisolated static func stringifyLogField(_ value: Any?) -> String? {
+        guard let value else {
+            return nil
+        }
+
+        if let text = value as? String {
+            return text
+        }
+
+        if JSONSerialization.isValidJSONObject(value),
+           let data = try? JSONSerialization.data(withJSONObject: value, options: [.prettyPrinted]),
+           let text = String(data: data, encoding: .utf8)
+        {
+            return text
+        }
+
+        return String(describing: value)
+    }
+
+    private nonisolated static func parseTimestamp(_ value: String) -> Date? {
+        guard !value.isEmpty else {
+            return nil
+        }
+
+        let formatterWithFractional = ISO8601DateFormatter()
+        formatterWithFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatterWithFractional.date(from: value) {
+            return date
+        }
+
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: value)
+    }
+
+    private nonisolated static func organPairKey(cycleID: UInt64, stage: String) -> String {
+        "\(cycleID)|\(stage)"
+    }
+}
+
+private struct MetricsSnapshot: Sendable {
+    let cycleID: Double?
+    let actDescriptorCatalogCount: Double?
+    let statusText: String
+}
+
+private struct LogFileMetadata: Sendable {
+    let url: URL
+    let modifiedAt: Date?
+}
+
+private struct OrganLogsSnapshot: Sendable {
+    let events: [OrganLogEvent]
+    let statusText: String
+}
+
+private enum OrganLogEventKind: Sendable {
+    case input
+    case output
+
+    var sortOrder: Int {
+        switch self {
+        case .input:
+            return 0
+        case .output:
+            return 1
+        }
+    }
+}
+
+private struct OrganLogEvent: Sendable {
+    let eventID: String
+    let kind: OrganLogEventKind
+    let timestamp: Date?
+    let cycleID: UInt64
+    let stage: String
+    let payload: String
 }

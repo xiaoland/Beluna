@@ -3,13 +3,12 @@ import SwiftUI
 struct ChatView: View {
     @ObservedObject var viewModel: ChatViewModel
     @Environment(\.openSettings) private var openSettings
-    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(spacing: 0) {
             header
-            if viewModel.isSleeping {
-                sleepingNotice
+            if viewModel.isHibernating {
+                hibernateNotice
             }
             Divider()
             messageList
@@ -22,14 +21,14 @@ struct ChatView: View {
         }
     }
 
-    private var sleepingNotice: some View {
+    private var hibernateNotice: some View {
         HStack(spacing: 8) {
-            Image(systemName: viewModel.isConnectionEnabled ? "moon.stars.fill" : "bolt.slash.fill")
+            Image(systemName: viewModel.isConnectionEnabled ? "moon.zzz.fill" : "bolt.slash.fill")
                 .foregroundStyle(.orange)
-            Text(viewModel.sleepingTitle)
+            Text(viewModel.hibernateTitle)
                 .font(.subheadline.weight(.semibold))
             Spacer()
-            Text(viewModel.sleepingHint)
+            Text(viewModel.hibernateHint)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -39,56 +38,78 @@ struct ChatView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Beluna")
-                    .font(.title3.bold())
-                Text("Apple Universal Chat Endpoint")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+        VStack(spacing: 10) {
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Beluna")
+                        .font(.title3.bold())
+                    Text("Apple Universal Chat Endpoint")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
 
-            Spacer()
+                Spacer()
+
+                HStack(spacing: 8) {
+                    statusPill(
+                        title: "Connection",
+                        value: viewModel.connectionState.rawValue,
+                        tint: viewModel.connectionState.tint
+                    )
+                    statusPill(
+                        title: "Beluna",
+                        value: viewModel.belunaState.rawValue,
+                        tint: viewModel.belunaState.tint
+                    )
+                }
+
+                Button(viewModel.connectButtonTitle) {
+                    viewModel.toggleConnection()
+                }
+                .buttonStyle(.borderedProminent)
+
+                Button("Retry") {
+                    viewModel.retryConnection()
+                }
+                .buttonStyle(.bordered)
+                .disabled(!viewModel.canRetry)
+
+                Button {
+                    openSettings()
+                } label: {
+                    Image(systemName: "gearshape")
+                }
+                .buttonStyle(.bordered)
+                .help("Open Settings")
+            }
 
             HStack(spacing: 8) {
-                statusPill(
-                    title: "Connection",
-                    value: viewModel.connectionState.rawValue,
-                    tint: viewModel.connectionState.tint
-                )
-                statusPill(
-                    title: "Beluna",
-                    value: viewModel.belunaState.rawValue,
-                    tint: viewModel.belunaState.tint
-                )
-            }
+                metricPill(title: "Cycle", value: viewModel.metricsCycleIDText)
+                metricPill(title: "Act Catalog", value: viewModel.metricsActDescriptorCatalogCountText)
 
-            Button(viewModel.connectButtonTitle) {
-                viewModel.toggleConnection()
-            }
-            .buttonStyle(.borderedProminent)
+                if let lastUpdated = viewModel.metricsLastUpdatedLabel {
+                    Text(lastUpdated)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
 
-            Button("Retry") {
-                viewModel.retryConnection()
-            }
-            .buttonStyle(.bordered)
-            .disabled(!viewModel.canRetry)
+                Spacer(minLength: 8)
 
-            Button {
-                openWindow(id: "observability")
-            } label: {
-                Image(systemName: "doc.text.magnifyingglass")
-            }
-            .buttonStyle(.bordered)
-            .help("Open Observability")
+                Text(viewModel.metricsStatusText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
 
-            Button {
-                openSettings()
-            } label: {
-                Image(systemName: "gearshape")
+                Button {
+                    viewModel.refreshMetrics()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.bordered)
+                .disabled(viewModel.isMetricsRefreshing)
+                .help("Refresh Metrics")
             }
-            .buttonStyle(.bordered)
-            .help("Open Settings")
         }
         .padding(12)
         .background(Color(NSColor.windowBackgroundColor))
@@ -118,7 +139,7 @@ struct ChatView: View {
 
     private var composer: some View {
         HStack(spacing: 8) {
-            TextField(viewModel.isSleeping ? "Beluna is sleeping..." : "Message Beluna...", text: $viewModel.draft, axis: .vertical)
+            TextField(viewModel.isHibernating ? "Beluna is in Hibernate..." : "Message Beluna...", text: $viewModel.draft, axis: .vertical)
                 .lineLimit(1...4)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit {
@@ -151,17 +172,38 @@ struct ChatView: View {
         .padding(.vertical, 6)
         .background(.regularMaterial, in: Capsule())
     }
+
+    private func metricPill(title: String, value: String) -> some View {
+        HStack(spacing: 6) {
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.caption.monospaced().weight(.semibold))
+                .foregroundStyle(.primary)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color.primary.opacity(0.06), in: Capsule())
+    }
 }
 
 private struct MessageRow: View {
     let message: ChatMessage
 
     var body: some View {
-        switch message.role {
-        case .system, .debug:
-            CenterNoticeBubble(message: message)
-        case .user, .assistant:
-            MessageBubble(message: message)
+        switch message.body {
+        case let .toolCall(payload):
+            ToolCallMessageView(message: message, payload: payload)
+        case .text:
+            switch message.role {
+            case .system, .debug:
+                CenterNoticeBubble(message: message)
+            case .user, .assistant:
+                MessageBubble(message: message)
+            case .tool:
+                CenterNoticeBubble(message: message)
+            }
         }
     }
 }
@@ -190,7 +232,7 @@ private struct CenterNoticeBubble: View {
             return Color.orange.opacity(0.18)
         case .debug:
             return Color.gray.opacity(0.2)
-        case .user, .assistant:
+        case .user, .assistant, .tool:
             return .clear
         }
     }
@@ -239,6 +281,8 @@ private struct MessageBubble: View {
             return "System"
         case .debug:
             return "Debug"
+        case .tool:
+            return "Tool"
         }
     }
 
@@ -252,6 +296,8 @@ private struct MessageBubble: View {
             return Color.orange.opacity(0.18)
         case .debug:
             return Color.gray.opacity(0.2)
+        case .tool:
+            return Color.primary.opacity(0.1)
         }
     }
 
@@ -259,7 +305,7 @@ private struct MessageBubble: View {
         switch message.role {
         case .user:
             return .white
-        case .assistant, .system:
+        case .assistant, .system, .tool:
             return .primary
         case .debug:
             return .secondary

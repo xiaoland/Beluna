@@ -40,7 +40,10 @@
 ### Continuity
 
 - [ ] 被动/主动回忆 与 被动/主动记忆；被动记忆还涉及到 sense 权重；Act其实不用记住，因为 Sense 会回传。
-- [ ] 重命名 l1-memory 为 scratchpad 或者别的生物学隐喻的东西
+- [ ] 在给到Cortex Primary LLM的时候，重命名 l1-memory 为 scratchpad 或者别的生物学隐喻的东西
+  - l1-memory -> Focol-Awareness
+  - goal-tree -> Willpower-Matrix，其中 root-partition -> Instincts, User Partition -> Pursuits.
+- [ ] l1-memory 是 flush 而不是 patch (new-l1-memory)，且限制数量为 10 （可配置），超出的会被丢弃并且不告知（有日志）
 
 ### Spine
 

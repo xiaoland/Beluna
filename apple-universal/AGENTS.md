@@ -10,7 +10,7 @@ Beluna Apple Universal App is the app that bridges human interaction with Beluna
 
 ## Current Focus
 
-- Harden desktop endpoint UX and observability for Beluna Core integration.
+- Harden desktop endpoint UX and in-chat observability for Beluna Core integration.
 
 ## Boundary and Quality Rules
 
@@ -27,32 +27,31 @@ Beluna Apple Universal App is the app that bridges human interaction with Beluna
 
 ## Current State
 
-> Last Updated At: 2026-02-21T13:31+08:00
+> Last Updated At: 2026-02-22T16:23+08:00
 
 ### Live Capabilities
 
 - SwiftUI desktop chat endpoint connects to Core via Unix Socket NDJSON (`SpineUnixSocketBodyEndpoint`).
 - Connection controls are exposed in `SettingView` (socket path, connect/disconnect, retry).
+- Observability controls are exposed in `SettingView` (metrics endpoint + log directory).
 - Connection intent and socket path are persisted via `UserDefaults`.
 - App enforces single-instance runtime lock on macOS.
 - Xcode debug sessions default to manual connect.
 - Socket path is configured directly from `SettingView` and applied immediately on reconnect.
+- Metrics are rendered in Chat header (`cortex_cycle_id`, `input_ir_act_descriptor_catalog_count`), auto-refreshed every 5s only when socket-connected, with manual refresh.
+- Core log polling runs every 3s and pairs `cortex_organ_input` + `cortex_organ_output` into standalone tool-call widgets in Chat view.
+- Beluna lifecycle state uses `Hibernate` (instead of `Sleeping`) when Core is unavailable after connection history exists.
 - Auth capability descriptors publish explicit payload schemas, including `present_text_message` with a string payload.
-- Dedicated Observability window browses Core local log files from configurable directory path.
-  - Supports manual path apply and macOS folder picker (`NSOpenPanel`).
-  - Uses security-scoped bookmark for sandbox-compatible read access.
-  - Parses JSON log lines into a timestamp-descending table view.
-  - Shows selected row raw line content and keeps tail-read fallback for large files.
 
 ### Known Limitations & Mocks
 
-- Observability view is read-only; no search/filter/export yet.
-- Log browsing is file snapshot based (refresh/poll), not real-time stream tail.
-- Core log format rendering is generic text/JSON, not schema-aware.
-- Protocol/lifecycle tests should be expanded for observability flows.
+- Tool-call log rendering is polling-based (3s), not filesystem watch-based tail streaming.
+- Organ-log pairing relies on `(cycle_id, stage)` FIFO and may skip unmatched events when source files rotate aggressively.
+- No in-chat filter/search for tool-call widgets yet.
+- Protocol/lifecycle tests should be expanded for metrics and organ-log polling flows.
 
 ### Immediate Next Focus
 
-- Add test coverage for observability path persistence and file reading behavior.
-- Add in-view filtering/search and JSON line helpers for large logs.
-- Evaluate non-macOS fallback UX for log directory selection and permissions.
+- Add test coverage for metrics polling and organ-log pairing behavior.
+- Add in-chat filtering/search for tool-call widgets and large-payload truncation controls.
+- Evaluate filesystem-watch based log streaming to reduce polling latency and repeated tail scans.
