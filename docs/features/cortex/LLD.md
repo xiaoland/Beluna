@@ -11,7 +11,7 @@
   - `summary: string`
   - `weight: float` (normalized `[0,1]`)
 - `L1Memory`
-  - `entries: string[]`
+  - `string[]`
 - `CognitionState`
   - `revision: u64`
   - `goal_tree: GoalTree`
@@ -19,7 +19,6 @@
 
 Patch ops:
 - `GoalTreePatchOp`: `sprout | prune | tilt`
-- `L1MemoryPatchOp`: `append | insert | remove`
 
 ## Tick Algorithm
 
@@ -29,7 +28,7 @@ Patch ops:
 4. Parse sections:
   - `<acts>`
   - `<goal-tree-patch>`
-  - `<l1-memory-patch>`
+  - `<new-focal-awareness>`
 5. Run three output helpers in parallel with strict JSON Schema outputs.
 6. Materialize `Act[]` and apply patch arrays in deterministic order.
 7. Return `CortexOutput { acts, new_cognition_state }`.
@@ -45,7 +44,7 @@ Patch ops:
 
 - `acts_helper`: `ActDraft[]`
 - `goal_tree_patch_helper`: `GoalTreePatchOp[]`
-- `l1_memory_patch_helper`: `L1MemoryPatchOp[]`
+- `l1_memory_flush_helper`: `string[]`
 
 No envelope wrapper objects are allowed around helper outputs.
 
@@ -57,5 +56,5 @@ No envelope wrapper objects are allowed around helper outputs.
 - `prune` removes target numbering and descendants by prefix.
 - `sprout` and `tilt` normalize incoming weights by dynamic Min-Max mapping from current forest weights.
 - If current forest range is degenerate (`max == min`) or empty, normalization falls back to `0.5`.
-- L1 ops apply on ordered list index semantics.
+- L1 flush applies full replacement semantics and truncates by `max_l1_memory_entries`.
 - `revision` increments only when state changed.

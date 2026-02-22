@@ -330,6 +330,10 @@
             "max_sub_output_tokens": {
               "type": "integer",
               "minimum": 1
+            },
+            "max_l1_memory_entries": {
+              "type": "integer",
+              "minimum": 1
             }
           },
           "additionalProperties": false
@@ -379,7 +383,7 @@
                 "null"
               ]
             },
-            "l1_memory_patch_helper": {
+            "l1_memory_flush_helper": {
               "type": [
                 "string",
                 "null"

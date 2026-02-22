@@ -1,16 +1,22 @@
 use crate::{
     cortex::{
-        cognition::{CognitionState, GoalNode, GoalTreePatchOp, L1MemoryPatchOp},
-        types::{ActDraft, ActsHelperOutput, GoalTreePatchHelperOutput, L1MemoryPatchHelperOutput},
+        cognition::{CognitionState, GoalNode, GoalTreePatchOp},
+        types::{ActDraft, ActsHelperOutput, GoalTreePatchHelperOutput, L1MemoryFlushHelperOutput},
     },
     types::Act,
 };
 
+pub(crate) struct CognitionPatchApplyResult {
+    pub new_cognition_state: CognitionState,
+    pub l1_memory_overflow_count: usize,
+}
+
 pub(crate) fn apply_cognition_patches(
     previous: &CognitionState,
     goal_tree_ops: &[GoalTreePatchOp],
-    l1_memory_ops: &[L1MemoryPatchOp],
-) -> CognitionState {
+    l1_memory_flush: &[String],
+    max_l1_memory_entries: usize,
+) -> CognitionPatchApplyResult {
     let mut next = previous.clone();
     let mut changed = false;
 
@@ -20,16 +26,19 @@ pub(crate) fn apply_cognition_patches(
         }
     }
 
-    for op in l1_memory_ops {
-        if apply_l1_memory_op(&mut next.l1_memory.entries, op) {
-            changed = true;
-        }
+    let (l1_memory_changed, l1_memory_overflow_count) =
+        apply_l1_memory_flush(&mut next.l1_memory, l1_memory_flush, max_l1_memory_entries);
+    if l1_memory_changed {
+        changed = true;
     }
 
     if changed {
         next.revision = next.revision.saturating_add(1);
     }
-    next
+    CognitionPatchApplyResult {
+        new_cognition_state: next,
+        l1_memory_overflow_count,
+    }
 }
 
 fn apply_goal_tree_op(user_partition: &mut Vec<GoalNode>, op: &GoalTreePatchOp) -> bool {
@@ -98,27 +107,19 @@ fn apply_goal_tree_op(user_partition: &mut Vec<GoalNode>, op: &GoalTreePatchOp) 
     }
 }
 
-fn apply_l1_memory_op(entries: &mut Vec<String>, op: &L1MemoryPatchOp) -> bool {
-    match op {
-        L1MemoryPatchOp::Append { value } => {
-            entries.push(value.clone());
-            true
-        }
-        L1MemoryPatchOp::Insert { index, value } => {
-            if *index > entries.len() {
-                return false;
-            }
-            entries.insert(*index, value.clone());
-            true
-        }
-        L1MemoryPatchOp::Remove { index } => {
-            if *index >= entries.len() {
-                return false;
-            }
-            entries.remove(*index);
-            true
-        }
+fn apply_l1_memory_flush(
+    l1_memory: &mut Vec<String>,
+    flush_entries: &[String],
+    max_l1_memory_entries: usize,
+) -> (bool, usize) {
+    let max_entries = max_l1_memory_entries.max(1);
+    let truncated: Vec<String> = flush_entries.iter().take(max_entries).cloned().collect();
+    let overflow_count = flush_entries.len().saturating_sub(max_entries);
+    let changed = *l1_memory != truncated;
+    if changed {
+        *l1_memory = truncated;
     }
+    (changed, overflow_count)
 }
 
 fn normalize_weight(weight: f64, user_partition: &[GoalNode]) -> Option<f64> {
@@ -233,41 +234,10 @@ pub(crate) fn goal_tree_patch_ops_json_schema() -> serde_json::Value {
     })
 }
 
-pub(crate) fn l1_memory_patch_ops_json_schema() -> serde_json::Value {
+pub(crate) fn l1_memory_flush_json_schema() -> serde_json::Value {
     serde_json::json!({
         "type": "array",
-        "items": {
-            "oneOf": [
-                {
-                    "type": "object",
-                    "properties": {
-                        "op": { "type": "string", "const": "append" },
-                        "value": { "type": "string" }
-                    },
-                    "required": ["op", "value"],
-                    "additionalProperties": false
-                },
-                {
-                    "type": "object",
-                    "properties": {
-                        "op": { "type": "string", "const": "insert" },
-                        "index": { "type": "integer", "minimum": 0 },
-                        "value": { "type": "string" }
-                    },
-                    "required": ["op", "index", "value"],
-                    "additionalProperties": false
-                },
-                {
-                    "type": "object",
-                    "properties": {
-                        "op": { "type": "string", "const": "remove" },
-                        "index": { "type": "integer", "minimum": 0 }
-                    },
-                    "required": ["op", "index"],
-                    "additionalProperties": false
-                }
-            ]
-        }
+        "items": { "type": "string" }
     })
 }
 
@@ -281,10 +251,10 @@ pub(crate) fn parse_goal_tree_patch_helper_output(
     serde_json::from_str::<GoalTreePatchHelperOutput>(text)
 }
 
-pub(crate) fn parse_l1_memory_patch_helper_output(
+pub(crate) fn parse_l1_memory_flush_helper_output(
     text: &str,
-) -> Result<L1MemoryPatchHelperOutput, serde_json::Error> {
-    serde_json::from_str::<L1MemoryPatchHelperOutput>(text)
+) -> Result<L1MemoryFlushHelperOutput, serde_json::Error> {
+    serde_json::from_str::<L1MemoryFlushHelperOutput>(text)
 }
 
 pub(crate) fn materialize_acts(

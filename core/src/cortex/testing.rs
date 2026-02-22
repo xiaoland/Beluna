@@ -1,10 +1,8 @@
 use std::{future::Future, pin::Pin, sync::Arc};
 
 use crate::{
-    cortex::{
-        CognitionState, Cortex, CortexError, GoalTreePatchOp, L1MemoryPatchOp, ReactionLimits,
-    },
-    types::{NeuralSignalDescriptor, PhysicalState, Sense},
+    cortex::{CognitionState, Cortex, CortexError, GoalTreePatchOp, ReactionLimits},
+    types::{NeuralSignalDescriptor, Sense},
 };
 
 #[derive(Debug, Clone)]
@@ -29,32 +27,26 @@ pub struct GoalTreeHelperRequest {
 #[derive(Debug, Clone)]
 pub struct PrimaryRequest {
     pub cycle_id: u64,
-    pub senses: Vec<Sense>,
-    pub physical_state: PhysicalState,
-    pub cognition_state: CognitionState,
     pub input_ir: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct ActsHelperRequest {
     pub cycle_id: u64,
-    pub output_ir: String,
     pub acts_section: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct GoalTreePatchHelperRequest {
     pub cycle_id: u64,
-    pub output_ir: String,
     pub goal_tree_patch_section: String,
     pub cognition_state: CognitionState,
 }
 
 #[derive(Debug, Clone)]
-pub struct L1MemoryPatchHelperRequest {
+pub struct L1MemoryFlushHelperRequest {
     pub cycle_id: u64,
-    pub output_ir: String,
-    pub l1_memory_patch_section: String,
+    pub l1_memory_flush_section: String,
     pub cognition_state: CognitionState,
 }
 
@@ -68,7 +60,7 @@ pub struct TestActDraft {
 
 pub type TestActsHelperOutput = Vec<TestActDraft>;
 pub type TestGoalTreePatchOutput = Vec<GoalTreePatchOp>;
-pub type TestL1MemoryPatchOutput = Vec<L1MemoryPatchOp>;
+pub type TestL1MemoryFlushOutput = Vec<String>;
 
 type SenseHelperFuture = Pin<Box<dyn Future<Output = Result<String, CortexError>> + Send>>;
 type ActDescriptorHelperFuture = Pin<Box<dyn Future<Output = Result<String, CortexError>> + Send>>;
@@ -78,8 +70,8 @@ type ActsHelperFuture =
     Pin<Box<dyn Future<Output = Result<TestActsHelperOutput, CortexError>> + Send>>;
 type GoalTreePatchHelperFuture =
     Pin<Box<dyn Future<Output = Result<TestGoalTreePatchOutput, CortexError>> + Send>>;
-type L1MemoryPatchHelperFuture =
-    Pin<Box<dyn Future<Output = Result<TestL1MemoryPatchOutput, CortexError>> + Send>>;
+type L1MemoryFlushHelperFuture =
+    Pin<Box<dyn Future<Output = Result<TestL1MemoryFlushOutput, CortexError>> + Send>>;
 
 pub type SenseHelperHook = Arc<dyn Fn(SenseHelperRequest) -> SenseHelperFuture + Send + Sync>;
 pub type ActDescriptorHelperHook =
@@ -90,8 +82,8 @@ pub type PrimaryHook = Arc<dyn Fn(PrimaryRequest) -> PrimaryFuture + Send + Sync
 pub type ActsHelperHook = Arc<dyn Fn(ActsHelperRequest) -> ActsHelperFuture + Send + Sync>;
 pub type GoalTreePatchHelperHook =
     Arc<dyn Fn(GoalTreePatchHelperRequest) -> GoalTreePatchHelperFuture + Send + Sync>;
-pub type L1MemoryPatchHelperHook =
-    Arc<dyn Fn(L1MemoryPatchHelperRequest) -> L1MemoryPatchHelperFuture + Send + Sync>;
+pub type L1MemoryFlushHelperHook =
+    Arc<dyn Fn(L1MemoryFlushHelperRequest) -> L1MemoryFlushHelperFuture + Send + Sync>;
 
 pub fn boxed<T>(
     future: impl Future<Output = T> + Send + 'static,
@@ -110,7 +102,7 @@ pub struct TestHooks {
     pub primary: PrimaryHook,
     pub acts_helper: ActsHelperHook,
     pub goal_tree_patch_helper: GoalTreePatchHelperHook,
-    pub l1_memory_patch_helper: L1MemoryPatchHelperHook,
+    pub l1_memory_flush_helper: L1MemoryFlushHelperHook,
 }
 
 impl TestHooks {
@@ -121,7 +113,7 @@ impl TestHooks {
         primary: PrimaryHook,
         acts_helper: ActsHelperHook,
         goal_tree_patch_helper: GoalTreePatchHelperHook,
-        l1_memory_patch_helper: L1MemoryPatchHelperHook,
+        l1_memory_flush_helper: L1MemoryFlushHelperHook,
     ) -> Self {
         Self {
             sense_helper,
@@ -130,7 +122,7 @@ impl TestHooks {
             primary,
             acts_helper,
             goal_tree_patch_helper,
-            l1_memory_patch_helper,
+            l1_memory_flush_helper,
         }
     }
 }

@@ -34,7 +34,7 @@ fn base_physical_state() -> PhysicalState {
 }
 
 fn valid_output_ir() -> String {
-    "<output-ir><acts>markdown acts body</acts><goal-stack-patch>markdown patch body</goal-stack-patch></output-ir>".to_string()
+    "<acts>markdown acts body</acts><willpower-matrix-patch>markdown patch body</willpower-matrix-patch><new-focal-awareness>[]</new-focal-awareness>".to_string()
 }
 
 fn build_pipeline(
@@ -199,17 +199,17 @@ async fn cortex_pipeline_invalid_output_ir_contract_returns_noop() {
 }
 
 #[tokio::test]
-async fn input_ir_contains_root_tag() {
-    let has_root = Arc::new(AtomicBool::new(false));
+async fn primary_input_excludes_input_ir_root_tag() {
+    let has_input_ir_root = Arc::new(AtomicBool::new(false));
     let sense_helper = Arc::new(|_req| boxed(async { Ok("senses section".to_string()) }));
     let act_descriptor_helper =
         Arc::new(|_req| boxed(async { Ok("act descriptor section".to_string()) }));
     let primary = Arc::new({
-        let has_root = Arc::clone(&has_root);
+        let has_input_ir_root = Arc::clone(&has_input_ir_root);
         move |req: beluna::cortex::testing::PrimaryRequest| {
-            let has_root = Arc::clone(&has_root);
+            let has_input_ir_root = Arc::clone(&has_input_ir_root);
             boxed(async move {
-                has_root.store(req.input_ir.contains("<input-ir>"), Ordering::Relaxed);
+                has_input_ir_root.store(req.input_ir.contains("<input-ir>"), Ordering::Relaxed);
                 Ok(valid_output_ir())
             })
         }
@@ -241,5 +241,5 @@ async fn input_ir_contains_root_tag() {
         .await
         .expect("pipeline should succeed");
 
-    assert!(has_root.load(Ordering::Relaxed));
+    assert!(!has_input_ir_root.load(Ordering::Relaxed));
 }

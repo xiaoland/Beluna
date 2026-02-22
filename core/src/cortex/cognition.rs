@@ -23,11 +23,7 @@ pub struct GoalTree {
     pub user_partition: Vec<GoalNode>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub struct L1Memory {
-    #[serde(default)]
-    pub entries: Vec<String>,
-}
+pub type L1Memory = Vec<String>;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CognitionState {
@@ -54,14 +50,6 @@ pub enum GoalTreePatchOp {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "op", rename_all = "snake_case")]
-pub enum L1MemoryPatchOp {
-    Append { value: String },
-    Insert { index: usize, value: String },
-    Remove { index: usize },
-}
-
 pub fn root_partition_runtime() -> Vec<String> {
     default_root_partition()
 }
@@ -84,7 +72,7 @@ impl Default for CognitionState {
         Self {
             revision: 0,
             goal_tree: GoalTree::default(),
-            l1_memory: L1Memory::default(),
+            l1_memory: Vec::new(),
         }
     }
 }

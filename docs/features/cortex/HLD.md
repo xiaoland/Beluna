@@ -36,7 +36,7 @@ Primary stage:
 Output helper stage (parallel):
 - `acts_helper` -> `ActDraft[]`
 - `goal_tree_patch_helper` -> `GoalTreePatchOp[]`
-- `l1_memory_patch_helper` -> `L1MemoryPatchOp[]`
+- `l1_memory_flush_helper` -> `string[]`
 
 Patch application is done inside Cortex to produce full `new_cognition_state`.
 
@@ -44,5 +44,6 @@ Patch application is done inside Cortex to produce full `new_cognition_state`.
 
 - Root partition is immutable and never modified by Cortex patching.
 - User partition is a flat forest mutated by numbering-based `sprout/prune/tilt`; L1 memory is mutable through allowed op sets.
+- Output helpers consume section-local context only and do not require full Output IR text.
 - Primary behavior invariants are expressed by prompt contract, not hard-coded policy branches.
 - Helper protocol remains semantic-first and plumbing-free.

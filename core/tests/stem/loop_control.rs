@@ -29,14 +29,21 @@ fn valid_output_ir() -> String {
 }
 
 fn counting_cortex(calls: Arc<AtomicUsize>, batch_sizes: Arc<Mutex<Vec<usize>>>) -> Arc<Cortex> {
-    let sense_helper = Arc::new(|_req| boxed(async { Ok("senses".to_string()) }));
-    let act_descriptor_helper = Arc::new(|_req| boxed(async { Ok("catalog".to_string()) }));
-    let primary = Arc::new(move |req: beluna::cortex::testing::PrimaryRequest| {
-        let calls = Arc::clone(&calls);
+    let sense_helper = Arc::new({
         let batch_sizes = Arc::clone(&batch_sizes);
+        move |req: beluna::cortex::testing::SenseHelperRequest| {
+            let batch_sizes = Arc::clone(&batch_sizes);
+            boxed(async move {
+                batch_sizes.lock().await.push(req.senses.len());
+                Ok("senses".to_string())
+            })
+        }
+    });
+    let act_descriptor_helper = Arc::new(|_req| boxed(async { Ok("catalog".to_string()) }));
+    let primary = Arc::new(move |_req: beluna::cortex::testing::PrimaryRequest| {
+        let calls = Arc::clone(&calls);
         boxed(async move {
             calls.fetch_add(1, Ordering::Relaxed);
-            batch_sizes.lock().await.push(req.senses.len());
             Ok(valid_output_ir())
         })
     });

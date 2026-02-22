@@ -235,6 +235,46 @@ async fn input_helpers_run_concurrently() {
 }
 
 #[tokio::test]
+async fn sense_helper_is_skipped_when_senses_are_empty() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let sense_helper = Arc::new({
+        let calls = Arc::clone(&calls);
+        move |_req| {
+            let calls = Arc::clone(&calls);
+            boxed(async move {
+                calls.fetch_add(1, Ordering::Relaxed);
+                Ok("senses".to_string())
+            })
+        }
+    });
+    let act_descriptor_helper = Arc::new(|_req| boxed(async { Ok("catalog".to_string()) }));
+    let primary = Arc::new(|_req| boxed(async { Ok(output_ir()) }));
+    let acts_helper = Arc::new(|_req| boxed(async { Ok(TestActsHelperOutput::default()) }));
+    let goal_stack_helper = Arc::new(|_req| boxed(async { Ok(TestGoalStackPatch::default()) }));
+    let cortex = cortex_with_hooks(
+        TestHooks::new(
+            sense_helper,
+            act_descriptor_helper,
+            primary,
+            acts_helper,
+            goal_stack_helper,
+        ),
+        ReactionLimits::default(),
+    );
+
+    cortex
+        .cortex(
+            &[],
+            &physical_state_with_descriptor("cap.demo"),
+            &CognitionState::default(),
+        )
+        .await
+        .expect("run should succeed");
+
+    assert_eq!(calls.load(Ordering::Relaxed), 0);
+}
+
+#[tokio::test]
 async fn output_helpers_run_concurrently() {
     let sense_helper = Arc::new(|_req| boxed(async { Ok("senses".to_string()) }));
     let act_descriptor_helper = Arc::new(|_req| boxed(async { Ok("catalog".to_string()) }));

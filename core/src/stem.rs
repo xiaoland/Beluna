@@ -23,6 +23,11 @@ enum StemMode {
     SleepingUntil(Instant),
 }
 
+struct CycleOutcome {
+    sleep_deadline: Option<Instant>,
+    wait_for_sense: bool,
+}
+
 pub struct Stem {
     cycle_id: u64,
     cortex: Arc<Cortex>,
@@ -56,6 +61,7 @@ impl Stem {
     #[tracing::instrument(name = "stem_run", target = "stem", skip(self))]
     pub async fn run(mut self) -> Result<()> {
         let mut mode = StemMode::Active;
+        let mut wait_for_sense = false;
         let mut tick = tokio::time::interval(Duration::from_millis(self.tick_interval_ms));
         tick.set_missed_tick_behavior(match self.tick_missed_behavior {
             TickMissedBehavior::Skip => MissedTickBehavior::Skip,
@@ -64,21 +70,43 @@ impl Stem {
         loop {
             match mode {
                 StemMode::Active => {
-                    tick.tick().await;
+                    let cycle_outcome = if wait_for_sense {
+                        let Some(first_sense) = self.sense_rx.recv().await else {
+                            break;
+                        };
+                        if matches!(first_sense, Sense::Hibernate) {
+                            break;
+                        }
 
-                    let senses = self.drain_senses_nonblocking();
-                    if senses.iter().any(|sense| matches!(sense, Sense::Hibernate)) {
-                        break;
-                    }
+                        let mut senses = vec![first_sense];
+                        senses.extend(self.drain_senses_nonblocking());
+                        if senses.iter().any(|sense| matches!(sense, Sense::Hibernate)) {
+                            break;
+                        }
 
-                    if let Some(deadline) = self.execute_cycle(senses).await? {
+                        self.execute_cycle(senses).await?
+                    } else {
+                        tick.tick().await;
+
+                        let senses = self.drain_senses_nonblocking();
+                        if senses.iter().any(|sense| matches!(sense, Sense::Hibernate)) {
+                            break;
+                        }
+
+                        self.execute_cycle(senses).await?
+                    };
+
+                    wait_for_sense = cycle_outcome.wait_for_sense;
+                    if let Some(deadline) = cycle_outcome.sleep_deadline {
                         mode = StemMode::SleepingUntil(deadline);
                     }
                 }
                 StemMode::SleepingUntil(deadline) => {
                     let now = Instant::now();
                     if now >= deadline {
-                        if let Some(next_deadline) = self.execute_cycle(Vec::new()).await? {
+                        let cycle_outcome = self.execute_cycle(Vec::new()).await?;
+                        wait_for_sense = cycle_outcome.wait_for_sense;
+                        if let Some(next_deadline) = cycle_outcome.sleep_deadline {
                             mode = StemMode::SleepingUntil(next_deadline);
                         } else {
                             mode = StemMode::Active;
@@ -89,7 +117,9 @@ impl Stem {
                     let wait = deadline.saturating_duration_since(now);
                     tokio::select! {
                         _ = tokio::time::sleep(wait) => {
-                            if let Some(next_deadline) = self.execute_cycle(Vec::new()).await? {
+                            let cycle_outcome = self.execute_cycle(Vec::new()).await?;
+                            wait_for_sense = cycle_outcome.wait_for_sense;
+                            if let Some(next_deadline) = cycle_outcome.sleep_deadline {
                                 mode = StemMode::SleepingUntil(next_deadline);
                             } else {
                                 mode = StemMode::Active;
@@ -109,7 +139,9 @@ impl Stem {
                                 break;
                             }
 
-                            if let Some(next_deadline) = self.execute_cycle(senses).await? {
+                            let cycle_outcome = self.execute_cycle(senses).await?;
+                            wait_for_sense = cycle_outcome.wait_for_sense;
+                            if let Some(next_deadline) = cycle_outcome.sleep_deadline {
                                 mode = StemMode::SleepingUntil(next_deadline);
                             } else {
                                 mode = StemMode::Active;
@@ -123,7 +155,7 @@ impl Stem {
         Ok(())
     }
 
-    async fn execute_cycle(&mut self, sense_batch: Vec<Sense>) -> Result<Option<Instant>> {
+    async fn execute_cycle(&mut self, sense_batch: Vec<Sense>) -> Result<CycleOutcome> {
         for sense in &sense_batch {
             match sense {
                 Sense::NewNeuralSignalDescriptors(patch) => {
@@ -168,9 +200,13 @@ impl Stem {
                     error = %err,
                     "cortex_failed_for_cycle"
                 );
-                return Ok(None);
+                return Ok(CycleOutcome {
+                    sleep_deadline: None,
+                    wait_for_sense: false,
+                });
             }
         };
+        let wait_for_sense = output.wait_for_sense;
 
         self.continuity
             .lock()
@@ -227,7 +263,10 @@ impl Stem {
             }
         }
 
-        Ok(sleep_deadline)
+        Ok(CycleOutcome {
+            sleep_deadline,
+            wait_for_sense,
+        })
     }
 
     fn drain_senses_nonblocking(&mut self) -> Vec<Sense> {

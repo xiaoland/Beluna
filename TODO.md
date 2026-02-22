@@ -15,6 +15,10 @@
 - [ ] descriptor 缺少 description 字段 😆
 - [ ] 文档化拓扑结构
 
+## Pathway
+
+- [ ] 区分 sense-id, act-id 于 sense-instance-id, act-instance-id
+
 ### Cortex
 
 - [x] Cortex contracts 中的 Act, Sense, Capability 移动到 types 中
@@ -35,15 +39,29 @@
   - 规定 Pyload Schema ？这里有一个 Gap，那就是 Act Payload 和 Primary Intent 直接的 Gap；或者说在复杂 json 下，markdown 的 representation 显得无力。
 - [ ] Primary LLM 不是 transform , sir... 所以 Primary 的 LLM Prompt 应该是什么
 - [x] InputIR GoalTree 现在什么情况，感觉很混乱
-- [ ] Cognition Organ 的 system prompt 和 user prompt 位置不对。user prompt 就是数据；system prompt 纯粹 instrutction
+- [x] Cognition Organ 的 system prompt 和 user prompt 位置不对。user prompt 就是数据；system prompt 纯粹 instrutction
+- [ ] sense is sense, what is semantic sense ?
+- [x] act-descripor helper 调用 LLM 来处理 payload schema 为 markdown，而不是整个 act descritor，其它字段比较meta，放在 XML 标签里面就很好
+- [ ] 让 Primary 不要给可选参数用默认值时传参，节省点 output token；或者往大了说就是不用太 deliberate
+- [x] willpower-matrix-patch 里面没有给出 numbering，要给个 one-shot 可能，或者说 user partition 一开始是空的时候给，后面它自然会有样学样；
+- [x] focal-awareness 就是 bullet point statements
+- [x] acts_helper 不需要把 output-ir 读进去；一方面会 duplicate，另一方面 act 解析不需要那么多上下文信息
+- [x] primary 怎么不自言自语，感觉 prompt 还要调整
+- [x] l1_memory_patch_helper 应该重命名为 l1-memory-flush helper 了
+- [x] goal_tree_patch_helper 也不需要 output-ir
+- [x] cortex 可以选择是否等待 sense arrived
+- [x] goal-tree user_partition 怎么一直空空的，有bug
+- [x] sense_helper 建议产出 payload 的 markdown，外面包一层 xml tag `<sense>` 以及 metadata 在 input-ir 中
+- [x] goal-tree user-partition 才是 matrix-willpower
+- [ ] 什么鬼是 primary-helper ？
 
 ### Continuity
 
 - [ ] 被动/主动回忆 与 被动/主动记忆；被动记忆还涉及到 sense 权重；Act其实不用记住，因为 Sense 会回传。
-- [ ] 在给到Cortex Primary LLM的时候，重命名 l1-memory 为 scratchpad 或者别的生物学隐喻的东西
+- [x] 在给到Cortex Primary LLM的时候，重命名 l1-memory 为 scratchpad 或者别的生物学隐喻的东西
   - l1-memory -> Focol-Awareness
   - goal-tree -> Willpower-Matrix，其中 root-partition -> Instincts, User Partition -> Pursuits.
-- [ ] l1-memory 是 flush 而不是 patch (new-l1-memory)，且限制数量为 10 （可配置），超出的会被丢弃并且不告知（有日志）
+- [x] l1-memory 是 flush 而不是 patch (new-l1-memory)，且限制数量为 10 （可配置），超出的会被丢弃并且不告知（有日志）
 
 ### Spine
 
@@ -63,6 +81,7 @@
 - [x] Request ID
 - [x] O11y in Error Handling
 - [x] Pull Metrics Endpoint
+- [ ] Local metrics (cortex-organ-output)
 
 ### AI Gateway
 
@@ -73,6 +92,15 @@
 - [x] 移除 Credential Provider
 - [ ] attempt 是什么鬼
 - [ ] 日志需要精简
+
+### Std BodyEndpoint
+
+- [ ] sense payload 需要优化，不要重复 metadata 中有的东西；
+  比如 shell.result 的 payload 为什么要有 kind ?
+  neural_signal_descriptor_id 更是诡异
+- [ ] sense payload 不会携带 uuid 的 act-id ，要带也是带在 root，而且不可以 expose 给
+
+#### Shell
 
 ## Apple Universal
 

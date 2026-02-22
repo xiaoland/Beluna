@@ -12,7 +12,7 @@ pub mod testing;
 mod types;
 
 pub use cognition::{
-    CognitionState, GoalNode, GoalTree, GoalTreePatchOp, L1Memory, L1MemoryPatchOp, ROOT_PARTITION,
+    CognitionState, GoalNode, GoalTree, GoalTreePatchOp, L1Memory, ROOT_PARTITION,
     new_default_cognition_state, root_partition_runtime,
 };
 pub use error::{CortexError, CortexErrorKind};

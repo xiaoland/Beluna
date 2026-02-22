@@ -1,9 +1,13 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    cortex::cognition::{CognitionState, GoalTreePatchOp, L1MemoryPatchOp},
+    cortex::cognition::{CognitionState, GoalTreePatchOp},
     types::Act,
 };
+
+fn default_max_l1_memory_entries() -> usize {
+    10
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReactionLimits {
@@ -15,6 +19,8 @@ pub struct ReactionLimits {
     pub max_repair_attempts: u8,
     pub max_primary_output_tokens: u64,
     pub max_sub_output_tokens: u64,
+    #[serde(default = "default_max_l1_memory_entries")]
+    pub max_l1_memory_entries: usize,
 }
 
 impl Default for ReactionLimits {
@@ -28,6 +34,7 @@ impl Default for ReactionLimits {
             max_repair_attempts: 1,
             max_primary_output_tokens: 1_024,
             max_sub_output_tokens: 768,
+            max_l1_memory_entries: default_max_l1_memory_entries(),
         }
     }
 }
@@ -37,6 +44,8 @@ pub struct CortexOutput {
     #[serde(default)]
     pub acts: Vec<Act>,
     pub new_cognition_state: CognitionState,
+    #[serde(default)]
+    pub wait_for_sense: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -59,4 +68,4 @@ pub(crate) struct ActDraft {
 
 pub(crate) type ActsHelperOutput = Vec<ActDraft>;
 pub(crate) type GoalTreePatchHelperOutput = Vec<GoalTreePatchOp>;
-pub(crate) type L1MemoryPatchHelperOutput = Vec<L1MemoryPatchOp>;
+pub(crate) type L1MemoryFlushHelperOutput = Vec<String>;

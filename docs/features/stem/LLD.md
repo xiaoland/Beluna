@@ -14,6 +14,9 @@
 - Interval source configured by `loop.tick_interval_ms`.
 - Missed tick behavior configured by `loop.tick_missed_behavior` (`skip`).
 - Tick can execute Cortex with empty domain senses.
+- Default tick interval is `10000ms` (10s), configurable via `loop.tick_interval_ms`.
+- If Primary output includes `<is-wait-for-sense>true</is-wait-for-sense>`, the next Active tick must wait until at least one sense arrives before invoking Cortex.
+- If `<is-wait-for-sense>` is absent or false, Stem keeps normal tick-driven invocation.
 
 ## Sleep Act Rules
 

@@ -48,8 +48,9 @@ Beluna Core is the runnable runtime and domain agent implementation.
 - `main` boots continuity/spine/cortex, starts the Stem loop, and listens for SIGTERM/SIGINT.
 - Shutdown closes ingress gate first, then blocks until `hibernate` sense is enqueued.
 - Runtime logging is `tracing`-only: JSON file logs with rotation/retention and optional stderr warn/error mirroring via `logging.*` config.
-- Stem is tick-driven (`loop.tick_interval_ms`, default 1s) with missed tick skip behavior.
+- Stem is tick-driven (`loop.tick_interval_ms`, default 10s) with missed tick skip behavior.
 - Stem can invoke Cortex with empty domain senses on timer ticks.
+- Stem waits for incoming sense before next Active tick only when Cortex output declares `wait_for_sense=true` (derived from Primary `<is-wait-for-sense>` tag).
 - Stem composes physical+cognition state, invokes pure Cortex boundary, persists returned cognition state, then dispatches acts serially through Continuity -> Spine.
 - Control senses:
   - `hibernate` breaks loop immediately.

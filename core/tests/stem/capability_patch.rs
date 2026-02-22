@@ -13,9 +13,7 @@ use beluna::{
     ledger::LedgerStage,
     spine::Spine,
     stem::Stem,
-    types::{
-        NeuralSignalDescriptor, NeuralSignalDescriptorPatch, NeuralSignalType, PhysicalState, Sense,
-    },
+    types::{NeuralSignalDescriptor, NeuralSignalDescriptorPatch, NeuralSignalType, Sense},
 };
 
 fn test_spine() -> Arc<Spine> {
@@ -27,15 +25,21 @@ fn valid_output_ir() -> String {
     "<output-ir><acts>body</acts><goal-stack-patch>body</goal-stack-patch></output-ir>".to_string()
 }
 
-fn capture_cortex(physical_states: Arc<Mutex<Vec<PhysicalState>>>) -> Arc<beluna::cortex::Cortex> {
+fn capture_cortex(
+    act_descriptors_seen: Arc<Mutex<Vec<Vec<NeuralSignalDescriptor>>>>,
+) -> Arc<beluna::cortex::Cortex> {
     let sense_helper = Arc::new(|_req| boxed(async { Ok("senses".to_string()) }));
-    let act_descriptor_helper = Arc::new(|_req| boxed(async { Ok("catalog".to_string()) }));
-    let primary = Arc::new(move |req: beluna::cortex::testing::PrimaryRequest| {
-        let physical_states = Arc::clone(&physical_states);
-        boxed(async move {
-            physical_states.lock().await.push(req.physical_state);
-            Ok(valid_output_ir())
-        })
+    let act_descriptor_helper = Arc::new(
+        move |req: beluna::cortex::testing::ActDescriptorHelperRequest| {
+            let act_descriptors_seen = Arc::clone(&act_descriptors_seen);
+            boxed(async move {
+                act_descriptors_seen.lock().await.push(req.act_descriptors);
+                Ok(valid_output_ir())
+            })
+        },
+    );
+    let primary = Arc::new(move |_req: beluna::cortex::testing::PrimaryRequest| {
+        boxed(async move { Ok(valid_output_ir()) })
     });
     let acts_helper = Arc::new(|_req| boxed(async { Ok(TestActsHelperOutput::default()) }));
     let goal_stack_helper = Arc::new(|_req| boxed(async { Ok(TestGoalStackPatch::default()) }));
@@ -74,12 +78,12 @@ async fn new_capabilities_patch_takes_effect_before_cortex() {
         .expect("sleep should be enqueued");
     drop(sense_tx);
 
-    let physical_states = Arc::new(Mutex::new(Vec::new()));
+    let act_descriptors_seen = Arc::new(Mutex::new(Vec::new()));
     let continuity = Arc::new(Mutex::new(ContinuityEngine::with_defaults()));
     let ledger = Arc::new(Mutex::new(LedgerStage::new(1_000)));
 
     let runtime = Stem::new(
-        capture_cortex(Arc::clone(&physical_states)),
+        capture_cortex(Arc::clone(&act_descriptors_seen)),
         continuity,
         ledger,
         test_spine(),
@@ -87,11 +91,9 @@ async fn new_capabilities_patch_takes_effect_before_cortex() {
     );
     runtime.run().await.expect("stem should run");
 
-    let captured = physical_states.lock().await;
+    let captured = act_descriptors_seen.lock().await;
     assert_eq!(captured.len(), 1);
     let descriptor = captured[0]
-        .capabilities
-        .entries
         .iter()
         .find(|entry| {
             entry.r#type == NeuralSignalType::Act

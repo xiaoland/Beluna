@@ -185,7 +185,7 @@ pub struct CortexHelperRoutesConfig {
     #[serde(default)]
     pub goal_tree_patch_helper: Option<String>,
     #[serde(default)]
-    pub l1_memory_patch_helper: Option<String>,
+    pub l1_memory_flush_helper: Option<String>,
 }
 
 impl Default for CortexHelperRoutesConfig {
@@ -198,7 +198,7 @@ impl Default for CortexHelperRoutesConfig {
             acts_helper: None,
             goal_tree_helper: None,
             goal_tree_patch_helper: None,
-            l1_memory_patch_helper: None,
+            l1_memory_flush_helper: None,
         }
     }
 }
@@ -247,7 +247,7 @@ pub enum TickMissedBehavior {
 }
 
 fn default_tick_interval_ms() -> u64 {
-    1_000
+    10_000
 }
 
 fn default_tick_missed_behavior() -> TickMissedBehavior {
