@@ -119,19 +119,31 @@ struct ChatView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 10) {
+                    if viewModel.hasOlderBufferedMessages {
+                        paginationHint("Scroll up to load older messages")
+                    }
+
                     ForEach(viewModel.messages) { message in
                         MessageRow(message: message)
                             .id(message.id)
+                            .onAppear {
+                                viewModel.handleVisibleMessageAppeared(message.id)
+                            }
+                    }
+
+                    if viewModel.hasNewerBufferedMessages {
+                        paginationHint("Scroll down to load newer messages")
                     }
                 }
                 .padding(12)
             }
             .background(Color(NSColor.textBackgroundColor).opacity(0.4))
-            .onChange(of: viewModel.messages.count) { _, _ in
-                if let lastID = viewModel.messages.last?.id {
-                    withAnimation(.easeOut(duration: 0.2)) {
-                        proxy.scrollTo(lastID, anchor: .bottom)
-                    }
+            .onChange(of: viewModel.latestMessageIDForAutoScroll) { _, latestID in
+                guard let latestID else {
+                    return
+                }
+                withAnimation(.easeOut(duration: 0.2)) {
+                    proxy.scrollTo(latestID, anchor: .bottom)
                 }
             }
         }
@@ -185,6 +197,19 @@ struct ChatView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(Color.primary.opacity(0.06), in: Capsule())
+    }
+
+    private func paginationHint(_ text: String) -> some View {
+        HStack {
+            Spacer()
+            Text(text)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color.primary.opacity(0.06), in: Capsule())
+            Spacer()
+        }
     }
 }
 

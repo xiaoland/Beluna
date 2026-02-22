@@ -27,19 +27,21 @@ Beluna Apple Universal App is the app that bridges human interaction with Beluna
 
 ## Current State
 
-> Last Updated At: 2026-02-22T16:23+08:00
+> Last Updated At: 2026-02-22T18:20+08:00
 
 ### Live Capabilities
 
 - SwiftUI desktop chat endpoint connects to Core via Unix Socket NDJSON (`SpineUnixSocketBodyEndpoint`).
 - Connection controls are exposed in `SettingView` (socket path, connect/disconnect, retry).
 - Observability controls are exposed in `SettingView` (metrics endpoint + log directory).
+- Chat history controls are exposed in `SettingView` (message buffer capacity).
 - Connection intent and socket path are persisted via `UserDefaults`.
 - App enforces single-instance runtime lock on macOS.
 - Xcode debug sessions default to manual connect.
 - Socket path is configured directly from `SettingView` and applied immediately on reconnect.
 - Metrics are rendered in Chat header (`cortex_cycle_id`, `input_ir_act_descriptor_catalog_count`), auto-refreshed every 5s only when socket-connected, with manual refresh.
 - Core log polling runs every 3s and pairs `cortex_organ_input` + `cortex_organ_output` into standalone tool-call widgets in Chat view.
+- Chat view keeps a bounded in-memory message ring buffer and incrementally loads older/newer pages on scroll.
 - Beluna lifecycle state uses `Hibernate` (instead of `Sleeping`) when Core is unavailable after connection history exists.
 - Auth capability descriptors publish explicit payload schemas, including `present_text_message` with a string payload.
 
@@ -48,6 +50,7 @@ Beluna Apple Universal App is the app that bridges human interaction with Beluna
 - Tool-call log rendering is polling-based (3s), not filesystem watch-based tail streaming.
 - Organ-log pairing relies on `(cycle_id, stage)` FIFO and may skip unmatched events when source files rotate aggressively.
 - No in-chat filter/search for tool-call widgets yet.
+- Chat history pagination currently loads from in-memory ring buffer only (no disk-backed history replay).
 - Protocol/lifecycle tests should be expanded for metrics and organ-log polling flows.
 
 ### Immediate Next Focus

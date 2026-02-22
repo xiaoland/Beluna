@@ -2,7 +2,12 @@ import Foundation
 
 @MainActor
 final class ChatViewModel: ObservableObject {
-    @Published var messages: [ChatMessage] = []
+    @Published private(set) var messages: [ChatMessage] = []
+    @Published private(set) var latestMessageIDForAutoScroll: UUID?
+    @Published private(set) var hasOlderBufferedMessages: Bool = false
+    @Published private(set) var hasNewerBufferedMessages: Bool = false
+    @Published private(set) var bufferedMessageCount: Int = 0
+    @Published private(set) var visibleMessageCount: Int = 0
     @Published var draft: String = ""
     @Published var connectionState: ConnectionState = .disconnected
     @Published var belunaState: BelunaState = .unknown
@@ -25,6 +30,9 @@ final class ChatViewModel: ObservableObject {
     @Published private(set) var logLastRefreshedAt: Date?
     @Published private(set) var isLogRefreshing: Bool = false
 
+    @Published var messageCapacityDraft: String
+    @Published private(set) var messageCapacity: Int
+
     var isHibernating: Bool {
         belunaState == .hibernate
     }
@@ -46,6 +54,13 @@ final class ChatViewModel: ObservableObject {
     var canApplyLogDirectoryPath: Bool {
         let normalized = Self.normalizeDirectoryPath(logDirectoryPathDraft)
         return !normalized.isEmpty && normalized != logDirectoryPath
+    }
+
+    var canApplyMessageCapacity: Bool {
+        guard let normalized = Self.normalizeMessageCapacity(messageCapacityDraft) else {
+            return false
+        }
+        return normalized != messageCapacity
     }
 
     var connectButtonTitle: String {
@@ -110,6 +125,9 @@ final class ChatViewModel: ObservableObject {
     private var metricsPollingTask: Task<Void, Never>?
     private var logPollingTask: Task<Void, Never>?
 
+    private var messageBuffer: [ChatMessage] = []
+    private var visibleMessageRange: Range<Int> = 0..<0
+
     private var pendingOrganInputs: [String: [OrganLogEvent]] = [:]
     private var pendingOrganOutputs: [String: [OrganLogEvent]] = [:]
     private var seenOrganEventIDs = Set<String>()
@@ -122,11 +140,16 @@ final class ChatViewModel: ObservableObject {
     private static let defaultSocketPath = "/tmp/beluna.sock"
     private static let defaultMetricsEndpoint = "http://127.0.0.1:9464/metrics"
     private static let defaultLogDirectoryPath = "~/logs/core"
+    private static let defaultMessageCapacity = 1000
+    private static let minimumMessageCapacity = 100
+    private static let maximumMessageCapacity = 20_000
+    private static let messagePageSize = 80
 
     private static let socketPathDefaultsKey = "beluna.apple-universal.socket_path"
     private static let autoConnectDefaultsKey = "beluna.apple-universal.auto_connect"
     private static let metricsEndpointDefaultsKey = "beluna.apple-universal.metrics_endpoint"
     private static let logDirectoryPathDefaultsKey = "beluna.apple-universal.log_directory_path"
+    private static let messageCapacityDefaultsKey = "beluna.apple-universal.message_capacity"
 
     private nonisolated static let maxLogReadBytes: Int64 = 512 * 1024
 
@@ -162,6 +185,11 @@ final class ChatViewModel: ObservableObject {
             ? Self.normalizeDirectoryPath(Self.defaultLogDirectoryPath)
             : persistedLogDirectory
 
+        let persistedMessageCapacity = Self.normalizeMessageCapacity(
+            UserDefaults.standard.object(forKey: Self.messageCapacityDefaultsKey) as? Int
+        )
+        let initialMessageCapacity = persistedMessageCapacity ?? Self.defaultMessageCapacity
+
         self.conversationID = "conv_\(UUID().uuidString.lowercased())"
         self.spineBodyEndpoint = SpineUnixSocketBodyEndpoint(socketPath: initialSocketPath)
 
@@ -175,11 +203,15 @@ final class ChatViewModel: ObservableObject {
         self.logDirectoryPath = initialLogDirectory
         self.logDirectoryPathDraft = initialLogDirectory
 
-        messages.append(
+        self.messageCapacity = initialMessageCapacity
+        self.messageCapacityDraft = String(initialMessageCapacity)
+
+        appendBufferedMessage(
             ChatMessage(
                 role: .system,
                 text: initialMessageText(initialAutoConnect: initialAutoConnect)
-            )
+            ),
+            preferredAutoScroll: true
         )
 
         bindSocketHandlers()
@@ -266,6 +298,26 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
+    func applyMessageCapacityDraft() {
+        guard let normalized = Self.normalizeMessageCapacity(messageCapacityDraft) else {
+            appendSystemMessage(
+                "Message capacity must be an integer between \(Self.minimumMessageCapacity) and \(Self.maximumMessageCapacity)."
+            )
+            messageCapacityDraft = String(messageCapacity)
+            return
+        }
+        guard normalized != messageCapacity else {
+            return
+        }
+
+        messageCapacity = normalized
+        messageCapacityDraft = String(normalized)
+        persistMessageBufferSettings()
+        trimMessageBufferToCapacity(preferLatestWindow: true)
+        publishVisibleMessages(autoScrollToLatest: true)
+        appendSystemMessage("Message buffer capacity set to \(normalized).")
+    }
+
     func refreshMetrics() {
         Task {
             await refreshMetricsNow()
@@ -325,7 +377,7 @@ final class ChatViewModel: ObservableObject {
         }
 
         draft = ""
-        messages.append(ChatMessage(role: .user, text: text))
+        appendBufferedMessage(ChatMessage(role: .user, text: text))
 
         Task {
             do {
@@ -333,6 +385,19 @@ final class ChatViewModel: ObservableObject {
             } catch {
                 appendSystemMessage("Failed to send user message to core: \(describeError(error))")
             }
+        }
+    }
+
+    func handleVisibleMessageAppeared(_ messageID: UUID) {
+        guard !messages.isEmpty else {
+            return
+        }
+
+        if messageID == messages.first?.id {
+            loadOlderMessagePageIfNeeded()
+        }
+        if messageID == messages.last?.id {
+            loadNewerMessagePageIfNeeded()
         }
     }
 
@@ -427,7 +492,7 @@ final class ChatViewModel: ObservableObject {
 
         do {
             let text = try extractPresentedText(from: action.payload)
-            messages.append(ChatMessage(role: .assistant, text: text))
+            appendBufferedMessage(ChatMessage(role: .assistant, text: text))
 
             try await spineBodyEndpoint.sendActResultSense(
                 action: action,
@@ -634,7 +699,114 @@ final class ChatViewModel: ObservableObject {
             outputPayload: output.payload
         )
         let timestamp = output.timestamp ?? input.timestamp ?? Date()
-        messages.append(ChatMessage(toolCall: payload, timestamp: timestamp))
+        appendBufferedMessage(ChatMessage(toolCall: payload, timestamp: timestamp))
+    }
+
+    private func appendBufferedMessage(_ message: ChatMessage, preferredAutoScroll: Bool? = nil) {
+        let shouldAutoScroll = preferredAutoScroll ?? isShowingLatestMessageWindow
+        let previousVisibleCount = visibleMessageRange.count
+
+        messageBuffer.append(message)
+        trimMessageBufferToCapacity(preferLatestWindow: shouldAutoScroll)
+
+        if messageBuffer.isEmpty {
+            visibleMessageRange = 0..<0
+            publishVisibleMessages(autoScrollToLatest: false)
+            return
+        }
+
+        if shouldAutoScroll || visibleMessageRange.isEmpty {
+            let desiredVisibleCount = max(previousVisibleCount, Self.messagePageSize)
+            let end = messageBuffer.count
+            let start = max(0, end - desiredVisibleCount)
+            visibleMessageRange = start..<end
+            publishVisibleMessages(autoScrollToLatest: true)
+            return
+        }
+
+        publishVisibleMessages(autoScrollToLatest: false)
+    }
+
+    private func loadOlderMessagePageIfNeeded() {
+        guard visibleMessageRange.lowerBound > 0 else {
+            return
+        }
+
+        let newLowerBound = max(0, visibleMessageRange.lowerBound - Self.messagePageSize)
+        visibleMessageRange = newLowerBound..<visibleMessageRange.upperBound
+        publishVisibleMessages(autoScrollToLatest: false)
+    }
+
+    private func loadNewerMessagePageIfNeeded() {
+        guard visibleMessageRange.upperBound < messageBuffer.count else {
+            return
+        }
+
+        let newUpperBound = min(messageBuffer.count, visibleMessageRange.upperBound + Self.messagePageSize)
+        visibleMessageRange = visibleMessageRange.lowerBound..<newUpperBound
+        publishVisibleMessages(autoScrollToLatest: false)
+    }
+
+    private func trimMessageBufferToCapacity(preferLatestWindow: Bool) {
+        guard messageBuffer.count > messageCapacity else {
+            return
+        }
+
+        let overflow = messageBuffer.count - messageCapacity
+        messageBuffer.removeFirst(overflow)
+
+        let shiftedLowerBound = max(0, visibleMessageRange.lowerBound - overflow)
+        let shiftedUpperBound = max(shiftedLowerBound, visibleMessageRange.upperBound - overflow)
+        visibleMessageRange = shiftedLowerBound..<min(shiftedUpperBound, messageBuffer.count)
+
+        guard !messageBuffer.isEmpty else {
+            visibleMessageRange = 0..<0
+            return
+        }
+
+        if preferLatestWindow {
+            let desiredVisibleCount = max(visibleMessageRange.count, Self.messagePageSize)
+            let end = messageBuffer.count
+            let start = max(0, end - desiredVisibleCount)
+            visibleMessageRange = start..<end
+            return
+        }
+
+        if visibleMessageRange.isEmpty {
+            let end = min(messageBuffer.count, Self.messagePageSize)
+            let start = max(0, end - Self.messagePageSize)
+            visibleMessageRange = start..<end
+        }
+    }
+
+    private func publishVisibleMessages(autoScrollToLatest: Bool) {
+        guard !messageBuffer.isEmpty else {
+            visibleMessageRange = 0..<0
+            messages = []
+            bufferedMessageCount = 0
+            visibleMessageCount = 0
+            hasOlderBufferedMessages = false
+            hasNewerBufferedMessages = false
+            return
+        }
+
+        let clampedLowerBound = min(max(0, visibleMessageRange.lowerBound), messageBuffer.count)
+        let clampedUpperBound = min(max(clampedLowerBound, visibleMessageRange.upperBound), messageBuffer.count)
+        visibleMessageRange = clampedLowerBound..<clampedUpperBound
+
+        messages = Array(messageBuffer[visibleMessageRange])
+        bufferedMessageCount = messageBuffer.count
+        visibleMessageCount = messages.count
+        hasOlderBufferedMessages = visibleMessageRange.lowerBound > 0
+        hasNewerBufferedMessages = visibleMessageRange.upperBound < messageBuffer.count
+
+        if autoScrollToLatest, let latestID = messages.last?.id {
+            latestMessageIDForAutoScroll = latestID
+        }
+    }
+
+    private var isShowingLatestMessageWindow: Bool {
+        visibleMessageRange.upperBound == messageBuffer.count
     }
 
     private func appendPendingEvent(
@@ -702,6 +874,10 @@ final class ChatViewModel: ObservableObject {
         UserDefaults.standard.set(logDirectoryPath, forKey: Self.logDirectoryPathDefaultsKey)
     }
 
+    private func persistMessageBufferSettings() {
+        UserDefaults.standard.set(messageCapacity, forKey: Self.messageCapacityDefaultsKey)
+    }
+
     private nonisolated static func normalizeSocketPath(_ value: String?) -> String {
         (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -718,6 +894,22 @@ final class ChatViewModel: ObservableObject {
 
         let expanded = (trimmed as NSString).expandingTildeInPath
         return URL(fileURLWithPath: expanded).standardizedFileURL.path
+    }
+
+    private nonisolated static func normalizeMessageCapacity(_ value: String?) -> Int? {
+        let trimmed = (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let parsed = Int(trimmed) else {
+            return nil
+        }
+        return normalizeMessageCapacity(parsed)
+    }
+
+    private nonisolated static func normalizeMessageCapacity(_ value: Int?) -> Int? {
+        guard let value else {
+            return nil
+        }
+        let clamped = min(max(value, minimumMessageCapacity), maximumMessageCapacity)
+        return clamped
     }
 
     private func hibernateHelpText() -> String {
@@ -745,11 +937,11 @@ final class ChatViewModel: ObservableObject {
     }
 
     private func appendMessage(role: ChatRole, text: String) {
-        if let last = messages.last, last.role == role, last.text == text {
+        if let last = messageBuffer.last, last.role == role, last.text == text {
             return
         }
 
-        messages.append(ChatMessage(role: role, text: text))
+        appendBufferedMessage(ChatMessage(role: role, text: text))
     }
 
     private func rememberHandledAction(_ actionID: String) -> Bool {

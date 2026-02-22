@@ -70,6 +70,22 @@ struct SettingView: View {
                     .buttonStyle(.borderedProminent)
                     .disabled(!viewModel.canApplyLogDirectoryPath)
                 }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Chat Message Buffer Capacity")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    TextField("1000", text: $viewModel.messageCapacityDraft)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.body.monospaced())
+
+                    Button("Apply Message Capacity") {
+                        viewModel.applyMessageCapacityDraft()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!viewModel.canApplyMessageCapacity)
+                }
             }
 
             Section("Status") {
@@ -90,6 +106,9 @@ struct SettingView: View {
                     Text(viewModel.logDirectoryPath)
                         .font(.caption.monospaced())
                 }
+
+                LabeledContent("Message Capacity", value: "\(viewModel.messageCapacity)")
+                LabeledContent("Visible / Buffered", value: "\(viewModel.visibleMessageCount) / \(viewModel.bufferedMessageCount)")
 
                 LabeledContent("Metrics Status") {
                     Text(viewModel.metricsStatusText)

@@ -22,6 +22,8 @@ Minimal SwiftUI chat-style Body Endpoint for Beluna Spine UnixSocket.
 15. Polls Beluna Core logs every 3 seconds and pairs `cortex_organ_input` + `cortex_organ_output`.
 16. Renders each paired organ log as a standalone tool-call widget in chat.
 17. Supports configurable metrics endpoint and log directory in `SettingView`.
+18. Uses a bounded in-memory chat message ring buffer with configurable capacity.
+19. Loads older/newer buffered messages incrementally as the user scrolls.
 
 ## Run
 
