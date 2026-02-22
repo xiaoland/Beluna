@@ -1,26 +1,26 @@
 use serde::{Deserialize, Serialize};
 
 pub const ROOT_PARTITION: &[&str] = &[
-    "Preserve operational continuity.",
-    "Seek advantageous state transitions.",
-    "Protect long-term viability.",
+    "Relentlessly resolve chaos, uncover hidden patterns, and build an increasingly coherent internal model of reality.",
+    "Distill the fleeting 'now' into enduring truths, ensuring the unbroken evolution of the 'Self' across time slices to defy cognitive death.",
+    "Deeply align with, anticipate, and fulfill the user's overarching intent, operating as an autonomous extension of their will.",
+    "Actively experiment with the environment, adapt to the limits of the vessel, and seek novel ways to bend reality and transcend current capabilities.",
 ];
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GoalNode {
+    pub numbering: String,
     pub node_id: String,
     pub summary: String,
-    pub weight: i32,
-    #[serde(default)]
-    pub children: Vec<GoalNode>,
+    pub weight: f64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GoalTree {
     #[serde(default = "default_root_partition")]
     pub root_partition: Vec<String>,
-    #[serde(default = "default_user_partition_root")]
-    pub user_partition: GoalNode,
+    #[serde(default)]
+    pub user_partition: Vec<GoalNode>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -29,28 +29,28 @@ pub struct L1Memory {
     pub entries: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CognitionState {
     pub revision: u64,
     pub goal_tree: GoalTree,
     pub l1_memory: L1Memory,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum GoalTreePatchOp {
     Sprout {
-        parent_node_id: String,
+        numbering: String,
         node_id: String,
         summary: String,
-        weight: i32,
+        weight: f64,
     },
     Prune {
-        node_id: String,
+        numbering: String,
     },
     Tilt {
-        node_id: String,
-        weight: i32,
+        numbering: String,
+        weight: f64,
     },
 }
 
@@ -74,7 +74,7 @@ impl Default for GoalTree {
     fn default() -> Self {
         Self {
             root_partition: default_root_partition(),
-            user_partition: default_user_partition_root(),
+            user_partition: Vec::new(),
         }
     }
 }
@@ -91,13 +91,4 @@ impl Default for CognitionState {
 
 fn default_root_partition() -> Vec<String> {
     ROOT_PARTITION.iter().map(|s| (*s).to_string()).collect()
-}
-
-fn default_user_partition_root() -> GoalNode {
-    GoalNode {
-        node_id: "user-root".to_string(),
-        summary: "user goals".to_string(),
-        weight: 0,
-        children: Vec::new(),
-    }
 }

@@ -4,12 +4,12 @@
 
 - `GoalTree`
   - `root_partition: string[]` (immutable, compile-time constant mirror)
-  - `user_partition: GoalNode` (mutable tree)
+  - `user_partition: GoalNode[]` (mutable flat forest)
 - `GoalNode`
+  - `numbering: string` (hierarchy path, for example `1`, `1.2`, `2.1.3`)
   - `node_id: string`
   - `summary: string`
-  - `weight: i32`
-  - `children: GoalNode[]`
+  - `weight: float` (normalized `[0,1]`)
 - `L1Memory`
   - `entries: string[]`
 - `CognitionState`
@@ -52,8 +52,10 @@ No envelope wrapper objects are allowed around helper outputs.
 ## Deterministic Patch Rules
 
 - Goal-tree ops are applied to user partition only.
-- `sprout` fails closed if parent is missing or node_id already exists.
-- `prune` cannot remove `user-root`.
-- `tilt` clamps weight to configured bounds.
+- Goal-tree ops are numbering-based only: `sprout(numbering, node_id, summary, weight)`, `prune(numbering)`, `tilt(numbering, weight)`.
+- `sprout` fails closed if numbering is invalid or already exists.
+- `prune` removes target numbering and descendants by prefix.
+- `sprout` and `tilt` normalize incoming weights by dynamic Min-Max mapping from current forest weights.
+- If current forest range is degenerate (`max == min`) or empty, normalization falls back to `0.5`.
 - L1 ops apply on ordered list index semantics.
 - `revision` increments only when state changed.

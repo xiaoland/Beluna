@@ -32,43 +32,67 @@ pub(crate) fn apply_cognition_patches(
     next
 }
 
-fn apply_goal_tree_op(user_root: &mut GoalNode, op: &GoalTreePatchOp) -> bool {
+fn apply_goal_tree_op(user_partition: &mut Vec<GoalNode>, op: &GoalTreePatchOp) -> bool {
     match op {
         GoalTreePatchOp::Sprout {
-            parent_node_id,
+            numbering,
             node_id,
             summary,
             weight,
         } => {
-            if node_exists(user_root, node_id) {
+            if !is_valid_numbering(numbering) {
                 return false;
             }
-            let Some(parent) = find_node_mut(user_root, parent_node_id) else {
+            if user_partition
+                .iter()
+                .any(|node| node.numbering == *numbering)
+            {
+                return false;
+            }
+
+            let Some(normalized_weight) = normalize_weight(*weight, user_partition) else {
                 return false;
             };
-            parent.children.push(GoalNode {
+
+            user_partition.push(GoalNode {
+                numbering: numbering.clone(),
                 node_id: node_id.clone(),
                 summary: summary.clone(),
-                weight: clamp_weight(*weight),
-                children: Vec::new(),
+                weight: normalized_weight,
             });
             true
         }
-        GoalTreePatchOp::Prune { node_id } => {
-            if node_id == "user-root" {
+        GoalTreePatchOp::Prune { numbering } => {
+            if !is_valid_numbering(numbering) {
                 return false;
             }
-            prune_node(user_root, node_id)
+
+            let descendant_prefix = format!("{numbering}.");
+            let original_len = user_partition.len();
+            user_partition.retain(|node| {
+                node.numbering != *numbering && !node.numbering.starts_with(&descendant_prefix)
+            });
+            user_partition.len() != original_len
         }
-        GoalTreePatchOp::Tilt { node_id, weight } => {
-            let Some(node) = find_node_mut(user_root, node_id) else {
+        GoalTreePatchOp::Tilt { numbering, weight } => {
+            if !is_valid_numbering(numbering) {
+                return false;
+            }
+            let Some(idx) = user_partition
+                .iter()
+                .position(|node| node.numbering == *numbering)
+            else {
                 return false;
             };
-            let clamped = clamp_weight(*weight);
-            if node.weight == clamped {
+
+            let Some(normalized_weight) = normalize_weight(*weight, user_partition) else {
+                return false;
+            };
+
+            if (user_partition[idx].weight - normalized_weight).abs() <= f64::EPSILON {
                 return false;
             }
-            node.weight = clamped;
+            user_partition[idx].weight = normalized_weight;
             true
         }
     }
@@ -97,46 +121,59 @@ fn apply_l1_memory_op(entries: &mut Vec<String>, op: &L1MemoryPatchOp) -> bool {
     }
 }
 
-fn node_exists(node: &GoalNode, node_id: &str) -> bool {
-    if node.node_id == node_id {
-        return true;
+fn normalize_weight(weight: f64, user_partition: &[GoalNode]) -> Option<f64> {
+    if !weight.is_finite() {
+        return None;
     }
-    node.children
-        .iter()
-        .any(|child| node_exists(child, node_id))
-}
 
-fn find_node_mut<'a>(node: &'a mut GoalNode, node_id: &str) -> Option<&'a mut GoalNode> {
-    if node.node_id == node_id {
-        return Some(node);
+    if user_partition.is_empty() {
+        return Some(0.5);
     }
-    for child in &mut node.children {
-        if let Some(found) = find_node_mut(child, node_id) {
-            return Some(found);
+
+    let mut min_weight = user_partition[0].weight;
+    let mut max_weight = user_partition[0].weight;
+    for node in user_partition.iter().skip(1) {
+        if node.weight < min_weight {
+            min_weight = node.weight;
+        }
+        if node.weight > max_weight {
+            max_weight = node.weight;
         }
     }
-    None
+
+    let span = max_weight - min_weight;
+    if span.abs() <= f64::EPSILON {
+        return Some(0.5);
+    }
+
+    if weight < min_weight || weight > max_weight {
+        return None;
+    }
+
+    Some((weight - min_weight) / span)
 }
 
-fn prune_node(node: &mut GoalNode, target: &str) -> bool {
-    if let Some(idx) = node
-        .children
-        .iter()
-        .position(|child| child.node_id == target)
-    {
-        node.children.remove(idx);
-        return true;
+fn is_valid_numbering(numbering: &str) -> bool {
+    if numbering.is_empty() {
+        return false;
     }
-    for child in &mut node.children {
-        if prune_node(child, target) {
-            return true;
+
+    for segment in numbering.split('.') {
+        if segment.is_empty() {
+            return false;
+        }
+        if !segment.chars().all(|ch| ch.is_ascii_digit()) {
+            return false;
+        }
+        if segment.starts_with('0') && segment.len() > 1 {
+            return false;
+        }
+        if segment == "0" {
+            return false;
         }
     }
-    false
-}
 
-fn clamp_weight(weight: i32) -> i32 {
-    weight.clamp(-1000, 1000)
+    true
 }
 
 pub(crate) fn acts_json_schema() -> serde_json::Value {
@@ -164,31 +201,31 @@ pub(crate) fn goal_tree_patch_ops_json_schema() -> serde_json::Value {
                     "type": "object",
                     "properties": {
                         "op": { "type": "string", "const": "sprout" },
-                        "parent_node_id": { "type": "string" },
+                        "numbering": { "type": "string" },
                         "node_id": { "type": "string" },
                         "summary": { "type": "string" },
-                        "weight": { "type": "integer" }
+                        "weight": { "type": "number" }
                     },
-                    "required": ["op", "parent_node_id", "node_id", "summary", "weight"],
+                    "required": ["op", "numbering", "node_id", "summary", "weight"],
                     "additionalProperties": false
                 },
                 {
                     "type": "object",
                     "properties": {
                         "op": { "type": "string", "const": "prune" },
-                        "node_id": { "type": "string" }
+                        "numbering": { "type": "string" }
                     },
-                    "required": ["op", "node_id"],
+                    "required": ["op", "numbering"],
                     "additionalProperties": false
                 },
                 {
                     "type": "object",
                     "properties": {
                         "op": { "type": "string", "const": "tilt" },
-                        "node_id": { "type": "string" },
-                        "weight": { "type": "integer" }
+                        "numbering": { "type": "string" },
+                        "weight": { "type": "number" }
                     },
-                    "required": ["op", "node_id", "weight"],
+                    "required": ["op", "numbering", "weight"],
                     "additionalProperties": false
                 }
             ]

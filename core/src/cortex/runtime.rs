@@ -583,7 +583,7 @@ impl Cortex {
         let root = serde_json::to_string_pretty(&cognition_state.goal_tree.root_partition)
             .unwrap_or_else(|_| "[]".to_string());
         let merged = format!(
-            "## root partition\n{}\n\n## user partition\n{}",
+            "## root partition\n{}\n\n## user partition forest\n{}",
             root, generated
         );
 

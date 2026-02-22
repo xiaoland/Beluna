@@ -13,6 +13,7 @@
 - [ ] config.rs 过耦合了其它业务，我认为就根据 json schema 来检查就可以了
 - [ ] Stem Loop 按时间运行；cortex 可以触发 act sleep （注意区分休眠和睡眠）
 - [ ] descriptor 缺少 description 字段 😆
+- [ ] 文档化拓扑结构
 
 ### Cortex
 
@@ -34,6 +35,12 @@
   - 规定 Pyload Schema ？这里有一个 Gap，那就是 Act Payload 和 Primary Intent 直接的 Gap；或者说在复杂 json 下，markdown 的 representation 显得无力。
 - [ ] Primary LLM 不是 transform , sir... 所以 Primary 的 LLM Prompt 应该是什么
 - [x] InputIR GoalTree 现在什么情况，感觉很混乱
+- [ ] Cognition Organ 的 system prompt 和 user prompt 位置不对。user prompt 就是数据；system prompt 纯粹 instrutction
+
+### Continuity
+
+- [ ] 被动/主动回忆 与 被动/主动记忆；被动记忆还涉及到 sense 权重；Act其实不用记住，因为 Sense 会回传。
+- [ ] 重命名 l1-memory 为 scratchpad 或者别的生物学隐喻的东西
 
 ### Spine
 
@@ -72,3 +79,7 @@
 - [ ] 检查到 socket 存在不代表就要连接，把 Beluna 的状态和连接状态分开。
 - [x] 哪来的那么多命令行窗口？
 - [ ] 作为 Body Endpoint 哪来的 Spine ? 请直接命名为 BodyEndpoint 即可
+- [ ] Consolidate core's o11y into chat view:
+  - 移动 metrics 到顶部，和状态
+  - 将关键日志渲染为 tool call message
+  - polling 日志或者说有更优雅的 watch

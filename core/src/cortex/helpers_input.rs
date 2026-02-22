@@ -49,9 +49,9 @@ pub(crate) fn fallback_goal_tree_section(cognition_state: &CognitionState) -> St
     let root_json = serde_json::to_string_pretty(&cognition_state.goal_tree.root_partition)
         .unwrap_or_else(|_| "[]".to_string());
     let user_json = serde_json::to_string_pretty(&cognition_state.goal_tree.user_partition)
-        .unwrap_or_else(|_| "{}".to_string());
+        .unwrap_or_else(|_| "[]".to_string());
     format!(
-        "## root partition\n{}\n\n## user partition\n{}",
+        "## root partition\n{}\n\n## user partition forest\n{}",
         root_json, user_json
     )
 }
@@ -63,7 +63,7 @@ pub(crate) fn l1_memory_section(cognition_state: &CognitionState) -> String {
 
 pub(crate) fn goal_tree_user_partition_json(cognition_state: &CognitionState) -> String {
     serde_json::to_string_pretty(&cognition_state.goal_tree.user_partition)
-        .unwrap_or_else(|_| "{}".to_string())
+        .unwrap_or_else(|_| "[]".to_string())
 }
 
 pub(crate) fn l1_memory_json(cognition_state: &CognitionState) -> String {
@@ -168,6 +168,6 @@ pub(crate) fn act_descriptor_cache_key(act_descriptors: &[NeuralSignalDescriptor
 
 pub(crate) fn goal_tree_cache_key(cognition_state: &CognitionState) -> String {
     let canonical = serde_json::to_string(&cognition_state.goal_tree.user_partition)
-        .unwrap_or_else(|_| "{}".to_string());
+        .unwrap_or_else(|_| "[]".to_string());
     format!("{:x}", md5::compute(canonical.as_bytes()))
 }

@@ -116,27 +116,57 @@ pub fn validate_cognition_state(state: &CognitionState) -> Result<(), Continuity
         ));
     }
 
-    if state.goal_tree.user_partition.node_id != "user-root" {
-        return Err(invariant_violation(
-            "goal-tree user partition root node_id must be 'user-root'",
-        ));
+    let mut numbering_set = BTreeSet::new();
+    for node in &state.goal_tree.user_partition {
+        validate_goal_node(node, &mut numbering_set)?;
     }
-
-    let mut ids = BTreeSet::new();
-    collect_node_ids(&state.goal_tree.user_partition, &mut ids)?;
 
     Ok(())
 }
 
-fn collect_node_ids(node: &GoalNode, ids: &mut BTreeSet<String>) -> Result<(), ContinuityError> {
-    if !ids.insert(node.node_id.clone()) {
+fn validate_goal_node(
+    node: &GoalNode,
+    numbering_set: &mut BTreeSet<String>,
+) -> Result<(), ContinuityError> {
+    if !is_valid_numbering(&node.numbering) {
         return Err(invariant_violation(format!(
-            "duplicate goal node id '{}'",
-            node.node_id
+            "invalid goal numbering '{}'",
+            node.numbering
         )));
     }
-    for child in &node.children {
-        collect_node_ids(child, ids)?;
+    if !numbering_set.insert(node.numbering.clone()) {
+        return Err(invariant_violation(format!(
+            "duplicate goal numbering '{}'",
+            node.numbering
+        )));
     }
+    if !node.weight.is_finite() || !(0.0..=1.0).contains(&node.weight) {
+        return Err(invariant_violation(format!(
+            "goal weight must be finite and in [0,1], got {} for numbering '{}'",
+            node.weight, node.numbering
+        )));
+    }
+
     Ok(())
+}
+
+fn is_valid_numbering(numbering: &str) -> bool {
+    if numbering.is_empty() {
+        return false;
+    }
+    for segment in numbering.split('.') {
+        if segment.is_empty() {
+            return false;
+        }
+        if !segment.chars().all(|ch| ch.is_ascii_digit()) {
+            return false;
+        }
+        if segment == "0" {
+            return false;
+        }
+        if segment.starts_with('0') && segment.len() > 1 {
+            return false;
+        }
+    }
+    true
 }

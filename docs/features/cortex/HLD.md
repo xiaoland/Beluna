@@ -43,6 +43,6 @@ Patch application is done inside Cortex to produce full `new_cognition_state`.
 ## Invariants
 
 - Root partition is immutable and never modified by Cortex patching.
-- User partition and L1 memory are mutable through allowed op sets only.
+- User partition is a flat forest mutated by numbering-based `sprout/prune/tilt`; L1 memory is mutable through allowed op sets.
 - Primary behavior invariants are expressed by prompt contract, not hard-coded policy branches.
 - Helper protocol remains semantic-first and plumbing-free.

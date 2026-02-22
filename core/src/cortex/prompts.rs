@@ -10,7 +10,7 @@ pub fn primary_system_prompt() -> String {
         "or l1-memory-patch is destroyed at tick end.\n",
         "Your reality is split into cognition state and physical state.\n",
         "Cognition state:\n",
-        "- <goal-tree>: root partition is immutable instincts; user partition is mutable mission tree.\n",
+        "- <goal-tree>: root partition is immutable instincts; user partition is a mutable forest (use hierarchy numbering).\n",
         "- <l1-memory>: ordered list of notes left by past selves.\n",
         "Physical state:\n",
         "- <act-descriptor-catalog>: the only actions the vessel can execute now.\n",
@@ -81,11 +81,10 @@ pub fn build_goal_tree_helper_prompt(user_partition_json: &str) -> String {
         concat!(
             "Convert <goal-forest> into compact cognition-friendly markdown.\n",
             "Rules:\n",
-            "1) Keep structure and node identity semantics.\n",
-            "2) Use `(w=)` representing weight.\n",
-            "3) Each node a line.\n",
+            "1) Each node a line.\n",
+            "2) Avoid bold or italic.\n",
+            "3) Use `(w=)` representing weight.\n",
             "4) Return markdown only.\n",
-            "5) Avoid bold or italic.\n\n",
             "<goal-forest>\n{}\n</goal-forest>"
         ),
         user_partition_json
@@ -118,12 +117,10 @@ pub fn build_goal_tree_patch_helper_prompt(
     format!(
         concat!(
             "Convert <goal-tree-patch> section into GoalTreePatchOp JSON array. Return JSON array only.\n",
-            "Current user partition:\n",
-            "{}\n",
-            "Output IR:\n",
-            "{}\n\n",
-            "Goal-tree-patch section:\n",
-            "{}"
+            "Patch ops must be numbering-based only: sprout(numbering,node_id,summary,weight), prune(numbering), tilt(numbering,weight).\n",
+            "<current-goal-tree-user-partition>\n{}\n</current-goal-tree-user-partition>",
+            "<output-ir>\n{}\n</output-ir>\n\n", // FIXME has this OutputIR filtered out goal-tree-patch section?
+            "<goal-tree-patch>\n{}\n</goal-tree-patch>\n"
         ),
         user_partition_json, output_ir, goal_tree_patch_section
     )
