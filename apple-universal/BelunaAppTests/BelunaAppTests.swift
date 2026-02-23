@@ -75,15 +75,12 @@ struct BelunaAppTests {
             return
         }
         #expect(
-            actResultSchema["required"]?.arrayValue?.contains(.string("kind")) == true
-                && actResultSchema["required"]?.arrayValue?.contains(.string("act_instance_id")) == true
-                && actResultSchema["required"]?.arrayValue?.contains(.string("status")) == true
-                && actResultSchema["required"]?.arrayValue?.contains(.string("reference_id")) == true
+            actResultSchema["required"]?.arrayValue?.contains(.string("act_instance_id")) == true
+                && actResultSchema["required"]?.arrayValue?.contains(.string("is_presented")) == true
+                && actResultSchema["required"]?.arrayValue?.contains(.string("is_user_read")) == true
         )
-        #expect(
-            actResultSchema["properties"]?.objectValue?["kind"]?.objectValue?["const"]?.stringValue
-                == "present_message_result"
-        )
+        #expect(actResultSchema["properties"]?.objectValue?["is_presented"]?.objectValue?["type"]?.stringValue == "boolean")
+        #expect(actResultSchema["properties"]?.objectValue?["is_user_read"]?.objectValue?["type"]?.stringValue == "boolean")
     }
 
     @Test func actAckEnvelopeMatchesCoreContract() throws {
@@ -105,8 +102,8 @@ struct BelunaAppTests {
         )
         let envelope = makeActResultSenseEnvelope(
             action: action,
-            status: "applied",
-            referenceID: "apple-universal:chat:\(action.actID)"
+            isPresented: true,
+            isUserRead: false
         )
 
         #expect(envelope.method == "sense")
@@ -117,8 +114,8 @@ struct BelunaAppTests {
             return
         }
         #expect(payload["act_instance_id"]?.stringValue == action.actID)
-        #expect(payload["status"]?.stringValue == "applied")
-        #expect(payload["reference_id"]?.stringValue == "apple-universal:chat:\(action.actID)")
+        #expect(payload["is_presented"]?.boolValue == true)
+        #expect(payload["is_user_read"]?.boolValue == false)
     }
 
     @Test func decodesCoreActEnvelope() throws {

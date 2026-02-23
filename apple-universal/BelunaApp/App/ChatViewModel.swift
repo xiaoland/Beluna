@@ -498,8 +498,8 @@ final class ChatViewModel: ObservableObject {
 
             try await spineBodyEndpoint.sendActResultSense(
                 action: action,
-                status: "applied",
-                referenceID: "apple-universal:chat:\(action.actID)"
+                isPresented: true,
+                isUserRead: false
             )
         } catch {
             await rejectInvoke(action: action, reasonCode: "invalid_payload")
@@ -512,9 +512,8 @@ final class ChatViewModel: ObservableObject {
         do {
             try await spineBodyEndpoint.sendActResultSense(
                 action: action,
-                status: "rejected",
-                referenceID: "apple-universal:chat:reject:\(action.actID)",
-                reasonCode: reasonCode
+                isPresented: false,
+                isUserRead: false
             )
         } catch {
             appendSystemMessage("Failed to send invoke result sense: \(describeError(error))")

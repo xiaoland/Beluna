@@ -70,4 +70,11 @@ enum JSONValue: Codable, Equatable {
         }
         return nil
     }
+
+    var boolValue: Bool? {
+        if case let .bool(value) = self {
+            return value
+        }
+        return nil
+    }
 }

@@ -1,9 +1,9 @@
 import Foundation
 
 let appleEndpointName = "macos-app"
-let appleActNeuralSignalDescriptorID = "present_text_message"
+let appleActNeuralSignalDescriptorID = "present.text_message"
 let appleUserSenseNeuralSignalDescriptorID = "apple.chat.user_message"
-let appleActResultSenseNeuralSignalDescriptorID = "apple.chat.present_message_result"
+let appleActResultSenseNeuralSignalDescriptorID = "apple.chat.present_message_success"
 
 enum NeuralSignalTypeWire: String, Codable, Equatable {
     case sense
@@ -169,27 +169,19 @@ func makeAppleEndpointRegisterEnvelope() -> NDJSONEnvelope<AuthBodyWire> {
                     payloadSchema: .object([
                         "type": .string("object"),
                         "required": .array([
-                            .string("kind"),
                             .string("act_instance_id"),
-                            .string("status"),
-                            .string("reference_id")
+                            .string("is_presented"),
+                            .string("is_user_read")
                         ]),
                         "properties": .object([
-                            "kind": .object([
-                                "type": .string("string"),
-                                "const": .string("present_message_result")
-                            ]),
                             "act_instance_id": .object([
                                 "type": .string("string")
                             ]),
-                            "status": .object([
-                                "type": .string("string")
+                            "is_presented": .object([
+                                "type": .string("boolean")
                             ]),
-                            "reference_id": .object([
-                                "type": .string("string")
-                            ]),
-                            "reason_code": .object([
-                                "type": .string("string")
+                            "is_user_read": .object([
+                                "type": .string("boolean")
                             ])
                         ])
                     ])
@@ -226,19 +218,14 @@ func makeUserSenseEnvelope(conversationID: String, text: String) -> NDJSONEnvelo
 
 func makeActResultSenseEnvelope(
     action: InboundActWire,
-    status: String,
-    referenceID: String,
-    reasonCode: String? = nil
+    isPresented: Bool,
+    isUserRead: Bool
 ) -> NDJSONEnvelope<SenseBodyWire> {
-    var payload: [String: JSONValue] = [
-        "kind": .string("present_message_result"),
-        "status": .string(status),
+    let payload: [String: JSONValue] = [
         "act_instance_id": .string(action.actID),
-        "reference_id": .string(referenceID)
+        "is_presented": .bool(isPresented),
+        "is_user_read": .bool(isUserRead)
     ]
-    if let reasonCode {
-        payload["reason_code"] = .string(reasonCode)
-    }
 
     return makeEnvelope(
         method: "sense",

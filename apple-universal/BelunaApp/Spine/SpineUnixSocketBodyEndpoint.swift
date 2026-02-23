@@ -118,15 +118,13 @@ actor SpineUnixSocketBodyEndpoint {
 
     func sendActResultSense(
         action: InboundActWire,
-        status: String,
-        referenceID: String,
-        reasonCode: String? = nil
+        isPresented: Bool,
+        isUserRead: Bool
     ) async throws {
         let envelope = makeActResultSenseEnvelope(
             action: action,
-            status: status,
-            referenceID: referenceID,
-            reasonCode: reasonCode
+            isPresented: isPresented,
+            isUserRead: isUserRead
         )
         try await sendLine(envelope)
     }
