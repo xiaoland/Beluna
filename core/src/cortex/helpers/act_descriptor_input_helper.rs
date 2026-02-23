@@ -110,7 +110,7 @@ pub(crate) fn fallback_act_descriptor_catalog_section(
         let payload_schema_json = serde_json::to_string_pretty(&descriptor.payload_schema)
             .unwrap_or_else(|_| "{}".to_string());
         entries.push(format!(
-            "<act-descriptor fq-act-id=\"{}\">\n## payload-schema\n{}\n</act-descriptor>",
+            "<act-descriptor act-id=\"{}\">\n## payload-schema\n{}\n</act-descriptor>",
             escape_xml_attr(&build_fq_neural_signal_id(
                 &descriptor.endpoint_id,
                 &descriptor.neural_signal_descriptor_id,
@@ -135,7 +135,7 @@ pub(crate) fn wrap_act_descriptor_catalog_entry(
         &descriptor.neural_signal_descriptor_id,
     );
     format!(
-        "<act-descriptor fq-act-id=\"{}\">\n{}\n</act-descriptor>",
+        "<act-descriptor act-id=\"{}\">\n{}\n</act-descriptor>",
         escape_xml_attr(&fq_act_id),
         markdown.trim(),
     )

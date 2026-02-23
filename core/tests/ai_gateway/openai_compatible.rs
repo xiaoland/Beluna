@@ -45,6 +45,7 @@ async fn given_missing_endpoint_when_openai_compatible_invoked_then_invalid_requ
             credential: CredentialRef::None,
             models: vec![beluna::ai_gateway::types::ModelProfile {
                 id: "gpt-4.1-mini".to_string(),
+                aliases: vec![],
             }],
             capabilities: None,
             copilot: None,

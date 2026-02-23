@@ -44,7 +44,7 @@ impl GoalTreeInputHelper {
     ) -> Result<GoalTreeInputSections, CortexError> {
         let instincts_section = instincts_section(&goal_tree.root_partition);
         let willpower_matrix_section = self
-            .to_willpower_matrix_section(runtime, cycle_id, goal_tree)
+            .to_willpower_matrix_section(runtime, cycle_id, &goal_tree.user_partition)
             .await?;
         Ok(GoalTreeInputSections {
             instincts_section,
@@ -56,13 +56,12 @@ impl GoalTreeInputHelper {
         &self,
         runtime: &impl HelperRuntime,
         cycle_id: u64,
-        goal_tree: &GoalTree,
+        user_partition: &[GoalNode],
     ) -> Result<String, CortexError> {
-        let user_partition = &goal_tree.user_partition;
         let stage = CognitionOrgan::GoalTree.stage();
         let user_partition_json = goal_tree_user_partition_json(user_partition);
         let input_payload = helpers::pretty_json(&serde_json::json!({
-            "goal_tree": goal_tree,
+            "goal_tree_user_partition": user_partition,
         }));
         helpers::log_organ_input(cycle_id, stage, &input_payload);
 
@@ -87,7 +86,7 @@ impl GoalTreeInputHelper {
         let generated = if let Some(hooks) = runtime.hooks() {
             (hooks.goal_tree_helper)(TestGoalTreeHelperRequest {
                 cycle_id,
-                goal_tree: goal_tree.clone(),
+                user_partition_json: user_partition_json.clone(),
             })
             .await?
         } else {

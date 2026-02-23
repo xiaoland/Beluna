@@ -26,6 +26,8 @@ impl BackendRouter {
         }
 
         let mut backends = HashMap::new();
+        let mut route_aliases = HashMap::new();
+
         for profile in &config.backends {
             if profile.models.is_empty() {
                 return Err(invalid_request(format!(
@@ -48,6 +50,30 @@ impl BackendRouter {
                         profile.id, model.id
                     )));
                 }
+
+                // Build route aliases from model-level aliases
+                for alias in &model.aliases {
+                    let trimmed_alias = alias.trim();
+                    if trimmed_alias.is_empty() {
+                        return Err(invalid_request(format!(
+                            "backend '{}' model '{}' contains empty alias",
+                            profile.id, model.id
+                        )));
+                    }
+                    if route_aliases.contains_key(trimmed_alias) {
+                        return Err(invalid_request(format!(
+                            "duplicate alias '{}' in ai_gateway.backends",
+                            trimmed_alias
+                        )));
+                    }
+                    route_aliases.insert(
+                        trimmed_alias.to_string(),
+                        ModelTarget {
+                            backend_id: profile.id.clone(),
+                            model_id: model.id.clone(),
+                        },
+                    );
+                }
             }
 
             if backends
@@ -61,43 +87,11 @@ impl BackendRouter {
             }
         }
 
-        let route_aliases = config
-            .route_aliases
-            .iter()
-            .map(|(alias, target)| (alias.trim().to_string(), target.clone()))
-            .collect::<HashMap<_, _>>();
-
         if !route_aliases.contains_key(DEFAULT_ROUTE_ALIAS) {
             return Err(invalid_request(format!(
-                "ai_gateway.route_aliases must include '{}'",
+                "ai_gateway.backends must define alias '{}' on some model",
                 DEFAULT_ROUTE_ALIAS
             )));
-        }
-
-        for (alias, target) in &route_aliases {
-            if alias.is_empty() {
-                return Err(invalid_request(
-                    "ai_gateway.route_aliases cannot contain empty keys",
-                ));
-            }
-
-            let backend = backends.get(&target.backend_id).ok_or_else(|| {
-                invalid_request(format!(
-                    "alias '{}' points to missing backend '{}'",
-                    alias, target.backend_id
-                ))
-            })?;
-
-            if !backend
-                .models
-                .iter()
-                .any(|model| model.id == target.model_id)
-            {
-                return Err(invalid_request(format!(
-                    "alias '{}' points to unknown model '{}' on backend '{}'",
-                    alias, target.model_id, target.backend_id
-                )));
-            }
         }
 
         Ok(Self {

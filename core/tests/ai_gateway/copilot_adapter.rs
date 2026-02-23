@@ -45,6 +45,7 @@ async fn given_missing_copilot_config_when_invoked_then_first_stream_item_is_inv
             credential: CredentialRef::None,
             models: vec![beluna::ai_gateway::types::ModelProfile {
                 id: "copilot-default".to_string(),
+                aliases: vec![],
             }],
             capabilities: None,
             copilot: None,

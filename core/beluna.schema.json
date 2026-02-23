@@ -9,32 +9,6 @@
     "ai_gateway": {
       "type": "object",
       "properties": {
-        "route_aliases": {
-          "type": "object",
-          "minProperties": 1,
-          "propertyNames": {
-            "type": "string",
-            "minLength": 1
-          },
-          "additionalProperties": {
-            "type": "object",
-            "properties": {
-              "backend_id": {
-                "type": "string",
-                "minLength": 1
-              },
-              "model_id": {
-                "type": "string",
-                "minLength": 1
-              }
-            },
-            "required": [
-              "backend_id",
-              "model_id"
-            ],
-            "additionalProperties": false
-          }
-        },
         "reliability": {
           "type": "object",
           "properties": {
@@ -182,6 +156,13 @@
                     "id": {
                       "type": "string",
                       "minLength": 1
+                    },
+                    "aliases": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
                     }
                   },
                   "required": [
@@ -251,8 +232,7 @@
         }
       },
       "required": [
-        "backends",
-        "route_aliases"
+        "backends"
       ],
       "additionalProperties": false
     },

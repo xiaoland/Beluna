@@ -1,10 +1,8 @@
-use std::collections::BTreeMap;
-
 use beluna::ai_gateway::{
     router::BackendRouter,
     types::{
         AIGatewayConfig, BackendDialect, BackendProfile, BudgetConfig, CredentialRef, ModelProfile,
-        ModelTarget, ReliabilityConfig,
+        ReliabilityConfig,
     },
     types_chat::{
         CanonicalContentPart, CanonicalLimits, CanonicalMessage, CanonicalOutputMode,
@@ -13,22 +11,6 @@ use beluna::ai_gateway::{
 };
 
 fn gateway_config() -> AIGatewayConfig {
-    let mut route_aliases = BTreeMap::new();
-    route_aliases.insert(
-        "default".to_string(),
-        ModelTarget {
-            backend_id: "primary".to_string(),
-            model_id: "m1".to_string(),
-        },
-    );
-    route_aliases.insert(
-        "low-cost".to_string(),
-        ModelTarget {
-            backend_id: "secondary".to_string(),
-            model_id: "m2".to_string(),
-        },
-    );
-
     AIGatewayConfig {
         backends: vec![
             BackendProfile {
@@ -38,6 +20,7 @@ fn gateway_config() -> AIGatewayConfig {
                 credential: CredentialRef::None,
                 models: vec![ModelProfile {
                     id: "m1".to_string(),
+                    aliases: vec!["default".to_string()],
                 }],
                 capabilities: None,
                 copilot: None,
@@ -49,12 +32,12 @@ fn gateway_config() -> AIGatewayConfig {
                 credential: CredentialRef::None,
                 models: vec![ModelProfile {
                     id: "m2".to_string(),
+                    aliases: vec!["low-cost".to_string()],
                 }],
                 capabilities: None,
                 copilot: None,
             },
         ],
-        route_aliases,
         reliability: ReliabilityConfig::default(),
         budget: BudgetConfig::default(),
     }

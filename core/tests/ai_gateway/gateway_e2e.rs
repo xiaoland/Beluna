@@ -19,8 +19,8 @@ use beluna::ai_gateway::{
     gateway::AIGateway,
     types::{
         AIGatewayConfig, AdapterContext, BackendCapabilities, BackendDialect, BackendProfile,
-        BudgetConfig, CredentialRef, ModelProfile, ModelTarget, ReliabilityConfig,
-        ResolvedCredential, RetryPolicy,
+        BudgetConfig, CredentialRef, ModelProfile, ReliabilityConfig, ResolvedCredential,
+        RetryPolicy,
     },
     types_chat::{
         AdapterInvocation, BackendIdentity, BackendRawEvent, BelunaContentPart, BelunaMessage,
@@ -245,15 +245,6 @@ fn gateway_config() -> AIGatewayConfig {
 }
 
 fn gateway_config_with_budget(budget: BudgetConfig) -> AIGatewayConfig {
-    let mut route_aliases = BTreeMap::new();
-    route_aliases.insert(
-        "default".to_string(),
-        ModelTarget {
-            backend_id: "openai-default".to_string(),
-            model_id: "m1".to_string(),
-        },
-    );
-
     AIGatewayConfig {
         backends: vec![BackendProfile {
             id: "openai-default".to_string(),
@@ -262,6 +253,7 @@ fn gateway_config_with_budget(budget: BudgetConfig) -> AIGatewayConfig {
             credential: CredentialRef::None,
             models: vec![ModelProfile {
                 id: "m1".to_string(),
+                aliases: vec!["default".to_string()],
             }],
             capabilities: Some(BackendCapabilities {
                 streaming: true,
@@ -273,7 +265,6 @@ fn gateway_config_with_budget(budget: BudgetConfig) -> AIGatewayConfig {
             }),
             copilot: None,
         }],
-        route_aliases,
         reliability: ReliabilityConfig {
             request_timeout_ms: 30_000,
             max_retries: 2,

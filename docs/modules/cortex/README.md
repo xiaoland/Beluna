@@ -3,9 +3,11 @@
 Cortex is the stateless deliberative cognition module.
 
 Code:
+
 - `core/src/cortex/*`
 
 Key properties:
+
 - pure runtime boundary: `cortex(senses, physical_state, cognition_state) -> (acts, new_cognition_state, wait_for_sense)`
 - no internal durable persistence of cognition state
 - Cortex is the cognition engine; Primary is the cognition core inside Cortex.
@@ -20,7 +22,7 @@ Key properties:
 - helpers are cognition organs that reduce Primary cognition-load; LLM handles semantic conversion/extraction, while deterministic assembly (catalog XML, IDs) is in Rust
 - runtime (`core/src/cortex/runtime.rs`) only orchestrates state/IR stages and fallback policy, not helper conversion internals
 - `sense_helper` takes raw sense inputs, internally composes `fq_sense_id`, and emits `<sense fq-sense-id="...">...`
-- `act_descriptor_helper` takes raw descriptors, internally composes `fq_act_id`, and emits `<act-descriptor fq-act-id="...">...`
+- `act_descriptor_helper` takes raw descriptors, internally composes `fq_act_id`, and emits `<act-descriptor act-id="...">...`
 - goal-tree helper boundary receives full goal-tree (`root_partition + user_partition`); root conversion is consolidated inside helper module
 - goal-tree helper cache remains keyed by user partition forest
 - when `user_partition` is empty, goal-tree section uses deterministic one-shot pursuits

@@ -422,17 +422,12 @@ mod tests {
         }},
         "models": [
           {{
-            "id": "m1"
+            "id": "m1",
+            "aliases": ["default"]
           }}
         ]
       }}
-    ],
-    "route_aliases": {{
-      "default": {{
-        "backend_id": "backend-default",
-        "model_id": "m1"
-      }}
-    }}
+    ]
   }},
   "logging": {{
     "retention_days": 0
@@ -473,17 +468,12 @@ mod tests {
         }},
         "models": [
           {{
-            "id": "m1"
+            "id": "m1",
+            "aliases": ["default"]
           }}
         ]
       }}
-    ],
-    "route_aliases": {{
-      "default": {{
-        "backend_id": "backend-default",
-        "model_id": "m1"
-      }}
-    }}
+    ]
   }},
   "cortex": {{
     "primary_route": "default"

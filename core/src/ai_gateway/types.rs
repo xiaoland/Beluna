@@ -94,6 +94,8 @@ pub struct BackendProfile {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ModelProfile {
     pub id: ModelId,
+    #[serde(default)]
+    pub aliases: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -205,8 +207,6 @@ impl Default for RetryPolicy {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AIGatewayConfig {
     pub backends: Vec<BackendProfile>,
-    #[serde(default)]
-    pub route_aliases: BTreeMap<String, ModelTarget>,
     #[serde(default)]
     pub reliability: ReliabilityConfig,
     #[serde(default)]

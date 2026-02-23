@@ -45,6 +45,7 @@ async fn given_missing_endpoint_when_ollama_invoked_then_invalid_request_is_retu
             credential: CredentialRef::None,
             models: vec![beluna::ai_gateway::types::ModelProfile {
                 id: "qwen2.5-coder:7b".to_string(),
+                aliases: vec![],
             }],
             capabilities: None,
             copilot: None,

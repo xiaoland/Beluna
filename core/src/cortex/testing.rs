@@ -1,7 +1,7 @@
 use std::{future::Future, pin::Pin, sync::Arc};
 
 use crate::{
-    cortex::{CognitionState, Cortex, CortexError, GoalTree, GoalTreePatchOp, ReactionLimits},
+    cortex::{CognitionState, Cortex, CortexError, GoalTreePatchOp, ReactionLimits},
     types::{NeuralSignalDescriptor, Sense},
 };
 
@@ -21,7 +21,7 @@ pub struct ActDescriptorHelperRequest {
 #[derive(Debug, Clone)]
 pub struct GoalTreeHelperRequest {
     pub cycle_id: u64,
-    pub goal_tree: GoalTree,
+    pub user_partition_json: String,
 }
 
 #[derive(Debug, Clone)]

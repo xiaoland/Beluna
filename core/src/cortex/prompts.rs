@@ -73,7 +73,7 @@ pub fn act_descriptor_helper_system_prompt() -> String {
         "Rules:\n",
         "1) Return the converted text only.\n",
         "2) You can use markdown for complex schema.\n",
-        "3) Avoid using bold, italic markup."
+        "3) Do NOT use bold, italic markup."
     )
     .to_string()
 }
