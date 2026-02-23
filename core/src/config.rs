@@ -67,19 +67,8 @@ fn default_logging_filter() -> String {
     "info".to_string()
 }
 
-fn default_logging_rotation() -> LoggingRotation {
-    LoggingRotation::Daily
-}
-
 fn default_logging_retention_days() -> usize {
     14
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
-pub enum LoggingRotation {
-    Daily,
-    Hourly,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -88,8 +77,6 @@ pub struct LoggingConfig {
     pub dir: PathBuf,
     #[serde(default = "default_logging_filter")]
     pub filter: String,
-    #[serde(default = "default_logging_rotation")]
-    pub rotation: LoggingRotation,
     #[serde(default = "default_logging_retention_days")]
     pub retention_days: usize,
     #[serde(default = "default_enabled_true")]
@@ -101,7 +88,6 @@ impl Default for LoggingConfig {
         Self {
             dir: default_logging_dir(),
             filter: default_logging_filter(),
-            rotation: default_logging_rotation(),
             retention_days: default_logging_retention_days(),
             stderr_warn_enabled: true,
         }
@@ -404,32 +390,15 @@ mod tests {
 
     use uuid::Uuid;
 
-    use super::{Config, LoggingConfig, LoggingRotation};
+    use super::{Config, LoggingConfig};
 
     #[test]
     fn logging_config_defaults_match_contract() {
         let config = LoggingConfig::default();
         assert_eq!(config.dir, std::path::PathBuf::from("./logs/core"));
         assert_eq!(config.filter, "info");
-        assert_eq!(config.rotation, LoggingRotation::Daily);
         assert_eq!(config.retention_days, 14);
         assert!(config.stderr_warn_enabled);
-    }
-
-    #[test]
-    fn logging_rotation_hourly_is_deserialized() {
-        #[derive(serde::Deserialize)]
-        struct Wrapper {
-            logging: LoggingConfig,
-        }
-
-        let parsed: Wrapper = serde_json::from_value(serde_json::json!({
-            "logging": {
-                "rotation": "hourly"
-            }
-        }))
-        .expect("wrapper should deserialize");
-        assert_eq!(parsed.logging.rotation, LoggingRotation::Hourly);
     }
 
     #[test]

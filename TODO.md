@@ -34,9 +34,9 @@
 - [x] Metrics: cycle id, neural-signal-descriptor catalog, token consumed
 - [x] llm input / output log 是什么鬼，不应该让 ai gateway 来吗
 - [ ] Input IR 存在效率问题
-  - act-descriptor 存在 tag attrubutes 和 body markdown 重复的问题。
-  - 整个 Input IR act-descriptor 就应该是 markdown ，并且避免使用各种 text style markup。
-  - 规定 Pyload Schema ？这里有一个 Gap，那就是 Act Payload 和 Primary Intent 直接的 Gap；或者说在复杂 json 下，markdown 的 representation 显得无力。
+  - [x] act-descriptor 存在 tag attrubutes 和 body markdown 重复的问题。
+  - [x] 整个 Input IR act-descriptor 就应该是 markdown ，并且避免使用各种 text style markup。
+  - [ ] 规定 Pyload Schema ？这里有一个 Gap，那就是 Act Payload 和 Primary Intent 直接的 Gap；或者说在复杂 json 下，markdown 的 representation 显得无力。
 - [ ] Primary LLM 不是 transform , sir... 所以 Primary 的 LLM Prompt 应该是什么
 - [x] InputIR GoalTree 现在什么情况，感觉很混乱
 - [x] Cognition Organ 的 system prompt 和 user prompt 位置不对。user prompt 就是数据；system prompt 纯粹 instrutction
@@ -53,7 +53,9 @@
 - [x] goal-tree user_partition 怎么一直空空的，有bug
 - [x] sense_helper 建议产出 payload 的 markdown，外面包一层 xml tag `<sense>` 以及 metadata 在 input-ir 中
 - [x] goal-tree user-partition 才是 matrix-willpower
-- [ ] 什么鬼是 primary-helper ？
+- [ ] 什么鬼是 primary-helper ？需要重构，在代码模块层面理清楚 helper 与 primary
+- [ ] endpoint-id 和 neural-signal-descriptor-id 在 input ir 中合并为 (fully-qualified) act-id, sense-id；
+      这意味着 output-ir 中输出的是 fully-qualified act-id，这时候就需要 helper 根据 catalog 拆开。
 
 ### Continuity
 
@@ -82,6 +84,7 @@
 - [x] O11y in Error Handling
 - [x] Pull Metrics Endpoint
 - [ ] Local metrics (cortex-organ-output)
+- [ ] rotate，但是基于日期 + awake from hibernate times monotoic int
 
 ### AI Gateway
 
@@ -114,3 +117,4 @@
   - 移动 metrics 到顶部，和状态
   - 将关键日志渲染为 tool call message
   - polling 日志或者说有更优雅的 watch
+- [ ] Sense, Act persistence

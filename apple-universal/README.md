@@ -20,7 +20,7 @@ Minimal SwiftUI chat-style Body Endpoint for Beluna Spine UnixSocket.
 13. Polls Core Prometheus metrics every 5 seconds and surfaces key Cortex gauges in the chat header.
 14. Supports manual metrics refresh in the chat header.
 15. Polls Beluna Core logs every 3 seconds and pairs `cortex_organ_input` + `cortex_organ_output`.
-16. Aggregates paired organ logs by `cycle_id` into in-chat cortex cycle cards.
+16. Parses awake sequence from `core.log.<YYYY-MM-DD>.<n>` and aggregates paired organ logs by `(awake_sequence, cycle_id)` into in-chat cortex cycle cards.
 17. Opens a cortex cycle popup on click to list per-stage organ activity messages with selectable input/output payload text.
 18. Supports configurable metrics endpoint and log directory in `SettingView`.
 19. Uses a bounded in-memory chat message ring buffer with configurable capacity.

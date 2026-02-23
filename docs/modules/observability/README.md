@@ -14,9 +14,10 @@ This module defines Core runtime observability conventions and cross-module tele
 Core initializes tracing at startup (`core/src/logging.rs`) with:
 
 1. `tracing_error::ErrorLayer` for richer error context in span trees.
-2. JSON file layer (rotating file appender):
+2. JSON file layer (local file appender):
    - includes timestamp, level, target, fields, current span, span list
-   - rotation: `daily` or `hourly`
+   - file name format: `core.log.<YYYY-MM-DD>.<awake_sequence>`
+   - `awake_sequence` is monotonic per date and increments on each process wake/start
    - retention cleanup: `logging.retention_days` (default 14)
 3. stderr mirror layer:
    - enabled by `logging.stderr_warn_enabled`

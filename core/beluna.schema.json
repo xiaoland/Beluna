@@ -267,13 +267,6 @@
           "type": "string",
           "minLength": 1
         },
-        "rotation": {
-          "type": "string",
-          "enum": [
-            "daily",
-            "hourly"
-          ]
-        },
         "retention_days": {
           "type": "integer",
           "minimum": 1

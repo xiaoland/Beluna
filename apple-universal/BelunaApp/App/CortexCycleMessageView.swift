@@ -34,6 +34,14 @@ struct CortexCycleMessageView: View {
                 Text("\(payload.cycleID)")
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
+                if let awakeSequence = payload.awakeSequence {
+                    Text("awake \(awakeSequence)")
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(Color.primary.opacity(0.06), in: Capsule())
+                }
                 Spacer()
                 Text(Self.timestampFormatter.string(from: message.timestamp))
                     .font(.caption2.monospaced())
@@ -75,7 +83,7 @@ private struct CortexCycleDetailView: View {
                 }
                 .padding(12)
             }
-            .navigationTitle("Cortex Cycle \(payload.cycleID)")
+            .navigationTitle(navigationTitleText)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
@@ -85,6 +93,13 @@ private struct CortexCycleDetailView: View {
             }
         }
         .frame(minWidth: 760, minHeight: 520)
+    }
+
+    private var navigationTitleText: String {
+        if let awakeSequence = payload.awakeSequence {
+            return "Awake \(awakeSequence) · Cortex Cycle \(payload.cycleID)"
+        }
+        return "Cortex Cycle \(payload.cycleID)"
     }
 }
 

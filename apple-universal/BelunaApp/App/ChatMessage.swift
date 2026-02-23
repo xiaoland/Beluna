@@ -32,6 +32,7 @@ struct OrganActivityMessagePayload: Identifiable, Equatable {
 
 struct CortexCycleMessagePayload: Equatable {
     let cycleID: UInt64
+    let awakeSequence: UInt64?
     var organActivityMessages: [OrganActivityMessagePayload]
 }
 
@@ -65,7 +66,13 @@ struct ChatMessage: Identifiable, Equatable {
         case let .text(text):
             return text
         case let .cortexCycle(payload):
-            return "[cortex cycle] \(payload.cycleID), \(payload.organActivityMessages.count) organ activity message(s)"
+            let awakeSuffix: String
+            if let awakeSequence = payload.awakeSequence {
+                awakeSuffix = ", awake \(awakeSequence)"
+            } else {
+                awakeSuffix = ""
+            }
+            return "[cortex cycle] \(payload.cycleID)\(awakeSuffix), \(payload.organActivityMessages.count) organ activity message(s)"
         }
     }
 }

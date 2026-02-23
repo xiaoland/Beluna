@@ -128,7 +128,7 @@ final class ChatViewModel: ObservableObject {
     private var messageBuffer: [ChatMessage] = []
     private var visibleMessageRange: Range<Int> = 0..<0
 
-    private var cortexCycleMessageIDs: [UInt64: UUID] = [:]
+    private var cortexCycleMessageIDs: [String: UUID] = [:]
     private var pendingOrganInputs: [String: [OrganLogEvent]] = [:]
     private var pendingOrganOutputs: [String: [OrganLogEvent]] = [:]
     private var seenOrganEventIDs = Set<String>()
@@ -153,6 +153,7 @@ final class ChatViewModel: ObservableObject {
     private static let messageCapacityDefaultsKey = "beluna.apple-universal.message_capacity"
 
     private nonisolated static let maxLogReadBytes: Int64 = 512 * 1024
+    private nonisolated static let coreLogFilePrefix = "core.log"
 
     private static let metricsTimeFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -674,7 +675,11 @@ final class ChatViewModel: ObservableObject {
     }
 
     private func handleOrganLogEvent(_ event: OrganLogEvent) {
-        let key = Self.organPairKey(cycleID: event.cycleID, stage: event.stage)
+        let key = Self.organPairKey(
+            cycleID: event.cycleID,
+            awakeSequence: event.awakeSequence,
+            stage: event.stage
+        )
 
         switch event.kind {
         case .input:
@@ -703,6 +708,7 @@ final class ChatViewModel: ObservableObject {
 
         appendCortexCycleMessage(
             cycleID: input.cycleID,
+            awakeSequence: input.awakeSequence,
             organActivityMessage: organActivityMessage,
             timestamp: timestamp
         )
@@ -710,10 +716,12 @@ final class ChatViewModel: ObservableObject {
 
     private func appendCortexCycleMessage(
         cycleID: UInt64,
+        awakeSequence: UInt64?,
         organActivityMessage: OrganActivityMessagePayload,
         timestamp: Date
     ) {
-        if let existingMessageID = cortexCycleMessageIDs[cycleID],
+        let cycleKey = Self.cortexCycleKey(cycleID: cycleID, awakeSequence: awakeSequence)
+        if let existingMessageID = cortexCycleMessageIDs[cycleKey],
            let existingIndex = messageBuffer.firstIndex(where: { $0.id == existingMessageID }),
            case var .cortexCycle(existingPayload) = messageBuffer[existingIndex].body {
             existingPayload.organActivityMessages.append(organActivityMessage)
@@ -723,14 +731,15 @@ final class ChatViewModel: ObservableObject {
             return
         }
 
-        cortexCycleMessageIDs.removeValue(forKey: cycleID)
+        cortexCycleMessageIDs.removeValue(forKey: cycleKey)
 
         let payload = CortexCycleMessagePayload(
             cycleID: cycleID,
+            awakeSequence: awakeSequence,
             organActivityMessages: [organActivityMessage]
         )
         let cycleMessage = ChatMessage(cortexCycle: payload, timestamp: timestamp)
-        cortexCycleMessageIDs[cycleID] = cycleMessage.id
+        cortexCycleMessageIDs[cycleKey] = cycleMessage.id
         appendBufferedMessage(cycleMessage)
     }
 
@@ -906,8 +915,12 @@ final class ChatViewModel: ObservableObject {
                 continue
             }
 
-            if cortexCycleMessageIDs[payload.cycleID] == message.id {
-                cortexCycleMessageIDs.removeValue(forKey: payload.cycleID)
+            let cycleKey = Self.cortexCycleKey(
+                cycleID: payload.cycleID,
+                awakeSequence: payload.awakeSequence
+            )
+            if cortexCycleMessageIDs[cycleKey] == message.id {
+                cortexCycleMessageIDs.removeValue(forKey: cycleKey)
             }
         }
     }
@@ -1152,7 +1165,11 @@ final class ChatViewModel: ObservableObject {
 
             for file in candidates {
                 let content = loadTailContent(fileURL: file.url, maxReadBytes: maxLogReadBytes)
-                let fileEvents = parseOrganLogEvents(from: content, sourcePath: file.url.path)
+                let fileEvents = parseOrganLogEvents(
+                    from: content,
+                    sourcePath: file.url.path,
+                    sourceAwakeSequence: file.awakeSequence
+                )
                 events.append(contentsOf: fileEvents)
             }
 
@@ -1164,6 +1181,9 @@ final class ChatViewModel: ObservableObject {
                 }
                 if lhs.cycleID != rhs.cycleID {
                     return lhs.cycleID < rhs.cycleID
+                }
+                if lhs.awakeSequence != rhs.awakeSequence {
+                    return (lhs.awakeSequence ?? 0) < (rhs.awakeSequence ?? 0)
                 }
                 if lhs.stage != rhs.stage {
                     return lhs.stage < rhs.stage
@@ -1203,11 +1223,16 @@ final class ChatViewModel: ObservableObject {
             guard values.isRegularFile == true else {
                 continue
             }
+            let fileName = url.lastPathComponent
+            guard fileName.hasPrefix(coreLogFilePrefix) else {
+                continue
+            }
 
             files.append(
                 LogFileMetadata(
                     url: url.standardizedFileURL,
-                    modifiedAt: values.contentModificationDate
+                    modifiedAt: values.contentModificationDate,
+                    awakeSequence: parseAwakeSequence(from: fileName)
                 )
             )
         }
@@ -1243,7 +1268,8 @@ final class ChatViewModel: ObservableObject {
 
     private nonisolated static func parseOrganLogEvents(
         from content: String,
-        sourcePath: String
+        sourcePath: String,
+        sourceAwakeSequence: UInt64?
     ) -> [OrganLogEvent] {
         var events: [OrganLogEvent] = []
 
@@ -1282,7 +1308,9 @@ final class ChatViewModel: ObservableObject {
             }
 
             let timestampRaw = payload["timestamp"] as? String ?? ""
-            let eventID = "\(sourcePath)|\(timestampRaw)|\(message)|\(cycleID)|\(stage)|\(eventPayload.hashValue)"
+            let awakePart = sourceAwakeSequence.map(String.init) ?? "unknown"
+            let eventID =
+                "\(sourcePath)|\(awakePart)|\(timestampRaw)|\(message)|\(cycleID)|\(stage)|\(eventPayload.hashValue)"
 
             events.append(
                 OrganLogEvent(
@@ -1290,6 +1318,7 @@ final class ChatViewModel: ObservableObject {
                     kind: kind,
                     timestamp: parseTimestamp(timestampRaw),
                     cycleID: cycleID,
+                    awakeSequence: sourceAwakeSequence,
                     stage: stage,
                     payload: eventPayload
                 )
@@ -1353,8 +1382,55 @@ final class ChatViewModel: ObservableObject {
         return formatter.date(from: value)
     }
 
-    private nonisolated static func organPairKey(cycleID: UInt64, stage: String) -> String {
-        "\(cycleID)|\(stage)"
+    private nonisolated static func parseAwakeSequence(from fileName: String) -> UInt64? {
+        let prefix = "\(coreLogFilePrefix)."
+        guard fileName.hasPrefix(prefix) else {
+            return nil
+        }
+        let suffix = fileName.dropFirst(prefix.count)
+        let parts = suffix.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 2 else {
+            return nil
+        }
+        let datePart = String(parts[0])
+        let sequencePart = String(parts[1])
+        guard isDateLiteral(datePart), let sequence = UInt64(sequencePart), sequence > 0 else {
+            return nil
+        }
+        return sequence
+    }
+
+    private nonisolated static func isDateLiteral(_ value: String) -> Bool {
+        let bytes = Array(value.utf8)
+        guard bytes.count == 10 else {
+            return false
+        }
+        return isASCIIDigit(bytes[0])
+            && isASCIIDigit(bytes[1])
+            && isASCIIDigit(bytes[2])
+            && isASCIIDigit(bytes[3])
+            && bytes[4] == 45
+            && isASCIIDigit(bytes[5])
+            && isASCIIDigit(bytes[6])
+            && bytes[7] == 45
+            && isASCIIDigit(bytes[8])
+            && isASCIIDigit(bytes[9])
+    }
+
+    private nonisolated static func isASCIIDigit(_ value: UInt8) -> Bool {
+        value >= 48 && value <= 57
+    }
+
+    private nonisolated static func organPairKey(
+        cycleID: UInt64,
+        awakeSequence: UInt64?,
+        stage: String
+    ) -> String {
+        "\(awakeSequence.map(String.init) ?? "unknown")|\(cycleID)|\(stage)"
+    }
+
+    private nonisolated static func cortexCycleKey(cycleID: UInt64, awakeSequence: UInt64?) -> String {
+        "\(awakeSequence.map(String.init) ?? "unknown")|\(cycleID)"
     }
 }
 
@@ -1367,6 +1443,7 @@ private struct MetricsSnapshot: Sendable {
 private struct LogFileMetadata: Sendable {
     let url: URL
     let modifiedAt: Date?
+    let awakeSequence: UInt64?
 }
 
 private struct OrganLogsSnapshot: Sendable {
@@ -1393,6 +1470,7 @@ private struct OrganLogEvent: Sendable {
     let kind: OrganLogEventKind
     let timestamp: Date?
     let cycleID: UInt64
+    let awakeSequence: UInt64?
     let stage: String
     let payload: String
 }

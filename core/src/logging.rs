@@ -1,23 +1,23 @@
 use std::{
-    fs,
+    fs::{self, OpenOptions},
+    io::ErrorKind,
     path::{Path, PathBuf},
     time::{Duration, SystemTime},
 };
 
 use anyhow::{Context, Result, anyhow};
-use tracing_appender::{
-    non_blocking::WorkerGuard,
-    rolling::{self, RollingFileAppender},
-};
+use time::{OffsetDateTime, UtcOffset};
+use tracing_appender::non_blocking::WorkerGuard;
 use tracing_error::ErrorLayer;
 use tracing_subscriber::{
     EnvFilter, Layer, filter::LevelFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt,
 };
 use uuid::Uuid;
 
-use crate::config::{LoggingConfig, LoggingRotation};
+use crate::config::LoggingConfig;
 
 const LOG_FILE_PREFIX: &str = "core.log";
+const LOG_FILE_DATE_SEPARATOR: char = '-';
 
 pub struct LoggingGuard {
     _worker_guard: WorkerGuard,
@@ -44,8 +44,9 @@ pub fn init_tracing(logging_config: &LoggingConfig) -> Result<LoggingGuard> {
 
     let retention_warnings =
         purge_old_log_files(&log_dir, LOG_FILE_PREFIX, logging_config.retention_days);
-    let appender = build_rolling_appender(&log_dir, logging_config.rotation.clone());
-    let (non_blocking_writer, worker_guard) = tracing_appender::non_blocking(appender);
+    let (log_file, log_file_path, awake_sequence) =
+        open_log_file_for_awake(&log_dir, LOG_FILE_PREFIX)?;
+    let (non_blocking_writer, worker_guard) = tracing_appender::non_blocking(log_file);
     let env_filter = build_env_filter(&logging_config.filter)?;
 
     let file_layer = fmt::layer()
@@ -77,8 +78,9 @@ pub fn init_tracing(logging_config: &LoggingConfig) -> Result<LoggingGuard> {
         target: "logging",
         run_id = %run_id,
         dir = %log_dir.display(),
+        log_file = %log_file_path.display(),
+        awake_sequence = awake_sequence,
         filter = %logging_config.filter,
-        rotation = ?logging_config.rotation,
         retention_days = logging_config.retention_days,
         stderr_warn_enabled = logging_config.stderr_warn_enabled,
         "logging_initialized"
@@ -98,10 +100,29 @@ fn build_env_filter(filter: &str) -> Result<EnvFilter> {
         .with_context(|| format!("failed to parse logging.filter '{}'", filter))
 }
 
-fn build_rolling_appender(log_dir: &Path, rotation: LoggingRotation) -> RollingFileAppender {
-    match rotation {
-        LoggingRotation::Daily => rolling::daily(log_dir, LOG_FILE_PREFIX),
-        LoggingRotation::Hourly => rolling::hourly(log_dir, LOG_FILE_PREFIX),
+fn open_log_file_for_awake(prefix_dir: &Path, prefix: &str) -> Result<(fs::File, PathBuf, u64)> {
+    let date = current_local_date_string(SystemTime::now());
+    let mut sequence = next_awake_sequence(prefix_dir, prefix, &date)?;
+    loop {
+        let file_name = format!("{prefix}.{date}.{sequence}");
+        let file_path = prefix_dir.join(&file_name);
+        match OpenOptions::new()
+            .create_new(true)
+            .append(true)
+            .open(&file_path)
+        {
+            Ok(file) => return Ok((file, file_path, sequence)),
+            Err(err) if err.kind() == ErrorKind::AlreadyExists => {
+                sequence = sequence.saturating_add(1);
+            }
+            Err(err) => {
+                return Err(anyhow!(
+                    "failed to create log file {}: {}",
+                    file_path.display(),
+                    err
+                ));
+            }
+        }
     }
 }
 
@@ -113,6 +134,54 @@ fn resolve_log_dir(dir: &Path) -> Result<PathBuf> {
     Ok(std::env::current_dir()
         .context("failed to read current working directory for logging.dir resolution")?
         .join(dir))
+}
+
+fn current_local_date_string(now: SystemTime) -> String {
+    let now = OffsetDateTime::from(now);
+    let now_local = UtcOffset::current_local_offset()
+        .map(|offset| now.to_offset(offset))
+        .unwrap_or(now);
+    let date = now_local.date();
+    format!(
+        "{:04}{sep}{:02}{sep}{:02}",
+        date.year(),
+        u8::from(date.month()),
+        date.day(),
+        sep = LOG_FILE_DATE_SEPARATOR
+    )
+}
+
+fn next_awake_sequence(log_dir: &Path, prefix: &str, date: &str) -> Result<u64> {
+    let mut max_sequence = 0_u64;
+    let entries = fs::read_dir(log_dir)
+        .with_context(|| format!("failed to scan logging directory {}", log_dir.display()))?;
+    for entry_result in entries {
+        let entry = entry_result.with_context(|| {
+            format!("failed to iterate logging directory {}", log_dir.display())
+        })?;
+        let metadata = entry
+            .metadata()
+            .with_context(|| format!("failed to stat {}", entry.path().display()))?;
+        if !metadata.is_file() {
+            continue;
+        }
+        let file_name = entry.file_name();
+        let file_name = file_name.to_string_lossy();
+        if let Some(sequence) = parse_awake_sequence_from_file_name(&file_name, prefix, date) {
+            max_sequence = max_sequence.max(sequence);
+        }
+    }
+    Ok(max_sequence.saturating_add(1))
+}
+
+fn parse_awake_sequence_from_file_name(file_name: &str, prefix: &str, date: &str) -> Option<u64> {
+    let file_name_prefix = format!("{prefix}.{date}.");
+    let sequence = file_name.strip_prefix(&file_name_prefix)?;
+    if sequence.is_empty() || !sequence.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    let parsed = sequence.parse::<u64>().ok()?;
+    (parsed > 0).then_some(parsed)
 }
 
 fn purge_old_log_files(log_dir: &Path, prefix: &str, retention_days: usize) -> Vec<String> {
@@ -209,7 +278,10 @@ mod tests {
 
     use uuid::Uuid;
 
-    use super::{build_env_filter, purge_old_log_files_at};
+    use super::{
+        build_env_filter, next_awake_sequence, parse_awake_sequence_from_file_name,
+        purge_old_log_files_at,
+    };
 
     #[test]
     fn invalid_filter_is_rejected() {
@@ -221,7 +293,7 @@ mod tests {
     fn retention_cleanup_only_removes_prefixed_files() {
         let dir = std::env::temp_dir().join(format!("beluna-logging-test-{}", Uuid::now_v7()));
         fs::create_dir_all(&dir).expect("temp dir should exist");
-        let expired_log = dir.join("core.log.2026-02-01");
+        let expired_log = dir.join("core.log.2026-02-01.1");
         let keep_file = dir.join("keep.txt");
 
         fs::write(&expired_log, "old").expect("log file should be created");
@@ -236,7 +308,50 @@ mod tests {
         assert!(!expired_log.exists(), "prefixed file should be removed");
         assert!(keep_file.exists(), "non-prefixed file should remain");
 
-        let _ = fs::remove_file(&keep_file);
-        let _ = fs::remove_dir(&dir);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn parse_awake_sequence_accepts_new_file_name_pattern() {
+        assert_eq!(
+            parse_awake_sequence_from_file_name("core.log.2026-02-20.1", "core.log", "2026-02-20"),
+            Some(1)
+        );
+        assert_eq!(
+            parse_awake_sequence_from_file_name("core.log.2026-02-20", "core.log", "2026-02-20"),
+            None
+        );
+        assert_eq!(
+            parse_awake_sequence_from_file_name("core.log.2026-02-20.x", "core.log", "2026-02-20"),
+            None
+        );
+        assert_eq!(
+            parse_awake_sequence_from_file_name("core.log.2026-02-21.3", "core.log", "2026-02-20"),
+            None
+        );
+    }
+
+    #[test]
+    fn next_awake_sequence_uses_max_existing_counter_for_same_date() {
+        let dir = std::env::temp_dir().join(format!("beluna-logging-test-{}", Uuid::now_v7()));
+        fs::create_dir_all(&dir).expect("temp dir should exist");
+
+        let files = [
+            "core.log.2026-02-20.1",
+            "core.log.2026-02-20.3",
+            "core.log.2026-02-20.invalid",
+            "core.log.2026-02-20",
+            "core.log.2026-02-19.9",
+            "other.log.2026-02-20.99",
+        ];
+        for file in files {
+            fs::write(dir.join(file), "x").expect("test file should be created");
+        }
+
+        let next = next_awake_sequence(&dir, "core.log", "2026-02-20")
+            .expect("sequence scan should succeed");
+        assert_eq!(next, 4);
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }
