@@ -41,7 +41,7 @@ fn physical_state_with_descriptor(descriptor_id: &str) -> PhysicalState {
 
 fn domain_sense() -> Sense {
     Sense::Domain(SenseDatum {
-        sense_id: "sense:1".to_string(),
+        sense_instance_id: "sense:1".to_string(),
         endpoint_id: "ep.demo".to_string(),
         neural_signal_descriptor_id: "sense.demo".to_string(),
         payload: serde_json::json!({"x":1}),

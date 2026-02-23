@@ -2,9 +2,9 @@
 
 mod clamp;
 pub mod cognition;
+mod cognition_patch;
 mod error;
-mod helpers_input;
-mod helpers_output;
+mod helpers;
 mod ir;
 mod prompts;
 mod runtime;

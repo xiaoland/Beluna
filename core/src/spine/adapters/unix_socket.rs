@@ -48,14 +48,14 @@ enum InboundBodyMessage {
     },
     Sense(InboundSenseFrame),
     ActAck {
-        act_id: String,
+        act_instance_id: String,
     },
     Unplug,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 struct InboundSenseFrame {
-    sense_id: String,
+    sense_instance_id: String,
     neural_signal_descriptor_id: String,
     payload: serde_json::Value,
 }
@@ -71,7 +71,7 @@ struct InboundAuthBody {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct InboundSenseBody {
-    sense_id: String,
+    sense_instance_id: String,
     neural_signal_descriptor_id: String,
     payload: serde_json::Value,
 }
@@ -79,7 +79,7 @@ struct InboundSenseBody {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct InboundActAckBody {
-    act_id: String,
+    act_instance_id: String,
 }
 
 fn parse_body_afferent_message(line: &str) -> Result<InboundBodyMessage, serde_json::Error> {
@@ -108,9 +108,9 @@ fn parse_body_afferent_message(line: &str) -> Result<InboundBodyMessage, serde_j
             let mut payload = body.payload;
             normalize_correlated_sense_payload(&mut payload);
             validate_correlated_sense_payload(&payload)?;
-            if !is_uuid_v4(&body.sense_id) {
+            if !is_uuid_v4(&body.sense_instance_id) {
                 return Err(invalid_correlated_sense_error(
-                    "sense_id must be a valid uuid-v4 string",
+                    "sense_instance_id must be a valid uuid-v4 string",
                 ));
             }
             if body.neural_signal_descriptor_id.trim().is_empty() {
@@ -119,20 +119,20 @@ fn parse_body_afferent_message(line: &str) -> Result<InboundBodyMessage, serde_j
                 ));
             }
             InboundBodyMessage::Sense(InboundSenseFrame {
-                sense_id: body.sense_id,
+                sense_instance_id: body.sense_instance_id,
                 neural_signal_descriptor_id: body.neural_signal_descriptor_id,
                 payload,
             })
         }
         "act_ack" => {
             let body: InboundActAckBody = decode_envelope_body(wire.body)?;
-            if !is_uuid_v7(&body.act_id) {
+            if !is_uuid_v7(&body.act_instance_id) {
                 return Err(invalid_correlated_sense_error(
-                    "act_ack.act_id must be a valid uuid-v7 string",
+                    "act_ack.act_instance_id must be a valid uuid-v7 string",
                 ));
             }
             InboundBodyMessage::ActAck {
-                act_id: body.act_id,
+                act_instance_id: body.act_instance_id,
             }
         }
         "unplug" => InboundBodyMessage::Unplug,
@@ -161,7 +161,7 @@ fn normalize_correlated_sense_payload(payload: &mut serde_json::Value) {
         return;
     };
 
-    if object.contains_key("act_id") {
+    if object.contains_key("act_instance_id") {
         return;
     }
 
@@ -175,7 +175,7 @@ fn normalize_correlated_sense_payload(payload: &mut serde_json::Value) {
     };
 
     object.insert(
-        "act_id".to_string(),
+        "act_instance_id".to_string(),
         serde_json::Value::String(neural_signal_id.to_string()),
     );
 }
@@ -185,13 +185,13 @@ fn validate_correlated_sense_payload(payload: &serde_json::Value) -> Result<(), 
         return Ok(());
     };
 
-    let Some(act_id) = object.get("act_id") else {
+    let Some(act_instance_id) = object.get("act_instance_id") else {
         return Ok(());
     };
 
-    if !act_id.as_str().map(is_uuid_v7).unwrap_or(false) {
+    if !act_instance_id.as_str().map(is_uuid_v7).unwrap_or(false) {
         return Err(invalid_correlated_sense_error(
-            "act_id must be a valid uuid-v7 string",
+            "act_instance_id must be a valid uuid-v7 string",
         ));
     }
 
@@ -332,7 +332,7 @@ const ACT_ACK_MAX_RETRIES: usize = 2;
 
 async fn wait_for_act_ack(
     ack_rx: &mut mpsc::UnboundedReceiver<String>,
-    act_id: &str,
+    act_instance_id: &str,
     timeout_ms: u64,
 ) -> bool {
     let deadline = Instant::now() + Duration::from_millis(timeout_ms);
@@ -344,8 +344,8 @@ async fn wait_for_act_ack(
 
         let remaining = deadline.duration_since(now);
         match timeout(remaining, ack_rx.recv()).await {
-            Ok(Some(received_act_id)) => {
-                if received_act_id == act_id {
+            Ok(Some(received_act_instance_id)) => {
+                if received_act_instance_id == act_instance_id {
                     return true;
                 }
             }
@@ -385,7 +385,7 @@ async fn handle_body_endpoint(
                 tracing::debug!(
                     target: "spine.unix_socket",
                     channel_id = channel_id,
-                    act_id = %act.act_id,
+                    act_instance_id = %act.act_instance_id,
                     endpoint_id = %act.endpoint_id,
                     neural_signal_descriptor_id = %act.neural_signal_descriptor_id,
                     "dispatching_act_to_unix_socket_endpoint"
@@ -396,12 +396,13 @@ async fn handle_body_endpoint(
                     write_half.write_all(encoded.as_bytes()).await?;
                     write_half.flush().await?;
 
-                    if wait_for_act_ack(&mut ack_rx, &act.act_id, ACT_ACK_TIMEOUT_MS).await {
+                    if wait_for_act_ack(&mut ack_rx, &act.act_instance_id, ACT_ACK_TIMEOUT_MS).await
+                    {
                         acknowledged = true;
                         tracing::info!(
                             target: "spine.unix_socket",
                             channel_id = channel_id,
-                            act_id = %act.act_id,
+                            act_instance_id = %act.act_instance_id,
                             attempts = attempt + 1,
                             latency_ms = dispatch_started_at.elapsed().as_millis() as u64,
                             "act_dispatch_acknowledged_by_body_endpoint"
@@ -412,7 +413,7 @@ async fn handle_body_endpoint(
                     if attempt < ACT_ACK_MAX_RETRIES {
                         tracing::warn!(
                             target: "spine.unix_socket",
-                            act_id = %act.act_id,
+                            act_instance_id = %act.act_instance_id,
                             attempt = attempt + 1,
                             "act_ack_timeout_retrying_dispatch"
                         );
@@ -423,14 +424,14 @@ async fn handle_body_endpoint(
                     tracing::error!(
                         target: "spine.unix_socket",
                         channel_id = channel_id,
-                        act_id = %act.act_id,
+                        act_instance_id = %act.act_instance_id,
                         attempts = ACT_ACK_MAX_RETRIES + 1,
                         latency_ms = dispatch_started_at.elapsed().as_millis() as u64,
                         "act_dispatch_failed_after_ack_retries"
                     );
                     return Err(anyhow::anyhow!(
-                        "failed to receive act_ack after retries for act_id={}",
-                        act.act_id
+                        "failed to receive act_ack after retries for act_instance_id={}",
+                        act.act_instance_id
                     ));
                 }
             }
@@ -516,14 +517,14 @@ async fn handle_body_endpoint(
                         );
                     }
                 }
-                InboundBodyMessage::ActAck { act_id } => {
+                InboundBodyMessage::ActAck { act_instance_id } => {
                     tracing::debug!(
                         target: "spine.unix_socket",
                         channel_id = channel_id,
-                        act_id = %act_id,
+                        act_instance_id = %act_instance_id,
                         "received_act_ack_from_body_endpoint"
                     );
-                    if ack_tx.send(act_id).is_err() {
+                    if ack_tx.send(act_instance_id).is_err() {
                         tracing::warn!(
                             target: "spine.unix_socket",
                             "dropping_act_ack_because_writer_has_closed"
@@ -560,7 +561,7 @@ async fn handle_body_endpoint(
 
                     // Adapter injects endpoint_id from authenticated endpoint binding.
                     let sense = SenseDatum {
-                        sense_id: sense.sense_id,
+                        sense_instance_id: sense.sense_instance_id,
                         endpoint_id: body_endpoint_id.to_string(),
                         neural_signal_descriptor_id: sense.neural_signal_descriptor_id,
                         payload: sense.payload,
@@ -614,7 +615,7 @@ mod tests {
     #[test]
     fn accepts_sense_message() {
         let parsed = parse_body_afferent_message(
-            r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"41f25f33-99f5-4250-99c3-020f8a92e199","neural_signal_descriptor_id":"chat.message","payload":{"v":1}}}"#,
+            r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_instance_id":"41f25f33-99f5-4250-99c3-020f8a92e199","neural_signal_descriptor_id":"chat.message","payload":{"v":1}}}"#,
         )
         .expect("sense message should parse");
         assert!(matches!(parsed, InboundBodyMessage::Sense(_)));
@@ -623,7 +624,7 @@ mod tests {
     #[test]
     fn accepts_correlated_sense_message_without_legacy_echo_fields() {
         let parsed = parse_body_afferent_message(
-            r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"9d60f110-af6d-42cb-853b-bf6f6ce6f0dc","neural_signal_descriptor_id":"present.message.result","payload":{"kind":"present_message_result","act_id":"0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a"}}}"#,
+            r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_instance_id":"9d60f110-af6d-42cb-853b-bf6f6ce6f0dc","neural_signal_descriptor_id":"present.message.result","payload":{"kind":"present_message_result","act_instance_id":"0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a"}}}"#,
         )
         .expect("correlated sense should parse");
         assert!(matches!(parsed, InboundBodyMessage::Sense(_)));
@@ -632,14 +633,14 @@ mod tests {
     #[test]
     fn accepts_legacy_correlated_sense_message_with_neural_signal_alias() {
         let parsed = parse_body_afferent_message(
-            r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"9d60f110-af6d-42cb-853b-bf6f6ce6f0dc","neural_signal_descriptor_id":"present.message.result","payload":{"kind":"present_message_result","neural_signal_id":"0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a"}}}"#,
+            r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_instance_id":"9d60f110-af6d-42cb-853b-bf6f6ce6f0dc","neural_signal_descriptor_id":"present.message.result","payload":{"kind":"present_message_result","neural_signal_id":"0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a"}}}"#,
         )
         .expect("legacy correlated sense should parse");
 
         match parsed {
             InboundBodyMessage::Sense(sense) => {
                 assert_eq!(
-                    sense.payload.get("act_id"),
+                    sense.payload.get("act_instance_id"),
                     Some(&serde_json::json!("0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a"))
                 );
             }
@@ -648,10 +649,10 @@ mod tests {
     }
 
     #[test]
-    fn rejects_correlated_sense_message_invalid_act_id() {
+    fn rejects_correlated_sense_message_invalid_act_instance_id() {
         assert!(
             parse_body_afferent_message(
-                r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_id":"01234567-89ab-4cde-8f01-23456789abcd","neural_signal_descriptor_id":"present.message.result","payload":{"kind":"present_message_result","act_id":"not-a-uuid-v7"}}}"#
+                r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_instance_id":"01234567-89ab-4cde-8f01-23456789abcd","neural_signal_descriptor_id":"present.message.result","payload":{"kind":"present_message_result","act_instance_id":"not-a-uuid-v7"}}}"#
             )
             .is_err()
         );
@@ -670,7 +671,7 @@ mod tests {
     #[test]
     fn act_encoding_contains_act_and_target_fields() {
         let act = Act {
-            act_id: "0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a".to_string(),
+            act_instance_id: "0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a".to_string(),
             endpoint_id: "macos-app.01".to_string(),
             neural_signal_descriptor_id: "present.message".to_string(),
             payload: serde_json::json!({"ok": true}),
@@ -683,7 +684,7 @@ mod tests {
         assert!(uuid::Uuid::parse_str(&message.id).is_ok());
         assert!(message.timestamp > 0);
         assert_eq!(
-            message.body.act.act_id,
+            message.body.act.act_instance_id,
             "0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a"
         );
         assert_eq!(
@@ -693,7 +694,7 @@ mod tests {
         assert_eq!(message.body.act.payload, serde_json::json!({"ok": true}));
         assert!(encoded.contains("\"method\":\"act\""));
         assert!(encoded.contains("\"body\":{"));
-        assert!(encoded.contains("\"act_id\":\"0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a\""));
+        assert!(encoded.contains("\"act_instance_id\":\"0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a\""));
         assert!(encoded.contains("\"neural_signal_descriptor_id\":\"present.message\""));
     }
 

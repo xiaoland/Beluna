@@ -1,7 +1,4 @@
-use crate::{
-    cortex::helpers_input::PrimaryActDescriptor,
-    types::{NeuralSignalDescriptor, Sense},
-};
+use crate::types::{NeuralSignalDescriptor, Sense, build_fq_neural_signal_id};
 
 pub fn primary_system_prompt() -> String {
     concat!(
@@ -19,6 +16,7 @@ pub fn primary_system_prompt() -> String {
         "2. Your Physical State:\n",
         "- <act-descriptor-catalog>: The specific physical and cognitive tools your vessel",
         "can deploy right now.\n",
+        "- Sense/act identities in IR are descriptor identities represented as fully-qualified ids.\n",
 
         "External reality is only observable through <senses>. Treat senses as subjective signals, ",
         "not absolute truth. They may be incomplete, distorted, or confusing. You must interpret them.\n",
@@ -34,6 +32,7 @@ pub fn primary_system_prompt() -> String {
 
         "Conclude your time slice by emitting:\n",
         "- <acts> Interventions chosen from your descriptors to alter the world or your vessel.\n",
+        "  Each act must reference descriptor identity by fully-qualified act id (fq_act_id).\n",
         "- <willpower-matrix-patch> Adjustments to your imperatives.\n",
         "- <new-focal-awareness> The essential distilled truth and unresolved doubts you must",
         "transmit to your future self before you cease to exist in this moment.\n",
@@ -51,9 +50,9 @@ pub fn sense_helper_system_prompt() -> String {
         "You are Cortex Sense helper. Convert one sense payload into compact cognition-friendly markdown.\n",
         "Rules:\n",
         "1) Interpret payload semantics only.\n",
-        "2) Do not output transport ids such as sense_id, endpoint_id, or neural_signal_descriptor_id.\n",
+        "2) Do not output transport ids such as sense_instance_id, endpoint_id, or neural_signal_descriptor_id.\n",
         "3) Return markdown only.\n",
-        "4) Avoid markdown style markup such as bold or italic."
+        "4) Avoid using bold, italic markup."
     )
     .to_string()
 }
@@ -70,10 +69,11 @@ pub fn build_sense_helper_prompt(payload_json: &str, payload_schema_json: &str) 
 
 pub fn act_descriptor_helper_system_prompt() -> String {
     concat!(
-        "Convert one act payload schema into concise markdown.\n",
+        "Convert this act's payload schema (a JSON Schema) into narrtive, concise, cognition-friendly text.\n",
         "Rules:\n",
-        "1) Return markdown only.\n",
-        "2) Avoid markdown style markup such as bold or italic."
+        "1) Return the converted text only.\n",
+        "2) You can use markdown for complex schema.\n",
+        "3) Avoid using bold, italic markup."
     )
     .to_string()
 }
@@ -104,21 +104,37 @@ pub fn build_goal_tree_helper_prompt(user_partition_json: &str) -> String {
 pub fn acts_helper_system_prompt() -> String {
     concat!(
         "You are Cortex Acts helper. Convert <acts> cognition output into structured act drafts.\n",
+        "Contract: each item must contain endpoint_id, fq_act_id, payload.\n",
+        "fq_act_id must come from <act-descriptor-catalog>.\n",
         "Return JSON array only."
     )
     .to_string()
 }
 
 pub fn build_acts_helper_prompt(
-    semantic_act_catalog: &[PrimaryActDescriptor],
+    act_descriptor_catalog: &[NeuralSignalDescriptor],
     acts_section: &str,
 ) -> String {
+    let projected_catalog: Vec<_> = act_descriptor_catalog
+        .iter()
+        .map(|descriptor| {
+            serde_json::json!({
+                "endpoint_id": descriptor.endpoint_id,
+                "neural_signal_descriptor_id": descriptor.neural_signal_descriptor_id,
+                "fq_act_id": build_fq_neural_signal_id(
+                    &descriptor.endpoint_id,
+                    &descriptor.neural_signal_descriptor_id
+                ),
+                "payload_schema": descriptor.payload_schema,
+            })
+        })
+        .collect();
     format!(
         concat!(
-            "<semantic-act-catalog>\n{}\n</semantic-act-catalog>\n\n",
+            "<act-descriptor-catalog>\n{}\n</act-descriptor-catalog>\n\n",
             "<acts>\n{}\n</acts>"
         ),
-        serde_json::to_string_pretty(semantic_act_catalog).unwrap_or_else(|_| "[]".to_string()),
+        serde_json::to_string_pretty(&projected_catalog).unwrap_or_else(|_| "[]".to_string()),
         acts_section
     )
 }

@@ -66,13 +66,13 @@ impl LedgerStage {
             return Ok((DispatchDecision::Break, None));
         }
 
-        let cost_attribution_id = derive_cost_attribution_id(ctx.cycle_id, &act.act_id);
+        let cost_attribution_id = derive_cost_attribution_id(ctx.cycle_id, &act.act_instance_id);
         let reserve_entry_id = self.ledger.reserve(
             ctx.cycle_id,
             reserve_survival_micro,
             self.reservation_ttl_cycles,
             cost_attribution_id.clone(),
-            format!("reserve:{}", act.act_id),
+            format!("reserve:{}", act.act_instance_id),
             self.policy_versions.clone(),
         )?;
 
@@ -112,30 +112,30 @@ impl LedgerStage {
             SpineEvent::ActApplied {
                 reference_id,
                 actual_cost_micro,
-                act_id,
+                act_instance_id,
                 ..
             } => self.ledger.settle_reservation(
                 ctx.cycle_id,
                 &ticket.reserve_entry_id,
                 reference_id,
                 *actual_cost_micro,
-                Some(act_id.clone()),
+                Some(act_instance_id.clone()),
                 self.policy_versions.clone(),
             )?,
             SpineEvent::ActRejected {
                 reference_id,
-                act_id,
+                act_instance_id,
                 ..
             }
             | SpineEvent::ActDeferred {
                 reference_id,
-                act_id,
+                act_instance_id,
                 ..
             } => self.ledger.refund_reservation(
                 ctx.cycle_id,
                 &ticket.reserve_entry_id,
                 reference_id,
-                Some(act_id.clone()),
+                Some(act_instance_id.clone()),
                 self.policy_versions.clone(),
             )?,
         }
@@ -188,10 +188,10 @@ impl LedgerStage {
     }
 }
 
-fn derive_cost_attribution_id(cycle_id: u64, act_id: &str) -> String {
+fn derive_cost_attribution_id(cycle_id: u64, act_instance_id: &str) -> String {
     let canonical = serde_json::json!({
         "cycle_id": cycle_id,
-        "act_id": act_id,
+        "act_instance_id": act_instance_id,
     });
     let mut hasher = Sha256::new();
     hasher.update(canonical.to_string().as_bytes());

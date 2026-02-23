@@ -1,10 +1,10 @@
 use uuid::Uuid;
 
-use crate::types::SenseId;
+use crate::types::SenseInstanceId;
 
-pub fn derive_act_id(
+pub fn derive_act_instance_id(
     cycle_id: u64,
-    based_on: &[SenseId],
+    based_on: &[SenseInstanceId],
     endpoint_id: &str,
     neural_signal_descriptor_id: &str,
     payload: &serde_json::Value,

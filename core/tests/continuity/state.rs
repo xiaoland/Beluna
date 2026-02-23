@@ -105,7 +105,7 @@ fn cognition_state_is_persisted() {
 fn spine_events_are_recorded() {
     let mut engine = ContinuityEngine::with_defaults();
     let act = Act {
-        act_id: "act:1".to_string(),
+        act_instance_id: "act:1".to_string(),
         endpoint_id: "ep.demo".to_string(),
         neural_signal_descriptor_id: "cap.demo".to_string(),
         payload: serde_json::json!({}),
@@ -117,7 +117,7 @@ fn spine_events_are_recorded() {
             &SpineEvent::ActApplied {
                 cycle_id: 1,
                 seq_no: 1,
-                act_id: act.act_id.clone(),
+                act_instance_id: act.act_instance_id.clone(),
                 reserve_entry_id: "res:1".to_string(),
                 cost_attribution_id: "cat:1".to_string(),
                 actual_cost_micro: 1,

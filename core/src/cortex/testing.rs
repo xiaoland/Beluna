@@ -1,7 +1,7 @@
 use std::{future::Future, pin::Pin, sync::Arc};
 
 use crate::{
-    cortex::{CognitionState, Cortex, CortexError, GoalTreePatchOp, ReactionLimits},
+    cortex::{CognitionState, Cortex, CortexError, GoalTree, GoalTreePatchOp, ReactionLimits},
     types::{NeuralSignalDescriptor, Sense},
 };
 
@@ -21,7 +21,7 @@ pub struct ActDescriptorHelperRequest {
 #[derive(Debug, Clone)]
 pub struct GoalTreeHelperRequest {
     pub cycle_id: u64,
-    pub user_partition_json: String,
+    pub goal_tree: GoalTree,
 }
 
 #[derive(Debug, Clone)]
@@ -53,7 +53,7 @@ pub struct L1MemoryFlushHelperRequest {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TestActDraft {
     pub endpoint_id: String,
-    pub neural_signal_descriptor_id: String,
+    pub fq_act_id: String,
     #[serde(default)]
     pub payload: serde_json::Value,
 }

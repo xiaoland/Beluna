@@ -76,7 +76,7 @@ struct BelunaAppTests {
         }
         #expect(
             actResultSchema["required"]?.arrayValue?.contains(.string("kind")) == true
-                && actResultSchema["required"]?.arrayValue?.contains(.string("act_id")) == true
+                && actResultSchema["required"]?.arrayValue?.contains(.string("act_instance_id")) == true
                 && actResultSchema["required"]?.arrayValue?.contains(.string("status")) == true
                 && actResultSchema["required"]?.arrayValue?.contains(.string("reference_id")) == true
         )
@@ -116,7 +116,7 @@ struct BelunaAppTests {
             Issue.record("sense payload should be an object")
             return
         }
-        #expect(payload["act_id"]?.stringValue == action.actID)
+        #expect(payload["act_instance_id"]?.stringValue == action.actID)
         #expect(payload["status"]?.stringValue == "applied")
         #expect(payload["reference_id"]?.stringValue == "apple-universal:chat:\(action.actID)")
     }
@@ -129,7 +129,7 @@ struct BelunaAppTests {
           "timestamp":1739500000000,
           "body":{
             "act":{
-              "act_id":"0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a",
+              "act_instance_id":"0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a",
               "endpoint_id":"macos-app.1",
               "neural_signal_descriptor_id":"present_text_message",
               "payload":"hello"
@@ -152,7 +152,7 @@ struct BelunaAppTests {
     @Test func userSenseEnvelopeUsesUUIDv4SenseID() throws {
         let envelope = makeUserSenseEnvelope(conversationID: "conv_1", text: "hello")
         guard let senseUUID = UUID(uuidString: envelope.body.senseID) else {
-            Issue.record("sense_id should be uuid string")
+            Issue.record("sense_instance_id should be uuid string")
             return
         }
 

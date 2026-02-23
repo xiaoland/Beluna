@@ -1,16 +1,10 @@
-use std::{
-    collections::{BTreeMap, HashMap},
-    future::Future,
-    pin::Pin,
-    sync::Arc,
-    time::Instant,
-};
+// cortex/runtime.ts invariants:
+// - Should stops at sense, neural signal descriptor, goal tree, l1 memory, IR, act level.
 
-use serde::{Deserialize, Serialize};
-use tokio::{
-    sync::RwLock,
-    time::{Duration, timeout},
-};
+use std::{collections::BTreeMap, sync::Arc, time::Instant};
+
+use async_trait::async_trait;
+use tokio::time::{Duration, timeout};
 
 use crate::{
     ai_gateway::{
@@ -22,32 +16,19 @@ use crate::{
     },
     config::CortexHelperRoutesConfig,
     cortex::{
-        clamp::derive_act_id,
-        cognition::{CognitionState, GoalNode, GoalTreePatchOp},
+        cognition::{CognitionState, GoalTreePatchOp},
+        cognition_patch::apply_cognition_patches,
         error::{CortexError, extractor_failed, filler_failed, invalid_input, primary_failed},
-        helpers_input,
-        helpers_output::{
-            acts_json_schema, apply_cognition_patches, goal_tree_patch_ops_json_schema,
-            l1_memory_flush_json_schema, materialize_acts, parse_acts_helper_output,
-            parse_goal_tree_patch_helper_output, parse_l1_memory_flush_helper_output,
+        helpers::{
+            self, CognitionOrgan, CortexHelpers, HelperRuntime, act_descriptor_input_helper,
+            goal_tree_input_helper, sense_input_helper,
         },
         ir, prompts,
-        testing::{
-            ActDescriptorHelperRequest as TestActDescriptorHelperRequest,
-            ActsHelperRequest as TestActsHelperRequest,
-            GoalTreeHelperRequest as TestGoalTreeHelperRequest,
-            GoalTreePatchHelperRequest as TestGoalTreePatchRequest,
-            L1MemoryFlushHelperRequest as TestL1MemoryFlushRequest,
-            PrimaryRequest as TestPrimaryRequest, SenseHelperRequest as TestSenseHelperRequest,
-            TestHooks,
-        },
-        types::{
-            ActDraft, ActsHelperOutput, CortexOutput, GoalTreePatchHelperOutput,
-            L1MemoryFlushHelperOutput, ReactionLimits,
-        },
+        testing::{PrimaryRequest as TestPrimaryRequest, TestHooks},
+        types::{CortexOutput, ReactionLimits},
     },
     observability::metrics as observability_metrics,
-    types::{NeuralSignalDescriptor, PhysicalState, Sense},
+    types::{PhysicalState, Sense},
 };
 
 #[derive(Debug, Clone)]
@@ -60,50 +41,14 @@ pub enum CortexTelemetryEvent {
 
 pub type CortexTelemetryHook = Arc<dyn Fn(CortexTelemetryEvent) + Send + Sync>;
 
-type SenseSectionFuture = Pin<Box<dyn Future<Output = Result<String, CortexError>> + Send>>;
-type ActDescriptorSectionFuture = Pin<Box<dyn Future<Output = Result<String, CortexError>> + Send>>;
-type GoalTreeSectionFuture = Pin<Box<dyn Future<Output = Result<String, CortexError>> + Send>>;
-type PrimaryFuture = Pin<Box<dyn Future<Output = Result<String, CortexError>> + Send>>;
-type ActsHelperFuture = Pin<Box<dyn Future<Output = Result<ActsHelperOutput, CortexError>> + Send>>;
-type GoalTreePatchHelperFuture =
-    Pin<Box<dyn Future<Output = Result<GoalTreePatchHelperOutput, CortexError>> + Send>>;
-type L1MemoryFlushHelperFuture =
-    Pin<Box<dyn Future<Output = Result<L1MemoryFlushHelperOutput, CortexError>> + Send>>;
-
 #[derive(Clone)]
 pub struct Cortex {
     gateway: Option<Arc<AIGateway>>,
     helper_routes: CortexHelperRoutesConfig,
     hooks: Option<TestHooks>,
-    act_descriptor_cache: Arc<RwLock<HashMap<String, String>>>,
-    goal_tree_cache: Arc<RwLock<HashMap<String, String>>>,
+    helpers: CortexHelpers,
     telemetry_hook: Option<CortexTelemetryHook>,
     limits: ReactionLimits,
-}
-
-#[derive(Clone, Copy)]
-enum CognitionOrgan {
-    Primary,
-    Sense,
-    ActDescriptor,
-    GoalTree,
-    Acts,
-    GoalTreePatch,
-    L1MemoryFlush,
-}
-
-impl CognitionOrgan {
-    fn stage(self) -> &'static str {
-        match self {
-            Self::Primary => "primary",
-            Self::Sense => "sense_helper",
-            Self::ActDescriptor => "act_descriptor_helper",
-            Self::GoalTree => "goal_tree_helper",
-            Self::Acts => "acts_helper",
-            Self::GoalTreePatch => "goal_tree_patch_helper",
-            Self::L1MemoryFlush => "l1_memory_flush_helper",
-        }
-    }
 }
 
 impl Cortex {
@@ -116,8 +61,7 @@ impl Cortex {
             gateway: Some(gateway),
             helper_routes: config.helper_routes.clone(),
             hooks: None,
-            act_descriptor_cache: Arc::new(RwLock::new(HashMap::new())),
-            goal_tree_cache: Arc::new(RwLock::new(HashMap::new())),
+            helpers: CortexHelpers::default(),
             telemetry_hook,
             limits: config.default_limits.clone(),
         }
@@ -128,8 +72,7 @@ impl Cortex {
             gateway: None,
             helper_routes: CortexHelperRoutesConfig::default(),
             hooks: Some(hooks),
-            act_descriptor_cache: Arc::new(RwLock::new(HashMap::new())),
-            goal_tree_cache: Arc::new(RwLock::new(HashMap::new())),
+            helpers: CortexHelpers::default(),
             telemetry_hook: None,
             limits,
         }
@@ -153,31 +96,38 @@ impl Cortex {
         observability_metrics::record_cortex_cycle_id(physical_state.cycle_id);
 
         let deadline = Duration::from_millis(self.limits.max_cycle_time_ms.max(1));
-        let sense_descriptors =
-            helpers_input::sense_descriptors(&physical_state.capabilities.entries);
-        let act_descriptors = helpers_input::act_descriptors(&physical_state.capabilities.entries);
+        let sense_descriptors = helpers::sense_descriptors(&physical_state.capabilities.entries);
+        let act_descriptors = helpers::act_descriptors(&physical_state.capabilities.entries);
 
-        let (sense_section_result, act_catalog_result, goal_tree_section_result) = tokio::join!(
+        let senses_owned = senses.to_vec();
+        let sense_descriptors_for_helper = sense_descriptors.clone();
+        let act_descriptors_for_helper = act_descriptors.clone();
+        let goal_tree = cognition_state.goal_tree.clone();
+
+        let (sense_section_result, act_catalog_result, goal_tree_sections_result) = tokio::join!(
             timeout(
                 deadline,
-                self.build_senses_section(
+                self.helpers.input.sense.to_input_ir_section(
+                    self,
                     physical_state.cycle_id,
-                    senses.to_vec(),
-                    sense_descriptors.clone()
+                    &senses_owned,
+                    &sense_descriptors_for_helper,
                 )
             ),
             timeout(
                 deadline,
-                self.build_act_descriptor_catalog_section(
+                self.helpers.input.act_descriptor.to_input_ir_section(
+                    self,
                     physical_state.cycle_id,
-                    act_descriptors.clone()
+                    &act_descriptors_for_helper,
                 )
             ),
             timeout(
                 deadline,
-                self.build_goal_tree_section(
+                self.helpers.input.goal_tree.to_input_ir_sections(
+                    self,
                     physical_state.cycle_id,
-                    cognition_state.goal_tree.user_partition.clone(),
+                    &goal_tree,
                 )
             )
         );
@@ -186,23 +136,23 @@ impl Cortex {
             physical_state.cycle_id,
             "sense_helper",
             sense_section_result,
-            helpers_input::fallback_senses_section(senses, &sense_descriptors),
+            sense_input_helper::fallback_senses_section(senses, &sense_descriptors),
         );
         let act_descriptor_catalog_section = self.resolve_input_helper_fallback(
             physical_state.cycle_id,
             "act_descriptor_helper",
             act_catalog_result,
-            helpers_input::fallback_act_descriptor_catalog_section(&act_descriptors),
+            act_descriptor_input_helper::fallback_act_descriptor_catalog_section(&act_descriptors),
         );
-        let willpower_matrix_section = self.resolve_input_helper_fallback(
+        let goal_tree_sections = self.resolve_goal_tree_input_helper_fallback(
             physical_state.cycle_id,
-            "goal_tree_helper",
-            goal_tree_section_result,
-            helpers_input::fallback_goal_tree_section(&cognition_state.goal_tree.user_partition),
+            goal_tree_sections_result,
+            goal_tree_input_helper::fallback_input_ir_sections(&cognition_state.goal_tree),
         );
-        let instincts_section =
-            helpers_input::instincts_section(&cognition_state.goal_tree.root_partition);
-        let focal_awareness_section = helpers_input::l1_memory_section(&cognition_state.l1_memory);
+        let instincts_section = goal_tree_sections.instincts_section;
+        let willpower_matrix_section = goal_tree_sections.willpower_matrix_section;
+        let focal_awareness_section =
+            goal_tree_input_helper::l1_memory_section(&cognition_state.l1_memory);
 
         observability_metrics::record_cortex_input_ir_act_descriptor_catalog_count(
             act_descriptors.len(),
@@ -255,7 +205,7 @@ impl Cortex {
 
         let primary_result = timeout(
             deadline,
-            self.run_primary_helper(
+            self.run_primary_engine(
                 physical_state.cycle_id,
                 primary_input_payload,
                 input_ir.text.clone(),
@@ -324,32 +274,35 @@ impl Cortex {
         let (acts_result, goal_tree_ops_result, l1_memory_flush_result) = tokio::join!(
             timeout(
                 deadline,
-                self.run_acts_helper(
+                self.helpers.output.acts.to_structured_output(
+                    self,
                     physical_state.cycle_id,
-                    output_sections.acts_section.clone(),
-                    act_descriptors.clone()
+                    &output_sections.acts_section,
+                    &act_descriptors,
                 )
             ),
             timeout(
                 deadline,
-                self.run_goal_tree_patch_helper(
+                self.helpers.output.goal_tree_patch.to_structured_output(
+                    self,
                     physical_state.cycle_id,
-                    output_sections.goal_tree_patch_section.clone(),
-                    cognition_state.clone()
+                    &output_sections.goal_tree_patch_section,
+                    cognition_state,
                 )
             ),
             timeout(
                 deadline,
-                self.run_l1_memory_flush_helper(
+                self.helpers.output.l1_memory_flush.to_structured_output(
+                    self,
                     physical_state.cycle_id,
-                    output_sections.l1_memory_flush_section.clone(),
-                    cognition_state.clone()
+                    &output_sections.l1_memory_flush_section,
+                    cognition_state,
                 )
             )
         );
 
-        let act_drafts = match acts_result {
-            Ok(Ok(acts_helper_output)) => acts_helper_output,
+        let acts = match acts_result {
+            Ok(Ok(acts)) => acts,
             Ok(Err(err)) => {
                 self.emit(CortexTelemetryEvent::StageFailed {
                     cycle_id: physical_state.cycle_id,
@@ -452,20 +405,6 @@ impl Cortex {
             );
         }
 
-        let acts = materialize_acts(
-            physical_state.cycle_id,
-            act_drafts,
-            |cycle_id, endpoint_id, neural_signal_descriptor_id, payload| {
-                derive_act_id(
-                    cycle_id,
-                    &[],
-                    endpoint_id,
-                    neural_signal_descriptor_id,
-                    payload,
-                )
-            },
-        );
-
         let apply_result = apply_cognition_patches(
             cognition_state,
             &goal_tree_ops,
@@ -540,242 +479,18 @@ impl Cortex {
         })
     }
 
-    async fn build_senses_section(
-        &self,
-        cycle_id: u64,
-        senses: Vec<Sense>,
-        sense_descriptors: Vec<NeuralSignalDescriptor>,
-    ) -> Result<String, CortexError> {
-        let stage = CognitionOrgan::Sense.stage();
-        let semantic_senses = helpers_input::semantic_sense_events(&senses);
-        if semantic_senses.is_empty() {
-            let input_payload = pretty_json(&serde_json::json!({
-                "senses": &senses,
-                "sense_descriptors": &sense_descriptors,
-            }));
-            log_cortex_organ_input(cycle_id, stage, &input_payload);
-            let output = helpers_input::fallback_senses_section(&senses, &sense_descriptors);
-            log_cortex_organ_output(cycle_id, stage, &output);
-            return Ok(output);
-        }
-
-        if let Some(hooks) = &self.hooks {
-            let input_payload = pretty_json(&serde_json::json!({
-                "senses": &senses,
-                "sense_descriptors": &sense_descriptors,
-            }));
-            log_cortex_organ_input(cycle_id, stage, &input_payload);
-            let output = (hooks.sense_helper)(TestSenseHelperRequest {
-                cycle_id,
-                senses,
-                sense_descriptors,
-            })
-            .await?;
-            log_cortex_organ_output(cycle_id, stage, &output);
-            return Ok(output);
-        }
-
-        let semantic_sense_catalog = helpers_input::semantic_sense_catalog(&sense_descriptors);
-        let input_payload = format!(
-            "semantic_senses:\n{}\n\nsemantic_sense_catalog:\n{}",
-            pretty_json(&semantic_senses),
-            pretty_json(&semantic_sense_catalog)
-        );
-        log_cortex_organ_input(cycle_id, stage, &input_payload);
-        let output = self
-            .build_senses_with_organs(cycle_id, &semantic_senses, &semantic_sense_catalog)
-            .await?;
-        log_cortex_organ_output(cycle_id, stage, &output);
-        Ok(output)
-    }
-
-    async fn build_act_descriptor_catalog_section(
-        &self,
-        cycle_id: u64,
-        act_descriptors: Vec<NeuralSignalDescriptor>,
-    ) -> Result<String, CortexError> {
-        let stage = CognitionOrgan::ActDescriptor.stage();
-        let input_payload = pretty_json(&serde_json::json!({
-            "act_descriptors": &act_descriptors,
-        }));
-        log_cortex_organ_input(cycle_id, stage, &input_payload);
-
-        let cache_key = helpers_input::act_descriptor_cache_key(&act_descriptors);
-        if let Some(cached) = self.get_cached_act_descriptor_section(&cache_key).await {
-            tracing::debug!(
-                target: "cortex",
-                cycle_id = cycle_id,
-                cache_key = %cache_key,
-                "act_descriptor_helper_cache_hit"
-            );
-            log_cortex_organ_output(cycle_id, stage, &cached);
-            return Ok(cached);
-        }
-
-        let generated = if let Some(hooks) = &self.hooks {
-            (hooks.act_descriptor_helper)(TestActDescriptorHelperRequest {
-                cycle_id,
-                act_descriptors,
-            })
-            .await?
-        } else {
-            self.build_act_descriptor_catalog_with_organs(cycle_id, &act_descriptors)
-                .await?
-        };
-
-        if !generated.trim().is_empty() {
-            self.cache_act_descriptor_section(cache_key, generated.clone())
-                .await;
-        }
-        log_cortex_organ_output(cycle_id, stage, &generated);
-        Ok(generated)
-    }
-
-    async fn build_goal_tree_section(
-        &self,
-        cycle_id: u64,
-        user_partition: Vec<GoalNode>,
-    ) -> Result<String, CortexError> {
-        let stage = CognitionOrgan::GoalTree.stage();
-        let user_partition_json = helpers_input::goal_tree_user_partition_json(&user_partition);
-        let input_payload = pretty_json(&serde_json::json!({
-            "goal_tree_user_partition": &user_partition,
-        }));
-        log_cortex_organ_input(cycle_id, stage, &input_payload);
-
-        if user_partition.is_empty() {
-            let output = helpers_input::goal_tree_empty_pursuits_one_shot().to_string();
-            log_cortex_organ_output(cycle_id, stage, &output);
-            return Ok(output);
-        }
-
-        let cache_key = helpers_input::goal_tree_cache_key(&user_partition);
-        if let Some(cached) = self.get_cached_goal_tree_section(&cache_key).await {
-            tracing::debug!(
-                target: "cortex",
-                cycle_id = cycle_id,
-                cache_key = %cache_key,
-                "goal_tree_helper_cache_hit"
-            );
-            log_cortex_organ_output(cycle_id, stage, &cached);
-            return Ok(cached);
-        }
-
-        let generated = if let Some(hooks) = &self.hooks {
-            (hooks.goal_tree_helper)(TestGoalTreeHelperRequest {
-                cycle_id,
-                user_partition_json: user_partition_json.clone(),
-            })
-            .await?
-        } else {
-            let prompt = prompts::build_goal_tree_helper_prompt(&user_partition_json);
-            self.run_text_organ_with_system(
-                cycle_id,
-                CognitionOrgan::GoalTree,
-                self.limits.max_sub_output_tokens,
-                prompts::goal_tree_helper_system_prompt(),
-                prompt,
-            )
-            .await?
-        };
-
-        self.cache_goal_tree_section(cache_key, generated.clone())
-            .await;
-        log_cortex_organ_output(cycle_id, stage, &generated);
-        Ok(generated)
-    }
-
-    async fn build_senses_with_organs(
-        &self,
-        cycle_id: u64,
-        semantic_senses: &[helpers_input::PrimarySenseEvent],
-        semantic_sense_catalog: &[helpers_input::PrimarySenseDescriptor],
-    ) -> Result<String, CortexError> {
-        let mut entries = Vec::with_capacity(semantic_senses.len());
-        for sense_event in semantic_senses {
-            let payload_json = serde_json::to_string_pretty(&sense_event.payload)
-                .unwrap_or_else(|_| "{}".to_string());
-            let payload_schema_json = semantic_sense_catalog
-                .iter()
-                .find(|descriptor| {
-                    descriptor.endpoint == sense_event.endpoint
-                        && descriptor.sense == sense_event.sense
-                })
-                .and_then(|descriptor| {
-                    serde_json::to_string_pretty(&descriptor.payload_schema).ok()
-                })
-                .unwrap_or_else(|| "{}".to_string());
-            let prompt = prompts::build_sense_helper_prompt(&payload_json, &payload_schema_json);
-            let markdown = self
-                .run_text_organ_with_system(
-                    cycle_id,
-                    CognitionOrgan::Sense,
-                    self.limits.max_sub_output_tokens,
-                    prompts::sense_helper_system_prompt(),
-                    prompt,
-                )
-                .await?;
-            entries.push(format!(
-                "<sense endpoint-id=\"{}\" sense-id=\"{}\" sense-name=\"{}\">\n{}\n</sense>",
-                escape_xml_attr(&sense_event.endpoint),
-                escape_xml_attr(&sense_event.sense_id),
-                escape_xml_attr(&sense_event.sense),
-                markdown.trim(),
-            ));
-        }
-        Ok(entries.join("\n"))
-    }
-
-    async fn build_act_descriptor_catalog_with_organs(
-        &self,
-        cycle_id: u64,
-        act_descriptors: &[NeuralSignalDescriptor],
-    ) -> Result<String, CortexError> {
-        let mut catalog_entries = Vec::with_capacity(act_descriptors.len());
-        for act_descriptor in act_descriptors {
-            let prompt = prompts::build_act_descriptor_markdown_prompt(
-                &serde_json::to_string_pretty(&act_descriptor.payload_schema)
-                    .unwrap_or_else(|_| "{}".to_string()),
-            );
-            let markdown = self
-                .run_text_organ_with_system(
-                    cycle_id,
-                    CognitionOrgan::ActDescriptor,
-                    self.limits.max_sub_output_tokens,
-                    prompts::act_descriptor_helper_system_prompt(),
-                    prompt,
-                )
-                .await?;
-            catalog_entries.push(self.wrap_act_descriptor_catalog_entry(act_descriptor, &markdown));
-        }
-        Ok(catalog_entries.join("\n"))
-    }
-
-    fn wrap_act_descriptor_catalog_entry(
-        &self,
-        act_descriptor: &NeuralSignalDescriptor,
-        markdown: &str,
-    ) -> String {
-        format!(
-            "<act-descriptor endpoint-id=\"{}\" act-id=\"{}\">\n{}\n</act-descriptor>",
-            escape_xml_attr(&act_descriptor.endpoint_id),
-            escape_xml_attr(&act_descriptor.neural_signal_descriptor_id),
-            markdown.trim(),
-        )
-    }
-
-    async fn run_primary_helper(
+    async fn run_primary_engine(
         &self,
         cycle_id: u64,
         primary_input: String,
         input_ir_internal: String,
     ) -> Result<String, CortexError> {
         let stage = CognitionOrgan::Primary.stage();
-        let input_payload = pretty_json(&serde_json::json!({
+        let input_payload = helpers::pretty_json(&serde_json::json!({
             "primary_input": &primary_input,
             "input_ir_internal": &input_ir_internal,
         }));
-        log_cortex_organ_input(cycle_id, stage, &input_payload);
+        helpers::log_organ_input(cycle_id, stage, &input_payload);
 
         if let Some(hooks) = &self.hooks {
             let output = (hooks.primary)(TestPrimaryRequest {
@@ -783,7 +498,7 @@ impl Cortex {
                 input_ir: primary_input.clone(),
             })
             .await?;
-            log_cortex_organ_output(cycle_id, stage, &output);
+            helpers::log_organ_output(cycle_id, stage, &output);
             return Ok(output);
         }
 
@@ -796,157 +511,7 @@ impl Cortex {
                 prompts::build_primary_user_prompt(&primary_input),
             )
             .await?;
-        log_cortex_organ_output(cycle_id, stage, &output);
-        Ok(output)
-    }
-
-    async fn run_acts_helper(
-        &self,
-        cycle_id: u64,
-        acts_section: String,
-        act_descriptors: Vec<NeuralSignalDescriptor>,
-    ) -> Result<ActsHelperOutput, CortexError> {
-        let stage = CognitionOrgan::Acts.stage();
-        let semantic_act_catalog = helpers_input::semantic_act_catalog(&act_descriptors);
-        let input_payload = pretty_json(&serde_json::json!({
-            "acts_section": &acts_section,
-            "semantic_act_catalog": &semantic_act_catalog,
-        }));
-        log_cortex_organ_input(cycle_id, stage, &input_payload);
-
-        if let Some(hooks) = &self.hooks {
-            let raw = (hooks.acts_helper)(TestActsHelperRequest {
-                cycle_id,
-                acts_section,
-            })
-            .await?;
-            let output: ActsHelperOutput = raw
-                .into_iter()
-                .map(|act| ActDraft {
-                    endpoint_id: act.endpoint_id,
-                    neural_signal_descriptor_id: act.neural_signal_descriptor_id,
-                    payload: act.payload,
-                })
-                .collect();
-            log_cortex_organ_output(cycle_id, stage, &pretty_json(&output));
-            return Ok(output);
-        }
-
-        let prompt = prompts::build_acts_helper_prompt(&semantic_act_catalog, &acts_section);
-        let response = self
-            .run_organ(
-                cycle_id,
-                CognitionOrgan::Acts,
-                self.limits.max_sub_output_tokens,
-                prompts::acts_helper_system_prompt(),
-                prompt,
-                OutputMode::JsonSchema {
-                    name: "acts_helper_output".to_string(),
-                    schema: acts_json_schema(),
-                    strict: true,
-                },
-            )
-            .await?;
-        let output = parse_acts_helper_output(&response.output_text)
-            .map_err(|err| extractor_failed(err.to_string()))?;
-        log_cortex_organ_output(cycle_id, stage, &pretty_json(&output));
-        Ok(output)
-    }
-
-    async fn run_goal_tree_patch_helper(
-        &self,
-        cycle_id: u64,
-        goal_tree_patch_section: String,
-        cognition_state: CognitionState,
-    ) -> Result<GoalTreePatchHelperOutput, CortexError> {
-        let stage = CognitionOrgan::GoalTreePatch.stage();
-        let user_partition_json =
-            helpers_input::goal_tree_user_partition_json(&cognition_state.goal_tree.user_partition);
-        let input_payload = pretty_json(&serde_json::json!({
-            "goal_tree_patch_section": &goal_tree_patch_section,
-            "current_user_partition_json": &user_partition_json,
-        }));
-        log_cortex_organ_input(cycle_id, stage, &input_payload);
-
-        if let Some(hooks) = &self.hooks {
-            let output = (hooks.goal_tree_patch_helper)(TestGoalTreePatchRequest {
-                cycle_id,
-                goal_tree_patch_section,
-                cognition_state,
-            })
-            .await?;
-            log_cortex_organ_output(cycle_id, stage, &pretty_json(&output));
-            return Ok(output);
-        }
-
-        let prompt = prompts::build_goal_tree_patch_helper_prompt(
-            &goal_tree_patch_section,
-            &user_partition_json,
-        );
-        let response = self
-            .run_organ(
-                cycle_id,
-                CognitionOrgan::GoalTreePatch,
-                self.limits.max_sub_output_tokens,
-                prompts::goal_tree_patch_helper_system_prompt(),
-                prompt,
-                OutputMode::JsonSchema {
-                    name: "goal_tree_patch_helper_output".to_string(),
-                    schema: goal_tree_patch_ops_json_schema(),
-                    strict: true,
-                },
-            )
-            .await?;
-        let output = parse_goal_tree_patch_helper_output(&response.output_text)
-            .map_err(|err| filler_failed(err.to_string()))?;
-        log_cortex_organ_output(cycle_id, stage, &pretty_json(&output));
-        Ok(output)
-    }
-
-    async fn run_l1_memory_flush_helper(
-        &self,
-        cycle_id: u64,
-        l1_memory_flush_section: String,
-        cognition_state: CognitionState,
-    ) -> Result<L1MemoryFlushHelperOutput, CortexError> {
-        let stage = CognitionOrgan::L1MemoryFlush.stage();
-        let l1_memory_json = helpers_input::l1_memory_json(&cognition_state.l1_memory);
-        let input_payload = pretty_json(&serde_json::json!({
-            "l1_memory_flush_section": &l1_memory_flush_section,
-            "current_l1_memory_json": &l1_memory_json,
-        }));
-        log_cortex_organ_input(cycle_id, stage, &input_payload);
-
-        if let Some(hooks) = &self.hooks {
-            let output = (hooks.l1_memory_flush_helper)(TestL1MemoryFlushRequest {
-                cycle_id,
-                l1_memory_flush_section,
-                cognition_state,
-            })
-            .await?;
-            log_cortex_organ_output(cycle_id, stage, &pretty_json(&output));
-            return Ok(output);
-        }
-
-        let prompt =
-            prompts::build_l1_memory_flush_helper_prompt(&l1_memory_flush_section, &l1_memory_json);
-        let response = self
-            .run_organ(
-                cycle_id,
-                CognitionOrgan::L1MemoryFlush,
-                self.limits.max_sub_output_tokens,
-                prompts::l1_memory_flush_helper_system_prompt(),
-                prompt,
-                OutputMode::JsonSchema {
-                    name: "l1_memory_flush_helper_output".to_string(),
-                    schema: l1_memory_flush_json_schema(),
-                    strict: true,
-                },
-            )
-            .await?;
-        let output = parse_l1_memory_flush_helper_output(&response.output_text)
-            .map_err(|err| filler_failed(err.to_string()))?;
-        log_cortex_organ_output(cycle_id, stage, &pretty_json(&output));
+        helpers::log_organ_output(cycle_id, stage, &output);
         Ok(output)
     }
 
@@ -1069,6 +634,53 @@ impl Cortex {
         }
     }
 
+    fn resolve_goal_tree_input_helper_fallback(
+        &self,
+        cycle_id: u64,
+        result: Result<
+            Result<goal_tree_input_helper::GoalTreeInputSections, CortexError>,
+            tokio::time::error::Elapsed,
+        >,
+        fallback: goal_tree_input_helper::GoalTreeInputSections,
+    ) -> goal_tree_input_helper::GoalTreeInputSections {
+        match result {
+            Ok(Ok(sections))
+                if !sections.willpower_matrix_section.trim().is_empty()
+                    && !sections.instincts_section.trim().is_empty() =>
+            {
+                sections
+            }
+            Ok(Ok(_)) => fallback,
+            Ok(Err(err)) => {
+                self.emit(CortexTelemetryEvent::StageFailed {
+                    cycle_id,
+                    stage: "goal_tree_helper",
+                });
+                tracing::warn!(
+                    target: "cortex",
+                    cycle_id = cycle_id,
+                    stage = "goal_tree_helper",
+                    error = %err,
+                    "input_helper_failed_fallback_raw"
+                );
+                fallback
+            }
+            Err(_) => {
+                self.emit(CortexTelemetryEvent::StageFailed {
+                    cycle_id,
+                    stage: "goal_tree_helper",
+                });
+                tracing::warn!(
+                    target: "cortex",
+                    cycle_id = cycle_id,
+                    stage = "goal_tree_helper",
+                    "input_helper_timeout_fallback_raw"
+                );
+                fallback
+            }
+        }
+    }
+
     fn noop_output(
         &self,
         cognition_state: &CognitionState,
@@ -1094,29 +706,6 @@ impl Cortex {
             CognitionOrgan::L1MemoryFlush => self.helper_routes.l1_memory_flush_helper.clone(),
         };
         stage_route.or_else(|| self.helper_routes.default.clone())
-    }
-
-    async fn get_cached_act_descriptor_section(&self, cache_key: &str) -> Option<String> {
-        self.act_descriptor_cache
-            .read()
-            .await
-            .get(cache_key)
-            .cloned()
-    }
-
-    async fn cache_act_descriptor_section(&self, cache_key: String, value: String) {
-        self.act_descriptor_cache
-            .write()
-            .await
-            .insert(cache_key, value);
-    }
-
-    async fn get_cached_goal_tree_section(&self, cache_key: &str) -> Option<String> {
-        self.goal_tree_cache.read().await.get(cache_key).cloned()
-    }
-
-    async fn cache_goal_tree_section(&self, cache_key: String, value: String) {
-        self.goal_tree_cache.write().await.insert(cache_key, value);
     }
 
     fn emit(&self, event: CortexTelemetryEvent) {
@@ -1156,6 +745,57 @@ impl Cortex {
         if let Some(hook) = &self.telemetry_hook {
             hook(event);
         }
+    }
+}
+
+#[async_trait]
+impl HelperRuntime for Cortex {
+    fn limits(&self) -> &ReactionLimits {
+        &self.limits
+    }
+
+    fn hooks(&self) -> Option<&TestHooks> {
+        self.hooks.as_ref()
+    }
+
+    async fn run_text_organ_with_system(
+        &self,
+        cycle_id: u64,
+        organ: CognitionOrgan,
+        max_output_tokens: u64,
+        system_prompt: String,
+        user_prompt: String,
+    ) -> Result<String, CortexError> {
+        Cortex::run_text_organ_with_system(
+            self,
+            cycle_id,
+            organ,
+            max_output_tokens,
+            system_prompt,
+            user_prompt,
+        )
+        .await
+    }
+
+    async fn run_organ(
+        &self,
+        cycle_id: u64,
+        organ: CognitionOrgan,
+        max_output_tokens: u64,
+        system_prompt: String,
+        user_prompt: String,
+        output_mode: OutputMode,
+    ) -> Result<ChatResponse, CortexError> {
+        Cortex::run_organ(
+            self,
+            cycle_id,
+            organ,
+            max_output_tokens,
+            system_prompt,
+            user_prompt,
+            output_mode,
+        )
+        .await
     }
 }
 
@@ -1200,81 +840,4 @@ fn build_request(
         metadata,
         cost_attribution_id: None,
     }
-}
-
-fn escape_xml_attr(value: &str) -> String {
-    value
-        .replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&apos;")
-}
-
-fn log_cortex_organ_input(cycle_id: u64, stage: &str, input_payload: &str) {
-    tracing::info!(
-        target: "cortex",
-        cycle_id = cycle_id,
-        stage = stage,
-        input_payload = %input_payload,
-        "cortex_organ_input"
-    );
-}
-
-fn log_cortex_organ_output(cycle_id: u64, stage: &str, output_payload: &str) {
-    tracing::info!(
-        target: "cortex",
-        cycle_id = cycle_id,
-        stage = stage,
-        output_payload = %output_payload,
-        "cortex_organ_output"
-    );
-}
-
-fn pretty_json<T: Serialize>(value: &T) -> String {
-    serde_json::to_string_pretty(value)
-        .unwrap_or_else(|err| format!("{{\"serialization_error\":\"{}\"}}", err))
-}
-
-fn parse_json_output<T: for<'a> Deserialize<'a>>(text: &str) -> Result<T, CortexError> {
-    let trimmed = text.trim();
-    if trimmed.is_empty() {
-        return Err(CortexError::new(
-            crate::cortex::error::CortexErrorKind::Internal,
-            "empty JSON output",
-        ));
-    }
-
-    if let Ok(parsed) = serde_json::from_str::<T>(trimmed) {
-        return Ok(parsed);
-    }
-
-    if let Some(stripped) = strip_code_fence(trimmed)
-        && let Ok(parsed) = serde_json::from_str::<T>(&stripped)
-    {
-        return Ok(parsed);
-    }
-
-    Err(CortexError::new(
-        crate::cortex::error::CortexErrorKind::Internal,
-        "failed to parse JSON output",
-    ))
-}
-
-fn strip_code_fence(text: &str) -> Option<String> {
-    let text = text.trim();
-    if !text.starts_with("```") {
-        return None;
-    }
-
-    let mut lines = text.lines();
-    let _first = lines.next()?;
-    let mut body = Vec::new();
-    for line in lines {
-        if line.trim_start().starts_with("```") {
-            break;
-        }
-        body.push(line);
-    }
-    Some(body.join("\n"))
 }

@@ -11,6 +11,7 @@ Beluna is a survival-oriented digital life runtime, not a chatbot.
 5. Spine executes acts and can emit dispatch-failure senses.
 6. Stem loop is tick-driven (default 1s, missed tick skip).
 7. Body endpoints are Beluna's world interfaces.
+8. Neural signal identity is descriptor-based (`sense_id` / `act_id`), while runtime envelopes use `sense_instance_id` / `act_instance_id`.
 
 ## Runtime Topology
 

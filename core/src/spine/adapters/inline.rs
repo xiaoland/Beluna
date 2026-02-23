@@ -21,7 +21,7 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub struct InlineSenseDatum {
-    pub sense_id: String,
+    pub sense_instance_id: String,
     pub neural_signal_descriptor_id: String,
     pub payload: serde_json::Value,
 }
@@ -137,7 +137,7 @@ impl SpineInlineAdapter {
                             };
                             // Inline endpoints do not carry endpoint_id; adapter injects the bound endpoint id.
                             let sense = SenseDatum {
-                                sense_id: sense.sense_id.clone(),
+                                sense_instance_id: sense.sense_instance_id.clone(),
                                 endpoint_id: body_endpoint_id_for_task.clone(),
                                 neural_signal_descriptor_id: sense.neural_signal_descriptor_id.clone(),
                                 payload: sense.payload.clone(),
@@ -202,11 +202,11 @@ impl SpineInlineAdapter {
     }
 
     async fn enqueue_act(&self, endpoint_name: &str, act: Act) -> Result<ActDispatchResult> {
-        let act_id = act.act_id.clone();
+        let act_instance_id = act.act_instance_id.clone();
         tracing::debug!(
             target: "spine.inline_adapter",
             endpoint_id = endpoint_name,
-            act_id = %act_id,
+            act_instance_id = %act_instance_id,
             neural_signal_descriptor_id = %act.neural_signal_descriptor_id,
             "enqueue_act_for_inline_endpoint"
         );
@@ -219,12 +219,12 @@ impl SpineInlineAdapter {
             tracing::warn!(
                 target: "spine.inline_adapter",
                 endpoint_id = endpoint_name,
-                act_id = %act_id,
+                act_instance_id = %act_instance_id,
                 "inline_endpoint_not_found_for_dispatch"
             );
             return Ok(ActDispatchResult::Rejected {
                 reason_code: "endpoint_not_found".to_string(),
-                reference_id: format!("inline_adapter:endpoint_not_found:{act_id}"),
+                reference_id: format!("inline_adapter:endpoint_not_found:{act_instance_id}"),
             });
         };
 
@@ -232,25 +232,25 @@ impl SpineInlineAdapter {
             tracing::warn!(
                 target: "spine.inline_adapter",
                 endpoint_id = endpoint_name,
-                act_id = %act_id,
+                act_instance_id = %act_instance_id,
                 "inline_endpoint_unavailable_during_dispatch"
             );
             self.remove_endpoint_by_name(endpoint_name, None, true)
                 .await;
             return Ok(ActDispatchResult::Rejected {
                 reason_code: "endpoint_unavailable".to_string(),
-                reference_id: format!("inline_adapter:endpoint_unavailable:{act_id}"),
+                reference_id: format!("inline_adapter:endpoint_unavailable:{act_instance_id}"),
             });
         }
 
         tracing::debug!(
             target: "spine.inline_adapter",
             endpoint_id = endpoint_name,
-            act_id = %act_id,
+            act_instance_id = %act_instance_id,
             "act_enqueued_for_inline_endpoint"
         );
         Ok(ActDispatchResult::Acknowledged {
-            reference_id: format!("inline_adapter:enqueued:{act_id}"),
+            reference_id: format!("inline_adapter:enqueued:{act_instance_id}"),
         })
     }
 
@@ -317,12 +317,12 @@ impl Endpoint for InlineAdapterEndpointProxy {
             tracing::warn!(
                 target: "spine.inline_adapter",
                 endpoint_id = %self.endpoint_name,
-                act_id = %act.act_id,
+                act_instance_id = %act.act_instance_id,
                 "inline_adapter_unavailable_for_dispatch"
             );
             return Ok(ActDispatchResult::Rejected {
                 reason_code: "adapter_unavailable".to_string(),
-                reference_id: format!("inline_adapter:unavailable:{}", act.act_id),
+                reference_id: format!("inline_adapter:unavailable:{}", act.act_instance_id),
             });
         };
 

@@ -27,7 +27,7 @@ pub async fn handle_web_invoke(
             return WebHandlerOutput {
                 outcome: EndpointExecutionOutcome::Rejected {
                     reason_code: "invalid_payload".to_string(),
-                    reference_id: format!("body.std.web:invalid_payload:{}", act.act_id),
+                    reference_id: format!("body.std.web:invalid_payload:{}", act.act_instance_id),
                 },
                 sense: None,
             };
@@ -40,7 +40,10 @@ pub async fn handle_web_invoke(
             return WebHandlerOutput {
                 outcome: EndpointExecutionOutcome::Rejected {
                     reason_code: "unsupported_scheme".to_string(),
-                    reference_id: format!("body.std.web:unsupported_scheme:{}", act.act_id),
+                    reference_id: format!(
+                        "body.std.web:unsupported_scheme:{}",
+                        act.act_instance_id
+                    ),
                 },
                 sense: None,
             };
@@ -49,7 +52,7 @@ pub async fn handle_web_invoke(
             return WebHandlerOutput {
                 outcome: EndpointExecutionOutcome::Rejected {
                     reason_code: "invalid_payload".to_string(),
-                    reference_id: format!("body.std.web:invalid_url:{}", act.act_id),
+                    reference_id: format!("body.std.web:invalid_url:{}", act.act_instance_id),
                 },
                 sense: None,
             };
@@ -62,7 +65,7 @@ pub async fn handle_web_invoke(
             return WebHandlerOutput {
                 outcome: EndpointExecutionOutcome::Rejected {
                     reason_code: "invalid_payload".to_string(),
-                    reference_id: format!("body.std.web:invalid_method:{}", act.act_id),
+                    reference_id: format!("body.std.web:invalid_method:{}", act.act_instance_id),
                 },
                 sense: None,
             };
@@ -75,7 +78,7 @@ pub async fn handle_web_invoke(
             return WebHandlerOutput {
                 outcome: EndpointExecutionOutcome::Rejected {
                     reason_code: "invalid_payload".to_string(),
-                    reference_id: format!("body.std.web:{reason}:{}", act.act_id),
+                    reference_id: format!("body.std.web:{reason}:{}", act.act_instance_id),
                 },
                 sense: None,
             };
@@ -88,7 +91,10 @@ pub async fn handle_web_invoke(
             return WebHandlerOutput {
                 outcome: EndpointExecutionOutcome::Rejected {
                     reason_code: "network_error".to_string(),
-                    reference_id: format!("body.std.web:client_build_error:{}", act.act_id),
+                    reference_id: format!(
+                        "body.std.web:client_build_error:{}",
+                        act.act_instance_id
+                    ),
                 },
                 sense: None,
             };
@@ -108,7 +114,7 @@ pub async fn handle_web_invoke(
             return WebHandlerOutput {
                 outcome: EndpointExecutionOutcome::Rejected {
                     reason_code: "network_error".to_string(),
-                    reference_id: format!("body.std.web:network_error:{}", act.act_id),
+                    reference_id: format!("body.std.web:network_error:{}", act.act_instance_id),
                 },
                 sense: None,
             };
@@ -117,7 +123,7 @@ pub async fn handle_web_invoke(
             return WebHandlerOutput {
                 outcome: EndpointExecutionOutcome::Rejected {
                     reason_code: "timeout".to_string(),
-                    reference_id: format!("body.std.web:timeout:{}", act.act_id),
+                    reference_id: format!("body.std.web:timeout:{}", act.act_instance_id),
                 },
                 sense: None,
             };
@@ -133,7 +139,7 @@ pub async fn handle_web_invoke(
             return WebHandlerOutput {
                 outcome: EndpointExecutionOutcome::Rejected {
                     reason_code: "network_error".to_string(),
-                    reference_id: format!("body.std.web:body_read_error:{}", act.act_id),
+                    reference_id: format!("body.std.web:body_read_error:{}", act.act_instance_id),
                 },
                 sense: None,
             };
@@ -142,7 +148,7 @@ pub async fn handle_web_invoke(
             return WebHandlerOutput {
                 outcome: EndpointExecutionOutcome::Rejected {
                     reason_code: "timeout".to_string(),
-                    reference_id: format!("body.std.web:body_timeout:{}", act.act_id),
+                    reference_id: format!("body.std.web:body_timeout:{}", act.act_instance_id),
                 },
                 sense: None,
             };
@@ -154,14 +160,14 @@ pub async fn handle_web_invoke(
     WebHandlerOutput {
         outcome: EndpointExecutionOutcome::Applied {
             actual_cost_micro: 0,
-            reference_id: format!("body.std.web:applied:{}", act.act_id),
+            reference_id: format!("body.std.web:applied:{}", act.act_instance_id),
         },
         sense: Some(InlineSenseDatum {
-            sense_id: uuid::Uuid::new_v4().to_string(),
+            sense_instance_id: uuid::Uuid::new_v4().to_string(),
             neural_signal_descriptor_id: "body.std.web.result".to_string(),
             payload: serde_json::json!({
                 "kind": "web_fetch_result",
-                "act_id": act.act_id,
+                "act_instance_id": act.act_instance_id,
                 "neural_signal_descriptor_id": act.neural_signal_descriptor_id,
                 "url": final_url,
                 "status_code": status_code,
@@ -205,9 +211,9 @@ mod tests {
 
     use super::{WebLimits, handle_web_invoke};
 
-    fn build_request(act_id: &str, payload: serde_json::Value) -> Act {
+    fn build_request(act_instance_id: &str, payload: serde_json::Value) -> Act {
         Act {
-            act_id: act_id.to_string(),
+            act_instance_id: act_instance_id.to_string(),
             endpoint_id: "ep:body:std:web".to_string(),
             neural_signal_descriptor_id: "tool.web.fetch".to_string(),
             payload: payload,

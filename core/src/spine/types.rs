@@ -50,7 +50,7 @@ pub enum SpineEvent {
     ActApplied {
         cycle_id: CycleId,
         seq_no: u64,
-        act_id: String,
+        act_instance_id: String,
         reserve_entry_id: ReserveEntryId,
         cost_attribution_id: CostAttributionId,
         actual_cost_micro: i64,
@@ -59,7 +59,7 @@ pub enum SpineEvent {
     ActRejected {
         cycle_id: CycleId,
         seq_no: u64,
-        act_id: String,
+        act_instance_id: String,
         reserve_entry_id: ReserveEntryId,
         cost_attribution_id: CostAttributionId,
         reason_code: String,
@@ -68,7 +68,7 @@ pub enum SpineEvent {
     ActDeferred {
         cycle_id: CycleId,
         seq_no: u64,
-        act_id: String,
+        act_instance_id: String,
         reserve_entry_id: ReserveEntryId,
         cost_attribution_id: CostAttributionId,
         reason_code: String,

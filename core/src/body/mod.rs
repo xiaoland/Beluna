@@ -167,7 +167,7 @@ fn start_std_web_inline_endpoint(
 )]
 async fn run_shell_worker(mut handles: InlineEndpointRuntimeHandles, limits: ShellLimits) {
     while let Some(act) = handles.act_rx.recv().await {
-        let request_id = format!("builtin-shell:{}", act.act_id);
+        let request_id = format!("builtin-shell:{}", act.act_instance_id);
         let output = handle_shell_invoke(&request_id, act.as_ref(), &limits).await;
         if let Some(sense) = output.sense
             && handles.sense_tx.send(Arc::new(sense)).await.is_err()
@@ -181,7 +181,7 @@ async fn run_shell_worker(mut handles: InlineEndpointRuntimeHandles, limits: She
 #[tracing::instrument(name = "std_web_worker", target = "body.inline", skip(handles, limits))]
 async fn run_web_worker(mut handles: InlineEndpointRuntimeHandles, limits: WebLimits) {
     while let Some(act) = handles.act_rx.recv().await {
-        let request_id = format!("builtin-web:{}", act.act_id);
+        let request_id = format!("builtin-web:{}", act.act_instance_id);
         let output = handle_web_invoke(&request_id, act.as_ref(), &limits).await;
         if let Some(sense) = output.sense
             && handles.sense_tx.send(Arc::new(sense)).await.is_err()

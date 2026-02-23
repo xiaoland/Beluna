@@ -90,7 +90,7 @@ async fn cortex_pipeline_emits_acts_and_new_cognition() {
     let output = pipeline
         .cortex(
             &[Sense::Domain(SenseDatum {
-                sense_id: "sense:1".to_string(),
+                sense_instance_id: "sense:1".to_string(),
                 endpoint_id: "ep.demo".to_string(),
                 neural_signal_descriptor_id: "sense.demo".to_string(),
                 payload: serde_json::json!({"x":1}),
@@ -102,7 +102,7 @@ async fn cortex_pipeline_emits_acts_and_new_cognition() {
         .expect("pipeline should succeed");
 
     assert_eq!(output.acts.len(), 1);
-    assert!(is_uuid_v7(&output.acts[0].act_id));
+    assert!(is_uuid_v7(&output.acts[0].act_instance_id));
     assert_eq!(output.new_cognition_state.revision, 1);
     assert_eq!(output.new_cognition_state.goal_stack.len(), 1);
 }
@@ -152,7 +152,7 @@ async fn cortex_pipeline_primary_failure_returns_noop_without_cognition_change()
     let output = pipeline
         .cortex(
             &[Sense::Domain(SenseDatum {
-                sense_id: "sense:1".to_string(),
+                sense_instance_id: "sense:1".to_string(),
                 endpoint_id: "ep.demo".to_string(),
                 neural_signal_descriptor_id: "sense.demo".to_string(),
                 payload: serde_json::json!({"x":1}),
@@ -183,7 +183,7 @@ async fn cortex_pipeline_invalid_output_ir_contract_returns_noop() {
     let output = pipeline
         .cortex(
             &[Sense::Domain(SenseDatum {
-                sense_id: "sense:1".to_string(),
+                sense_instance_id: "sense:1".to_string(),
                 endpoint_id: "ep.demo".to_string(),
                 neural_signal_descriptor_id: "sense.demo".to_string(),
                 payload: serde_json::json!({"x":1}),
@@ -230,7 +230,7 @@ async fn primary_input_excludes_input_ir_root_tag() {
     pipeline
         .cortex(
             &[Sense::Domain(SenseDatum {
-                sense_id: "sense:1".to_string(),
+                sense_instance_id: "sense:1".to_string(),
                 endpoint_id: "ep.demo".to_string(),
                 neural_signal_descriptor_id: "sense.demo".to_string(),
                 payload: serde_json::json!({"x":1}),

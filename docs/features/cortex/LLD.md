@@ -22,16 +22,17 @@ Patch ops:
 
 ## Tick Algorithm
 
-1. Build semantic helper inputs from `senses`, act descriptors, user goal tree.
-2. Build `<input-ir>` with strict first-level XML sections.
-3. Run primary to get `<output-ir>`.
-4. Parse sections:
+1. Run input helper instances (`sense`, `act-descriptor`, `goal-tree`) with contract `structured input -> cognition-friendly output`; helpers compose fully-qualified ids internally when needed.
+2. `goal_tree_input_helper` takes full `GoalTree` and consolidates both root-partition conversion (`<instincts>`) and user-partition conversion (`<willpower-matrix>`).
+3. Build `<input-ir>` with strict first-level XML sections.
+4. Run primary to get `<output-ir>`.
+5. Parse sections:
   - `<acts>`
   - `<goal-tree-patch>`
   - `<new-focal-awareness>`
-5. Run three output helpers in parallel with strict JSON Schema outputs.
-6. Materialize `Act[]` and apply patch arrays in deterministic order.
-7. Return `CortexOutput { acts, new_cognition_state }`.
+6. Run three output helper instances in parallel with contract `cognition-friendly input -> structured output`.
+7. `acts_helper` returns final `Act[]` (including deterministic id materialization); Cortex applies patch arrays in deterministic order.
+8. Return `CortexOutput { acts, new_cognition_state, wait_for_sense }`.
 
 ## IR Rules
 
@@ -39,10 +40,11 @@ Patch ops:
 - Section bodies are semi-structured markdown/plain text.
 - Avoid high-entropy plumbing noise in IR.
 - Keep semantic-first representation and implicit relational structure.
+- `<senses>` and `<act-descriptor-catalog>` carry fully-qualified ids only; they do not carry instance ids.
 
 ## Helper JSON Contracts
 
-- `acts_helper`: `ActDraft[]`
+- `acts_helper`: JSON array with fields `endpoint_id`, `fq_act_id`, `payload`, then helper-local deterministic materialization to `Act[]`
 - `goal_tree_patch_helper`: `GoalTreePatchOp[]`
 - `l1_memory_flush_helper`: `string[]`
 

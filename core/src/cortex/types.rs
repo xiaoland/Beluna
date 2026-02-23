@@ -1,9 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    cortex::cognition::{CognitionState, GoalTreePatchOp},
-    types::Act,
-};
+use crate::{cortex::cognition::CognitionState, types::Act};
 
 fn default_max_l1_memory_entries() -> usize {
     10
@@ -57,15 +54,3 @@ pub(crate) struct InputIr {
 pub(crate) struct OutputIr {
     pub text: String,
 }
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub(crate) struct ActDraft {
-    pub endpoint_id: String,
-    pub neural_signal_descriptor_id: String,
-    #[serde(default)]
-    pub payload: serde_json::Value,
-}
-
-pub(crate) type ActsHelperOutput = Vec<ActDraft>;
-pub(crate) type GoalTreePatchHelperOutput = Vec<GoalTreePatchOp>;
-pub(crate) type L1MemoryFlushHelperOutput = Vec<String>;

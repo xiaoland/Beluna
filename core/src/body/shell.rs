@@ -29,7 +29,7 @@ pub async fn handle_shell_invoke(
             return ShellHandlerOutput {
                 outcome: EndpointExecutionOutcome::Rejected {
                     reason_code: "invalid_payload".to_string(),
-                    reference_id: format!("body.std.shell:invalid_payload:{}", act.act_id),
+                    reference_id: format!("body.std.shell:invalid_payload:{}", act.act_instance_id),
                 },
                 sense: None,
             };
@@ -40,7 +40,7 @@ pub async fn handle_shell_invoke(
         return ShellHandlerOutput {
             outcome: EndpointExecutionOutcome::Rejected {
                 reason_code: "invalid_payload".to_string(),
-                reference_id: format!("body.std.shell:missing_argv:{}", act.act_id),
+                reference_id: format!("body.std.shell:missing_argv:{}", act.act_instance_id),
             },
             sense: None,
         };
@@ -73,7 +73,10 @@ pub async fn handle_shell_invoke(
                     return ShellHandlerOutput {
                         outcome: EndpointExecutionOutcome::Rejected {
                             reason_code: "exec_failure".to_string(),
-                            reference_id: format!("body.std.shell:wait_failure:{}", act.act_id),
+                            reference_id: format!(
+                                "body.std.shell:wait_failure:{}",
+                                act.act_instance_id
+                            ),
                         },
                         sense: None,
                     };
@@ -82,7 +85,7 @@ pub async fn handle_shell_invoke(
                     return ShellHandlerOutput {
                         outcome: EndpointExecutionOutcome::Rejected {
                             reason_code: "timeout".to_string(),
-                            reference_id: format!("body.std.shell:timeout:{}", act.act_id),
+                            reference_id: format!("body.std.shell:timeout:{}", act.act_instance_id),
                         },
                         sense: None,
                     };
@@ -93,7 +96,7 @@ pub async fn handle_shell_invoke(
             return ShellHandlerOutput {
                 outcome: EndpointExecutionOutcome::Rejected {
                     reason_code: "exec_failure".to_string(),
-                    reference_id: format!("body.std.shell:spawn_failure:{}", act.act_id),
+                    reference_id: format!("body.std.shell:spawn_failure:{}", act.act_instance_id),
                 },
                 sense: None,
             };
@@ -108,14 +111,17 @@ pub async fn handle_shell_invoke(
         return ShellHandlerOutput {
             outcome: EndpointExecutionOutcome::Rejected {
                 reason_code: "non_zero_exit".to_string(),
-                reference_id: format!("body.std.shell:non_zero_exit:{}:{}", exit_code, act.act_id),
+                reference_id: format!(
+                    "body.std.shell:non_zero_exit:{}:{}",
+                    exit_code, act.act_instance_id
+                ),
             },
             sense: Some(InlineSenseDatum {
-                sense_id: uuid::Uuid::new_v4().to_string(),
+                sense_instance_id: uuid::Uuid::new_v4().to_string(),
                 neural_signal_descriptor_id: "body.std.shell.result".to_string(),
                 payload: serde_json::json!({
                     "kind": "shell_result",
-                    "act_id": act.act_id,
+                    "act_instance_id": act.act_instance_id,
                     "neural_signal_descriptor_id": act.neural_signal_descriptor_id,
                     "exit_code": exit_code,
                     "stdout_text": stdout_text,
@@ -131,14 +137,14 @@ pub async fn handle_shell_invoke(
     ShellHandlerOutput {
         outcome: EndpointExecutionOutcome::Applied {
             actual_cost_micro: 0,
-            reference_id: format!("body.std.shell:applied:{}", act.act_id),
+            reference_id: format!("body.std.shell:applied:{}", act.act_instance_id),
         },
         sense: Some(InlineSenseDatum {
-            sense_id: uuid::Uuid::new_v4().to_string(),
+            sense_instance_id: uuid::Uuid::new_v4().to_string(),
             neural_signal_descriptor_id: "body.std.shell.result".to_string(),
             payload: serde_json::json!({
                 "kind": "shell_result",
-                "act_id": act.act_id,
+                "act_instance_id": act.act_instance_id,
                 "neural_signal_descriptor_id": act.neural_signal_descriptor_id,
                 "exit_code": exit_code,
                 "stdout_text": stdout_text,
@@ -165,9 +171,9 @@ mod tests {
 
     use super::{ShellLimits, handle_shell_invoke};
 
-    fn build_request(act_id: &str, payload: serde_json::Value) -> Act {
+    fn build_request(act_instance_id: &str, payload: serde_json::Value) -> Act {
         Act {
-            act_id: act_id.to_string(),
+            act_instance_id: act_instance_id.to_string(),
             endpoint_id: "ep:body:std:shell".to_string(),
             neural_signal_descriptor_id: "tool.shell.exec".to_string(),
             payload: payload,

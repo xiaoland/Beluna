@@ -47,7 +47,7 @@ struct SenseBodyWire: Codable {
     let payload: JSONValue
 
     enum CodingKeys: String, CodingKey {
-        case senseID = "sense_id"
+        case senseID = "sense_instance_id"
         case neuralSignalDescriptorID = "neural_signal_descriptor_id"
         case payload
     }
@@ -57,7 +57,7 @@ struct ActAckBodyWire: Codable {
     let actID: String
 
     enum CodingKeys: String, CodingKey {
-        case actID = "act_id"
+        case actID = "act_instance_id"
     }
 }
 
@@ -68,7 +68,7 @@ struct InboundActWire: Decodable, Equatable {
     let payload: JSONValue
 
     enum CodingKeys: String, CodingKey {
-        case actID = "act_id"
+        case actID = "act_instance_id"
         case endpointID = "endpoint_id"
         case neuralSignalDescriptorID = "neural_signal_descriptor_id"
         case payload
@@ -170,7 +170,7 @@ func makeAppleEndpointRegisterEnvelope() -> NDJSONEnvelope<AuthBodyWire> {
                         "type": .string("object"),
                         "required": .array([
                             .string("kind"),
-                            .string("act_id"),
+                            .string("act_instance_id"),
                             .string("status"),
                             .string("reference_id")
                         ]),
@@ -179,7 +179,7 @@ func makeAppleEndpointRegisterEnvelope() -> NDJSONEnvelope<AuthBodyWire> {
                                 "type": .string("string"),
                                 "const": .string("present_message_result")
                             ]),
-                            "act_id": .object([
+                            "act_instance_id": .object([
                                 "type": .string("string")
                             ]),
                             "status": .object([
@@ -233,7 +233,7 @@ func makeActResultSenseEnvelope(
     var payload: [String: JSONValue] = [
         "kind": .string("present_message_result"),
         "status": .string(status),
-        "act_id": .string(action.actID),
+        "act_instance_id": .string(action.actID),
         "reference_id": .string(referenceID)
     ]
     if let reasonCode {

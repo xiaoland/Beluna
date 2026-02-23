@@ -16,7 +16,7 @@ Minimal SwiftUI chat-style Body Endpoint for Beluna Spine UnixSocket.
 9. Authenticates over NDJSON envelope (`method=auth`) with declared capabilities.
 10. Sends user messages as `sense` envelopes aligned with the OpenAI Responses subset.
 11. Receives `act` envelopes, sends `act_ack`, and renders assistant chat bubbles.
-12. Sends invoke outcome back as correlated `sense` (echoes `act_id` and route markers).
+12. Sends invoke outcome back as correlated `sense` (echoes `act_instance_id` and route markers).
 13. Polls Core Prometheus metrics every 5 seconds and surfaces key Cortex gauges in the chat header.
 14. Supports manual metrics refresh in the chat header.
 15. Polls Beluna Core logs every 3 seconds and pairs `cortex_organ_input` + `cortex_organ_output`.

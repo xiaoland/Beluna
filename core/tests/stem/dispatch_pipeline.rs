@@ -30,7 +30,7 @@ impl Endpoint for SpyEndpoint {
     async fn invoke(&self, act: Act) -> Result<ActDispatchResult, beluna::spine::SpineError> {
         self.requests.lock().await.push(act.clone());
         Ok(ActDispatchResult::Acknowledged {
-            reference_id: format!("spy:settle:{}", act.act_id),
+            reference_id: format!("spy:settle:{}", act.act_instance_id),
         })
     }
 }
@@ -102,7 +102,7 @@ async fn dispatches_all_acts_when_ledger_has_zero_reservation_policy() {
     let (sense_tx, sense_rx) = mpsc::channel(4);
     sense_tx
         .send(Sense::Domain(SenseDatum {
-            sense_id: "sense:1".to_string(),
+            sense_instance_id: "sense:1".to_string(),
             endpoint_id: "ep.demo".to_string(),
             neural_signal_descriptor_id: "sense.demo".to_string(),
             payload: serde_json::json!({}),

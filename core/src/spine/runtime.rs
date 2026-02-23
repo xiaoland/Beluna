@@ -220,7 +220,7 @@ impl Spine {
         target = "spine.dispatch",
         skip(self, act),
         fields(
-            act_id = %act.act_id,
+            act_instance_id = %act.act_instance_id,
             endpoint_id = %act.endpoint_id,
             neural_signal_descriptor_id = %act.neural_signal_descriptor_id
         )
@@ -240,7 +240,7 @@ impl Spine {
                 self.emit_dispatch_failure_sense(
                     &act,
                     "spine_dispatch_error",
-                    &format!("spine:error:{}:{}", act.act_id, err.kind as u8),
+                    &format!("spine:error:{}:{}", act.act_instance_id, err.kind as u8),
                 )
                 .await;
                 Ok(DispatchDecision::Break)
@@ -253,24 +253,26 @@ impl Spine {
         target = "spine.dispatch",
         skip(self, act),
         fields(
-            act_id = %act.act_id,
+            act_instance_id = %act.act_instance_id,
             endpoint_id = %act.endpoint_id,
             neural_signal_descriptor_id = %act.neural_signal_descriptor_id
         )
     )]
     pub async fn dispatch_act(&self, act: Act) -> Result<ActDispatchResult, SpineError> {
-        if act.act_id.trim().is_empty() || act.endpoint_id.trim().is_empty() {
+        if act.act_instance_id.trim().is_empty() || act.endpoint_id.trim().is_empty() {
             tracing::warn!(
                 target: "spine.dispatch",
                 "act_dispatch_invalid_input"
             );
-            return Err(invalid_batch("act dispatch is missing act_id/endpoint_id"));
+            return Err(invalid_batch(
+                "act dispatch is missing act_instance_id/endpoint_id",
+            ));
         }
 
         let Some(dispatch) = self.resolve_dispatch(&act.endpoint_id) else {
             let outcome = ActDispatchResult::Rejected {
                 reason_code: "endpoint_not_found".to_string(),
-                reference_id: format!("spine:missing_endpoint:{}", act.act_id),
+                reference_id: format!("spine:missing_endpoint:{}", act.act_instance_id),
             };
             Self::log_dispatch_outcome(&act, "unknown", None, &outcome);
             return Ok(outcome);
@@ -298,7 +300,7 @@ impl Spine {
                         );
                         let outcome = ActDispatchResult::Rejected {
                             reason_code: "endpoint_error".to_string(),
-                            reference_id: format!("spine:error:{}", act.act_id),
+                            reference_id: format!("spine:error:{}", act.act_instance_id),
                         };
                         Self::log_dispatch_outcome(&act, "inline", None, &outcome);
                         Ok(outcome)
@@ -327,7 +329,7 @@ impl Spine {
                         );
                         let outcome = ActDispatchResult::Rejected {
                             reason_code: "endpoint_error".to_string(),
-                            reference_id: format!("spine:error:{}", act.act_id),
+                            reference_id: format!("spine:error:{}", act.act_instance_id),
                         };
                         Self::log_dispatch_outcome(&act, "adapter", Some(channel_id), &outcome);
                         Ok(outcome)
@@ -339,11 +341,11 @@ impl Spine {
 
     async fn emit_dispatch_failure_sense(&self, act: &Act, reason_code: &str, reference_id: &str) {
         let sense = Sense::Domain(SenseDatum {
-            sense_id: uuid::Uuid::new_v4().to_string(),
+            sense_instance_id: uuid::Uuid::new_v4().to_string(),
             endpoint_id: "core.spine".to_string(),
             neural_signal_descriptor_id: "dispatch.failed".to_string(),
             payload: serde_json::json!({
-                "act_id": act.act_id,
+                "act_instance_id": act.act_instance_id,
                 "endpoint_id": act.endpoint_id,
                 "neural_signal_descriptor_id": act.neural_signal_descriptor_id,
                 "reason_code": reason_code,
@@ -353,7 +355,7 @@ impl Spine {
         if let Err(err) = self.afferent_pathway.send(sense).await {
             tracing::warn!(
                 target: "spine.dispatch",
-                act_id = %act.act_id,
+                act_instance_id = %act.act_instance_id,
                 error = %err,
                 "failed_to_emit_dispatch_failure_sense"
             );
@@ -588,12 +590,12 @@ impl Spine {
                 target: "spine.dispatch",
                 dispatch_binding = "adapter",
                 adapter_channel_id = channel_id,
-                act_id = %act.act_id,
+                act_instance_id = %act.act_instance_id,
                 "adapter_channel_send_failed"
             );
             return Err(backend_failure(format!(
                 "failed to dispatch act {} to adapter channel {}",
-                act.act_id, channel_id
+                act.act_instance_id, channel_id
             )));
         }
 
@@ -601,11 +603,11 @@ impl Spine {
             target: "spine.dispatch",
             dispatch_binding = "adapter",
             adapter_channel_id = channel_id,
-            act_id = %act.act_id,
+            act_instance_id = %act.act_instance_id,
             "act_enqueued_to_adapter_channel"
         );
         Ok(ActDispatchResult::Acknowledged {
-            reference_id: format!("adapter:act_sent:{}", act.act_id),
+            reference_id: format!("adapter:act_sent:{}", act.act_instance_id),
         })
     }
 
@@ -619,7 +621,7 @@ impl Spine {
             (ActDispatchResult::Acknowledged { reference_id }, Some(channel_id)) => {
                 tracing::info!(
                     target: "spine.dispatch",
-                    act_id = %act.act_id,
+                    act_instance_id = %act.act_instance_id,
                     endpoint_id = %act.endpoint_id,
                     neural_signal_descriptor_id = %act.neural_signal_descriptor_id,
                     dispatch_binding = dispatch_binding,
@@ -631,7 +633,7 @@ impl Spine {
             (ActDispatchResult::Acknowledged { reference_id }, None) => {
                 tracing::info!(
                     target: "spine.dispatch",
-                    act_id = %act.act_id,
+                    act_instance_id = %act.act_instance_id,
                     endpoint_id = %act.endpoint_id,
                     neural_signal_descriptor_id = %act.neural_signal_descriptor_id,
                     dispatch_binding = dispatch_binding,
@@ -648,7 +650,7 @@ impl Spine {
             ) => {
                 tracing::warn!(
                     target: "spine.dispatch",
-                    act_id = %act.act_id,
+                    act_instance_id = %act.act_instance_id,
                     endpoint_id = %act.endpoint_id,
                     neural_signal_descriptor_id = %act.neural_signal_descriptor_id,
                     dispatch_binding = dispatch_binding,
@@ -667,7 +669,7 @@ impl Spine {
             ) => {
                 tracing::warn!(
                     target: "spine.dispatch",
-                    act_id = %act.act_id,
+                    act_instance_id = %act.act_instance_id,
                     endpoint_id = %act.endpoint_id,
                     neural_signal_descriptor_id = %act.neural_signal_descriptor_id,
                     dispatch_binding = dispatch_binding,

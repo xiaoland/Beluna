@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-pub type SenseId = String;
-pub type ActId = String;
+pub type SenseInstanceId = String;
+pub type ActInstanceId = String;
 pub type CycleId = u64;
 
 pub fn is_uuid_v4(id: &str) -> bool {
@@ -32,17 +32,13 @@ pub struct NeuralSignalDescriptorRouteKey {
 }
 
 impl NeuralSignalDescriptorRouteKey {
-    pub fn fq_neural_signal_descriptor_id(&self) -> String {
-        format!(
-            "{}/{}/{}",
-            match self.r#type {
-                NeuralSignalType::Sense => "sense",
-                NeuralSignalType::Act => "act",
-            },
-            self.endpoint_id,
-            self.neural_signal_descriptor_id
-        )
+    pub fn fq_neural_signal_id(&self) -> String {
+        build_fq_neural_signal_id(&self.endpoint_id, &self.neural_signal_descriptor_id)
     }
+}
+
+pub fn build_fq_neural_signal_id(endpoint_id: &str, neural_signal_descriptor_id: &str) -> String {
+    format!("{endpoint_id}/{neural_signal_descriptor_id}")
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -75,7 +71,7 @@ pub struct NeuralSignalDescriptorDropPatch {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SenseDatum {
-    pub sense_id: SenseId,
+    pub sense_instance_id: SenseInstanceId,
     pub endpoint_id: String,
     pub neural_signal_descriptor_id: String,
     pub payload: serde_json::Value,
@@ -92,7 +88,7 @@ pub enum Sense {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Act {
-    pub act_id: ActId,
+    pub act_instance_id: ActInstanceId,
     pub endpoint_id: String,
     pub neural_signal_descriptor_id: String,
     pub payload: serde_json::Value,

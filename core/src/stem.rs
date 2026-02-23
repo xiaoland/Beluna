@@ -229,7 +229,7 @@ impl Stem {
                     target: "stem",
                     cycle_id = self.cycle_id,
                     seq_no = seq_no,
-                    act_id = %act.act_id,
+                    act_instance_id = %act.act_instance_id,
                     "sleep_act_intercepted"
                 );
                 break;

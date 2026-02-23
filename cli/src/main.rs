@@ -107,14 +107,14 @@ struct AuthBody {
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 struct SenseBody {
-    sense_id: String,
+    sense_instance_id: String,
     neural_signal_descriptor_id: String,
     payload: serde_json::Value,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 struct ActAckBody {
-    act_id: String,
+    act_instance_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -132,7 +132,7 @@ struct InboundActBody {
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 struct Act {
-    act_id: String,
+    act_instance_id: String,
     endpoint_id: String,
     neural_signal_descriptor_id: String,
     payload: serde_json::Value,
@@ -200,7 +200,7 @@ async fn main() -> Result<()> {
                             Arc::clone(&writer),
                             "sense",
                             SenseBody {
-                                sense_id: uuid::Uuid::new_v4().to_string(),
+                                sense_instance_id: uuid::Uuid::new_v4().to_string(),
                                 neural_signal_descriptor_id: USER_MESSAGE_NEURAL_SIGNAL_DESCRIPTOR_ID.to_string(),
                                 payload: serde_json::json!({
                                     "kind": "user_message",
@@ -239,7 +239,7 @@ async fn main() -> Result<()> {
             Arc::clone(&writer),
             "act_ack",
             ActAckBody {
-                act_id: act.act_id.clone(),
+                act_instance_id: act.act_instance_id.clone(),
             },
         )
         .await?;
@@ -247,13 +247,16 @@ async fn main() -> Result<()> {
         if act.neural_signal_descriptor_id != PRESENT_PLAIN_TEXT_NEURAL_SIGNAL_DESCRIPTOR_ID {
             eprintln!(
                 "[warn] unsupported neural_signal_descriptor_id '{}' for act {}",
-                act.neural_signal_descriptor_id, act.act_id
+                act.neural_signal_descriptor_id, act.act_instance_id
             );
             continue;
         }
 
         let Some(text) = extract_text_from_payload(&act.payload) else {
-            return Err(anyhow!("act {} missing payload text string", act.act_id));
+            return Err(anyhow!(
+                "act {} missing payload text string",
+                act.act_instance_id
+            ));
         };
 
         println!("{text}");
