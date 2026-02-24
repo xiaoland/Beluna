@@ -9,6 +9,34 @@
     "ai_gateway": {
       "type": "object",
       "properties": {
+        "chat": {
+          "type": "object",
+          "properties": {
+            "default_route": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "default_max_tool_rounds": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "default_max_turn_context_messages": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "default_session_ttl_seconds": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "default_turn_timeout_ms": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "additionalProperties": false
+        },
         "reliability": {
           "type": "object",
           "properties": {
@@ -297,10 +325,12 @@
               "maximum": 1
             },
             "max_primary_output_tokens": {
+              "description": "Paused: retained for compatibility, currently ignored by Cortex request dispatch.",
               "type": "integer",
               "minimum": 1
             },
             "max_sub_output_tokens": {
+              "description": "Paused: retained for compatibility, currently ignored by Cortex request dispatch.",
               "type": "integer",
               "minimum": 1
             },

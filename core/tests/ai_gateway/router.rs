@@ -1,8 +1,8 @@
 use beluna::ai_gateway::{
     router::BackendRouter,
     types::{
-        AIGatewayConfig, BackendDialect, BackendProfile, BudgetConfig, CredentialRef, ModelProfile,
-        ReliabilityConfig,
+        AIGatewayConfig, BackendDialect, BackendProfile, BudgetConfig, ChatConfig, CredentialRef,
+        ModelProfile, ReliabilityConfig,
     },
     types_chat::{
         CanonicalContentPart, CanonicalLimits, CanonicalMessage, CanonicalOutputMode,
@@ -38,6 +38,7 @@ fn gateway_config() -> AIGatewayConfig {
                 copilot: None,
             },
         ],
+        chat: ChatConfig::default(),
         reliability: ReliabilityConfig::default(),
         budget: BudgetConfig::default(),
     }

@@ -19,8 +19,8 @@ use crate::ai_gateway::{
     error::{GatewayError, GatewayErrorKind},
     types::{AdapterContext, BackendCapabilities, BackendDialect},
     types_chat::{
-        AdapterInvocation, BackendIdentity, BackendRawEvent, CanonicalRequest, CanonicalToolCall,
-        FinishReason, ToolCallStatus, UsageStats,
+        AdapterInvocation, BackendIdentity, BackendOnceResponse, BackendRawEvent,
+        CanonicalRequest, CanonicalToolCall, FinishReason, ToolCallStatus, UsageStats,
     },
 };
 
@@ -55,6 +55,104 @@ impl BackendAdapter for OllamaAdapter {
             vision: false,
             resumable_streaming: false,
         }
+    }
+
+    async fn invoke_once(
+        &self,
+        ctx: AdapterContext,
+        req: CanonicalRequest,
+    ) -> Result<BackendOnceResponse, GatewayError> {
+        let endpoint = ctx.profile.endpoint.clone().ok_or_else(|| {
+            GatewayError::new(
+                GatewayErrorKind::InvalidRequest,
+                "ollama backend requires endpoint",
+            )
+            .with_retryable(false)
+            .with_backend_id(ctx.backend_id.clone())
+        })?;
+
+        let url = format!("{}/api/chat", endpoint.trim_end_matches('/'));
+        let backend_id = ctx.backend_id.clone();
+        let model = ctx.model.clone();
+        let request_id = ctx.request_id.clone();
+        let timeout_ms = ctx.timeout.as_millis();
+        tracing::debug!(
+            target: "ai_gateway.ollama",
+            request_id = %request_id,
+            backend_id = %backend_id,
+            model = %model,
+            timeout_ms = timeout_ms as u64,
+            url = %url,
+            "ollama_once_dispatch_start"
+        );
+
+        let mut body = json!({
+            "model": model,
+            "messages": http_common::canonical_messages_to_ollama(&req.messages),
+            "stream": false,
+        });
+
+        if !req.tools.is_empty() {
+            body["tools"] = Value::Array(http_common::tools_to_ollama(&req.tools));
+        }
+        if let Some(max_tokens) = req.limits.max_output_tokens {
+            body["options"] = json!({"num_predict": max_tokens});
+        }
+
+        let mut req_builder = self
+            .client
+            .post(url)
+            .timeout(ctx.timeout)
+            .header(header::CONTENT_TYPE, "application/json")
+            .header("x-request-id", request_id.clone())
+            .json(&body);
+
+        if let Some(auth_header) = ctx.credential.auth_header.clone() {
+            req_builder = req_builder.header(header::AUTHORIZATION, auth_header);
+        }
+        for (k, v) in ctx.credential.extra_headers.clone() {
+            req_builder = req_builder.header(k, v);
+        }
+
+        let response = req_builder.send().await.map_err(|err| {
+            GatewayError::new(
+                GatewayErrorKind::BackendTransient,
+                format!("ollama request failed: {}", err),
+            )
+            .with_retryable(true)
+            .with_backend_id(backend_id.clone())
+        })?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let body = response.text().await.unwrap_or_default();
+            return Err(http_common::map_http_error(status, &backend_id, &body));
+        }
+
+        let payload = response.json::<Value>().await.map_err(|err| {
+            GatewayError::new(
+                GatewayErrorKind::ProtocolViolation,
+                format!("invalid ollama response payload: {}", err),
+            )
+            .with_retryable(false)
+            .with_backend_id(backend_id.clone())
+        })?;
+
+        let events = parse_ollama_payload(&payload)?;
+        let (output_text, tool_calls, usage, finish_reason) =
+            aggregate_once_events(events, &backend_id)?;
+
+        Ok(BackendOnceResponse {
+            backend_identity: BackendIdentity {
+                backend_id,
+                dialect: BackendDialect::Ollama,
+                model: ctx.model,
+            },
+            output_text,
+            tool_calls,
+            usage,
+            finish_reason,
+        })
     }
 
     async fn invoke_stream(
@@ -438,4 +536,36 @@ fn parse_ollama_payload(payload: &Value) -> Result<Vec<BackendRawEvent>, Gateway
     }
 
     Ok(events)
+}
+
+fn aggregate_once_events(
+    events: Vec<BackendRawEvent>,
+    backend_id: &str,
+) -> Result<(String, Vec<CanonicalToolCall>, Option<UsageStats>, FinishReason), GatewayError> {
+    let mut output_text = String::new();
+    let mut tool_calls = Vec::new();
+    let mut usage: Option<UsageStats> = None;
+    let mut finish_reason: Option<FinishReason> = None;
+
+    for event in events {
+        match event {
+            BackendRawEvent::OutputTextDelta { delta } => output_text.push_str(&delta),
+            BackendRawEvent::ToolCallReady { call } => tool_calls.push(call),
+            BackendRawEvent::Usage { usage: u } => usage = Some(u),
+            BackendRawEvent::Completed { finish_reason: f } => finish_reason = Some(f),
+            BackendRawEvent::Failed { error } => return Err(error),
+            BackendRawEvent::ToolCallDelta { .. } => {}
+        }
+    }
+
+    let finish_reason = finish_reason.ok_or_else(|| {
+        GatewayError::new(
+            GatewayErrorKind::ProtocolViolation,
+            "ollama response missing terminal finish reason",
+        )
+        .with_retryable(false)
+        .with_backend_id(backend_id.to_string())
+    })?;
+
+    Ok((output_text, tool_calls, usage, finish_reason))
 }

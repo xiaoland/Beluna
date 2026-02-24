@@ -8,18 +8,19 @@ use std::{
 };
 
 use async_trait::async_trait;
+use futures_util::StreamExt;
 use serde_json::{Value, json};
 use tokio::{process::Command, sync::mpsc};
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::Instrument;
 
 use crate::ai_gateway::{
-    adapters::{BackendAdapter, copilot_rpc::RpcIo},
+    adapters::{BackendAdapter, github_copilot::rpc::RpcIo},
     error::{GatewayError, GatewayErrorKind},
     types::{AdapterContext, BackendCapabilities, BackendDialect},
     types_chat::{
-        AdapterInvocation, BackendIdentity, BackendRawEvent, CanonicalContentPart,
-        CanonicalRequest, FinishReason,
+        AdapterInvocation, BackendIdentity, BackendOnceResponse, BackendRawEvent,
+        CanonicalContentPart, CanonicalRequest, FinishReason,
     },
 };
 
@@ -41,6 +42,58 @@ impl BackendAdapter for GitHubCopilotAdapter {
             vision: false,
             resumable_streaming: false,
         }
+    }
+
+    async fn invoke_once(
+        &self,
+        ctx: AdapterContext,
+        mut req: CanonicalRequest,
+    ) -> Result<BackendOnceResponse, GatewayError> {
+        req.stream = false;
+        let backend_id = ctx.backend_id.clone();
+        let model = ctx.model.clone();
+        let mut invocation = self.invoke_stream(ctx, req).await?;
+        let mut output_text = String::new();
+        let mut finish_reason: Option<FinishReason> = None;
+
+        while let Some(item) = invocation.stream.next().await {
+            match item? {
+                BackendRawEvent::OutputTextDelta { delta } => {
+                    output_text.push_str(&delta);
+                }
+                BackendRawEvent::Completed {
+                    finish_reason: reason,
+                } => {
+                    finish_reason = Some(reason);
+                    break;
+                }
+                BackendRawEvent::Failed { error } => return Err(error),
+                BackendRawEvent::ToolCallDelta { .. }
+                | BackendRawEvent::ToolCallReady { .. }
+                | BackendRawEvent::Usage { .. } => {}
+            }
+        }
+
+        let finish_reason = finish_reason.ok_or_else(|| {
+            GatewayError::new(
+                GatewayErrorKind::ProtocolViolation,
+                "copilot once response missing terminal finish reason",
+            )
+            .with_retryable(false)
+            .with_backend_id(backend_id.clone())
+        })?;
+
+        Ok(BackendOnceResponse {
+            backend_identity: BackendIdentity {
+                backend_id,
+                dialect: BackendDialect::GitHubCopilotSdk,
+                model,
+            },
+            output_text,
+            tool_calls: Vec::new(),
+            usage: None,
+            finish_reason,
+        })
     }
 
     async fn invoke_stream(

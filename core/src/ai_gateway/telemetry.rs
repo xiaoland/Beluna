@@ -53,7 +53,7 @@ pub fn emit_gateway_event(event: GatewayTelemetryEvent) {
             model,
             cost_attribution_id,
         } => {
-            tracing::info!(
+            tracing::debug!(
                 target: "ai_gateway",
                 event = "request_started",
                 request_id = %request_id,
@@ -68,7 +68,7 @@ pub fn emit_gateway_event(event: GatewayTelemetryEvent) {
             attempt,
             cost_attribution_id,
         } => {
-            tracing::info!(
+            tracing::debug!(
                 target: "ai_gateway",
                 event = "attempt_started",
                 request_id = %request_id,
@@ -96,7 +96,7 @@ pub fn emit_gateway_event(event: GatewayTelemetryEvent) {
             );
         }
         GatewayTelemetryEvent::StreamFirstEvent { request_id } => {
-            tracing::info!(
+            tracing::debug!(
                 target: "ai_gateway",
                 event = "stream_first_event",
                 request_id = %request_id,
@@ -113,7 +113,7 @@ pub fn emit_gateway_event(event: GatewayTelemetryEvent) {
                 .as_ref()
                 .map(|u| (u.input_tokens, u.output_tokens, u.total_tokens))
                 .unwrap_or((None, None, None));
-            tracing::info!(
+            tracing::debug!(
                 target: "ai_gateway",
                 event = "request_completed",
                 request_id = %request_id,
@@ -145,7 +145,7 @@ pub fn emit_gateway_event(event: GatewayTelemetryEvent) {
             request_id,
             cost_attribution_id,
         } => {
-            tracing::info!(
+            tracing::debug!(
                 target: "ai_gateway",
                 event = "request_cancelled",
                 request_id = %request_id,

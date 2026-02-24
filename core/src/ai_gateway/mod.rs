@@ -3,6 +3,7 @@
 pub mod adapters;
 pub mod budget;
 pub mod capabilities;
+pub mod chat;
 pub mod credentials;
 pub mod error;
 pub mod gateway;

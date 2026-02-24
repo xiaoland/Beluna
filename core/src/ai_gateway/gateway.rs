@@ -5,10 +5,13 @@ use tokio::{sync::mpsc, time::sleep};
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::Instrument;
 
+use crate::observability::metrics as observability_metrics;
+
 use crate::ai_gateway::{
     adapters::{BackendAdapter, build_default_adapters},
     budget::{BudgetEnforcer, BudgetLease},
     capabilities::CapabilityGuard,
+    chat::InMemoryChatSessionStore,
     credentials::CredentialProvider,
     error::{GatewayError, GatewayErrorKind},
     reliability::ReliabilityLayer,
@@ -32,6 +35,9 @@ pub struct AIGateway {
     capability_guard: CapabilityGuard,
     budget_enforcer: BudgetEnforcer,
     reliability: ReliabilityLayer,
+    chat_store: Arc<InMemoryChatSessionStore>,
+    chat_default_route: Option<String>,
+    chat_default_turn_timeout_ms: u64,
 }
 
 impl AIGateway {
@@ -40,6 +46,7 @@ impl AIGateway {
         credential_provider: Arc<dyn CredentialProvider>,
     ) -> Result<Self, GatewayError> {
         let router = BackendRouter::new(&config)?;
+        let chat_config = config.chat.clone();
         Ok(Self {
             router,
             credential_provider,
@@ -49,6 +56,12 @@ impl AIGateway {
             capability_guard: CapabilityGuard,
             budget_enforcer: BudgetEnforcer::new(config.budget),
             reliability: ReliabilityLayer::new(config.reliability),
+            chat_store: Arc::new(InMemoryChatSessionStore::new(
+                chat_config.default_session_ttl_seconds,
+                chat_config.default_max_turn_context_messages,
+            )),
+            chat_default_route: chat_config.default_route,
+            chat_default_turn_timeout_ms: chat_config.default_turn_timeout_ms,
         })
     }
 
@@ -58,6 +71,15 @@ impl AIGateway {
     ) -> Self {
         self.adapters = adapters;
         self
+    }
+
+    pub fn chat(self: &Arc<Self>) -> crate::ai_gateway::chat::ChatGateway {
+        crate::ai_gateway::chat::ChatGateway::new(
+            Arc::clone(self),
+            Arc::clone(&self.chat_store),
+            self.chat_default_route.clone(),
+            self.chat_default_turn_timeout_ms,
+        )
     }
 
     pub async fn chat_stream(&self, request: ChatRequest) -> Result<ChatEventStream, GatewayError> {
@@ -74,88 +96,21 @@ impl AIGateway {
         let route = request.route.clone();
         log_llm_input(&stage, &request);
         log_chat_once_request_summary(&stage, &request);
-
-        let mut stream = self.chat_stream_internal(request, false).await?;
-        let mut output_text = String::new();
-        let mut tool_calls = Vec::new();
-        let mut usage: Option<UsageStats> = None;
-        let mut finish_reason: Option<FinishReason> = None;
-        let mut request_id: Option<String> = None;
-        let mut backend_id: Option<String> = None;
-        let mut model_id: Option<String> = None;
-
-        while let Some(item) = stream.next().await {
-            let event = item?;
-            match event {
-                ChatEvent::Started {
-                    request_id: id,
-                    backend_id: started_backend_id,
-                    model_id: started_model_id,
-                } => {
-                    request_id = Some(id);
-                    backend_id = Some(started_backend_id);
-                    model_id = Some(started_model_id);
-                }
-                ChatEvent::TextDelta { delta, .. } => {
-                    output_text.push_str(&delta);
-                }
-                ChatEvent::ToolCallReady { call, .. } => {
-                    tool_calls.push(call);
-                }
-                ChatEvent::Usage { usage: current, .. } => {
-                    usage = Some(current);
-                }
-                ChatEvent::Completed {
-                    request_id: id,
-                    finish_reason: reason,
-                } => {
-                    request_id = Some(id);
-                    finish_reason = Some(reason);
-                    break;
-                }
-                ChatEvent::Failed { error, .. } => {
-                    return Err(error);
-                }
-                ChatEvent::ToolCallDelta { .. } => {}
-            }
-        }
-
-        let request_id = request_id.ok_or_else(|| {
-            GatewayError::new(
-                GatewayErrorKind::ProtocolViolation,
-                "missing request id in stream",
-            )
-            .with_retryable(false)
-        })?;
-
-        let finish_reason = finish_reason.ok_or_else(|| {
-            GatewayError::new(
-                GatewayErrorKind::ProtocolViolation,
-                "stream ended without terminal event",
-            )
-            .with_retryable(false)
-        })?;
-
-        let response = ChatResponse {
-            request_id,
-            output_text,
-            tool_calls,
-            usage,
-            finish_reason,
-            backend_metadata: Default::default(),
-        };
+        let canonical_request = self.request_normalizer.normalize_chat(request, false)?;
+        let dispatch = self.dispatch_once(canonical_request).await?;
+        let response = dispatch.response;
         log_chat_once_response_summary(
             &stage,
             route.as_deref(),
-            backend_id.as_deref(),
-            model_id.as_deref(),
+            Some(dispatch.backend_id.as_str()),
+            Some(dispatch.model_id.as_str()),
             &response,
         );
         log_llm_output(
             &stage,
             route.as_deref(),
-            backend_id.as_deref(),
-            model_id.as_deref(),
+            Some(dispatch.backend_id.as_str()),
+            Some(dispatch.model_id.as_str()),
             &response,
         );
 
@@ -169,6 +124,213 @@ impl AIGateway {
     ) -> Result<ChatEventStream, GatewayError> {
         let canonical_request = self.request_normalizer.normalize_chat(request, stream)?;
         self.dispatch_stream(canonical_request).await
+    }
+
+    async fn dispatch_once(
+        &self,
+        canonical_request: CanonicalRequest,
+    ) -> Result<DispatchOnceResult, GatewayError> {
+        let selected = self.router.select(&canonical_request)?;
+        let credential = self
+            .credential_provider
+            .resolve(&selected.profile.credential, &selected.profile)
+            .await?;
+
+        let adapter = self
+            .adapters
+            .get(&selected.profile.dialect)
+            .cloned()
+            .ok_or_else(|| {
+                GatewayError::new(
+                    GatewayErrorKind::InvalidRequest,
+                    format!(
+                        "adapter for dialect {:?} is not registered",
+                        selected.profile.dialect
+                    ),
+                )
+                .with_retryable(false)
+                .with_backend_id(selected.backend_id.clone())
+            })?;
+
+        let capabilities = selected
+            .profile
+            .capabilities
+            .clone()
+            .unwrap_or_else(|| adapter.static_capabilities());
+        self.capability_guard
+            .assert_supported(&canonical_request, &capabilities)?;
+
+        let budget_lease = self
+            .budget_enforcer
+            .pre_dispatch(&canonical_request, &selected.backend_id)
+            .await?;
+
+        let stage = canonical_request
+            .metadata
+            .get("cortex_stage")
+            .map(String::as_str)
+            .unwrap_or("primary");
+        tracing::debug!(
+            target: "ai_gateway",
+            request_id = %canonical_request.request_id,
+            backend_id = %selected.backend_id,
+            dialect = ?selected.profile.dialect,
+            model = %selected.resolved_model,
+            stage = stage,
+            max_output_tokens = ?canonical_request.limits.max_output_tokens,
+            requested_timeout_ms = ?canonical_request.limits.max_request_time_ms,
+            effective_timeout_ms = budget_lease.effective_timeout.as_millis() as u64,
+            "chat_once_prepared"
+        );
+
+        let request_id = canonical_request.request_id.clone();
+        let cost_attribution_id = canonical_request.cost_attribution_id.clone();
+        emit_gateway_event(GatewayTelemetryEvent::RequestStarted {
+            request_id: request_id.clone(),
+            backend_id: selected.backend_id.clone(),
+            model: selected.resolved_model.clone(),
+            cost_attribution_id: cost_attribution_id.clone(),
+        });
+
+        let mut attempt = 0_u32;
+        let mut lease = Some(budget_lease);
+        loop {
+            emit_gateway_event(GatewayTelemetryEvent::AttemptStarted {
+                request_id: request_id.clone(),
+                attempt,
+                cost_attribution_id: cost_attribution_id.clone(),
+            });
+
+            if let Err(err) = reliability_check(&self.reliability, &selected.backend_id).await {
+                release_lease(&self.budget_enforcer, &mut lease);
+                emit_gateway_event(GatewayTelemetryEvent::RequestFailed {
+                    request_id,
+                    attempts: attempt + 1,
+                    error_kind: err.kind,
+                    cost_attribution_id,
+                });
+                return Err(err);
+            }
+
+            let adapter_ctx = AdapterContext {
+                backend_id: selected.backend_id.clone(),
+                model: selected.resolved_model.clone(),
+                profile: selected.profile.clone(),
+                credential: credential.clone(),
+                timeout: lease
+                    .as_ref()
+                    .map(|l| l.effective_timeout)
+                    .unwrap_or_else(|| {
+                        std::time::Duration::from_millis(self.reliability.config().request_timeout_ms)
+                    }),
+                request_id: request_id.clone(),
+            };
+
+            let invoke_started_at = Instant::now();
+            let once_result = adapter
+                .invoke_once(adapter_ctx, canonical_request.clone())
+                .await;
+            tracing::debug!(
+                target: "ai_gateway",
+                request_id = %request_id,
+                attempt = attempt,
+                backend_id = %selected.backend_id,
+                elapsed_ms = invoke_started_at.elapsed().as_millis() as u64,
+                success = once_result.is_ok(),
+                "chat_once_invoke_result"
+            );
+
+            match once_result {
+                Ok(once_response) => {
+                    self.reliability.record_success(&selected.backend_id).await;
+                    if let Some(usage) = once_response.usage.clone() {
+                        let usage_event = ChatEvent::Usage {
+                            request_id: request_id.clone(),
+                            usage: usage.clone(),
+                        };
+                        self.budget_enforcer
+                            .observe_event(&selected.backend_id, &usage_event)
+                            .await;
+                    }
+                    release_lease(&self.budget_enforcer, &mut lease);
+                    emit_gateway_event(GatewayTelemetryEvent::RequestCompleted {
+                        request_id: request_id.clone(),
+                        attempts: attempt + 1,
+                        usage: once_response.usage.clone(),
+                        cost_attribution_id: cost_attribution_id.clone(),
+                    });
+
+                    let backend_id = once_response.backend_identity.backend_id.clone();
+                    let model_id = once_response.backend_identity.model.clone();
+                    let mut backend_metadata = std::collections::BTreeMap::new();
+                    backend_metadata.insert(
+                        "backend_id".to_string(),
+                        serde_json::Value::String(backend_id.clone()),
+                    );
+                    backend_metadata.insert(
+                        "model".to_string(),
+                        serde_json::Value::String(model_id.clone()),
+                    );
+
+                    let response = ChatResponse {
+                        request_id: request_id.clone(),
+                        output_text: once_response.output_text,
+                        tool_calls: once_response.tool_calls,
+                        usage: once_response.usage,
+                        finish_reason: once_response.finish_reason,
+                        backend_metadata,
+                    };
+                    return Ok(DispatchOnceResult {
+                        response,
+                        backend_id,
+                        model_id,
+                    });
+                }
+                Err(err) => {
+                    let can_retry = self.reliability.can_retry(
+                        &err,
+                        attempt,
+                        false,
+                        false,
+                        &capabilities,
+                        adapter.supports_tool_retry(),
+                    );
+                    emit_gateway_event(GatewayTelemetryEvent::AttemptFailed {
+                        request_id: request_id.clone(),
+                        attempt,
+                        kind: err.kind,
+                        retryable: err.retryable,
+                        cost_attribution_id: cost_attribution_id.clone(),
+                    });
+                    self.reliability
+                        .record_failure(
+                            &selected.backend_id,
+                            ReliabilityLayer::counts_toward_breaker(&err),
+                        )
+                        .await;
+
+                    if can_retry {
+                        observability_metrics::increment_chat_task_retries_total(
+                            &selected.backend_id,
+                            &selected.resolved_model,
+                            1,
+                        );
+                        attempt += 1;
+                        sleep(self.reliability.backoff_delay(attempt)).await;
+                        continue;
+                    }
+
+                    release_lease(&self.budget_enforcer, &mut lease);
+                    emit_gateway_event(GatewayTelemetryEvent::RequestFailed {
+                        request_id,
+                        attempts: attempt + 1,
+                        error_kind: err.kind,
+                        cost_attribution_id,
+                    });
+                    return Err(err);
+                }
+            }
+        }
     }
 
     async fn dispatch_stream(
@@ -274,6 +436,12 @@ impl AIGateway {
 
         Ok(Box::pin(ReceiverStream::new(rx)))
     }
+}
+
+struct DispatchOnceResult {
+    response: ChatResponse,
+    backend_id: String,
+    model_id: String,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -462,6 +630,11 @@ async fn run_stream_task(
                     .await;
 
                 if can_retry {
+                    observability_metrics::increment_chat_task_retries_total(
+                        &selected.backend_id,
+                        &selected.resolved_model,
+                        1,
+                    );
                     attempt += 1;
                     let delay = reliability.backoff_delay(attempt);
                     tokio::select! {
@@ -736,6 +909,11 @@ async fn run_stream_task(
             .await;
 
         if can_retry {
+            observability_metrics::increment_chat_task_retries_total(
+                &selected.backend_id,
+                &selected.resolved_model,
+                1,
+            );
             attempt += 1;
             let delay = reliability.backoff_delay(attempt);
             tokio::select! {
@@ -799,6 +977,13 @@ fn release_lease(budget_enforcer: &BudgetEnforcer, lease: &mut Option<BudgetLeas
     }
 }
 
+async fn reliability_check(
+    reliability: &ReliabilityLayer,
+    backend_id: &String,
+) -> Result<(), GatewayError> {
+    reliability.ensure_backend_allowed(backend_id).await
+}
+
 fn log_llm_input(stage: &str, request: &ChatRequest) {
     let request_json = serde_json::to_string_pretty(request)
         .unwrap_or_else(|err| format!("{{\"serialization_error\":\"{}\"}}", err));
@@ -853,7 +1038,7 @@ fn log_chat_once_request_summary(stage: &str, request: &ChatRequest) {
             .map(|tool| tool.name.as_str())
             .collect::<Vec<_>>(),
     );
-    tracing::info!(
+    tracing::debug!(
         target: "ai_gateway",
         stage = stage,
         request_id = request.request_id.as_deref().unwrap_or("-"),
@@ -879,7 +1064,7 @@ fn log_chat_once_response_summary(
             .map(|call| call.name.as_str())
             .collect::<Vec<_>>(),
     );
-    tracing::info!(
+    tracing::debug!(
         target: "ai_gateway",
         stage = stage,
         request_id = %response.request_id,

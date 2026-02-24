@@ -159,6 +159,52 @@ impl Default for BudgetConfig {
     }
 }
 
+fn default_chat_default_route() -> Option<String> {
+    Some(DEFAULT_ROUTE_ALIAS.to_string())
+}
+
+fn default_chat_default_max_tool_rounds() -> u32 {
+    6
+}
+
+fn default_chat_default_max_turn_context_messages() -> usize {
+    64
+}
+
+fn default_chat_default_session_ttl_seconds() -> u64 {
+    3_600
+}
+
+fn default_chat_default_turn_timeout_ms() -> u64 {
+    30_000
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatConfig {
+    #[serde(default = "default_chat_default_route")]
+    pub default_route: Option<String>,
+    #[serde(default = "default_chat_default_max_tool_rounds")]
+    pub default_max_tool_rounds: u32,
+    #[serde(default = "default_chat_default_max_turn_context_messages")]
+    pub default_max_turn_context_messages: usize,
+    #[serde(default = "default_chat_default_session_ttl_seconds")]
+    pub default_session_ttl_seconds: u64,
+    #[serde(default = "default_chat_default_turn_timeout_ms")]
+    pub default_turn_timeout_ms: u64,
+}
+
+impl Default for ChatConfig {
+    fn default() -> Self {
+        Self {
+            default_route: default_chat_default_route(),
+            default_max_tool_rounds: default_chat_default_max_tool_rounds(),
+            default_max_turn_context_messages: default_chat_default_max_turn_context_messages(),
+            default_session_ttl_seconds: default_chat_default_session_ttl_seconds(),
+            default_turn_timeout_ms: default_chat_default_turn_timeout_ms(),
+        }
+    }
+}
+
 fn default_request_timeout_ms() -> u64 {
     30_000
 }
@@ -207,6 +253,8 @@ impl Default for RetryPolicy {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AIGatewayConfig {
     pub backends: Vec<BackendProfile>,
+    #[serde(default)]
+    pub chat: ChatConfig,
     #[serde(default)]
     pub reliability: ReliabilityConfig,
     #[serde(default)]

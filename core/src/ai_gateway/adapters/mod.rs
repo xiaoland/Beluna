@@ -5,10 +5,9 @@ use async_trait::async_trait;
 use crate::ai_gateway::{
     error::GatewayError,
     types::{AdapterContext, BackendCapabilities, BackendDialect},
-    types_chat::{AdapterInvocation, CanonicalRequest},
+    types_chat::{AdapterInvocation, BackendOnceResponse, CanonicalRequest},
 };
 
-pub mod copilot_rpc;
 pub mod github_copilot;
 pub mod http_common;
 pub mod ollama;
@@ -20,6 +19,18 @@ pub trait BackendAdapter: Send + Sync {
     fn static_capabilities(&self) -> BackendCapabilities;
     fn supports_tool_retry(&self) -> bool {
         false
+    }
+
+    async fn invoke_once(
+        &self,
+        _ctx: AdapterContext,
+        _req: CanonicalRequest,
+    ) -> Result<BackendOnceResponse, GatewayError> {
+        Err(GatewayError::new(
+            crate::ai_gateway::error::GatewayErrorKind::UnsupportedCapability,
+            "adapter does not implement chat once",
+        )
+        .with_retryable(false))
     }
 
     async fn invoke_stream(

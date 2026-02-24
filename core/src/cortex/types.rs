@@ -23,7 +23,9 @@ pub struct ReactionLimits {
     pub max_primary_calls: u8,
     pub max_sub_calls: u8,
     pub max_repair_attempts: u8,
+    /// Paused: this config is retained for compatibility but currently ignored.
     pub max_primary_output_tokens: u64,
+    /// Paused: this config is retained for compatibility but currently ignored.
     pub max_sub_output_tokens: u64,
     #[serde(default = "default_max_internal_steps")]
     pub max_internal_steps: u8,

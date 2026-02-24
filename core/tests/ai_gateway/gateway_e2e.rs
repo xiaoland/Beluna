@@ -19,13 +19,13 @@ use beluna::ai_gateway::{
     gateway::AIGateway,
     types::{
         AIGatewayConfig, AdapterContext, BackendCapabilities, BackendDialect, BackendProfile,
-        BudgetConfig, CredentialRef, ModelProfile, ReliabilityConfig, ResolvedCredential,
+        BudgetConfig, ChatConfig, CredentialRef, ModelProfile, ReliabilityConfig, ResolvedCredential,
         RetryPolicy,
     },
     types_chat::{
-        AdapterInvocation, BackendIdentity, BackendRawEvent, BelunaContentPart, BelunaMessage,
-        BelunaRole, CanonicalRequest, ChatEvent, ChatRequest, FinishReason, OutputMode,
-        RequestLimitOverrides, ToolChoice, UsageStats,
+        AdapterInvocation, BackendIdentity, BackendOnceResponse, BackendRawEvent,
+        BelunaContentPart, BelunaMessage, BelunaRole, CanonicalRequest, ChatEvent, ChatRequest,
+        FinishReason, OutputMode, RequestLimitOverrides, ToolChoice, UsageStats,
     },
 };
 
@@ -62,6 +62,34 @@ impl BackendAdapter for RetryOnceMockAdapter {
             vision: false,
             resumable_streaming: false,
         }
+    }
+
+    async fn invoke_once(
+        &self,
+        ctx: AdapterContext,
+        _req: CanonicalRequest,
+    ) -> Result<BackendOnceResponse, GatewayError> {
+        let previous = self.calls.fetch_add(1, Ordering::SeqCst);
+        if previous == 0 {
+            return Err(GatewayError::new(
+                GatewayErrorKind::BackendTransient,
+                "first attempt fails",
+            )
+            .with_retryable(true)
+            .with_backend_id(ctx.backend_id));
+        }
+
+        Ok(BackendOnceResponse {
+            backend_identity: BackendIdentity {
+                backend_id: "openai-default".to_string(),
+                dialect: BackendDialect::OpenAiCompatible,
+                model: "m1".to_string(),
+            },
+            output_text: "ok".to_string(),
+            tool_calls: Vec::new(),
+            usage: None,
+            finish_reason: FinishReason::Stop,
+        })
     }
 
     async fn invoke_stream(
@@ -119,6 +147,16 @@ impl BackendAdapter for OutputThenFailAdapter {
         }
     }
 
+    async fn invoke_once(
+        &self,
+        _ctx: AdapterContext,
+        _req: CanonicalRequest,
+    ) -> Result<BackendOnceResponse, GatewayError> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        Err(GatewayError::new(GatewayErrorKind::BackendTransient, "once failed")
+            .with_retryable(false))
+    }
+
     async fn invoke_stream(
         &self,
         _ctx: AdapterContext,
@@ -162,6 +200,29 @@ impl BackendAdapter for UsageOverBudgetThenCompleteAdapter {
             vision: false,
             resumable_streaming: false,
         }
+    }
+
+    async fn invoke_once(
+        &self,
+        _ctx: AdapterContext,
+        _req: CanonicalRequest,
+    ) -> Result<BackendOnceResponse, GatewayError> {
+        Ok(BackendOnceResponse {
+            backend_identity: BackendIdentity {
+                backend_id: "openai-default".to_string(),
+                dialect: BackendDialect::OpenAiCompatible,
+                model: "m1".to_string(),
+            },
+            output_text: "still-running".to_string(),
+            tool_calls: Vec::new(),
+            usage: Some(UsageStats {
+                input_tokens: Some(10),
+                output_tokens: Some(20),
+                total_tokens: Some(30),
+                provider_usage_raw: None,
+            }),
+            finish_reason: FinishReason::Stop,
+        })
     }
 
     async fn invoke_stream(
@@ -218,6 +279,18 @@ impl BackendAdapter for CancelAwarePendingAdapter {
         }
     }
 
+    async fn invoke_once(
+        &self,
+        _ctx: AdapterContext,
+        _req: CanonicalRequest,
+    ) -> Result<BackendOnceResponse, GatewayError> {
+        Err(GatewayError::new(
+            GatewayErrorKind::UnsupportedCapability,
+            "once path is not implemented for pending adapter",
+        )
+        .with_retryable(false))
+    }
+
     async fn invoke_stream(
         &self,
         _ctx: AdapterContext,
@@ -265,6 +338,7 @@ fn gateway_config_with_budget(budget: BudgetConfig) -> AIGatewayConfig {
             }),
             copilot: None,
         }],
+        chat: ChatConfig::default(),
         reliability: ReliabilityConfig {
             request_timeout_ms: 30_000,
             max_retries: 2,

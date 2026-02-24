@@ -324,5 +324,14 @@ pub struct AdapterInvocation {
     pub cancel: Option<AdapterCancelHandle>,
 }
 
+#[derive(Debug, Clone)]
+pub struct BackendOnceResponse {
+    pub backend_identity: BackendIdentity,
+    pub output_text: String,
+    pub tool_calls: Vec<CanonicalToolCall>,
+    pub usage: Option<UsageStats>,
+    pub finish_reason: FinishReason,
+}
+
 pub type ChatEventStream =
     Pin<Box<dyn Stream<Item = Result<ChatEvent, GatewayError>> + Send + 'static>>;
