@@ -1,12 +1,12 @@
 import Foundation
 import Darwin
 
-enum SpineBodyEndpointError: Error {
+enum BodyEndpointClientError: Error {
     case notConnected
     case connectionFailed(String)
 }
 
-extension SpineBodyEndpointError: LocalizedError {
+extension BodyEndpointClientError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notConnected:
@@ -40,7 +40,7 @@ private func socketPathDiagnostics(_ path: String) -> String {
     }
 }
 
-actor SpineUnixSocketBodyEndpoint {
+actor UnixSocketBodyEndpointClient {
     typealias StateHandler = @Sendable (ConnectionState) -> Void
     typealias MessageHandler = @Sendable (ServerWireMessage) -> Void
     typealias DebugHandler = @Sendable (String) -> Void
@@ -107,25 +107,22 @@ actor SpineUnixSocketBodyEndpoint {
     }
 
     func sendRegister() async throws {
-        let envelope = makeAppleEndpointRegisterEnvelope()
+        let envelope = makeBodyEndpointRegisterEnvelope()
         try await sendLine(envelope)
     }
 
-    func sendUserSense(conversationID: String, text: String) async throws {
-        let envelope = makeUserSenseEnvelope(conversationID: conversationID, text: text)
+    func sendUserTextSubmittedSense(text: String) async throws {
+        let envelope = makeUserTextSubmittedSenseEnvelope(text: text)
         try await sendLine(envelope)
     }
 
-    func sendActResultSense(
-        action: InboundActWire,
-        isPresented: Bool,
-        isUserRead: Bool
-    ) async throws {
-        let envelope = makeActResultSenseEnvelope(
-            action: action,
-            isPresented: isPresented,
-            isUserRead: isUserRead
-        )
+    func sendActPresentationSucceededSense(action: InboundActWire) async throws {
+        let envelope = makeActPresentationSucceededSenseEnvelope(action: action)
+        try await sendLine(envelope)
+    }
+
+    func sendActPresentationRejectedSense(action: InboundActWire, reasonCode: String) async throws {
+        let envelope = makeActPresentationRejectedSenseEnvelope(action: action, reasonCode: reasonCode)
         try await sendLine(envelope)
     }
 
@@ -190,13 +187,13 @@ actor SpineUnixSocketBodyEndpoint {
             try await parseIncomingData(chunk)
         }
 
-        throw SpineBodyEndpointError.connectionFailed("connection closed")
+        throw BodyEndpointClientError.connectionFailed("connection closed")
     }
 
     private func openUnixSocket(path: String) throws -> Int32 {
         let fd = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else {
-            throw SpineBodyEndpointError.connectionFailed(
+            throw BodyEndpointClientError.connectionFailed(
                 "socket failed: \(osErrorDescription(errno)) (\(errno))"
             )
         }
@@ -211,7 +208,7 @@ actor SpineUnixSocketBodyEndpoint {
             let pathBytes = Array(path.utf8)
             let maxPathLength = MemoryLayout.size(ofValue: address.sun_path)
             guard pathBytes.count < maxPathLength else {
-                throw SpineBodyEndpointError.connectionFailed(
+                throw BodyEndpointClientError.connectionFailed(
                     "socket path too long for AF_UNIX: \(path)"
                 )
             }
@@ -235,7 +232,7 @@ actor SpineUnixSocketBodyEndpoint {
                 } else {
                     sandboxHint = "check socket path and core listener status"
                 }
-                throw SpineBodyEndpointError.connectionFailed(
+                throw BodyEndpointClientError.connectionFailed(
                     "connect failed: \(osErrorDescription(code)) (\(code)); \(socketPathDiagnostics(path)); hint=\(sandboxHint)"
                 )
             }
@@ -280,7 +277,7 @@ actor SpineUnixSocketBodyEndpoint {
                     }
 
                     continuation.finish(
-                        throwing: SpineBodyEndpointError.connectionFailed(
+                        throwing: BodyEndpointClientError.connectionFailed(
                             "read failed: \(osErrorDescription(code)) (\(code))"
                         )
                     )
@@ -320,7 +317,7 @@ actor SpineUnixSocketBodyEndpoint {
                     continue
                 }
 
-                throw SpineBodyEndpointError.connectionFailed(
+                throw BodyEndpointClientError.connectionFailed(
                     "write failed: \(osErrorDescription(code)) (\(code))"
                 )
             }
@@ -363,7 +360,7 @@ actor SpineUnixSocketBodyEndpoint {
 
     private func sendLine<T: Encodable>(_ envelope: T) async throws {
         guard let socketFD else {
-            throw SpineBodyEndpointError.notConnected
+            throw BodyEndpointClientError.notConnected
         }
 
         let data = try encodeLine(envelope)

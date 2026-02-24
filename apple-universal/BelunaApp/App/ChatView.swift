@@ -43,7 +43,7 @@ struct ChatView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Beluna")
                         .font(.title3.bold())
-                    Text("Apple Universal Chat Endpoint")
+                    Text("Apple Universal Body Endpoint")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

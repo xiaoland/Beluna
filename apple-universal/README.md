@@ -1,31 +1,50 @@
 # Apple Universal App
 
-Minimal SwiftUI chat-style Body Endpoint for Beluna Spine UnixSocket.
+SwiftUI-based Beluna Body Endpoint for Apple platforms (currently focused on macOS).
 
 ## What it does
 
-1. Connects to Spine Unix socket (`/tmp/beluna.sock` by default).
-2. Moves connection configuration to `SettingView` (socket path + connect controls).
-3. Persists connection intent and socket path in UserDefaults.
-4. Uses POSIX Unix socket I/O to avoid `Network.framework` AF_UNIX diagnostics.
-5. Auto-reconnects with exponential backoff (up to 5 retries), with manual retry support.
-6. Enforces single-instance runtime lock to avoid duplicate app instances.
-7. In Xcode debug sessions, defaults to manual connect to avoid accidental side effects.
-8. Registers body endpoint route:
-   - `macos-app` / `present_text_message` (string payload)
-9. Authenticates over NDJSON envelope (`method=auth`) with declared capabilities.
-10. Sends user messages as `sense` envelopes aligned with the OpenAI Responses subset.
-11. Receives `act` envelopes, sends `act_ack`, and renders assistant chat bubbles.
-12. Sends invoke outcome back as correlated `sense` (echoes `act_instance_id` and route markers).
-13. Polls Core Prometheus metrics every 5 seconds and surfaces key Cortex gauges in the chat header.
-14. Supports manual metrics refresh in the chat header.
-15. Polls Beluna Core logs every 3 seconds and pairs `cortex_organ_input` + `cortex_organ_output`.
-16. Parses awake sequence from `core.log.<YYYY-MM-DD>.<n>` and aggregates paired organ logs by `(awake_sequence, cycle_id)` into in-chat cortex cycle cards.
-17. Opens a cortex cycle popup on click to list per-stage organ activity messages with selectable input/output payload text.
-18. Supports configurable metrics endpoint and log directory in `SettingView`.
-19. Uses a bounded in-memory chat message ring buffer with configurable capacity.
-20. Loads older/newer buffered messages incrementally as the user scrolls.
+1. Connects to Beluna Core via Unix socket (`/tmp/beluna.sock` by default).
+2. Uses POSIX socket I/O with reconnect/backoff and manual retry support.
+3. Persists connection settings (socket path, auto-connect), observability settings, and message capacity in `UserDefaults`.
+4. Uses endpoint IDs aligned with Apple Body Endpoint identity:
+   - `apple-universal` (family)
+   - `macos-app` (macOS runtime)
+   - `ios-app` (iOS runtime)
+5. Registers NDJSON auth capabilities (`method=auth`) with semantic IDs:
+   - Act:
+     - `present.message.text`
+   - Senses:
+     - `user.message.text`
+     - `present.message.text.success`
+     - `present.message.text.failure`
+6. Uses simple sense payload schemas to reduce cognition load:
+   - `user.message.text` payload schema: `{ "type": "string" }`
+   - `present.message.text.success` / `present.message.text.failure`: object schemas without `additionalProperties`.
+7. Sends user text as a plain string payload for `user.message.text` (no `conversation_id`).
+8. Reports correlated `present.message.text.success` / `present.message.text.failure` with `act_instance_id` in `metadata` (not payload).
+9. Receives acts, sends `act_ack`, renders assistant messages, then reports success/rejection senses.
+10. Persists local Sense/Act history to disk and restores it after app restart.
+11. Exposes “Clear Local History” in `SettingView`.
+12. Keeps a bounded in-memory ring buffer with incremental pagination for visible messages.
+13. Polls Core Prometheus metrics (5s when connected + manual refresh).
+14. Polls Core logs (3s), pairs `cortex_organ_input` and `cortex_organ_output`, and renders cycle cards.
+15. Supports configurable metrics endpoint and log directory.
 
 ## Run
 
-## Test
+1. Open the Xcode project:
+   - `open /Users/lanzhijiang/Development/Beluna/apple-universal/BelunaApp.xcodeproj`
+2. Select scheme `BelunaApp`, target macOS, then Run.
+3. In app settings, confirm the Unix socket path (default `/tmp/beluna.sock`) matches Beluna Core.
+
+## Build
+
+```bash
+xcodebuild \
+  -project /Users/lanzhijiang/Development/Beluna/apple-universal/BelunaApp.xcodeproj \
+  -scheme BelunaApp \
+  -configuration Debug \
+  -destination 'platform=macOS' \
+  build
+```

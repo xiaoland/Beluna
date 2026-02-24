@@ -86,6 +86,28 @@ struct SettingView: View {
                     .buttonStyle(.borderedProminent)
                     .disabled(!viewModel.canApplyMessageCapacity)
                 }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Local Sense/Act History")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    Text("Sent senses and received acts are persisted locally and restored on next launch.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    HStack(spacing: 8) {
+                        Button("Clear Local History") {
+                            viewModel.clearLocalSenseActHistory()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!viewModel.canClearLocalSenseActHistory)
+
+                        Text("Persisted: \(viewModel.persistedSenseActMessageCount)")
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
 
             Section("Status") {
@@ -109,6 +131,7 @@ struct SettingView: View {
 
                 LabeledContent("Message Capacity", value: "\(viewModel.messageCapacity)")
                 LabeledContent("Visible / Buffered", value: "\(viewModel.visibleMessageCount) / \(viewModel.bufferedMessageCount)")
+                LabeledContent("Persisted Sense/Act", value: "\(viewModel.persistedSenseActMessageCount)")
 
                 LabeledContent("Metrics Status") {
                     Text(viewModel.metricsStatusText)

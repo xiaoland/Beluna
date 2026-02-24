@@ -32,6 +32,7 @@ final class ChatViewModel: ObservableObject {
 
     @Published var messageCapacityDraft: String
     @Published private(set) var messageCapacity: Int
+    @Published private(set) var persistedSenseActMessageCount: Int = 0
 
     var isHibernating: Bool {
         belunaState == .hibernate
@@ -69,6 +70,10 @@ final class ChatViewModel: ObservableObject {
 
     var canRetry: Bool {
         isConnectionEnabled && connectionState != .connected
+    }
+
+    var canClearLocalSenseActHistory: Bool {
+        persistedSenseActMessageCount > 0
     }
 
     var hibernateTitle: String {
@@ -112,8 +117,8 @@ final class ChatViewModel: ObservableObject {
         return "Updated \(Self.metricsTimeFormatter.string(from: metricsLastRefreshedAt))"
     }
 
-    private let conversationID: String
-    private let spineBodyEndpoint: SpineUnixSocketBodyEndpoint
+    private let bodyEndpointClient: UnixSocketBodyEndpointClient
+    private let localSenseActHistoryStore: LocalSenseActHistoryStore
     private let hibernateNoticeText = "Beluna entered Hibernate."
     private let disconnectedNoticeText = "Beluna is disconnected. Click Connect to reconnect."
 
@@ -127,6 +132,7 @@ final class ChatViewModel: ObservableObject {
 
     private var messageBuffer: [ChatMessage] = []
     private var visibleMessageRange: Range<Int> = 0..<0
+    private var persistedSenseActMessagesCache: [ChatMessage] = []
 
     private var cortexCycleMessageIDs: [String: UUID] = [:]
     private var pendingOrganInputs: [String: [OrganLogEvent]] = [:]
@@ -192,8 +198,8 @@ final class ChatViewModel: ObservableObject {
         )
         let initialMessageCapacity = persistedMessageCapacity ?? Self.defaultMessageCapacity
 
-        self.conversationID = "conv_\(UUID().uuidString.lowercased())"
-        self.spineBodyEndpoint = SpineUnixSocketBodyEndpoint(socketPath: initialSocketPath)
+        self.bodyEndpointClient = UnixSocketBodyEndpointClient(socketPath: initialSocketPath)
+        self.localSenseActHistoryStore = LocalSenseActHistoryStore()
 
         self.socketPath = initialSocketPath
         self.socketPathDraft = initialSocketPath
@@ -207,6 +213,9 @@ final class ChatViewModel: ObservableObject {
 
         self.messageCapacity = initialMessageCapacity
         self.messageCapacityDraft = String(initialMessageCapacity)
+
+        let restoredSenseActMessages = localSenseActHistoryStore.load(maxCount: initialMessageCapacity)
+        restoreMessageBuffer(from: restoredSenseActMessages)
 
         appendBufferedMessage(
             ChatMessage(
@@ -223,7 +232,7 @@ final class ChatViewModel: ObservableObject {
         metricsPollingTask?.cancel()
         logPollingTask?.cancel()
 
-        let bodyEndpoint = spineBodyEndpoint
+        let bodyEndpoint = bodyEndpointClient
         Task {
             await bodyEndpoint.stop()
         }
@@ -317,7 +326,24 @@ final class ChatViewModel: ObservableObject {
         persistMessageBufferSettings()
         trimMessageBufferToCapacity(preferLatestWindow: true)
         publishVisibleMessages(autoScrollToLatest: true)
+        persistLocalSenseActHistoryIfNeeded()
         appendSystemMessage("Message buffer capacity set to \(normalized).")
+    }
+
+    func clearLocalSenseActHistory() {
+        localSenseActHistoryStore.clear()
+
+        handledActionIDs.removeAll(keepingCapacity: false)
+        handledActionOrder.removeAll(keepingCapacity: false)
+        messageBuffer.removeAll(keepingCapacity: false)
+        visibleMessageRange = 0..<0
+        resetOrganLogTracking()
+
+        persistedSenseActMessagesCache.removeAll(keepingCapacity: false)
+        persistedSenseActMessageCount = 0
+        publishVisibleMessages(autoScrollToLatest: false)
+
+        appendSystemMessage("Local Sense/Act history was cleared.")
     }
 
     func refreshMetrics() {
@@ -379,11 +405,11 @@ final class ChatViewModel: ObservableObject {
         }
 
         draft = ""
-        appendBufferedMessage(ChatMessage(role: .user, text: text))
+        appendBufferedMessage(ChatMessage(role: .user, signalOrigin: .sense, text: text))
 
         Task {
             do {
-                try await spineBodyEndpoint.sendUserSense(conversationID: conversationID, text: text)
+                try await bodyEndpointClient.sendUserTextSubmittedSense(text: text)
             } catch {
                 appendSystemMessage("Failed to send user message to core: \(describeError(error))")
             }
@@ -410,7 +436,7 @@ final class ChatViewModel: ObservableObject {
         }
 
         Task {
-            await spineBodyEndpoint.start()
+            await bodyEndpointClient.start()
         }
     }
 
@@ -422,7 +448,7 @@ final class ChatViewModel: ObservableObject {
         }
 
         Task {
-            await spineBodyEndpoint.stop()
+            await bodyEndpointClient.stop()
         }
     }
 
@@ -433,13 +459,13 @@ final class ChatViewModel: ObservableObject {
         belunaState = .unknown
 
         Task {
-            await spineBodyEndpoint.stop()
-            await spineBodyEndpoint.updateSocketPath(updatedSocketPath)
+            await bodyEndpointClient.stop()
+            await bodyEndpointClient.updateSocketPath(updatedSocketPath)
             if shouldConnect {
                 if announce {
                     appendSystemMessage("Connecting to \(updatedSocketPath)...")
                 }
-                await spineBodyEndpoint.start()
+                await bodyEndpointClient.start()
             }
         }
     }
@@ -450,7 +476,7 @@ final class ChatViewModel: ObservableObject {
                 return
             }
 
-            await spineBodyEndpoint.setHandlers(
+            await bodyEndpointClient.setHandlers(
                 onStateChange: { [weak self] state in
                     Task { @MainActor in
                         self?.handleConnectionStateChange(state)
@@ -480,7 +506,7 @@ final class ChatViewModel: ObservableObject {
     }
 
     private func handleAct(_ action: InboundActWire) async {
-        guard action.neuralSignalDescriptorID == appleActNeuralSignalDescriptorID else {
+        guard action.neuralSignalDescriptorID == bodyEndpointActPresentMessageTextDescriptorID else {
             appendDebugMessage(
                 "Ignored act for unexpected descriptor \(action.neuralSignalDescriptorID) on endpoint \(action.endpointID)"
             )
@@ -494,26 +520,21 @@ final class ChatViewModel: ObservableObject {
 
         do {
             let text = try extractPresentedText(from: action.payload)
-            appendBufferedMessage(ChatMessage(role: .assistant, text: text))
+            appendBufferedMessage(ChatMessage(role: .assistant, signalOrigin: .act, text: text))
 
-            try await spineBodyEndpoint.sendActResultSense(
-                action: action,
-                isPresented: true,
-                isUserRead: false
-            )
+            try await bodyEndpointClient.sendActPresentationSucceededSense(action: action)
         } catch {
             await rejectInvoke(action: action, reasonCode: "invalid_payload")
-            appendSystemMessage("Failed to decode assistant payload: \(describeError(error))")
-            log("failed to decode assistant payload: \(describeError(error)), payload=\(action.payload)")
+            appendSystemMessage("Failed to decode act payload: \(describeError(error))")
+            log("failed to decode act payload: \(describeError(error)), payload=\(action.payload)")
         }
     }
 
     private func rejectInvoke(action: InboundActWire, reasonCode: String) async {
         do {
-            try await spineBodyEndpoint.sendActResultSense(
+            try await bodyEndpointClient.sendActPresentationRejectedSense(
                 action: action,
-                isPresented: false,
-                isUserRead: false
+                reasonCode: reasonCode
             )
         } catch {
             appendSystemMessage("Failed to send invoke result sense: \(describeError(error))")
@@ -523,7 +544,7 @@ final class ChatViewModel: ObservableObject {
     private func handleConnectionStateChange(_ state: ConnectionState) {
         if !isConnectionEnabled && state == .connected {
             Task {
-                await spineBodyEndpoint.stop()
+                await bodyEndpointClient.stop()
             }
             connectionState = .disconnected
             belunaState = .unknown
@@ -727,6 +748,7 @@ final class ChatViewModel: ObservableObject {
             messageBuffer[existingIndex].body = .cortexCycle(existingPayload)
             messageBuffer[existingIndex].timestamp = timestamp
             publishVisibleMessages(autoScrollToLatest: false)
+            persistLocalSenseActHistoryIfNeeded()
             return
         }
 
@@ -752,6 +774,7 @@ final class ChatViewModel: ObservableObject {
         if messageBuffer.isEmpty {
             visibleMessageRange = 0..<0
             publishVisibleMessages(autoScrollToLatest: false)
+            persistLocalSenseActHistoryIfNeeded()
             return
         }
 
@@ -761,10 +784,12 @@ final class ChatViewModel: ObservableObject {
             let start = max(0, end - desiredVisibleCount)
             visibleMessageRange = start..<end
             publishVisibleMessages(autoScrollToLatest: true)
+            persistLocalSenseActHistoryIfNeeded()
             return
         }
 
         publishVisibleMessages(autoScrollToLatest: false)
+        persistLocalSenseActHistoryIfNeeded()
     }
 
     private func loadOlderMessagePageIfNeeded() {
@@ -924,6 +949,53 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
+    private func restoreMessageBuffer(from restoredMessages: [ChatMessage]) {
+        guard !restoredMessages.isEmpty else {
+            persistedSenseActMessagesCache = []
+            persistedSenseActMessageCount = 0
+            return
+        }
+
+        messageBuffer = restoredMessages
+        rebuildCortexCycleMessageIndex()
+
+        let end = messageBuffer.count
+        let start = max(0, end - Self.messagePageSize)
+        visibleMessageRange = start..<end
+        publishVisibleMessages(autoScrollToLatest: false)
+
+        persistedSenseActMessagesCache = currentPersistedSenseActMessages()
+        persistedSenseActMessageCount = persistedSenseActMessagesCache.count
+    }
+
+    private func rebuildCortexCycleMessageIndex() {
+        cortexCycleMessageIDs.removeAll(keepingCapacity: false)
+
+        for message in messageBuffer {
+            guard case let .cortexCycle(payload) = message.body else {
+                continue
+            }
+            let key = Self.cortexCycleKey(cycleID: payload.cycleID, awakeSequence: payload.awakeSequence)
+            cortexCycleMessageIDs[key] = message.id
+        }
+    }
+
+    private func persistLocalSenseActHistoryIfNeeded() {
+        let currentSenseActMessages = currentPersistedSenseActMessages()
+        persistedSenseActMessageCount = currentSenseActMessages.count
+
+        guard currentSenseActMessages != persistedSenseActMessagesCache else {
+            return
+        }
+
+        persistedSenseActMessagesCache = currentSenseActMessages
+        localSenseActHistoryStore.save(messages: currentSenseActMessages, maxCount: messageCapacity)
+    }
+
+    private func currentPersistedSenseActMessages() -> [ChatMessage] {
+        messageBuffer.filter { $0.signalOrigin == .sense || $0.signalOrigin == .act }
+    }
+
     private func persistConnectionSettings() {
         UserDefaults.standard.set(socketPath, forKey: Self.socketPathDefaultsKey)
         UserDefaults.standard.set(isConnectionEnabled, forKey: Self.autoConnectDefaultsKey)
@@ -1022,7 +1094,7 @@ final class ChatViewModel: ObservableObject {
     }
 
     private func describeError(_ error: Error) -> String {
-        if let endpointError = error as? SpineBodyEndpointError {
+        if let endpointError = error as? BodyEndpointClientError {
             switch endpointError {
             case .notConnected:
                 return "not connected"

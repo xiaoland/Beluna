@@ -12,22 +12,22 @@ import Testing
 struct BelunaAppTests {
 
     @Test func authEnvelopeMatchesCoreContract() throws {
-        let envelope = makeAppleEndpointRegisterEnvelope()
+        let envelope = makeBodyEndpointRegisterEnvelope()
 
         #expect(envelope.method == "auth")
-        #expect(envelope.body.endpointName == appleEndpointName)
-        #expect(envelope.body.capabilities.count == 3)
+        #expect(envelope.body.endpointName == runtimeBodyEndpointID)
+        #expect(envelope.body.capabilities.count == 4)
         #expect(UUID(uuidString: envelope.id) != nil)
         #expect(envelope.timestamp > 0)
     }
 
     @Test func authEnvelopeDeclaresActPayloadSchema() throws {
-        let envelope = makeAppleEndpointRegisterEnvelope()
+        let envelope = makeBodyEndpointRegisterEnvelope()
         guard let descriptor = descriptor(
-            withID: appleActNeuralSignalDescriptorID,
+            withID: bodyEndpointActPresentMessageTextDescriptorID,
             in: envelope.body.capabilities
         ) else {
-            Issue.record("missing act descriptor \(appleActNeuralSignalDescriptorID)")
+            Issue.record("missing act descriptor \(bodyEndpointActPresentMessageTextDescriptorID)")
             return
         }
 
@@ -42,45 +42,36 @@ struct BelunaAppTests {
     }
 
     @Test func authEnvelopeDeclaresSensePayloadSchemas() throws {
-        let envelope = makeAppleEndpointRegisterEnvelope()
+        let envelope = makeBodyEndpointRegisterEnvelope()
 
         guard let userSense = descriptor(
-            withID: appleUserSenseNeuralSignalDescriptorID,
+            withID: bodyEndpointSenseUserMessageTextDescriptorID,
             in: envelope.body.capabilities
         ) else {
-            Issue.record("missing sense descriptor \(appleUserSenseNeuralSignalDescriptorID)")
+            Issue.record("missing sense descriptor \(bodyEndpointSenseUserMessageTextDescriptorID)")
             return
         }
+        #expect(userSense.payloadSchema.objectValue?["type"]?.stringValue == "string")
 
-        guard let userSenseSchema = userSense.payloadSchema.objectValue else {
-            Issue.record("user sense payload_schema should be an object")
-            return
-        }
-        #expect(
-            userSenseSchema["properties"]?.objectValue?["conversation_id"]?.objectValue?["type"]?.stringValue
-                == "string"
-        )
-        #expect(userSenseSchema["properties"]?.objectValue?["input"]?.objectValue?["type"]?.stringValue == "array")
-
-        guard let actResultSense = descriptor(
-            withID: appleActResultSenseNeuralSignalDescriptorID,
+        guard let successSense = descriptor(
+            withID: bodyEndpointSensePresentMessageTextSuccessDescriptorID,
             in: envelope.body.capabilities
         ) else {
-            Issue.record("missing sense descriptor \(appleActResultSenseNeuralSignalDescriptorID)")
+            Issue.record("missing sense descriptor \(bodyEndpointSensePresentMessageTextSuccessDescriptorID)")
             return
         }
+        #expect(successSense.payloadSchema.objectValue?["type"]?.stringValue == "object")
+        #expect(successSense.payloadSchema.objectValue?["additionalProperties"] == nil)
 
-        guard let actResultSchema = actResultSense.payloadSchema.objectValue else {
-            Issue.record("act result payload_schema should be an object")
+        guard let failureSense = descriptor(
+            withID: bodyEndpointSensePresentMessageTextFailureDescriptorID,
+            in: envelope.body.capabilities
+        ) else {
+            Issue.record("missing sense descriptor \(bodyEndpointSensePresentMessageTextFailureDescriptorID)")
             return
         }
-        #expect(
-            actResultSchema["required"]?.arrayValue?.contains(.string("act_instance_id")) == true
-                && actResultSchema["required"]?.arrayValue?.contains(.string("is_presented")) == true
-                && actResultSchema["required"]?.arrayValue?.contains(.string("is_user_read")) == true
-        )
-        #expect(actResultSchema["properties"]?.objectValue?["is_presented"]?.objectValue?["type"]?.stringValue == "boolean")
-        #expect(actResultSchema["properties"]?.objectValue?["is_user_read"]?.objectValue?["type"]?.stringValue == "boolean")
+        #expect(failureSense.payloadSchema.objectValue?["type"]?.stringValue == "object")
+        #expect(failureSense.payloadSchema.objectValue?["additionalProperties"] == nil)
     }
 
     @Test func actAckEnvelopeMatchesCoreContract() throws {
@@ -93,29 +84,36 @@ struct BelunaAppTests {
         #expect(envelope.timestamp > 0)
     }
 
-    @Test func correlatedSenseUsesActID() throws {
+    @Test func succeededSenseUsesMetadataForActID() throws {
         let action = InboundActWire(
             actID: "0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a",
-            endpointID: "macos-app.1",
-            neuralSignalDescriptorID: appleActNeuralSignalDescriptorID,
+            endpointID: runtimeBodyEndpointID,
+            neuralSignalDescriptorID: bodyEndpointActPresentMessageTextDescriptorID,
             payload: .string("hello")
         )
-        let envelope = makeActResultSenseEnvelope(
-            action: action,
-            isPresented: true,
-            isUserRead: false
-        )
+        let envelope = makeActPresentationSucceededSenseEnvelope(action: action)
 
         #expect(envelope.method == "sense")
-        #expect(envelope.body.neuralSignalDescriptorID == appleActResultSenseNeuralSignalDescriptorID)
+        #expect(envelope.body.neuralSignalDescriptorID == bodyEndpointSensePresentMessageTextSuccessDescriptorID)
         #expect(UUID(uuidString: envelope.body.senseID) != nil)
-        guard let payload = envelope.body.payload.objectValue else {
-            Issue.record("sense payload should be an object")
-            return
-        }
-        #expect(payload["act_instance_id"]?.stringValue == action.actID)
-        #expect(payload["is_presented"]?.boolValue == true)
-        #expect(payload["is_user_read"]?.boolValue == false)
+        #expect(envelope.body.payload.objectValue == [:])
+        #expect(envelope.body.metadata?.objectValue?["act_instance_id"]?.stringValue == action.actID)
+    }
+
+    @Test func rejectedSenseIncludesReasonCodeAndMetadataActID() throws {
+        let action = InboundActWire(
+            actID: "0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a",
+            endpointID: runtimeBodyEndpointID,
+            neuralSignalDescriptorID: bodyEndpointActPresentMessageTextDescriptorID,
+            payload: .string("hello")
+        )
+        let envelope = makeActPresentationRejectedSenseEnvelope(action: action, reasonCode: "invalid_payload")
+
+        #expect(envelope.method == "sense")
+        #expect(envelope.body.neuralSignalDescriptorID == bodyEndpointSensePresentMessageTextFailureDescriptorID)
+        #expect(UUID(uuidString: envelope.body.senseID) != nil)
+        #expect(envelope.body.payload.objectValue?["reason_code"]?.stringValue == "invalid_payload")
+        #expect(envelope.body.metadata?.objectValue?["act_instance_id"]?.stringValue == action.actID)
     }
 
     @Test func decodesCoreActEnvelope() throws {
@@ -127,8 +125,8 @@ struct BelunaAppTests {
           "body":{
             "act":{
               "act_instance_id":"0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a",
-              "endpoint_id":"macos-app.1",
-              "neural_signal_descriptor_id":"present_text_message",
+              "endpoint_id":"\(runtimeBodyEndpointID)",
+              "neural_signal_descriptor_id":"present.message.text",
               "payload":"hello"
             }
           }
@@ -141,20 +139,22 @@ struct BelunaAppTests {
             return
         }
         #expect(action.actID == "0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a")
-        #expect(action.endpointID == "macos-app.1")
-        #expect(action.neuralSignalDescriptorID == "present_text_message")
+        #expect(action.endpointID == runtimeBodyEndpointID)
+        #expect(action.neuralSignalDescriptorID == bodyEndpointActPresentMessageTextDescriptorID)
         #expect(action.payload.stringValue == "hello")
     }
 
-    @Test func userSenseEnvelopeUsesUUIDv4SenseID() throws {
-        let envelope = makeUserSenseEnvelope(conversationID: "conv_1", text: "hello")
+    @Test func userSenseEnvelopeUsesStringPayload() throws {
+        let envelope = makeUserTextSubmittedSenseEnvelope(text: "hello")
         guard let senseUUID = UUID(uuidString: envelope.body.senseID) else {
             Issue.record("sense_instance_id should be uuid string")
             return
         }
 
         #expect(envelope.method == "sense")
-        #expect(envelope.body.neuralSignalDescriptorID == appleUserSenseNeuralSignalDescriptorID)
+        #expect(envelope.body.neuralSignalDescriptorID == bodyEndpointSenseUserMessageTextDescriptorID)
+        #expect(envelope.body.payload.stringValue == "hello")
+        #expect(envelope.body.metadata == nil)
         #expect(uuidVersion(senseUUID) == 4)
     }
 
