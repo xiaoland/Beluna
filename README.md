@@ -1,8 +1,8 @@
-# Beluna
+# Beluna 蓝汐
 
-Beluna is an agent.
+Beluna is a life.
 
-Read product documents in `docs/*`.
+Read documents in `docs/*`.
 
 ## Monorepo
 
@@ -10,14 +10,14 @@ Read product documents in `docs/*`.
 - Beluna CLI: `./cli`
 - Apple Universal App: `./apple-universal`
 
-## Run Core
+## Run Beluna
 
 ```bash
 cd ./core
 cargo run -- --config ../beluna.jsonc
 ```
 
-## Run Beluna CLI Body Endpoint
+## Run CLI Body Endpoint
 
 `beluna-cli` is a standalone Rust app. It does not boot core; it connects to core's Unix socket (NDJSON), registers capability `present.plain_text`, and emits `user_message` senses from stdin.
 
@@ -25,3 +25,7 @@ cargo run -- --config ../beluna.jsonc
 cd ./cli
 cargo run -- --socket-path ../beluna.sock
 ```
+
+## Run Apple Universal Body Endpoint
+
+Use XCode.

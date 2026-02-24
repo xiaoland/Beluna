@@ -5,8 +5,8 @@ use serde_json::{Value, json};
 use crate::ai_gateway::{
     error::{GatewayError, GatewayErrorKind},
     types_chat::{
-        CanonicalContentPart, CanonicalMessage, CanonicalRole, CanonicalToolChoice,
-        CanonicalToolDefinition, FinishReason,
+        CanonicalContentPart, CanonicalMessage, CanonicalMessageToolCall, CanonicalRole,
+        CanonicalToolChoice, CanonicalToolDefinition, FinishReason,
     },
 };
 
@@ -23,17 +23,7 @@ pub fn canonical_messages_to_openai(messages: &[CanonicalMessage]) -> Vec<Value>
     messages
         .iter()
         .map(|message| {
-            let content = if message.parts.len() == 1 {
-                part_to_simple_content(&message.parts[0])
-            } else {
-                Value::Array(
-                    message
-                        .parts
-                        .iter()
-                        .map(part_to_multi_content)
-                        .collect::<Vec<_>>(),
-                )
-            };
+            let content = message_content_to_openai(message);
 
             let mut obj = serde_json::Map::new();
             obj.insert(
@@ -45,6 +35,21 @@ pub fn canonical_messages_to_openai(messages: &[CanonicalMessage]) -> Vec<Value>
                 obj.insert(
                     "tool_call_id".to_string(),
                     Value::String(tool_call_id.clone()),
+                );
+            }
+            if let Some(tool_name) = &message.tool_name {
+                obj.insert("name".to_string(), Value::String(tool_name.clone()));
+            }
+            if !message.tool_calls.is_empty() {
+                obj.insert(
+                    "tool_calls".to_string(),
+                    Value::Array(
+                        message
+                            .tool_calls
+                            .iter()
+                            .map(message_tool_call_to_openai)
+                            .collect::<Vec<_>>(),
+                    ),
                 );
             }
             Value::Object(obj)
@@ -59,10 +64,7 @@ pub fn canonical_messages_to_ollama(messages: &[CanonicalMessage]) -> Vec<Value>
             let text = message
                 .parts
                 .iter()
-                .filter_map(|part| match part {
-                    CanonicalContentPart::Text { text } => Some(text.as_str()),
-                    _ => None,
-                })
+                .map(part_to_wire_text)
                 .collect::<Vec<_>>()
                 .join("");
 
@@ -74,6 +76,21 @@ pub fn canonical_messages_to_ollama(messages: &[CanonicalMessage]) -> Vec<Value>
             map.insert("content".into(), Value::String(text));
             if let Some(tool_call_id) = &message.tool_call_id {
                 map.insert("tool_call_id".into(), Value::String(tool_call_id.clone()));
+            }
+            if let Some(tool_name) = &message.tool_name {
+                map.insert("name".into(), Value::String(tool_name.clone()));
+            }
+            if !message.tool_calls.is_empty() {
+                map.insert(
+                    "tool_calls".into(),
+                    Value::Array(
+                        message
+                            .tool_calls
+                            .iter()
+                            .map(message_tool_call_to_ollama)
+                            .collect::<Vec<_>>(),
+                    ),
+                );
             }
             Value::Object(map)
         })
@@ -176,7 +193,7 @@ pub fn map_http_error(status: u16, backend_id: &str, body: &str) -> GatewayError
 fn part_to_simple_content(part: &CanonicalContentPart) -> Value {
     match part {
         CanonicalContentPart::Text { text } => Value::String(text.clone()),
-        CanonicalContentPart::Json { value } => value.clone(),
+        CanonicalContentPart::Json { value } => Value::String(value.to_string()),
         CanonicalContentPart::ImageUrl { url, .. } => Value::String(url.clone()),
     }
 }
@@ -184,7 +201,9 @@ fn part_to_simple_content(part: &CanonicalContentPart) -> Value {
 fn part_to_multi_content(part: &CanonicalContentPart) -> Value {
     match part {
         CanonicalContentPart::Text { text } => json!({"type": "text", "text": text}),
-        CanonicalContentPart::Json { value } => json!({"type": "json", "json": value}),
+        CanonicalContentPart::Json { value } => {
+            json!({"type": "text", "text": value.to_string()})
+        }
         CanonicalContentPart::ImageUrl { url, mime_type } => {
             let mut map = BTreeMap::new();
             map.insert("type".to_string(), Value::String("input_image".to_string()));
@@ -195,4 +214,48 @@ fn part_to_multi_content(part: &CanonicalContentPart) -> Value {
             Value::Object(map.into_iter().collect())
         }
     }
+}
+
+fn part_to_wire_text(part: &CanonicalContentPart) -> String {
+    match part {
+        CanonicalContentPart::Text { text } => text.clone(),
+        CanonicalContentPart::Json { value } => value.to_string(),
+        CanonicalContentPart::ImageUrl { url, .. } => url.clone(),
+    }
+}
+
+fn message_content_to_openai(message: &CanonicalMessage) -> Value {
+    match message.parts.len() {
+        0 => Value::String(String::new()),
+        1 => part_to_simple_content(&message.parts[0]),
+        _ => Value::Array(
+            message
+                .parts
+                .iter()
+                .map(part_to_multi_content)
+                .collect::<Vec<_>>(),
+        ),
+    }
+}
+
+fn message_tool_call_to_openai(call: &CanonicalMessageToolCall) -> Value {
+    json!({
+        "id": call.id,
+        "type": "function",
+        "function": {
+            "name": call.name,
+            "arguments": call.arguments_json,
+        }
+    })
+}
+
+fn message_tool_call_to_ollama(call: &CanonicalMessageToolCall) -> Value {
+    json!({
+        "id": call.id,
+        "type": "function",
+        "function": {
+            "name": call.name,
+            "arguments": call.arguments_json,
+        }
+    })
 }

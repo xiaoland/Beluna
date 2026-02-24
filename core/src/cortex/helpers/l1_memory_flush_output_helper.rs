@@ -2,12 +2,13 @@ use crate::{
     ai_gateway::types_chat::OutputMode,
     cortex::{
         cognition::CognitionState,
-        error::{CortexError, filler_failed},
+        error::filler_failed,
         helpers::{self, CognitionOrgan, HelperRuntime},
         prompts,
         testing::L1MemoryFlushHelperRequest as TestL1MemoryFlushRequest,
     },
 };
+use tokio::time::{Duration, timeout};
 
 type L1MemoryFlushHelperOutput = Vec<String>;
 
@@ -19,11 +20,12 @@ impl L1MemoryFlushOutputHelper {
         &self,
         runtime: &impl HelperRuntime,
         cycle_id: u64,
+        deadline: Duration,
         l1_memory_flush_section: &str,
         cognition_state: &CognitionState,
-    ) -> Result<L1MemoryFlushHelperOutput, CortexError> {
+    ) -> L1MemoryFlushHelperOutput {
         let stage = CognitionOrgan::L1MemoryFlush.stage();
-        let l1_memory_json = crate::cortex::helpers::goal_tree_input_helper::l1_memory_json(
+        let l1_memory_json = crate::cortex::helpers::l1_memory_input_helper::l1_memory_json(
             &cognition_state.l1_memory,
         );
         let input_payload = helpers::pretty_json(&serde_json::json!({
@@ -32,37 +34,69 @@ impl L1MemoryFlushOutputHelper {
         }));
         helpers::log_organ_input(cycle_id, stage, &input_payload);
 
-        let output = if let Some(hooks) = runtime.hooks() {
-            (hooks.l1_memory_flush_helper)(TestL1MemoryFlushRequest {
-                cycle_id,
-                l1_memory_flush_section: l1_memory_flush_section.to_string(),
-                cognition_state: cognition_state.clone(),
-            })
-            .await?
-        } else {
-            let prompt = prompts::build_l1_memory_flush_helper_prompt(
-                l1_memory_flush_section,
-                &l1_memory_json,
-            );
-            let response = runtime
-                .run_organ(
+        let output_result = timeout(deadline, async {
+            if let Some(hooks) = runtime.hooks() {
+                (hooks.l1_memory_flush_helper)(TestL1MemoryFlushRequest {
                     cycle_id,
-                    CognitionOrgan::L1MemoryFlush,
-                    runtime.limits().max_sub_output_tokens,
-                    prompts::l1_memory_flush_helper_system_prompt(),
-                    prompt,
-                    OutputMode::JsonSchema {
-                        name: "l1_memory_flush_helper_output".to_string(),
-                        schema: l1_memory_flush_json_schema(),
-                        strict: true,
-                    },
-                )
-                .await?;
-            parse_l1_memory_flush_helper_output(&response.output_text)
-                .map_err(|err| filler_failed(err.to_string()))?
-        };
-        helpers::log_organ_output(cycle_id, stage, &helpers::pretty_json(&output));
-        Ok(output)
+                    l1_memory_flush_section: l1_memory_flush_section.to_string(),
+                    cognition_state: cognition_state.clone(),
+                })
+                .await
+            } else {
+                let prompt = prompts::build_l1_memory_flush_helper_prompt(
+                    l1_memory_flush_section,
+                    &l1_memory_json,
+                );
+                let response = runtime
+                    .run_organ(
+                        cycle_id,
+                        CognitionOrgan::L1MemoryFlush,
+                        runtime.limits().max_sub_output_tokens,
+                        prompts::l1_memory_flush_helper_system_prompt(),
+                        prompt,
+                        OutputMode::JsonSchema {
+                            name: "l1_memory_flush_helper_output".to_string(),
+                            schema: l1_memory_flush_json_schema(),
+                            strict: true,
+                        },
+                    )
+                    .await?;
+                parse_l1_memory_flush_helper_output(&response.output_text)
+                    .map_err(|err| filler_failed(err.to_string()))
+            }
+        })
+        .await;
+        match output_result {
+            Ok(Ok(output)) => {
+                helpers::log_organ_output(cycle_id, stage, &helpers::pretty_json(&output));
+                output
+            }
+            Ok(Err(err)) => {
+                runtime.emit_stage_failed(cycle_id, stage);
+                tracing::warn!(
+                    target: "cortex",
+                    cycle_id = cycle_id,
+                    stage = stage,
+                    error = %err,
+                    "l1_memory_flush_helper_failed_fallback_empty"
+                );
+                let fallback = Vec::new();
+                helpers::log_organ_output(cycle_id, stage, &helpers::pretty_json(&fallback));
+                fallback
+            }
+            Err(_) => {
+                runtime.emit_stage_failed(cycle_id, stage);
+                tracing::warn!(
+                    target: "cortex",
+                    cycle_id = cycle_id,
+                    stage = stage,
+                    "l1_memory_flush_helper_timeout_fallback_empty"
+                );
+                let fallback = Vec::new();
+                helpers::log_organ_output(cycle_id, stage, &helpers::pretty_json(&fallback));
+                fallback
+            }
+        }
     }
 }
 

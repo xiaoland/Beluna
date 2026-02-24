@@ -304,6 +304,14 @@
               "type": "integer",
               "minimum": 1
             },
+            "max_internal_steps": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "sense_passthrough_max_bytes": {
+              "type": "integer",
+              "minimum": 1
+            },
             "max_l1_memory_entries": {
               "type": "integer",
               "minimum": 1

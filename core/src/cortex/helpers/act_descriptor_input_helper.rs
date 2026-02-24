@@ -1,10 +1,10 @@
 use std::{collections::HashMap, sync::Arc};
 
 use tokio::sync::RwLock;
+use tokio::time::{Duration, timeout};
 
 use crate::{
     cortex::{
-        error::CortexError,
         helpers::{self, CognitionOrgan, HelperRuntime},
         prompts,
         testing::ActDescriptorHelperRequest as TestActDescriptorHelperRequest,
@@ -22,8 +22,9 @@ impl ActDescriptorInputHelper {
         &self,
         runtime: &impl HelperRuntime,
         cycle_id: u64,
+        deadline: Duration,
         act_descriptors: &[NeuralSignalDescriptor],
-    ) -> Result<String, CortexError> {
+    ) -> String {
         let stage = CognitionOrgan::ActDescriptor.stage();
         let input_payload = helpers::pretty_json(&serde_json::json!({
             "act_descriptors": act_descriptors,
@@ -39,25 +40,60 @@ impl ActDescriptorInputHelper {
                 "act_descriptor_helper_cache_hit"
             );
             helpers::log_organ_output(cycle_id, stage, &cached);
-            return Ok(cached);
+            return cached;
         }
 
-        let generated = if let Some(hooks) = runtime.hooks() {
-            (hooks.act_descriptor_helper)(TestActDescriptorHelperRequest {
-                cycle_id,
-                act_descriptors: act_descriptors.to_vec(),
-            })
-            .await?
-        } else {
-            self.build_with_organ(runtime, cycle_id, act_descriptors)
-                .await?
-        };
+        let generated_result = timeout(deadline, async {
+            if let Some(hooks) = runtime.hooks() {
+                (hooks.act_descriptor_helper)(TestActDescriptorHelperRequest {
+                    cycle_id,
+                    act_descriptors: act_descriptors.to_vec(),
+                })
+                .await
+            } else {
+                self.build_with_organ(runtime, cycle_id, act_descriptors)
+                    .await
+            }
+        })
+        .await;
 
-        if !generated.trim().is_empty() {
-            self.cache_section(cache_key, generated.clone()).await;
+        match generated_result {
+            Ok(Ok(generated)) if !generated.trim().is_empty() => {
+                self.cache_section(cache_key, generated.clone()).await;
+                helpers::log_organ_output(cycle_id, stage, &generated);
+                generated
+            }
+            Ok(Ok(_)) => {
+                let fallback = fallback_act_descriptor_catalog_section(act_descriptors);
+                helpers::log_organ_output(cycle_id, stage, &fallback);
+                fallback
+            }
+            Ok(Err(err)) => {
+                runtime.emit_stage_failed(cycle_id, stage);
+                tracing::warn!(
+                    target: "cortex",
+                    cycle_id = cycle_id,
+                    stage = stage,
+                    error = %err,
+                    "act_descriptor_helper_failed_fallback_raw"
+                );
+                let fallback = fallback_act_descriptor_catalog_section(act_descriptors);
+                helpers::log_organ_output(cycle_id, stage, &fallback);
+                fallback
+            }
+            Err(_) => {
+                runtime.emit_stage_failed(cycle_id, stage);
+                tracing::warn!(
+                    target: "cortex",
+                    cycle_id = cycle_id,
+                    stage = stage,
+                    "act_descriptor_helper_timeout_fallback_raw"
+                );
+                let fallback = fallback_act_descriptor_catalog_section(act_descriptors);
+                helpers::log_organ_output(cycle_id, stage, &fallback);
+                fallback
+            }
         }
-        helpers::log_organ_output(cycle_id, stage, &generated);
-        Ok(generated)
     }
 
     async fn build_with_organ(
@@ -65,22 +101,26 @@ impl ActDescriptorInputHelper {
         runtime: &impl HelperRuntime,
         cycle_id: u64,
         act_descriptors: &[NeuralSignalDescriptor],
-    ) -> Result<String, CortexError> {
+    ) -> Result<String, crate::cortex::error::CortexError> {
         let mut catalog_entries = Vec::with_capacity(act_descriptors.len());
         for act_descriptor in act_descriptors {
-            let prompt = prompts::build_act_descriptor_markdown_prompt(
-                &serde_json::to_string_pretty(&act_descriptor.payload_schema)
-                    .unwrap_or_else(|_| "{}".to_string()),
-            );
-            let markdown = runtime
-                .run_text_organ_with_system(
-                    cycle_id,
-                    CognitionOrgan::ActDescriptor,
-                    runtime.limits().max_sub_output_tokens,
-                    prompts::act_descriptor_helper_system_prompt(),
-                    prompt,
-                )
-                .await?;
+            let markdown = if is_complex_payload_schema(&act_descriptor.payload_schema) {
+                let prompt = prompts::build_act_descriptor_markdown_prompt(
+                    &serde_json::to_string_pretty(&act_descriptor.payload_schema)
+                        .unwrap_or_else(|_| "{}".to_string()),
+                );
+                runtime
+                    .run_text_organ_with_system(
+                        cycle_id,
+                        CognitionOrgan::ActDescriptor,
+                        runtime.limits().max_sub_output_tokens,
+                        prompts::act_descriptor_helper_system_prompt(),
+                        prompt,
+                    )
+                    .await?
+            } else {
+                simple_payload_schema_markdown(&act_descriptor.payload_schema)
+            };
             catalog_entries.push(wrap_act_descriptor_catalog_entry(
                 act_descriptor,
                 markdown.trim(),
@@ -110,7 +150,7 @@ pub(crate) fn fallback_act_descriptor_catalog_section(
         let payload_schema_json = serde_json::to_string_pretty(&descriptor.payload_schema)
             .unwrap_or_else(|_| "{}".to_string());
         entries.push(format!(
-            "<act-descriptor act-id=\"{}\">\n## payload-schema\n{}\n</act-descriptor>",
+            "<somatic-act-descriptor somatic-act-id=\"{}\">\n## payload-schema\n{}\n</somatic-act-descriptor>",
             escape_xml_attr(&build_fq_neural_signal_id(
                 &descriptor.endpoint_id,
                 &descriptor.neural_signal_descriptor_id,
@@ -126,6 +166,79 @@ fn act_descriptor_cache_key(act_descriptors: &[NeuralSignalDescriptor]) -> Strin
     format!("{:x}", md5::compute(canonical.as_bytes()))
 }
 
+fn is_complex_payload_schema(schema: &serde_json::Value) -> bool {
+    top_level_property_count(schema) > 10
+        || has_second_level_object(schema)
+        || has_array_with_nested_array_or_object(schema)
+}
+
+fn top_level_property_count(schema: &serde_json::Value) -> usize {
+    schema
+        .get("properties")
+        .and_then(|props| props.as_object())
+        .map_or(0, |props| props.len())
+}
+
+fn has_second_level_object(schema: &serde_json::Value) -> bool {
+    let Some(properties) = schema.get("properties").and_then(|props| props.as_object()) else {
+        return false;
+    };
+    properties.values().any(is_object_schema)
+}
+
+fn has_array_with_nested_array_or_object(schema: &serde_json::Value) -> bool {
+    if array_items_contain_array_or_object(schema) {
+        return true;
+    }
+    let Some(properties) = schema.get("properties").and_then(|props| props.as_object()) else {
+        return false;
+    };
+    properties.values().any(array_items_contain_array_or_object)
+}
+
+fn array_items_contain_array_or_object(schema: &serde_json::Value) -> bool {
+    if !is_array_schema(schema) {
+        return false;
+    }
+    let Some(items) = schema.get("items") else {
+        return false;
+    };
+    match items {
+        serde_json::Value::Array(item_schemas) => item_schemas
+            .iter()
+            .any(|item| is_array_schema(item) || is_object_schema(item)),
+        _ => is_array_schema(items) || is_object_schema(items),
+    }
+}
+
+fn is_object_schema(schema: &serde_json::Value) -> bool {
+    json_schema_type_contains(schema, "object")
+        || schema
+            .get("properties")
+            .and_then(|props| props.as_object())
+            .is_some_and(|props| !props.is_empty())
+}
+
+fn is_array_schema(schema: &serde_json::Value) -> bool {
+    json_schema_type_contains(schema, "array") || schema.get("items").is_some()
+}
+
+fn json_schema_type_contains(schema: &serde_json::Value, expected: &str) -> bool {
+    match schema.get("type") {
+        Some(serde_json::Value::String(kind)) => kind == expected,
+        Some(serde_json::Value::Array(kinds)) => kinds
+            .iter()
+            .any(|kind| kind.as_str().is_some_and(|value| value == expected)),
+        _ => false,
+    }
+}
+
+fn simple_payload_schema_markdown(payload_schema: &serde_json::Value) -> String {
+    let payload_schema_json =
+        serde_json::to_string_pretty(payload_schema).unwrap_or_else(|_| "{}".to_string());
+    format!("## payload-schema\n{}", payload_schema_json)
+}
+
 pub(crate) fn wrap_act_descriptor_catalog_entry(
     descriptor: &NeuralSignalDescriptor,
     markdown: &str,
@@ -135,7 +248,7 @@ pub(crate) fn wrap_act_descriptor_catalog_entry(
         &descriptor.neural_signal_descriptor_id,
     );
     format!(
-        "<act-descriptor act-id=\"{}\">\n{}\n</act-descriptor>",
+        "<somatic-act-descriptor somatic-act-id=\"{}\">\n{}\n</somatic-act-descriptor>",
         escape_xml_attr(&fq_act_id),
         markdown.trim(),
     )

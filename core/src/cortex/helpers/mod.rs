@@ -12,6 +12,7 @@ pub(crate) mod acts_output_helper;
 pub(crate) mod goal_tree_input_helper;
 pub(crate) mod goal_tree_patch_output_helper;
 pub(crate) mod l1_memory_flush_output_helper;
+pub(crate) mod l1_memory_input_helper;
 pub(crate) mod sense_input_helper;
 
 #[derive(Clone, Copy)]
@@ -43,6 +44,7 @@ impl CognitionOrgan {
 pub(crate) trait HelperRuntime: Send + Sync {
     fn limits(&self) -> &ReactionLimits;
     fn hooks(&self) -> Option<&TestHooks>;
+    fn emit_stage_failed(&self, cycle_id: u64, stage: &'static str);
 
     async fn run_text_organ_with_system(
         &self,
@@ -65,23 +67,24 @@ pub(crate) trait HelperRuntime: Send + Sync {
 }
 
 #[derive(Clone, Default)]
-pub(crate) struct InputHelpers {
+pub(crate) struct InputHelper {
     pub sense: sense_input_helper::SenseInputHelper,
     pub act_descriptor: act_descriptor_input_helper::ActDescriptorInputHelper,
     pub goal_tree: goal_tree_input_helper::GoalTreeInputHelper,
+    pub l1_memory: l1_memory_input_helper::L1MemoryInputHelper,
 }
 
 #[derive(Clone, Default)]
-pub(crate) struct OutputHelpers {
+pub(crate) struct OutputHelper {
     pub acts: acts_output_helper::ActsOutputHelper,
     pub goal_tree_patch: goal_tree_patch_output_helper::GoalTreePatchOutputHelper,
     pub l1_memory_flush: l1_memory_flush_output_helper::L1MemoryFlushOutputHelper,
 }
 
 #[derive(Clone, Default)]
-pub(crate) struct CortexHelpers {
-    pub input: InputHelpers,
-    pub output: OutputHelpers,
+pub(crate) struct CortexHelper {
+    pub input: InputHelper,
+    pub output: OutputHelper,
 }
 
 pub(crate) fn log_organ_input(cycle_id: u64, stage: &str, input_payload: &str) {

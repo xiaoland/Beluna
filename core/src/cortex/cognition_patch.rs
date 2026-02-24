@@ -39,9 +39,10 @@ fn apply_goal_tree_op(user_partition: &mut Vec<GoalNode>, op: &GoalTreePatchOp) 
     match op {
         GoalTreePatchOp::Sprout {
             numbering,
-            node_id,
-            summary,
             weight,
+            summary,
+            content,
+            status,
         } => {
             if !is_valid_numbering(numbering) {
                 return false;
@@ -59,9 +60,10 @@ fn apply_goal_tree_op(user_partition: &mut Vec<GoalNode>, op: &GoalTreePatchOp) 
 
             user_partition.push(GoalNode {
                 numbering: numbering.clone(),
-                node_id: node_id.clone(),
-                summary: summary.clone(),
                 weight: normalized_weight,
+                summary: summary.clone(),
+                content: content.clone(),
+                status: status.clone(),
             });
             true
         }

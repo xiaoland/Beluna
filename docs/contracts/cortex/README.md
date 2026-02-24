@@ -10,9 +10,14 @@ Must hold:
 3. `Act` is non-binding; execution decisions remain in Stem pipeline.
 4. Cortex is the cognition engine; Primary is the cognition core inside Cortex, and helpers are cognition organs (not LLM-wrapper abstractions).
 5. Input IR root is `<input-ir>` and Output IR root is `<output-ir>`.
-6. Primary failure/timeout returns noop with unchanged cognition state.
-7. Helper failure degrades to fallback section/empty helper output.
-8. `sleep` sense is never processed by Cortex.
-9. Capability catalog consumed by Cortex is the merged physical capability view from Stem.
-10. Primary IR uses fully-qualified neural signal ids only (no endpoint/sense/act split id fields, no instance ids).
-11. `acts_helper` conversion owns act structuring end-to-end (`cognition-friendly <acts> -> Act[]`), including deterministic `fq_act_id` validation and `act_instance_id` generation in Rust.
+6. Primary executes as a bounded Cognitive Micro-loop and uses AI Gateway tool calls for Internal Cognitive Actions.
+7. Internal Cognitive Action tools are `expand-sense-raw` and `expand-sense-with-sub-agent`; they are not Somatic Acts.
+8. Primary failure/timeout or `max_internal_steps` exhaustion returns noop with unchanged cognition state.
+9. Helper failure degrades to fallback section/empty helper output.
+10. Sense entries expose tick-local monotonic integer `sense-instance-id`; internal sense expansion tools consume these IDs.
+11. Sense helper contract: small payload passthrough, large payload Postman Envelope (`brief`, `original_size_in_bytes`, `confidence_score`, `omitted_features`).
+12. `sleep` sense is never processed by Cortex.
+13. Capability catalog consumed by Cortex is the merged physical capability view from Stem.
+14. Primary IR uses fully-qualified neural signal ids; senses additionally carry `sense-instance-id`.
+15. `acts_helper` conversion owns act structuring end-to-end (`cognition-friendly <somatic-acts> -> Act[]`), including deterministic `fq_act_id` validation and `act_instance_id` generation in Rust.
+16. Primary output sections are optional; missing sections must not fail contract parsing and must degrade deterministically (`somatic-acts` -> no acts, `willpower-matrix-patch` -> empty patch ops, `new-focal-awareness` -> keep current l1-memory, `is-wait-for-sense` -> false).

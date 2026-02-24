@@ -10,9 +10,10 @@ pub const ROOT_PARTITION: &[&str] = &[
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GoalNode {
     pub numbering: String,
-    pub node_id: String,
-    pub summary: String,
     pub weight: f64,
+    pub summary: String,
+    pub content: String,
+    pub status: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -37,9 +38,10 @@ pub struct CognitionState {
 pub enum GoalTreePatchOp {
     Sprout {
         numbering: String,
-        node_id: String,
-        summary: String,
         weight: f64,
+        summary: String,
+        content: String,
+        status: String,
     },
     Prune {
         numbering: String,

@@ -146,6 +146,24 @@ fn validate_goal_node(
             node.weight, node.numbering
         )));
     }
+    if node.summary.trim().is_empty() {
+        return Err(invariant_violation(format!(
+            "goal summary cannot be empty for numbering '{}'",
+            node.numbering
+        )));
+    }
+    if node.content.trim().is_empty() {
+        return Err(invariant_violation(format!(
+            "goal content cannot be empty for numbering '{}'",
+            node.numbering
+        )));
+    }
+    if node.status.trim().is_empty() {
+        return Err(invariant_violation(format!(
+            "goal status cannot be empty for numbering '{}'",
+            node.numbering
+        )));
+    }
 
     Ok(())
 }

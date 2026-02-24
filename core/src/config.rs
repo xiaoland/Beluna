@@ -493,4 +493,66 @@ mod tests {
         let _ = fs::remove_file(&config_path);
         let _ = fs::remove_dir(&work_dir);
     }
+
+    #[test]
+    fn config_load_allows_partial_cortex_default_limits_override() {
+        let work_dir = std::env::temp_dir().join(format!("beluna-config-test-{}", Uuid::now_v7()));
+        fs::create_dir_all(&work_dir).expect("temp work dir should be created");
+
+        let config_path = work_dir.join("beluna.jsonc");
+        let schema_path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("beluna.schema.json");
+        let config_text = format!(
+            r#"{{
+  "$schema": "{}",
+  "ai_gateway": {{
+    "backends": [
+      {{
+        "id": "backend-default",
+        "dialect": "openai_compatible",
+        "credential": {{
+          "type": "none"
+        }},
+        "models": [
+          {{
+            "id": "m1",
+            "aliases": ["default"]
+          }}
+        ]
+      }}
+    ]
+  }},
+  "cortex": {{
+    "helper_routes": {{
+      "primary": "cortex_primary",
+      "default": "cortex_helper"
+    }},
+    "default_limits": {{
+      "sense_passthrough_max_bytes": 240
+    }}
+  }}
+}}"#,
+            schema_path.display(),
+        );
+        fs::write(&config_path, config_text).expect("config should be written");
+
+        let config = Config::load(&config_path).expect("partial default_limits should load");
+        assert_eq!(
+            config.cortex.default_limits.sense_passthrough_max_bytes,
+            240
+        );
+        assert_eq!(config.cortex.default_limits.max_attempts, 4);
+        assert_eq!(config.cortex.default_limits.max_internal_steps, 4);
+        assert_eq!(
+            config.cortex.helper_routes.primary.as_deref(),
+            Some("cortex_primary")
+        );
+        assert_eq!(
+            config.cortex.helper_routes.default.as_deref(),
+            Some("cortex_helper")
+        );
+
+        let _ = fs::remove_file(&config_path);
+        let _ = fs::remove_dir(&work_dir);
+    }
 }

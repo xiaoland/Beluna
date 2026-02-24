@@ -6,7 +6,16 @@ fn default_max_l1_memory_entries() -> usize {
     10
 }
 
+fn default_max_internal_steps() -> u8 {
+    4
+}
+
+fn default_sense_passthrough_max_bytes() -> usize {
+    2_048
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct ReactionLimits {
     pub max_attempts: usize,
     pub max_payload_bytes: usize,
@@ -16,6 +25,10 @@ pub struct ReactionLimits {
     pub max_repair_attempts: u8,
     pub max_primary_output_tokens: u64,
     pub max_sub_output_tokens: u64,
+    #[serde(default = "default_max_internal_steps")]
+    pub max_internal_steps: u8,
+    #[serde(default = "default_sense_passthrough_max_bytes")]
+    pub sense_passthrough_max_bytes: usize,
     #[serde(default = "default_max_l1_memory_entries")]
     pub max_l1_memory_entries: usize,
 }
@@ -31,6 +44,8 @@ impl Default for ReactionLimits {
             max_repair_attempts: 1,
             max_primary_output_tokens: 1_024,
             max_sub_output_tokens: 768,
+            max_internal_steps: default_max_internal_steps(),
+            sense_passthrough_max_bytes: default_sense_passthrough_max_bytes(),
             max_l1_memory_entries: default_max_l1_memory_entries(),
         }
     }

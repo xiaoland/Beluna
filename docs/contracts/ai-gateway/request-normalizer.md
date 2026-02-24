@@ -40,6 +40,22 @@
 - Then: normalization fails with `InvalidRequest`
 - Then: the error message contains `non-tool`
 
+### Scenario: Assistant message with tool calls is accepted
+
+- Given: a request containing one `assistant` role message
+- Given: that message includes `tool_calls` with non-empty `id`, `name`, and `arguments_json`
+- When: the request is normalized
+- Then: the result is successful
+- Then: assistant `tool_calls` are preserved in canonical messages
+
+### Scenario: System or user message with tool calls is rejected
+
+- Given: a request containing one `system` or `user` role message
+- Given: that message includes non-empty `tool_calls`
+- When: the request is normalized
+- Then: normalization fails with `InvalidRequest`
+- Then: the error message contains `tool_calls`
+
 ### Scenario: Tool schema with unsupported top-level keyword is rejected
 
 - Given: a request containing a tool definition

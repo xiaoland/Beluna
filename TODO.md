@@ -13,7 +13,20 @@
 - [ ] 让 Primary 不要给可选参数用默认值时传参，节省点 output token；或者往大了说就是不用太 deliberate
 - [ ] 纠正 primary 的认知：Act 不是 tool，而是 willpower 落实到现实世界的 bridge
 - [ ] 不是 wait-for-sense，而是 wait-for-act
-- [ ] goal node 添加 status 字段 （注意更新 shot）
+- [ ] Cognitive Sovereignty 属于 Primary
+  - [ ] Primary 变为多轮对话（不要求 LLM 一下就推出 act，这样可以更好地“注意”），称为 Cognitive Micro-loop；
+        通过 tool-call 提供的是 Internal Cognitive Action ，不同于 Act （是Somatic Act）；
+        设置 max_internal_steps 来避免死循环，未来可能需要 Watchdog Timeout
+  - [ ] 为 Primary LLM 提供 `expand-sense-raw(sense_ids: [ID_A, ID_B])`, `expand-sense-with-sub-agent(tasks: [{sense_id: ID_A, instruction: "..."}])` 工具;
+        这些工具本质上都是 helper 的包装
+  - [ ] Sense Helper 不再把 payload 变为 cognition-friendly text，而是 Postman Envelope，包含 brief, original_size_in_bytes, confidence_score, omitted_features；当 payload size 较小时（可配置），透传。
+- [ ] primary-facing string optimization
+  - act, sense -> somatic act / sense
+- [ ] act-descriptor-helper: 仅对结构复杂的 payload schema 做 cognition-friendly 转换
+- [ ] node-id 和 numbering 重复了啊...，改为 numbering, weight, summary, content, status 吧 （记得更新 shot）
+- [ ] willpower-matrix 提供 patch shot，否则 primary 不知道可以修剪、调权重，每次都全量输出去了
+- [ ] new-focal-awareness 给的 shot 有问题，导致 primary 输出 list 了，还一行一条
+- [ ] act-helper: 如果 act 已经是 valid json (也符合payload schema)，就不用调用 LLM 转换了
 
 ### Continuity
 
@@ -48,9 +61,11 @@
 ## Apple Universal
 
 - [x] 检查到 socket 存在不代表就要连接，把 Beluna 的状态和连接状态分开。
-- [ ] 作为 Body Endpoint 哪来的 Spine ? 请直接命名为 BodyEndpoint 即可
 - [x] Consolidate core's o11y into chat view:
   - 移动 metrics 到顶部，和状态
   - 将关键日志渲染为 tool call message
   - polling 日志或者说有更优雅的 watch
 - [ ] Sense, Act persistence
+- [ ] 重构 Body Endpoint 部分
+  - [ ] 作为 Body Endpoint 哪来的 Spine ? 请直接命名为 BodyEndpoint 即可
+  - [ ] 优化 sense, act

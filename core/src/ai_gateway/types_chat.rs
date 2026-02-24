@@ -40,6 +40,15 @@ pub struct BelunaMessage {
     pub tool_call_id: Option<String>,
     #[serde(default)]
     pub tool_name: Option<String>,
+    #[serde(default)]
+    pub tool_calls: Vec<BelunaMessageToolCall>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BelunaMessageToolCall {
+    pub id: String,
+    pub name: String,
+    pub arguments_json: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -141,6 +150,14 @@ pub struct CanonicalMessage {
     pub parts: Vec<CanonicalContentPart>,
     pub tool_call_id: Option<String>,
     pub tool_name: Option<String>,
+    pub tool_calls: Vec<CanonicalMessageToolCall>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CanonicalMessageToolCall {
+    pub id: String,
+    pub name: String,
+    pub arguments_json: String,
 }
 
 #[derive(Debug, Clone)]

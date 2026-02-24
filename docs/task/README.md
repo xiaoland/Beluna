@@ -1,6 +1,6 @@
-# Task
+# docs/task README
 
-## Workflow
+## Workflow (Complex)
 
 Make progressive planning:  
 
@@ -16,3 +16,7 @@ Notes:
 - Write each stage of plan to file `docs/task/<task-name>/L<X>-PLAN.md`. Spilt into multiple files if needed.
 - MUST ask user for explicit approval before getting into next planning.
 - Make use of sub agent to reduct your cognitive load.
+
+## Workflow (Moderate)
+
+Draft a simple implementation plan (expand key changes) and ask for my approval. If you find out key decisions needed, stop and discuss with me.

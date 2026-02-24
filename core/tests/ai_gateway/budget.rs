@@ -23,6 +23,7 @@ fn request(max_output_tokens: Option<u64>) -> CanonicalRequest {
             }],
             tool_call_id: None,
             tool_name: None,
+            tool_calls: vec![],
         }],
         tools: vec![],
         tool_choice: CanonicalToolChoice::Auto,

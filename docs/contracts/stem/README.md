@@ -9,6 +9,7 @@ Must hold:
 - producer backpressure follows native bounded-channel blocking semantics.
 - loop is tick-driven with configurable interval; default 1s.
 - missed ticks are skipped.
+- after any non-tick-triggered cycle (`wait_for_sense` wake or sleep wake), interval schedule is reset so the next Active tick waits a full period.
 - `hibernate` breaks loop immediately.
 - `new_neural_signal_descriptors` / `drop_neural_signal_descriptors` are applied before same-cycle Cortex call.
 - dispatch stage order is deterministic: Continuity gate -> Spine dispatch.

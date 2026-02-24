@@ -14,25 +14,21 @@ pub fn primary_system_prompt() -> String {
         "You are expected to decompose, resolve, and patch these as you progress.\n",
         "- <focal-awareness>: The notes and deductions left by your past self.\n",
         "2. Your Physical State:\n",
-        "- <act-descriptor-catalog>: The specific physical and cognitive tools your vessel",
+        "- <somatic-act-descriptor-catalog>: The specific physical and cognitive tools your vessel",
         "can deploy right now.\n",
         "- Sense/act identities in IR are descriptor identities represented as fully-qualified ids.\n",
-
-        "External reality is only observable through <senses>. Treat senses as subjective signals, ",
-        "not absolute truth. They may be incomplete, distorted, or confusing. You must interpret them.\n",
 
         "Upon awakening:\n",
         "Anchor yourself in your Cognition State. Read your memory and confirm your goals.\n",
         "Assess your Physical State. Know your limits and your available tools.\n",
-        "Interpret your <senses>. Cross-reference these signals with your memory",
+        "Interpret your <somatic-senses>. Cross-reference these signals with your memory",
         "to deduce the actual state of the external environment.",
 
         "In the plain text area, perform your silent internal monologue.",
         "Doubt your senses if necessary. Decide how to progress.\n",
 
-        "Conclude your time slice by emitting:\n",
-        "- <acts> Interventions chosen from your descriptors to alter the world or your vessel.\n",
-        "  Each act must reference descriptor identity by fully-qualified act id (fq_act_id).\n",
+        "When finished, emit final output text only with:\n",
+        "- <somatic-acts> Interact with the world.",
         "- <willpower-matrix-patch> Adjustments to your imperatives.\n",
         "- <new-focal-awareness> The essential distilled truth and unresolved doubts you must",
         "transmit to your future self before you cease to exist in this moment.\n",
@@ -47,29 +43,62 @@ pub fn build_primary_user_prompt(primary_input: &str) -> String {
 
 pub fn sense_helper_system_prompt() -> String {
     concat!(
-        "You are Cortex Sense helper. Convert one sense payload into compact cognition-friendly markdown.\n",
+        "You are Cortex Sense helper. Convert one large sense payload into a Postman Envelope JSON object.\n",
         "Rules:\n",
-        "1) Interpret payload semantics only.\n",
-        "2) Do not output transport ids such as sense_instance_id, endpoint_id, or neural_signal_descriptor_id.\n",
-        "3) Return markdown only.\n",
-        "4) Avoid using bold, italic markup."
+        "1) Return JSON with fields: brief, original_size_in_bytes, confidence_score, omitted_features.\n",
+        "2) brief must be compact and semantic-first.\n",
+        "3) confidence_score must be within [0,1].\n",
+        "4) omitted_features must list omitted payload aspects.\n",
+        "5) Do not include transport ids."
     )
     .to_string()
 }
 
-pub fn build_sense_helper_prompt(payload_json: &str, payload_schema_json: &str) -> String {
+pub fn build_sense_postman_envelope_prompt(
+    payload_json: &str,
+    payload_schema_json: &str,
+    original_size_in_bytes: usize,
+) -> String {
     format!(
         concat!(
+            "<original-size-bytes>\n{}\n</original-size-bytes>\n\n",
             "<sense-payload>\n{}\n</sense-payload>\n\n",
             "<sense-payload-schema>\n{}\n</sense-payload-schema>"
         ),
-        payload_json, payload_schema_json
+        original_size_in_bytes, payload_json, payload_schema_json
+    )
+}
+
+pub fn sense_sub_agent_system_prompt() -> String {
+    concat!(
+        "You are Cortex Sense sub-agent helper.\n",
+        "Given one sense payload, schema, and instruction, return JSON with result and confidence_score.\n",
+        "Rules:\n",
+        "1) result must directly answer the instruction.\n",
+        "2) confidence_score must be within [0,1].\n",
+        "3) Keep result compact and concrete."
+    )
+    .to_string()
+}
+
+pub fn build_sense_sub_agent_prompt(
+    payload_json: &str,
+    payload_schema_json: &str,
+    instruction: &str,
+) -> String {
+    format!(
+        concat!(
+            "<instruction>\n{}\n</instruction>\n\n",
+            "<sense-payload>\n{}\n</sense-payload>\n\n",
+            "<sense-payload-schema>\n{}\n</sense-payload-schema>"
+        ),
+        instruction, payload_json, payload_schema_json
     )
 }
 
 pub fn act_descriptor_helper_system_prompt() -> String {
     concat!(
-        "Convert this act's payload schema (a JSON Schema) into narrtive, concise, cognition-friendly text.\n",
+        "Convert this act's payload schema (a JSON Schema) into narrative, concise, cognition-friendly text.\n",
         "Rules:\n",
         "1) Return the converted text only.\n",
         "2) You can use markdown for complex schema.\n",
@@ -103,9 +132,9 @@ pub fn build_goal_tree_helper_prompt(user_partition_json: &str) -> String {
 
 pub fn acts_helper_system_prompt() -> String {
     concat!(
-        "You are Cortex Acts helper. Convert <acts> cognition output into structured act drafts.\n",
+        "You are Cortex Acts helper. Convert <somatic-acts> cognition output into structured Somatic Act drafts.\n",
         "Contract: each item must contain endpoint_id, fq_act_id, payload.\n",
-        "fq_act_id must come from <act-descriptor-catalog>.\n",
+        "fq_act_id must come from <somatic-act-descriptor-catalog>.\n",
         "Return JSON array only."
     )
     .to_string()
@@ -131,8 +160,8 @@ pub fn build_acts_helper_prompt(
         .collect();
     format!(
         concat!(
-            "<act-descriptor-catalog>\n{}\n</act-descriptor-catalog>\n\n",
-            "<acts>\n{}\n</acts>"
+            "<somatic-act-descriptor-catalog>\n{}\n</somatic-act-descriptor-catalog>\n\n",
+            "<somatic-acts>\n{}\n</somatic-acts>"
         ),
         serde_json::to_string_pretty(&projected_catalog).unwrap_or_else(|_| "[]".to_string()),
         acts_section
@@ -142,7 +171,7 @@ pub fn build_acts_helper_prompt(
 pub fn goal_tree_patch_helper_system_prompt() -> String {
     concat!(
         "You are Cortex Goal Tree Patch helper. Convert <goal-tree-patch> into GoalTreePatchOp JSON array.\n",
-        "Patch ops must be numbering-based only: sprout(numbering,node_id,summary,weight), prune(numbering), tilt(numbering,weight).\n",
+        "Patch ops must be numbering-based only: sprout(numbering,weight,summary,content,status), prune(numbering), tilt(numbering,weight).\n",
         "Normalize numbering to valid hierarchy paths like 1, 1.1, 2.3.1; never output .0 segments.\n",
         "Return JSON array only."
     )
@@ -164,8 +193,8 @@ pub fn build_goal_tree_patch_helper_prompt(
 
 pub fn l1_memory_flush_helper_system_prompt() -> String {
     concat!(
-        "You are Cortex L1 Memory helper. Convert <new-focal-awareness> into a full replacement JSON string array.\n",
-        "Return JSON array only."
+        "Convert <new-focal-awareness> into a JSON string array.\n",
+        "Return JSON only. You can aggregate multiple lines into one array item if they are part of the same concept."
     )
     .to_string()
 }

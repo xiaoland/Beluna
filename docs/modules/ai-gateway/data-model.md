@@ -25,3 +25,9 @@ Chat stream contract:
 
 - Gateway emits tool-call statuses for inference-time assembly (`Partial`, `Ready`).
 - `Executed` and `Rejected` are runtime/tool-execution states and are not gateway stream emissions.
+
+## Tool-Call Message Pairing
+
+- Assistant messages may carry `tool_calls` as RPC request frames (`id`, `name`, `arguments_json`).
+- Tool role messages carry `tool_call_id + tool_name + content` as RPC response frames.
+- OpenAI-compatible transport mapping stringifies JSON tool payload parts to keep `content` wire-safe.

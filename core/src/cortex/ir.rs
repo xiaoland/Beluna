@@ -6,12 +6,12 @@ use crate::cortex::{
 
 pub(crate) const INPUT_IR_ROOT: &str = "input-ir";
 pub(crate) const OUTPUT_IR_ROOT: &str = "output-ir";
-const SENSES_TAG: &str = "senses";
-const ACT_DESCRIPTOR_CATALOG_TAG: &str = "act-descriptor-catalog";
+const ACT_DESCRIPTOR_CATALOG_TAG: &str = "somatic-act-descriptor-catalog";
 const PRIMARY_INSTINCTS_TAG: &str = "instincts";
 const PRIMARY_WILLPOWER_MATRIX_TAG: &str = "willpower-matrix";
 const PRIMARY_FOCAL_AWARENESS_TAG: &str = "focal-awareness";
-const ACTS_TAG: &str = "acts";
+const SENSES_TAG: &str = "somatic-senses";
+const ACTS_TAG: &str = "somatic-acts";
 const PRIMARY_GOAL_TREE_PATCH_TAG: &str = "willpower-matrix-patch";
 const PRIMARY_NEW_FOCAL_AWARENESS_TAG: &str = "new-focal-awareness";
 const PRIMARY_WAIT_FOR_SENSE_TAG: &str = "is-wait-for-sense";
@@ -21,9 +21,9 @@ const INTERNAL_WAIT_FOR_SENSE_TAG: &str = "is-wait-for-sense";
 
 #[derive(Debug, Clone)]
 pub(crate) struct OutputIrSections {
-    pub acts_section: String,
-    pub goal_tree_patch_section: String,
-    pub l1_memory_flush_section: String,
+    pub acts_section: Option<String>,
+    pub goal_tree_patch_section: Option<String>,
+    pub l1_memory_flush_section: Option<String>,
     pub wait_for_sense: bool,
 }
 
@@ -84,25 +84,22 @@ pub(crate) fn parse_output_ir(
 
     let parse_target =
         extract_tag_body(&output_ir.text, OUTPUT_IR_ROOT).unwrap_or_else(|| output_ir.text.clone());
-    let acts_section = extract_tag_body(&parse_target, ACTS_TAG)
-        .ok_or_else(|| primary_failed("primary output must include <acts> section"))?;
-    let goal_tree_patch_section = extract_tag_body(&parse_target, PRIMARY_GOAL_TREE_PATCH_TAG)
-        .ok_or_else(|| {
-            primary_failed("primary output must include <willpower-matrix-patch> section")
-        })?;
-    let l1_memory_flush_section = extract_tag_body(&parse_target, PRIMARY_NEW_FOCAL_AWARENESS_TAG)
-        .ok_or_else(|| {
-            primary_failed("primary output must include <new-focal-awareness> section")
-        })?;
+    let acts_section = extract_tag_body(&parse_target, ACTS_TAG);
+    let goal_tree_patch_section = extract_tag_body(&parse_target, PRIMARY_GOAL_TREE_PATCH_TAG);
+    let l1_memory_flush_section = extract_tag_body(&parse_target, PRIMARY_NEW_FOCAL_AWARENESS_TAG);
     let wait_for_sense = extract_tag_body(&parse_target, PRIMARY_WAIT_FOR_SENSE_TAG)
         .map_or(false, |raw| parse_wait_for_sense_flag(&raw));
+
+    let internal_acts_section = acts_section.clone().unwrap_or_default();
+    let internal_goal_tree_patch_section = goal_tree_patch_section.clone().unwrap_or_default();
+    let internal_l1_memory_flush_section = l1_memory_flush_section.clone().unwrap_or_default();
 
     Ok((
         OutputIr {
             text: build_internal_output_ir(
-                &acts_section,
-                &goal_tree_patch_section,
-                &l1_memory_flush_section,
+                &internal_acts_section,
+                &internal_goal_tree_patch_section,
+                &internal_l1_memory_flush_section,
                 wait_for_sense,
             ),
         },
@@ -148,4 +145,29 @@ fn extract_tag_body(text: &str, tag: &str) -> Option<String> {
     let end_rel = text[body_start..].find(&close)?;
     let body_end = body_start + end_rel;
     Some(text[body_start..body_end].trim().to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_output_ir;
+
+    #[test]
+    fn parse_output_ir_allows_missing_sections() {
+        let output = "<is-wait-for-sense>true</is-wait-for-sense>";
+        let (_, sections) = parse_output_ir(output).expect("parse should succeed");
+        assert!(sections.acts_section.is_none());
+        assert!(sections.goal_tree_patch_section.is_none());
+        assert!(sections.l1_memory_flush_section.is_none());
+        assert!(sections.wait_for_sense);
+    }
+
+    #[test]
+    fn parse_output_ir_without_known_tags_defaults_to_empty_sections() {
+        let output = "plain monologue without tags";
+        let (_, sections) = parse_output_ir(output).expect("parse should succeed");
+        assert!(sections.acts_section.is_none());
+        assert!(sections.goal_tree_patch_section.is_none());
+        assert!(sections.l1_memory_flush_section.is_none());
+        assert!(!sections.wait_for_sense);
+    }
 }

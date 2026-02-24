@@ -84,7 +84,9 @@ impl Stem {
                             break;
                         }
 
-                        self.execute_cycle(senses).await?
+                        let cycle_outcome = self.execute_cycle(senses).await?;
+                        tick.reset();
+                        cycle_outcome
                     } else {
                         tick.tick().await;
 
@@ -105,6 +107,7 @@ impl Stem {
                     let now = Instant::now();
                     if now >= deadline {
                         let cycle_outcome = self.execute_cycle(Vec::new()).await?;
+                        tick.reset();
                         wait_for_sense = cycle_outcome.wait_for_sense;
                         if let Some(next_deadline) = cycle_outcome.sleep_deadline {
                             mode = StemMode::SleepingUntil(next_deadline);
@@ -118,6 +121,7 @@ impl Stem {
                     tokio::select! {
                         _ = tokio::time::sleep(wait) => {
                             let cycle_outcome = self.execute_cycle(Vec::new()).await?;
+                            tick.reset();
                             wait_for_sense = cycle_outcome.wait_for_sense;
                             if let Some(next_deadline) = cycle_outcome.sleep_deadline {
                                 mode = StemMode::SleepingUntil(next_deadline);
@@ -140,6 +144,7 @@ impl Stem {
                             }
 
                             let cycle_outcome = self.execute_cycle(senses).await?;
+                            tick.reset();
                             wait_for_sense = cycle_outcome.wait_for_sense;
                             if let Some(next_deadline) = cycle_outcome.sleep_deadline {
                                 mode = StemMode::SleepingUntil(next_deadline);

@@ -73,6 +73,7 @@ impl AIGateway {
             .to_string();
         let route = request.route.clone();
         log_llm_input(&stage, &request);
+        log_chat_once_request_summary(&stage, &request);
 
         let mut stream = self.chat_stream_internal(request, false).await?;
         let mut output_text = String::new();
@@ -143,6 +144,13 @@ impl AIGateway {
             finish_reason,
             backend_metadata: Default::default(),
         };
+        log_chat_once_response_summary(
+            &stage,
+            route.as_deref(),
+            backend_id.as_deref(),
+            model_id.as_deref(),
+            &response,
+        );
         log_llm_output(
             &stage,
             route.as_deref(),
@@ -835,4 +843,69 @@ fn log_llm_output(
         output_text = %response.output_text,
         "llm_output"
     );
+}
+
+fn log_chat_once_request_summary(stage: &str, request: &ChatRequest) {
+    let requested_tool_names = summarize_names(
+        request
+            .tools
+            .iter()
+            .map(|tool| tool.name.as_str())
+            .collect::<Vec<_>>(),
+    );
+    tracing::info!(
+        target: "ai_gateway",
+        stage = stage,
+        request_id = request.request_id.as_deref().unwrap_or("-"),
+        route = request.route.as_deref().unwrap_or("-"),
+        messages = request.messages.len(),
+        tools = request.tools.len(),
+        requested_tool_names = %requested_tool_names,
+        "chat_once_request_summary"
+    );
+}
+
+fn log_chat_once_response_summary(
+    stage: &str,
+    route: Option<&str>,
+    backend_id: Option<&str>,
+    model_id: Option<&str>,
+    response: &ChatResponse,
+) {
+    let returned_tool_names = summarize_names(
+        response
+            .tool_calls
+            .iter()
+            .map(|call| call.name.as_str())
+            .collect::<Vec<_>>(),
+    );
+    tracing::info!(
+        target: "ai_gateway",
+        stage = stage,
+        request_id = %response.request_id,
+        route = route.unwrap_or("-"),
+        backend_id = backend_id.unwrap_or("-"),
+        model = model_id.unwrap_or("-"),
+        finish_reason = ?response.finish_reason,
+        returned_tool_calls = response.tool_calls.len(),
+        returned_tool_names = %returned_tool_names,
+        output_chars = response.output_text.len(),
+        "chat_once_response_summary"
+    );
+}
+
+fn summarize_names(names: Vec<&str>) -> String {
+    const MAX_NAMES: usize = 8;
+    if names.is_empty() {
+        return "-".to_string();
+    }
+
+    let total = names.len();
+    let bounded = names.into_iter().take(MAX_NAMES).collect::<Vec<_>>();
+    let mut summary = bounded.join(",");
+    if total > MAX_NAMES {
+        let omitted = total - MAX_NAMES;
+        summary.push_str(&format!(",...(+{omitted})"));
+    }
+    summary
 }

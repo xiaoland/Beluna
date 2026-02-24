@@ -3,8 +3,8 @@ use std::collections::BTreeMap;
 use beluna::ai_gateway::{
     request_normalizer::RequestNormalizer,
     types_chat::{
-        BelunaContentPart, BelunaMessage, BelunaRole, BelunaToolDefinition, CanonicalOutputMode,
-        ChatRequest, OutputMode, RequestLimitOverrides, ToolChoice,
+        BelunaContentPart, BelunaMessage, BelunaMessageToolCall, BelunaRole, BelunaToolDefinition,
+        CanonicalOutputMode, ChatRequest, OutputMode, RequestLimitOverrides, ToolChoice,
     },
 };
 
@@ -19,6 +19,7 @@ fn base_request() -> ChatRequest {
             }],
             tool_call_id: None,
             tool_name: None,
+            tool_calls: vec![],
         }],
         tools: vec![],
         tool_choice: ToolChoice::Auto,
@@ -50,6 +51,7 @@ fn given_tool_message_without_tool_call_id_when_normalized_then_invalid_request_
         }],
         tool_call_id: None,
         tool_name: Some("my_tool".to_string()),
+        tool_calls: vec![],
     }];
 
     let err = normalizer
@@ -70,6 +72,7 @@ fn given_tool_message_with_image_part_when_normalized_then_invalid_request_is_re
         }],
         tool_call_id: Some("call-1".to_string()),
         tool_name: Some("my_tool".to_string()),
+        tool_calls: vec![],
     }];
 
     let err = normalizer
@@ -88,6 +91,49 @@ fn given_non_tool_message_with_tool_linkage_when_normalized_then_invalid_request
         .normalize_chat(request, true)
         .expect_err("normalization should fail");
     assert!(err.message.contains("non-tool"));
+}
+
+#[test]
+fn given_assistant_message_with_tool_calls_when_normalized_then_tool_calls_are_preserved() {
+    let normalizer = RequestNormalizer;
+    let mut request = base_request();
+    request.messages = vec![BelunaMessage {
+        role: BelunaRole::Assistant,
+        parts: vec![BelunaContentPart::Text {
+            text: String::new(),
+        }],
+        tool_call_id: None,
+        tool_name: None,
+        tool_calls: vec![BelunaMessageToolCall {
+            id: "call_1".to_string(),
+            name: "expand-sense-raw".to_string(),
+            arguments_json: "{\"sense_ids\":[1]}".to_string(),
+        }],
+    }];
+
+    let normalized = normalizer
+        .normalize_chat(request, true)
+        .expect("normalization should succeed");
+    assert_eq!(normalized.messages.len(), 1);
+    assert_eq!(normalized.messages[0].tool_calls.len(), 1);
+    assert_eq!(normalized.messages[0].tool_calls[0].id, "call_1");
+}
+
+#[test]
+fn given_system_message_with_tool_calls_when_normalized_then_invalid_request_is_returned() {
+    let normalizer = RequestNormalizer;
+    let mut request = base_request();
+    request.messages[0].role = BelunaRole::System;
+    request.messages[0].tool_calls = vec![BelunaMessageToolCall {
+        id: "call_1".to_string(),
+        name: "expand-sense-raw".to_string(),
+        arguments_json: "{\"sense_ids\":[1]}".to_string(),
+    }];
+
+    let err = normalizer
+        .normalize_chat(request, true)
+        .expect_err("normalization should fail");
+    assert!(err.message.contains("tool_calls"));
 }
 
 #[test]

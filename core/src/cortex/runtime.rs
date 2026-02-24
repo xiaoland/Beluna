@@ -4,13 +4,15 @@
 use std::{collections::BTreeMap, sync::Arc, time::Instant};
 
 use async_trait::async_trait;
+use serde::Deserialize;
 use tokio::time::{Duration, timeout};
 
 use crate::{
     ai_gateway::{
         gateway::AIGateway,
         types_chat::{
-            BelunaContentPart, BelunaMessage, BelunaRole, ChatRequest, ChatResponse, OutputMode,
+            BelunaContentPart, BelunaMessage, BelunaMessageToolCall, BelunaRole,
+            BelunaToolDefinition, CanonicalToolCall, ChatRequest, ChatResponse, OutputMode,
             RequestLimitOverrides, ToolChoice,
         },
     },
@@ -19,10 +21,7 @@ use crate::{
         cognition::{CognitionState, GoalTreePatchOp},
         cognition_patch::apply_cognition_patches,
         error::{CortexError, extractor_failed, filler_failed, invalid_input, primary_failed},
-        helpers::{
-            self, CognitionOrgan, CortexHelpers, HelperRuntime, act_descriptor_input_helper,
-            goal_tree_input_helper, sense_input_helper,
-        },
+        helpers::{self, CognitionOrgan, CortexHelper, HelperRuntime, sense_input_helper},
         ir, prompts,
         testing::{PrimaryRequest as TestPrimaryRequest, TestHooks},
         types::{CortexOutput, ReactionLimits},
@@ -46,9 +45,22 @@ pub struct Cortex {
     gateway: Option<Arc<AIGateway>>,
     helper_routes: CortexHelperRoutesConfig,
     hooks: Option<TestHooks>,
-    helpers: CortexHelpers,
+    helper: CortexHelper,
     telemetry_hook: Option<CortexTelemetryHook>,
     limits: ReactionLimits,
+}
+
+const PRIMARY_TOOL_EXPAND_SENSE_RAW: &str = "expand-sense-raw";
+const PRIMARY_TOOL_EXPAND_SENSE_WITH_SUB_AGENT: &str = "expand-sense-with-sub-agent";
+
+#[derive(Debug, Deserialize)]
+struct ExpandSenseRawArgs {
+    sense_ids: Vec<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ExpandSenseWithSubAgentArgs {
+    tasks: Vec<sense_input_helper::SenseSubAgentTask>,
 }
 
 impl Cortex {
@@ -61,7 +73,7 @@ impl Cortex {
             gateway: Some(gateway),
             helper_routes: config.helper_routes.clone(),
             hooks: None,
-            helpers: CortexHelpers::default(),
+            helper: CortexHelper::default(),
             telemetry_hook,
             limits: config.default_limits.clone(),
         }
@@ -72,7 +84,7 @@ impl Cortex {
             gateway: None,
             helper_routes: CortexHelperRoutesConfig::default(),
             hooks: Some(hooks),
-            helpers: CortexHelpers::default(),
+            helper: CortexHelper::default(),
             telemetry_hook: None,
             limits,
         }
@@ -100,59 +112,47 @@ impl Cortex {
         let act_descriptors = helpers::act_descriptors(&physical_state.capabilities.entries);
 
         let senses_owned = senses.to_vec();
+        let sense_tool_context =
+            sense_input_helper::SenseToolContext::from_inputs(&senses_owned, &sense_descriptors);
         let sense_descriptors_for_helper = sense_descriptors.clone();
         let act_descriptors_for_helper = act_descriptors.clone();
         let goal_tree = cognition_state.goal_tree.clone();
 
-        let (sense_section_result, act_catalog_result, goal_tree_sections_result) = tokio::join!(
-            timeout(
+        let (
+            senses_section,
+            act_descriptor_catalog_section,
+            goal_tree_sections,
+            focal_awareness_section,
+        ) = tokio::join!(
+            self.helper.input.sense.to_input_ir_section(
+                self,
+                physical_state.cycle_id,
                 deadline,
-                self.helpers.input.sense.to_input_ir_section(
-                    self,
-                    physical_state.cycle_id,
-                    &senses_owned,
-                    &sense_descriptors_for_helper,
-                )
+                &senses_owned,
+                &sense_descriptors_for_helper,
             ),
-            timeout(
+            self.helper.input.act_descriptor.to_input_ir_section(
+                self,
+                physical_state.cycle_id,
                 deadline,
-                self.helpers.input.act_descriptor.to_input_ir_section(
-                    self,
-                    physical_state.cycle_id,
-                    &act_descriptors_for_helper,
-                )
+                &act_descriptors_for_helper,
             ),
-            timeout(
+            self.helper.input.goal_tree.to_input_ir_sections(
+                self,
+                physical_state.cycle_id,
                 deadline,
-                self.helpers.input.goal_tree.to_input_ir_sections(
-                    self,
-                    physical_state.cycle_id,
-                    &goal_tree,
-                )
-            )
+                &goal_tree,
+            ),
+            async {
+                self.helper
+                    .input
+                    .l1_memory
+                    .to_input_ir_section(physical_state.cycle_id, &cognition_state.l1_memory)
+            }
         );
 
-        let senses_section = self.resolve_input_helper_fallback(
-            physical_state.cycle_id,
-            "sense_helper",
-            sense_section_result,
-            sense_input_helper::fallback_senses_section(senses, &sense_descriptors),
-        );
-        let act_descriptor_catalog_section = self.resolve_input_helper_fallback(
-            physical_state.cycle_id,
-            "act_descriptor_helper",
-            act_catalog_result,
-            act_descriptor_input_helper::fallback_act_descriptor_catalog_section(&act_descriptors),
-        );
-        let goal_tree_sections = self.resolve_goal_tree_input_helper_fallback(
-            physical_state.cycle_id,
-            goal_tree_sections_result,
-            goal_tree_input_helper::fallback_input_ir_sections(&cognition_state.goal_tree),
-        );
         let instincts_section = goal_tree_sections.instincts_section;
         let willpower_matrix_section = goal_tree_sections.willpower_matrix_section;
-        let focal_awareness_section =
-            goal_tree_input_helper::l1_memory_section(&cognition_state.l1_memory);
 
         observability_metrics::record_cortex_input_ir_act_descriptor_catalog_count(
             act_descriptors.len(),
@@ -209,6 +209,7 @@ impl Cortex {
                 physical_state.cycle_id,
                 primary_input_payload,
                 input_ir.text.clone(),
+                sense_tool_context,
             ),
         )
         .await;
@@ -271,125 +272,62 @@ impl Cortex {
             }
         };
 
-        let (acts_result, goal_tree_ops_result, l1_memory_flush_result) = tokio::join!(
-            timeout(
-                deadline,
-                self.helpers.output.acts.to_structured_output(
-                    self,
-                    physical_state.cycle_id,
-                    &output_sections.acts_section,
-                    &act_descriptors,
-                )
-            ),
-            timeout(
-                deadline,
-                self.helpers.output.goal_tree_patch.to_structured_output(
-                    self,
-                    physical_state.cycle_id,
-                    &output_sections.goal_tree_patch_section,
-                    cognition_state,
-                )
-            ),
-            timeout(
-                deadline,
-                self.helpers.output.l1_memory_flush.to_structured_output(
-                    self,
-                    physical_state.cycle_id,
-                    &output_sections.l1_memory_flush_section,
-                    cognition_state,
-                )
-            )
-        );
-
-        let acts = match acts_result {
-            Ok(Ok(acts)) => acts,
-            Ok(Err(err)) => {
-                self.emit(CortexTelemetryEvent::StageFailed {
-                    cycle_id: physical_state.cycle_id,
-                    stage: "acts_helper",
-                });
-                tracing::warn!(
-                    target: "cortex",
-                    cycle_id = physical_state.cycle_id,
-                    error = %err,
-                    "acts_helper_failed_fallback_empty"
-                );
-                Vec::new()
-            }
-            Err(_) => {
-                self.emit(CortexTelemetryEvent::StageFailed {
-                    cycle_id: physical_state.cycle_id,
-                    stage: "acts_helper_timeout",
-                });
-                tracing::warn!(
-                    target: "cortex",
-                    cycle_id = physical_state.cycle_id,
-                    deadline_ms = deadline.as_millis() as u64,
-                    "acts_helper_timeout_fallback_empty"
-                );
-                Vec::new()
+        let acts_future = async {
+            match output_sections.acts_section.as_deref() {
+                Some(acts_section) => {
+                    self.helper
+                        .output
+                        .acts
+                        .to_structured_output(
+                            self,
+                            physical_state.cycle_id,
+                            deadline,
+                            acts_section,
+                            &act_descriptors,
+                        )
+                        .await
+                }
+                None => Vec::new(),
             }
         };
-
-        let goal_tree_ops = match goal_tree_ops_result {
-            Ok(Ok(ops)) => ops,
-            Ok(Err(err)) => {
-                self.emit(CortexTelemetryEvent::StageFailed {
-                    cycle_id: physical_state.cycle_id,
-                    stage: "goal_tree_patch_helper",
-                });
-                tracing::warn!(
-                    target: "cortex",
-                    cycle_id = physical_state.cycle_id,
-                    error = %err,
-                    "goal_tree_patch_helper_failed_fallback_empty"
-                );
-                Vec::<GoalTreePatchOp>::new()
-            }
-            Err(_) => {
-                self.emit(CortexTelemetryEvent::StageFailed {
-                    cycle_id: physical_state.cycle_id,
-                    stage: "goal_tree_patch_helper_timeout",
-                });
-                tracing::warn!(
-                    target: "cortex",
-                    cycle_id = physical_state.cycle_id,
-                    deadline_ms = deadline.as_millis() as u64,
-                    "goal_tree_patch_helper_timeout_fallback_empty"
-                );
-                Vec::<GoalTreePatchOp>::new()
+        let goal_tree_patch_future = async {
+            match output_sections.goal_tree_patch_section.as_deref() {
+                Some(goal_tree_patch_section) => {
+                    self.helper
+                        .output
+                        .goal_tree_patch
+                        .to_structured_output(
+                            self,
+                            physical_state.cycle_id,
+                            deadline,
+                            goal_tree_patch_section,
+                            cognition_state,
+                        )
+                        .await
+                }
+                None => Vec::new(),
             }
         };
-
-        let l1_memory_flush = match l1_memory_flush_result {
-            Ok(Ok(entries)) => entries,
-            Ok(Err(err)) => {
-                self.emit(CortexTelemetryEvent::StageFailed {
-                    cycle_id: physical_state.cycle_id,
-                    stage: "l1_memory_flush_helper",
-                });
-                tracing::warn!(
-                    target: "cortex",
-                    cycle_id = physical_state.cycle_id,
-                    error = %err,
-                    "l1_memory_flush_helper_failed_fallback_empty"
-                );
-                Vec::<String>::new()
-            }
-            Err(_) => {
-                self.emit(CortexTelemetryEvent::StageFailed {
-                    cycle_id: physical_state.cycle_id,
-                    stage: "l1_memory_flush_helper_timeout",
-                });
-                tracing::warn!(
-                    target: "cortex",
-                    cycle_id = physical_state.cycle_id,
-                    deadline_ms = deadline.as_millis() as u64,
-                    "l1_memory_flush_helper_timeout_fallback_empty"
-                );
-                Vec::<String>::new()
+        let l1_memory_flush_future = async {
+            match output_sections.l1_memory_flush_section.as_deref() {
+                Some(l1_memory_flush_section) => {
+                    self.helper
+                        .output
+                        .l1_memory_flush
+                        .to_structured_output(
+                            self,
+                            physical_state.cycle_id,
+                            deadline,
+                            l1_memory_flush_section,
+                            cognition_state,
+                        )
+                        .await
+                }
+                None => cognition_state.l1_memory.clone(),
             }
         };
+        let (acts, goal_tree_ops, l1_memory_flush) =
+            tokio::join!(acts_future, goal_tree_patch_future, l1_memory_flush_future);
 
         if cognition_state.goal_tree.user_partition.is_empty()
             && !goal_tree_ops.is_empty()
@@ -438,13 +376,19 @@ impl Cortex {
         tracing::debug!(
             target: "cortex",
             cycle_id = physical_state.cycle_id,
-            output_ir_goal_tree_patch = %output_sections.goal_tree_patch_section,
+            output_ir_goal_tree_patch =
+                output_sections.goal_tree_patch_section.as_deref().unwrap_or(""),
+            output_ir_goal_tree_patch_present = output_sections.goal_tree_patch_section.is_some(),
             "output_ir_goal_tree_patch"
         );
         tracing::debug!(
             target: "cortex",
             cycle_id = physical_state.cycle_id,
-            output_ir_l1_memory_flush = %output_sections.l1_memory_flush_section,
+            output_ir_l1_memory_flush = output_sections
+                .l1_memory_flush_section
+                .as_deref()
+                .unwrap_or(""),
+            output_ir_l1_memory_flush_present = output_sections.l1_memory_flush_section.is_some(),
             "output_ir_l1_memory_flush"
         );
         tracing::debug!(
@@ -484,11 +428,18 @@ impl Cortex {
         cycle_id: u64,
         primary_input: String,
         input_ir_internal: String,
+        sense_tool_context: sense_input_helper::SenseToolContext,
     ) -> Result<String, CortexError> {
         let stage = CognitionOrgan::Primary.stage();
         let input_payload = helpers::pretty_json(&serde_json::json!({
             "primary_input": &primary_input,
             "input_ir_internal": &input_ir_internal,
+            "max_internal_steps": self.limits.max_internal_steps,
+            "sense_ids": sense_tool_context
+                .entries()
+                .iter()
+                .map(|entry| entry.sense_instance_id)
+                .collect::<Vec<_>>(),
         }));
         helpers::log_organ_input(cycle_id, stage, &input_payload);
 
@@ -502,17 +453,234 @@ impl Cortex {
             return Ok(output);
         }
 
-        let output = self
-            .run_text_organ_with_system(
-                cycle_id,
-                CognitionOrgan::Primary,
-                self.limits.max_primary_output_tokens,
-                prompts::primary_system_prompt(),
-                prompts::build_primary_user_prompt(&primary_input),
+        let mut messages = vec![
+            BelunaMessage {
+                role: BelunaRole::System,
+                parts: vec![BelunaContentPart::Text {
+                    text: prompts::primary_system_prompt(),
+                }],
+                tool_call_id: None,
+                tool_name: None,
+                tool_calls: vec![],
+            },
+            BelunaMessage {
+                role: BelunaRole::User,
+                parts: vec![BelunaContentPart::Text {
+                    text: prompts::build_primary_user_prompt(&primary_input),
+                }],
+                tool_call_id: None,
+                tool_name: None,
+                tool_calls: vec![],
+            },
+        ];
+
+        let max_internal_steps = self.limits.max_internal_steps.max(1);
+        for step in 0..max_internal_steps {
+            let response = self
+                .run_primary_micro_loop_turn(cycle_id, step, messages.clone())
+                .await?;
+            let assistant_text = response.output_text.trim().to_string();
+            let assistant_tool_calls = to_beluna_message_tool_calls(&response.tool_calls);
+            if !assistant_text.is_empty() || !assistant_tool_calls.is_empty() {
+                let parts = if assistant_text.is_empty() {
+                    vec![BelunaContentPart::Text {
+                        text: String::new(),
+                    }]
+                } else {
+                    vec![BelunaContentPart::Text {
+                        text: assistant_text.clone(),
+                    }]
+                };
+                messages.push(BelunaMessage {
+                    role: BelunaRole::Assistant,
+                    parts,
+                    tool_call_id: None,
+                    tool_name: None,
+                    tool_calls: assistant_tool_calls,
+                });
+            }
+
+            if response.tool_calls.is_empty() {
+                if assistant_text.is_empty() {
+                    return Err(primary_failed(
+                        "primary produced empty output without internal tool actions",
+                    ));
+                }
+                helpers::log_organ_output(cycle_id, stage, &assistant_text);
+                return Ok(assistant_text);
+            }
+
+            let tool_messages = self
+                .run_primary_internal_tool_calls(
+                    cycle_id,
+                    step,
+                    &response.tool_calls,
+                    &sense_tool_context,
+                )
+                .await;
+            messages.extend(tool_messages);
+        }
+
+        Err(primary_failed(format!(
+            "primary micro-loop exceeded max_internal_steps={}",
+            max_internal_steps
+        )))
+    }
+
+    async fn run_primary_micro_loop_turn(
+        &self,
+        cycle_id: u64,
+        step: u8,
+        messages: Vec<BelunaMessage>,
+    ) -> Result<ChatResponse, CortexError> {
+        let stage = CognitionOrgan::Primary.stage();
+        let request_id = format!("cortex-{stage}-{cycle_id}-micro-{step}");
+        let started_at = Instant::now();
+        let route = self.resolve_route(CognitionOrgan::Primary);
+        let request = build_request_from_messages(
+            request_id.clone(),
+            route.clone(),
+            self.limits.max_primary_output_tokens,
+            self.limits.max_cycle_time_ms,
+            messages,
+            primary_internal_tools(),
+            ToolChoice::Auto,
+            stage,
+            OutputMode::Text,
+        );
+
+        let gateway = self.gateway.as_ref().ok_or_else(|| {
+            CortexError::new(
+                crate::cortex::error::CortexErrorKind::Internal,
+                "AI Gateway is not configured for this Cortex instance",
             )
-            .await?;
-        helpers::log_organ_output(cycle_id, stage, &output);
-        Ok(output)
+        })?;
+
+        let response = gateway.chat_once(request).await.map_err(|err| {
+            tracing::debug!(
+                target: "cortex",
+                stage = stage,
+                cycle_id = cycle_id,
+                step = step,
+                request_id = %request_id,
+                elapsed_ms = started_at.elapsed().as_millis() as u64,
+                error_kind = ?err.kind,
+                error = %err.message,
+                "llm_call_failed"
+            );
+            primary_failed(err.to_string())
+        })?;
+
+        Ok(response)
+    }
+
+    async fn run_primary_internal_tool_calls(
+        &self,
+        cycle_id: u64,
+        step: u8,
+        tool_calls: &[CanonicalToolCall],
+        sense_tool_context: &sense_input_helper::SenseToolContext,
+    ) -> Vec<BelunaMessage> {
+        let mut tool_messages = Vec::with_capacity(tool_calls.len());
+        for call in tool_calls {
+            let payload = self
+                .run_primary_internal_tool_call(cycle_id, step, call, sense_tool_context)
+                .await;
+            tool_messages.push(BelunaMessage {
+                role: BelunaRole::Tool,
+                parts: vec![BelunaContentPart::Json { value: payload }],
+                tool_call_id: Some(call.id.clone()),
+                tool_name: Some(call.name.clone()),
+                tool_calls: vec![],
+            });
+        }
+        tool_messages
+    }
+
+    async fn run_primary_internal_tool_call(
+        &self,
+        cycle_id: u64,
+        step: u8,
+        call: &CanonicalToolCall,
+        sense_tool_context: &sense_input_helper::SenseToolContext,
+    ) -> serde_json::Value {
+        let tool_result = match call.name.as_str() {
+            PRIMARY_TOOL_EXPAND_SENSE_RAW => {
+                let parsed = serde_json::from_str::<ExpandSenseRawArgs>(&call.arguments_json)
+                    .map_err(|err| err.to_string());
+                match parsed {
+                    Ok(args) => Ok(sense_input_helper::expand_sense_raw(
+                        sense_tool_context,
+                        &args.sense_ids,
+                    )),
+                    Err(err) => Err(err),
+                }
+            }
+            PRIMARY_TOOL_EXPAND_SENSE_WITH_SUB_AGENT => {
+                let parsed =
+                    serde_json::from_str::<ExpandSenseWithSubAgentArgs>(&call.arguments_json)
+                        .map_err(|err| err.to_string());
+                match parsed {
+                    Ok(args) => {
+                        if args
+                            .tasks
+                            .iter()
+                            .any(|task| task.instruction.trim().is_empty())
+                        {
+                            Err("task instruction cannot be empty".to_string())
+                        } else {
+                            sense_input_helper::expand_sense_with_sub_agent(
+                                self,
+                                cycle_id,
+                                sense_tool_context,
+                                &args.tasks,
+                            )
+                            .await
+                            .map_err(|err| err.to_string())
+                        }
+                    }
+                    Err(err) => Err(err),
+                }
+            }
+            _ => Err(format!(
+                "unknown internal cognitive action tool '{}'",
+                call.name
+            )),
+        };
+
+        match tool_result {
+            Ok(value) => {
+                tracing::debug!(
+                    target: "cortex",
+                    cycle_id = cycle_id,
+                    step = step,
+                    tool_name = %call.name,
+                    tool_call_id = %call.id,
+                    "primary_internal_cognitive_action_completed"
+                );
+                serde_json::json!({
+                    "ok": true,
+                    "tool": call.name,
+                    "data": value,
+                })
+            }
+            Err(error) => {
+                tracing::warn!(
+                    target: "cortex",
+                    cycle_id = cycle_id,
+                    step = step,
+                    tool_name = %call.name,
+                    tool_call_id = %call.id,
+                    error = %error,
+                    "primary_internal_cognitive_action_failed"
+                );
+                serde_json::json!({
+                    "ok": false,
+                    "tool": call.name,
+                    "error": error,
+                })
+            }
+        }
     }
 
     async fn run_text_organ_with_system(
@@ -600,87 +768,6 @@ impl Cortex {
         Ok(response)
     }
 
-    fn resolve_input_helper_fallback(
-        &self,
-        cycle_id: u64,
-        stage: &'static str,
-        result: Result<Result<String, CortexError>, tokio::time::error::Elapsed>,
-        fallback: String,
-    ) -> String {
-        match result {
-            Ok(Ok(text)) if !text.trim().is_empty() => text,
-            Ok(Ok(_)) => fallback,
-            Ok(Err(err)) => {
-                self.emit(CortexTelemetryEvent::StageFailed { cycle_id, stage });
-                tracing::warn!(
-                    target: "cortex",
-                    cycle_id = cycle_id,
-                    stage = stage,
-                    error = %err,
-                    "input_helper_failed_fallback_raw"
-                );
-                fallback
-            }
-            Err(_) => {
-                self.emit(CortexTelemetryEvent::StageFailed { cycle_id, stage });
-                tracing::warn!(
-                    target: "cortex",
-                    cycle_id = cycle_id,
-                    stage = stage,
-                    "input_helper_timeout_fallback_raw"
-                );
-                fallback
-            }
-        }
-    }
-
-    fn resolve_goal_tree_input_helper_fallback(
-        &self,
-        cycle_id: u64,
-        result: Result<
-            Result<goal_tree_input_helper::GoalTreeInputSections, CortexError>,
-            tokio::time::error::Elapsed,
-        >,
-        fallback: goal_tree_input_helper::GoalTreeInputSections,
-    ) -> goal_tree_input_helper::GoalTreeInputSections {
-        match result {
-            Ok(Ok(sections))
-                if !sections.willpower_matrix_section.trim().is_empty()
-                    && !sections.instincts_section.trim().is_empty() =>
-            {
-                sections
-            }
-            Ok(Ok(_)) => fallback,
-            Ok(Err(err)) => {
-                self.emit(CortexTelemetryEvent::StageFailed {
-                    cycle_id,
-                    stage: "goal_tree_helper",
-                });
-                tracing::warn!(
-                    target: "cortex",
-                    cycle_id = cycle_id,
-                    stage = "goal_tree_helper",
-                    error = %err,
-                    "input_helper_failed_fallback_raw"
-                );
-                fallback
-            }
-            Err(_) => {
-                self.emit(CortexTelemetryEvent::StageFailed {
-                    cycle_id,
-                    stage: "goal_tree_helper",
-                });
-                tracing::warn!(
-                    target: "cortex",
-                    cycle_id = cycle_id,
-                    stage = "goal_tree_helper",
-                    "input_helper_timeout_fallback_raw"
-                );
-                fallback
-            }
-        }
-    }
-
     fn noop_output(
         &self,
         cognition_state: &CognitionState,
@@ -758,6 +845,10 @@ impl HelperRuntime for Cortex {
         self.hooks.as_ref()
     }
 
+    fn emit_stage_failed(&self, cycle_id: u64, stage: &'static str) {
+        self.emit(CortexTelemetryEvent::StageFailed { cycle_id, stage });
+    }
+
     async fn run_text_organ_with_system(
         &self,
         cycle_id: u64,
@@ -809,12 +900,12 @@ fn build_request(
     stage: &'static str,
     output_mode: OutputMode,
 ) -> ChatRequest {
-    let mut metadata = BTreeMap::new();
-    metadata.insert("cortex_stage".to_string(), stage.to_string());
-    ChatRequest {
-        request_id: Some(request_id),
+    build_request_from_messages(
+        request_id,
         route,
-        messages: vec![
+        max_output_tokens,
+        max_request_time_ms,
+        vec![
             BelunaMessage {
                 role: BelunaRole::System,
                 parts: vec![BelunaContentPart::Text {
@@ -822,16 +913,42 @@ fn build_request(
                 }],
                 tool_call_id: None,
                 tool_name: None,
+                tool_calls: vec![],
             },
             BelunaMessage {
                 role: BelunaRole::User,
                 parts: vec![BelunaContentPart::Text { text: user_prompt }],
                 tool_call_id: None,
                 tool_name: None,
+                tool_calls: vec![],
             },
         ],
-        tools: vec![],
-        tool_choice: ToolChoice::None,
+        vec![],
+        ToolChoice::None,
+        stage,
+        output_mode,
+    )
+}
+
+fn build_request_from_messages(
+    request_id: String,
+    route: Option<String>,
+    max_output_tokens: u64,
+    max_request_time_ms: u64,
+    messages: Vec<BelunaMessage>,
+    tools: Vec<BelunaToolDefinition>,
+    tool_choice: ToolChoice,
+    stage: &'static str,
+    output_mode: OutputMode,
+) -> ChatRequest {
+    let mut metadata = BTreeMap::new();
+    metadata.insert("cortex_stage".to_string(), stage.to_string());
+    ChatRequest {
+        request_id: Some(request_id),
+        route,
+        messages,
+        tools,
+        tool_choice,
         output_mode,
         limits: RequestLimitOverrides {
             max_output_tokens: Some(max_output_tokens),
@@ -840,4 +957,63 @@ fn build_request(
         metadata,
         cost_attribution_id: None,
     }
+}
+
+fn to_beluna_message_tool_calls(tool_calls: &[CanonicalToolCall]) -> Vec<BelunaMessageToolCall> {
+    tool_calls
+        .iter()
+        .map(|call| BelunaMessageToolCall {
+            id: call.id.clone(),
+            name: call.name.clone(),
+            arguments_json: call.arguments_json.clone(),
+        })
+        .collect()
+}
+
+fn primary_internal_tools() -> Vec<BelunaToolDefinition> {
+    vec![
+        BelunaToolDefinition {
+            name: PRIMARY_TOOL_EXPAND_SENSE_RAW.to_string(),
+            description: Some(
+                "Get the raw payload plus schema of the senses you asked for."
+                    .to_string(),
+            ),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "sense_ids": {
+                        "type": "array",
+                        "items": { "type": "integer", "minimum": 1 },
+                        "minItems": 1
+                    }
+                },
+                "required": ["sense_ids"]
+            }),
+        },
+        BelunaToolDefinition {
+            name: PRIMARY_TOOL_EXPAND_SENSE_WITH_SUB_AGENT.to_string(),
+            description: Some(
+                "Delegate few sub-agents summarizing the sense for you to avoid your own cognitive load."
+                    .to_string(),
+            ),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "tasks": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "sense_id": { "type": "integer", "minimum": 1 },
+                                "instruction": { "type": "string", "minLength": 1 }
+                            },
+                            "required": ["sense_id", "instruction"],
+                        }
+                    }
+                },
+                "required": ["tasks"],
+            }),
+        },
+    ]
 }

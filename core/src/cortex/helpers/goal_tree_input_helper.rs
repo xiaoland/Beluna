@@ -1,27 +1,21 @@
 use std::{collections::HashMap, sync::Arc};
 
 use tokio::sync::RwLock;
+use tokio::time::{Duration, timeout};
 
 use crate::cortex::{
     cognition::{GoalNode, GoalTree},
-    error::CortexError,
     helpers::{self, CognitionOrgan, HelperRuntime},
     prompts,
     testing::GoalTreeHelperRequest as TestGoalTreeHelperRequest,
 };
 
 const GOAL_TREE_EMPTY_PURSUITS_ONE_SHOT: &str = concat!(
-    "1 (w=0.60) Build an environment baseline from current senses and constraints.\n",
-    "1.1 (w=0.50) Verify executable acts and their payload boundaries.\n",
-    "1.2 (w=0.40) Extract high-signal observations and unresolved unknowns.\n",
-    "2 (w=0.50) Preserve compact cross-tick heuristics.\n",
-    "2.1 (w=0.40) Keep focal-awareness as styleless bullet point statements."
-);
-
-const L1_MEMORY_EMPTY_ONE_SHOT: &str = concat!(
-    "- Record concrete observations, not narrative.\n",
-    "- Keep one bullet per actionable heuristic.\n",
-    "- Prefer short statements that can guide the next tick directly."
+    "Current pursuits are empty, following are examples:\n",
+    "1 (w=0.60, status=active) Some description about this pursuit item, keep simple and direct.\n",
+    "1.1 (w=0.50, status=active) Use hierarchy numbering to organize the pursuits.\n",
+    "1.2 (w=0.40, status=closed) You only need to output the new/modified pursuits.\n",
+    "2 (w=0.50, status=active) Image the pursuits as a forest.\n",
 );
 
 #[derive(Clone, Default)]
@@ -40,24 +34,26 @@ impl GoalTreeInputHelper {
         &self,
         runtime: &impl HelperRuntime,
         cycle_id: u64,
+        deadline: Duration,
         goal_tree: &GoalTree,
-    ) -> Result<GoalTreeInputSections, CortexError> {
+    ) -> GoalTreeInputSections {
         let instincts_section = instincts_section(&goal_tree.root_partition);
         let willpower_matrix_section = self
-            .to_willpower_matrix_section(runtime, cycle_id, &goal_tree.user_partition)
-            .await?;
-        Ok(GoalTreeInputSections {
+            .to_willpower_matrix_section(runtime, cycle_id, deadline, &goal_tree.user_partition)
+            .await;
+        GoalTreeInputSections {
             instincts_section,
             willpower_matrix_section,
-        })
+        }
     }
 
     async fn to_willpower_matrix_section(
         &self,
         runtime: &impl HelperRuntime,
         cycle_id: u64,
+        deadline: Duration,
         user_partition: &[GoalNode],
-    ) -> Result<String, CortexError> {
+    ) -> String {
         let stage = CognitionOrgan::GoalTree.stage();
         let user_partition_json = goal_tree_user_partition_json(user_partition);
         let input_payload = helpers::pretty_json(&serde_json::json!({
@@ -68,7 +64,7 @@ impl GoalTreeInputHelper {
         if user_partition.is_empty() {
             let output = goal_tree_empty_pursuits_one_shot().to_string();
             helpers::log_organ_output(cycle_id, stage, &output);
-            return Ok(output);
+            return output;
         }
 
         let cache_key = goal_tree_cache_key(user_partition);
@@ -80,31 +76,68 @@ impl GoalTreeInputHelper {
                 "goal_tree_helper_cache_hit"
             );
             helpers::log_organ_output(cycle_id, stage, &cached);
-            return Ok(cached);
+            return cached;
         }
 
-        let generated = if let Some(hooks) = runtime.hooks() {
-            (hooks.goal_tree_helper)(TestGoalTreeHelperRequest {
-                cycle_id,
-                user_partition_json: user_partition_json.clone(),
-            })
-            .await?
-        } else {
-            let prompt = prompts::build_goal_tree_helper_prompt(&user_partition_json);
-            runtime
-                .run_text_organ_with_system(
+        let generated_result = timeout(deadline, async {
+            if let Some(hooks) = runtime.hooks() {
+                (hooks.goal_tree_helper)(TestGoalTreeHelperRequest {
                     cycle_id,
-                    CognitionOrgan::GoalTree,
-                    runtime.limits().max_sub_output_tokens,
-                    prompts::goal_tree_helper_system_prompt(),
-                    prompt,
-                )
-                .await?
-        };
+                    user_partition_json: user_partition_json.clone(),
+                })
+                .await
+            } else {
+                let prompt = prompts::build_goal_tree_helper_prompt(&user_partition_json);
+                runtime
+                    .run_text_organ_with_system(
+                        cycle_id,
+                        CognitionOrgan::GoalTree,
+                        runtime.limits().max_sub_output_tokens,
+                        prompts::goal_tree_helper_system_prompt(),
+                        prompt,
+                    )
+                    .await
+            }
+        })
+        .await;
 
-        self.cache_section(cache_key, generated.clone()).await;
-        helpers::log_organ_output(cycle_id, stage, &generated);
-        Ok(generated)
+        match generated_result {
+            Ok(Ok(generated)) if !generated.trim().is_empty() => {
+                self.cache_section(cache_key, generated.clone()).await;
+                helpers::log_organ_output(cycle_id, stage, &generated);
+                generated
+            }
+            Ok(Ok(_)) => {
+                let fallback = fallback_goal_tree_section(user_partition);
+                helpers::log_organ_output(cycle_id, stage, &fallback);
+                fallback
+            }
+            Ok(Err(err)) => {
+                runtime.emit_stage_failed(cycle_id, stage);
+                tracing::warn!(
+                    target: "cortex",
+                    cycle_id = cycle_id,
+                    stage = stage,
+                    error = %err,
+                    "goal_tree_helper_failed_fallback_raw"
+                );
+                let fallback = fallback_goal_tree_section(user_partition);
+                helpers::log_organ_output(cycle_id, stage, &fallback);
+                fallback
+            }
+            Err(_) => {
+                runtime.emit_stage_failed(cycle_id, stage);
+                tracing::warn!(
+                    target: "cortex",
+                    cycle_id = cycle_id,
+                    stage = stage,
+                    "goal_tree_helper_timeout_fallback_raw"
+                );
+                let fallback = fallback_goal_tree_section(user_partition);
+                helpers::log_organ_output(cycle_id, stage, &fallback);
+                fallback
+            }
+        }
     }
 
     async fn get_cached_section(&self, cache_key: &str) -> Option<String> {
@@ -120,30 +153,12 @@ pub(crate) fn fallback_goal_tree_section(user_partition: &[GoalNode]) -> String 
     serde_json::to_string_pretty(user_partition).unwrap_or_else(|_| "[]".to_string())
 }
 
-pub(crate) fn fallback_input_ir_sections(goal_tree: &GoalTree) -> GoalTreeInputSections {
-    GoalTreeInputSections {
-        instincts_section: instincts_section(&goal_tree.root_partition),
-        willpower_matrix_section: fallback_goal_tree_section(&goal_tree.user_partition),
-    }
-}
-
 pub(crate) fn instincts_section(root_partition: &[String]) -> String {
     serde_json::to_string_pretty(root_partition).unwrap_or_else(|_| "[]".to_string())
 }
 
-pub(crate) fn l1_memory_section(l1_memory: &[String]) -> String {
-    if l1_memory.is_empty() {
-        return l1_memory_empty_one_shot().to_string();
-    }
-    serde_json::to_string_pretty(l1_memory).unwrap_or_else(|_| "[]".to_string())
-}
-
 pub(crate) fn goal_tree_user_partition_json(user_partition: &[GoalNode]) -> String {
     serde_json::to_string_pretty(user_partition).unwrap_or_else(|_| "[]".to_string())
-}
-
-pub(crate) fn l1_memory_json(l1_memory: &[String]) -> String {
-    serde_json::to_string_pretty(l1_memory).unwrap_or_else(|_| "[]".to_string())
 }
 
 fn goal_tree_cache_key(user_partition: &[GoalNode]) -> String {
@@ -153,8 +168,4 @@ fn goal_tree_cache_key(user_partition: &[GoalNode]) -> String {
 
 pub(crate) fn goal_tree_empty_pursuits_one_shot() -> &'static str {
     GOAL_TREE_EMPTY_PURSUITS_ONE_SHOT
-}
-
-pub(crate) fn l1_memory_empty_one_shot() -> &'static str {
-    L1_MEMORY_EMPTY_ONE_SHOT
 }

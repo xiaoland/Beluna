@@ -8,9 +8,16 @@ RequestNormalizer must enforce deterministic validation before adapter dispatch.
   - `tool_call_id` must exist
   - `tool_name` should exist (required for dialects that require it)
   - `parts` should be text/json style payloads; image URL parts are invalid
+  - `tool_calls` must be empty
+- If `role == Assistant`:
+  - `tool_call_id` must be `None`
+  - `tool_name` must be `None`
+  - `tool_calls` is optional and represents RPC-style tool-call intents
+  - each assistant tool call requires non-empty `id`, `name`, `arguments_json`
 - If `role != Tool`:
   - `tool_call_id` must be `None`
   - `tool_name` must be `None`
+  - if `role != Assistant`, `tool_calls` must be empty
 
 Invalid states must fail as canonical `InvalidRequest`, not provider-specific errors.
 
@@ -41,6 +48,7 @@ Invalid states must fail as canonical `InvalidRequest`, not provider-specific er
 
 - Adapter boundary combines transport + dialect mapping (`BackendAdapter`).
 - OpenAI-compatible adapter targets chat-completions-like behavior, not strict parity.
+- OpenAI-compatible message `content` must stay wire-safe (`string` or `array<object>`); JSON parts are stringified at transport mapping.
 - Missing provider fields should degrade gracefully where safe.
 
 ## Contracts and Test Mapping

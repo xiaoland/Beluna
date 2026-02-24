@@ -5,9 +5,10 @@ use uuid::Uuid;
 use crate::ai_gateway::{
     error::{GatewayError, invalid_request},
     types_chat::{
-        BelunaContentPart, BelunaMessage, BelunaRole, BelunaToolDefinition, CanonicalContentPart,
-        CanonicalLimits, CanonicalMessage, CanonicalOutputMode, CanonicalRequest, CanonicalRole,
-        CanonicalToolChoice, CanonicalToolDefinition, ChatRequest, OutputMode, ToolChoice,
+        BelunaContentPart, BelunaMessage, BelunaMessageToolCall, BelunaRole, BelunaToolDefinition,
+        CanonicalContentPart, CanonicalLimits, CanonicalMessage, CanonicalMessageToolCall,
+        CanonicalOutputMode, CanonicalRequest, CanonicalRole, CanonicalToolChoice,
+        CanonicalToolDefinition, ChatRequest, OutputMode, ToolChoice,
     },
 };
 
@@ -84,8 +85,13 @@ impl RequestNormalizer {
                         "tool role message parts may only contain text/json",
                     ));
                 }
+                if !message.tool_calls.is_empty() {
+                    return Err(invalid_request(
+                        "tool role message must not include tool_calls",
+                    ));
+                }
             }
-            BelunaRole::System | BelunaRole::User | BelunaRole::Assistant => {
+            BelunaRole::Assistant => {
                 if message.tool_call_id.is_some() {
                     return Err(invalid_request(
                         "non-tool message must not include tool_call_id",
@@ -96,9 +102,56 @@ impl RequestNormalizer {
                         "non-tool message must not include tool_name",
                     ));
                 }
+                Self::validate_assistant_tool_calls(&message.tool_calls)?;
+            }
+            BelunaRole::System | BelunaRole::User => {
+                if message.tool_call_id.is_some() {
+                    return Err(invalid_request(
+                        "non-tool message must not include tool_call_id",
+                    ));
+                }
+                if message.tool_name.is_some() {
+                    return Err(invalid_request(
+                        "non-tool message must not include tool_name",
+                    ));
+                }
+                if !message.tool_calls.is_empty() {
+                    return Err(invalid_request(
+                        "system/user role message must not include tool_calls",
+                    ));
+                }
             }
         }
 
+        Ok(())
+    }
+
+    fn validate_assistant_tool_calls(
+        tool_calls: &[BelunaMessageToolCall],
+    ) -> Result<(), GatewayError> {
+        let mut ids = HashSet::with_capacity(tool_calls.len());
+        for call in tool_calls {
+            if call.id.trim().is_empty() {
+                return Err(invalid_request(
+                    "assistant tool_calls must include non-empty id",
+                ));
+            }
+            if !ids.insert(call.id.clone()) {
+                return Err(invalid_request(
+                    "assistant tool_calls must not contain duplicate id",
+                ));
+            }
+            if call.name.trim().is_empty() {
+                return Err(invalid_request(
+                    "assistant tool_calls must include non-empty name",
+                ));
+            }
+            if call.arguments_json.trim().is_empty() {
+                return Err(invalid_request(
+                    "assistant tool_calls must include non-empty arguments_json",
+                ));
+            }
+        }
         Ok(())
     }
 
@@ -185,7 +238,20 @@ impl RequestNormalizer {
             parts,
             tool_call_id: message.tool_call_id,
             tool_name: message.tool_name,
+            tool_calls: message
+                .tool_calls
+                .into_iter()
+                .map(Self::map_tool_call)
+                .collect(),
         })
+    }
+
+    fn map_tool_call(tool_call: BelunaMessageToolCall) -> CanonicalMessageToolCall {
+        CanonicalMessageToolCall {
+            id: tool_call.id,
+            name: tool_call.name,
+            arguments_json: tool_call.arguments_json,
+        }
     }
 
     fn map_tool(tool: BelunaToolDefinition) -> CanonicalToolDefinition {

@@ -1,6 +1,6 @@
 # Product Glossary
 
-- Cortex: Stateless cognition boundary `cortex(sense, physical_state, cognition_state) -> (acts, new_cognition_state)`.
+- Cortex: Stateless cognition boundary `cortex(senses, physical_state, cognition_state) -> (acts, new_cognition_state, wait_for_sense)`.
 - Stem: Runtime loop that consumes senses, invokes cortex, persists cognition, and dispatches acts serially.
 - Continuity: Operational state owner for cognition persistence and capability overlay patch/drop.
 - Ledger: Survival budget subsystem that reserves, settles, refunds, expires, and records debits.
@@ -9,13 +9,13 @@
 - Sense: One neural signal type used for ingress.
 - Act: One neural signal type used for executable proposals.
 - Sense ID / Act ID: In cognition contracts, this refers to neural signal descriptor identity.
-- Sense Instance ID / Act Instance ID: Runtime event instance identity (UUID-based), distinct from descriptor identity.
+- Sense Instance ID / Act Instance ID: Runtime event instance identity. In Cortex Primary IR, `sense-instance-id` is a tick-local monotonic integer mapped from runtime sense events.
 - Fully-Qualified Neural Signal ID: `endpoint_id + neural_signal_descriptor_id` combined identity.
 - Sense Queue: Bounded Rust MPSC queue shared by all afferent producers.
 - Capability Patch: Incremental upsert payload for capability catalog updates.
 - Capability Drop Patch: Incremental removal payload by route key.
 - Physical State: Current ledger snapshot + merged capabilities visible to Cortex.
-- Cognition State: Persisted goal stack and future cognitive state extensions.
+- Cognition State: Persisted goal-tree + l1-memory state.
 - Dispatch Decision: Pipeline control signal (`Continue` or `Break`) for current act only.
 - Route Key: Composite (`endpoint_id`, `capability_id`) routing identity in Spine.
 - Reservation Terminality: Exactly one terminal transition per reservation (`Settled`, `Refunded`, `Expired`), idempotent by reference.
