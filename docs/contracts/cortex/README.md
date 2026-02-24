@@ -18,6 +18,8 @@ Must hold:
 11. Sense helper contract: small payload passthrough, large payload Postman Envelope (`brief`, `original_size_in_bytes`, `confidence_score`, `omitted_features`).
 12. `sleep` sense is never processed by Cortex.
 13. Capability catalog consumed by Cortex is the merged physical capability view from Stem.
-14. Primary IR uses fully-qualified neural signal ids; senses additionally carry `sense-instance-id`.
-15. `acts_helper` conversion owns act structuring end-to-end (`cognition-friendly <somatic-acts> -> Act[]`), including deterministic `fq_act_id` validation and `act_instance_id` generation in Rust.
-16. Primary output sections are optional; missing sections must not fail contract parsing and must degrade deterministically (`somatic-acts` -> no acts, `willpower-matrix-patch` -> empty patch ops, `new-focal-awareness` -> keep current l1-memory, `is-wait-for-sense` -> false).
+14. Proprioception consumed by Cortex is a merged map from Stem and rendered in Input IR `<proprioception>`.
+15. Sense and proprioception semantics are distinct: `sense` is point-in-time external event; `proprioception` is continuous internal state.
+16. Primary IR uses fully-qualified neural signal ids; senses additionally carry `sense-instance-id`.
+17. `acts_helper` conversion owns act structuring end-to-end (`cognition-friendly <somatic-acts> -> Act[]`), including deterministic `fq_act_id` validation and `act_instance_id` generation in Rust.
+18. Primary output sections are optional; missing sections must not fail contract parsing and must degrade deterministically (`somatic-acts` -> no acts, `willpower-matrix-patch` -> empty patch ops, `new-focal-awareness` -> keep current l1-memory, `is-wait-for-sense` -> false).

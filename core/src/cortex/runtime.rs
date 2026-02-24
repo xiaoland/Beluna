@@ -123,6 +123,7 @@ impl Cortex {
 
         let (
             senses_section,
+            proprioception_section,
             act_descriptor_catalog_section,
             goal_tree_sections,
             focal_awareness_section,
@@ -134,6 +135,12 @@ impl Cortex {
                 &senses_owned,
                 &sense_descriptors_for_helper,
             ),
+            async {
+                self.helper
+                    .input
+                    .proprioception
+                    .to_input_ir_section(physical_state.cycle_id, &physical_state.proprioception)
+            },
             self.helper.input.act_descriptor.to_input_ir_section(
                 self,
                 physical_state.cycle_id,
@@ -169,6 +176,12 @@ impl Cortex {
         tracing::debug!(
             target: "cortex",
             cycle_id = physical_state.cycle_id,
+            input_ir_proprioception = %proprioception_section,
+            "input_ir_proprioception"
+        );
+        tracing::debug!(
+            target: "cortex",
+            cycle_id = physical_state.cycle_id,
             input_ir_act_descriptor_catalog = %act_descriptor_catalog_section,
             "input_ir_act_descriptor_catalog"
         );
@@ -193,6 +206,7 @@ impl Cortex {
 
         let input_ir = ir::build_input_ir(
             &senses_section,
+            &proprioception_section,
             &act_descriptor_catalog_section,
             &instincts_section,
             &willpower_matrix_section,
@@ -200,6 +214,7 @@ impl Cortex {
         );
         let primary_input_payload = ir::build_primary_input_payload(
             &senses_section,
+            &proprioception_section,
             &act_descriptor_catalog_section,
             &instincts_section,
             &willpower_matrix_section,

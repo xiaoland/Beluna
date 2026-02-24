@@ -106,6 +106,7 @@ async fn dispatches_all_acts_when_ledger_has_zero_reservation_policy() {
             endpoint_id: "ep.demo".to_string(),
             neural_signal_descriptor_id: "sense.demo".to_string(),
             payload: serde_json::json!({}),
+            metadata: serde_json::json!({}),
         }))
         .await
         .expect("domain sense should enqueue");

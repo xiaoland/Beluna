@@ -45,6 +45,7 @@ fn domain_sense() -> Sense {
         endpoint_id: "ep.demo".to_string(),
         neural_signal_descriptor_id: "sense.demo".to_string(),
         payload: serde_json::json!({"x":1}),
+        metadata: serde_json::json!({}),
     })
 }
 

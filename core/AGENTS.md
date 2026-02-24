@@ -51,14 +51,15 @@ Beluna Core is the runnable runtime and domain agent implementation.
 - Stem is tick-driven (`loop.tick_interval_ms`, default 10s) with missed tick skip behavior.
 - Stem can invoke Cortex with empty domain senses on timer ticks.
 - Stem waits for incoming sense before next Active tick only when Cortex output declares `wait_for_sense=true` (derived from Primary `<is-wait-for-sense>` tag).
-- Stem composes physical+cognition state, invokes pure Cortex boundary, persists returned cognition state, then dispatches acts serially through Continuity -> Spine.
+- Stem composes physical+cognition state (including merged proprioception map), invokes pure Cortex boundary, persists returned cognition state, then enqueues acts into async serial dispatch worker (`Continuity -> Spine`).
 - Control senses:
   - `hibernate` breaks loop immediately.
   - `new_neural_signal_descriptors` / `drop_neural_signal_descriptors` mutate capability state before same-cycle Cortex call.
+  - `new_proprioceptions` / `drop_proprioceptions` mutate proprioception state before same-cycle Cortex call.
 - Stem exposes a built-in act descriptor `core.control/sleep` with payload `{seconds}` for timed sleep mode.
 - Continuity persists cognition state (`goal-tree` + `l1-memory`) to JSON and enforces deterministic guardrails.
 - Continuity and Spine both hold afferent-pathway sender handles.
-- Spine `on_act` emits dispatch-failure senses to afferent pathway on reject/error.
+- Spine `on_act_final` emits dispatch-failure senses to afferent pathway on reject/lost.
 - Built-in inline body endpoints (shell/web under `core/src/body`) are started by `main` after Spine boot, each on a dedicated thread, and attach through Spine Inline Adapter configured in `spine.adapters`.
 - External body endpoints register over UnixSocket and publish senses/capability patches.
 - AI Gateway MVP provides deterministic routing, strict normalization, reliability controls, budget enforcement, and tracing-structured telemetry events.

@@ -11,6 +11,7 @@ const PRIMARY_INSTINCTS_TAG: &str = "instincts";
 const PRIMARY_WILLPOWER_MATRIX_TAG: &str = "willpower-matrix";
 const PRIMARY_FOCAL_AWARENESS_TAG: &str = "focal-awareness";
 const SENSES_TAG: &str = "somatic-senses";
+const PROPRIOCEPTION_TAG: &str = "proprioception";
 const ACTS_TAG: &str = "somatic-acts";
 const PRIMARY_GOAL_TREE_PATCH_TAG: &str = "willpower-matrix-patch";
 const PRIMARY_NEW_FOCAL_AWARENESS_TAG: &str = "new-focal-awareness";
@@ -29,6 +30,7 @@ pub(crate) struct OutputIrSections {
 
 pub(crate) fn build_input_ir(
     senses_section: &str,
+    proprioception_section: &str,
     act_descriptor_catalog_section: &str,
     instincts_section: &str,
     willpower_matrix_section: &str,
@@ -36,6 +38,7 @@ pub(crate) fn build_input_ir(
 ) -> InputIr {
     let primary_payload = build_primary_input_payload(
         senses_section,
+        proprioception_section,
         act_descriptor_catalog_section,
         instincts_section,
         willpower_matrix_section,
@@ -52,23 +55,26 @@ pub(crate) fn build_input_ir(
 
 pub(crate) fn build_primary_input_payload(
     senses_section: &str,
+    proprioception_section: &str,
     act_descriptor_catalog_section: &str,
     instincts_section: &str,
     willpower_matrix_section: &str,
     focal_awareness_section: &str,
 ) -> String {
     format!(
-        "<{senses}>\n{a}\n</{senses}>\n<{act_catalog}>\n{b}\n</{act_catalog}>\n<{instincts}>\n{c}\n</{instincts}>\n<{willpower_matrix}>\n{d}\n</{willpower_matrix}>\n<{focal_awareness}>\n{e}\n</{focal_awareness}>",
+        "<{senses}>\n{a}\n</{senses}>\n<{proprioception}>\n{b}\n</{proprioception}>\n<{act_catalog}>\n{c}\n</{act_catalog}>\n<{instincts}>\n{d}\n</{instincts}>\n<{willpower_matrix}>\n{e}\n</{willpower_matrix}>\n<{focal_awareness}>\n{f}\n</{focal_awareness}>",
         senses = SENSES_TAG,
+        proprioception = PROPRIOCEPTION_TAG,
         act_catalog = ACT_DESCRIPTOR_CATALOG_TAG,
         instincts = PRIMARY_INSTINCTS_TAG,
         willpower_matrix = PRIMARY_WILLPOWER_MATRIX_TAG,
         focal_awareness = PRIMARY_FOCAL_AWARENESS_TAG,
         a = senses_section.trim(),
-        b = act_descriptor_catalog_section.trim(),
-        c = instincts_section.trim(),
-        d = willpower_matrix_section.trim(),
-        e = focal_awareness_section.trim(),
+        b = proprioception_section.trim(),
+        c = act_descriptor_catalog_section.trim(),
+        d = instincts_section.trim(),
+        e = willpower_matrix_section.trim(),
+        f = focal_awareness_section.trim(),
     )
 }
 

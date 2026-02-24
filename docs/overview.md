@@ -12,6 +12,7 @@ Beluna is a survival-oriented digital life runtime, not a chatbot.
 6. Stem loop is tick-driven (default 1s, missed tick skip).
 7. Body endpoints are Beluna's world interfaces.
 8. Neural signal identity is descriptor-based (`sense_id` / `act_id`), while runtime envelopes use `sense_instance_id` / `act_instance_id`.
+9. Proprioception is continuous internal state and is passed to Cortex as `<proprioception>` in Input IR.
 
 ## Runtime Topology
 
@@ -31,16 +32,18 @@ Operational flow:
 ```text
 [BodyEndpoint, Spine, Continuity, Ledger] -> SenseQueue (bounded mpsc) -> Stem
 Stem:
-  drained senses -> compose(physical_state + cognition_state) -> Cortex
+  drained senses -> apply control patches (descriptor/proprioception) -> compose(physical_state + cognition_state) -> Cortex
   Cortex -> (acts, new_cognition_state)
   new_cognition_state -> Continuity persist
-  acts -> serial dispatch: Continuity -> Spine
+  acts -> async serial dispatch worker: Continuity -> Spine
 ```
 
 Control senses:
 1. `hibernate`: stops Stem loop.
 2. `new_neural_signal_descriptors`: applies patch before same-cycle Cortex call.
 3. `drop_neural_signal_descriptors`: applies drop patch before same-cycle Cortex call.
+4. `new_proprioceptions`: applies proprioception map upsert before same-cycle Cortex call.
+5. `drop_proprioceptions`: applies proprioception key removal before same-cycle Cortex call.
 
 Shutdown flow:
 1. `main` catches SIGINT/SIGTERM.

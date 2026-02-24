@@ -8,7 +8,7 @@ Cortex is a stateless cognition boundary that consumes `senses + physical_state 
 - Sense helper bypasses LLM calls when domain senses are empty and uses deterministic fallback section output.
 - Cortex does not durably persist cognition/goal state internally.
 - Input IR root is `<input-ir>` and Output IR root is `<output-ir>`.
-- Primary is the cognition core: it reasons from assembled section context (`<somatic-senses>`, `<somatic-act-descriptor-catalog>`, `<instincts>`, `<willpower-matrix>`, `<focal-awareness>`) and decides intent; it is not a generic IR transformation engine.
+- Primary is the cognition core: it reasons from assembled section context (`<somatic-senses>`, `<proprioception>`, `<somatic-act-descriptor-catalog>`, `<instincts>`, `<willpower-matrix>`, `<focal-awareness>`) and decides intent; it is not a generic IR transformation engine.
 - Primary is not an LLM wrapper concept.
 - Cognitive Sovereignty belongs to Primary: Primary runs a multi-turn Cognitive Micro-loop instead of one-shot inference.
 - Internal cognitive tool calls are Internal Cognitive Actions, not Somatic Act outputs.
@@ -17,7 +17,7 @@ Cortex is a stateless cognition boundary that consumes `senses + physical_state 
 - `<input-ir>` / `<output-ir>` are deterministic Rust-owned internal envelopes and are not exposed to Primary LLM prompts/contracts.
 - Primary contract accepts only assembled Input IR payload (no direct `senses`, `physical_state`, or `cognition_state` side channels).
 - Primary output sections are optional; missing sections degrade deterministically (`<somatic-acts>` => no acts, `<willpower-matrix-patch>` => no goal-tree ops, `<new-focal-awareness>` => keep current l1-memory). `<is-wait-for-sense>` defaults to false when absent.
-- Input helpers (`sense_helper`, `act_descriptor_helper`, `goal_tree_helper`, `l1_memory_input_helper`) run concurrently to assemble Input IR sections.
+- Input helpers (`sense_helper`, `proprioception_input_helper`, `act_descriptor_helper`, `goal_tree_helper`, `l1_memory_input_helper`) run concurrently to assemble Input IR sections.
 - Output helpers (`acts_helper`, `goal_tree_patch_helper`, `l1_memory_flush_helper`) run concurrently from Output IR sections.
 - Each helper is implemented as a dedicated submodule under `core/src/cortex/helpers/`.
 - Runtime (`runtime.rs`) orchestrates only boundary state and IR flow; helper conversion implementation is owned by helper modules.

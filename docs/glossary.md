@@ -14,7 +14,10 @@
 - Sense Queue: Bounded Rust MPSC queue shared by all afferent producers.
 - Capability Patch: Incremental upsert payload for capability catalog updates.
 - Capability Drop Patch: Incremental removal payload by route key.
-- Physical State: Current ledger snapshot + merged capabilities visible to Cortex.
+- Proprioception: Continuous internal state Beluna holds as key/value properties.
+- Proprioception Patch: Incremental upsert payload for proprioception map updates.
+- Proprioception Drop Patch: Incremental removal payload by proprioception keys.
+- Physical State: Current ledger snapshot + merged capabilities + merged proprioception visible to Cortex.
 - Cognition State: Persisted goal-tree + l1-memory state.
 - Dispatch Decision: Pipeline control signal (`Continue` or `Break`) for current act only.
 - Route Key: Composite (`endpoint_id`, `capability_id`) routing identity in Spine.

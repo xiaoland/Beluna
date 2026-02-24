@@ -21,7 +21,7 @@ use crate::{
         error::{SpineError, backend_failure, invalid_batch, registration_invalid},
         types::{ActDispatchResult, NeuralSignalDescriptor, NeuralSignalDescriptorRouteKey},
     },
-    types::{Act, DispatchDecision, NeuralSignalDescriptorCatalog, Sense, SenseDatum},
+    types::{Act, NeuralSignalDescriptorCatalog, Sense, SenseDatum},
 };
 
 #[derive(Debug, Clone)]
@@ -211,12 +211,19 @@ impl Spine {
         self.catalog_snapshot()
     }
 
+    pub fn body_endpoint_ids_snapshot(&self) -> Vec<String> {
+        let state = self.endpoint_state.lock().expect("lock poisoned");
+        let mut ids = state.by_id.keys().cloned().collect::<Vec<_>>();
+        ids.sort();
+        ids
+    }
+
     pub fn inline_adapter(&self) -> Option<Arc<SpineInlineAdapter>> {
         self.inline_adapter.get().cloned()
     }
 
     #[tracing::instrument(
-        name = "spine_on_act",
+        name = "spine_on_act_final",
         target = "spine.dispatch",
         skip(self, act),
         fields(
@@ -225,25 +232,46 @@ impl Spine {
             neural_signal_descriptor_id = %act.neural_signal_descriptor_id
         )
     )]
-    pub async fn on_act(&self, act: Act) -> Result<DispatchDecision, SpineError> {
+    pub async fn on_act_final(&self, act: Act) -> Result<ActDispatchResult, SpineError> {
         match self.dispatch_act(act.clone()).await {
-            Ok(ActDispatchResult::Acknowledged { .. }) => Ok(DispatchDecision::Continue),
+            Ok(ActDispatchResult::Acknowledged { reference_id }) => {
+                Ok(ActDispatchResult::Acknowledged { reference_id })
+            }
             Ok(ActDispatchResult::Rejected {
                 reason_code,
                 reference_id,
             }) => {
                 self.emit_dispatch_failure_sense(&act, &reason_code, &reference_id)
                     .await;
-                Ok(DispatchDecision::Break)
+                Ok(ActDispatchResult::Rejected {
+                    reason_code,
+                    reference_id,
+                })
+            }
+            Ok(ActDispatchResult::Lost {
+                reason_code,
+                reference_id,
+            }) => {
+                self.emit_dispatch_failure_sense(&act, &reason_code, &reference_id)
+                    .await;
+                Ok(ActDispatchResult::Lost {
+                    reason_code,
+                    reference_id,
+                })
             }
             Err(err) => {
+                let reason_code = "spine_dispatch_error".to_string();
+                let reference_id = format!("spine:error:{}:{}", act.act_instance_id, err.kind as u8);
                 self.emit_dispatch_failure_sense(
                     &act,
-                    "spine_dispatch_error",
-                    &format!("spine:error:{}:{}", act.act_instance_id, err.kind as u8),
+                    &reason_code,
+                    &reference_id,
                 )
                 .await;
-                Ok(DispatchDecision::Break)
+                Ok(ActDispatchResult::Lost {
+                    reason_code,
+                    reference_id,
+                })
             }
         }
     }
@@ -327,9 +355,9 @@ impl Spine {
                             error = %err,
                             "adapter_channel_invoke_failed"
                         );
-                        let outcome = ActDispatchResult::Rejected {
-                            reason_code: "endpoint_error".to_string(),
-                            reference_id: format!("spine:error:{}", act.act_instance_id),
+                        let outcome = ActDispatchResult::Lost {
+                            reason_code: "dispatch_lost".to_string(),
+                            reference_id: format!("spine:lost:{}", act.act_instance_id),
                         };
                         Self::log_dispatch_outcome(&act, "adapter", Some(channel_id), &outcome);
                         Ok(outcome)
@@ -351,6 +379,7 @@ impl Spine {
                 "reason_code": reason_code,
                 "reference_id": reference_id,
             }),
+            metadata: serde_json::json!({}),
         });
         if let Err(err) = self.afferent_pathway.send(sense).await {
             tracing::warn!(
@@ -676,6 +705,43 @@ impl Spine {
                     reason_code = %reason_code,
                     reference_id = %reference_id,
                     "act_dispatch_rejected"
+                );
+            }
+            (
+                ActDispatchResult::Lost {
+                    reason_code,
+                    reference_id,
+                },
+                Some(channel_id),
+            ) => {
+                tracing::warn!(
+                    target: "spine.dispatch",
+                    act_instance_id = %act.act_instance_id,
+                    endpoint_id = %act.endpoint_id,
+                    neural_signal_descriptor_id = %act.neural_signal_descriptor_id,
+                    dispatch_binding = dispatch_binding,
+                    adapter_channel_id = channel_id,
+                    reason_code = %reason_code,
+                    reference_id = %reference_id,
+                    "act_dispatch_lost"
+                );
+            }
+            (
+                ActDispatchResult::Lost {
+                    reason_code,
+                    reference_id,
+                },
+                None,
+            ) => {
+                tracing::warn!(
+                    target: "spine.dispatch",
+                    act_instance_id = %act.act_instance_id,
+                    endpoint_id = %act.endpoint_id,
+                    neural_signal_descriptor_id = %act.neural_signal_descriptor_id,
+                    dispatch_binding = dispatch_binding,
+                    reason_code = %reason_code,
+                    reference_id = %reference_id,
+                    "act_dispatch_lost"
                 );
             }
         }

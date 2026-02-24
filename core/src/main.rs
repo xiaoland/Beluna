@@ -1,6 +1,7 @@
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use anyhow::{Context, Result};
+use sysinfo::{Networks, System};
 use tokio::{
     signal::unix::{SignalKind, signal},
     sync::Mutex,
@@ -20,6 +21,53 @@ use beluna::{
     spine::{Spine, global_spine, install_global_spine, shutdown_global_spine},
     stem::Stem,
 };
+
+fn collect_main_startup_proprioception() -> BTreeMap<String, String> {
+    let mut entries = BTreeMap::new();
+    entries.insert("main.os".to_string(), collect_os_summary());
+    entries.insert("main.resources".to_string(), collect_resource_summary());
+    entries.insert("main.network".to_string(), collect_network_summary());
+    entries.insert(
+        "main.cwd".to_string(),
+        std::env::current_dir()
+            .map(|path| path.display().to_string())
+            .unwrap_or_else(|err| format!("cwd_unavailable:{err}")),
+    );
+    entries.insert("main.pid".to_string(), std::process::id().to_string());
+    entries
+}
+
+fn collect_os_summary() -> String {
+    let name = System::name().unwrap_or_else(|| "unknown".to_string());
+    let kernel = System::kernel_version().unwrap_or_else(|| "unknown".to_string());
+    let os_version = System::os_version().unwrap_or_else(|| "unknown".to_string());
+    let long_os_version = System::long_os_version().unwrap_or_else(|| "unknown".to_string());
+    let host = System::host_name().unwrap_or_else(|| "unknown".to_string());
+    format!(
+        "name={name};kernel={kernel};os_version={os_version};long_os_version={long_os_version};host={host}"
+    )
+}
+
+fn collect_resource_summary() -> String {
+    let system = System::new_all();
+    let total_memory = system.total_memory();
+    let available_memory = system.available_memory();
+    let used_memory = system.used_memory();
+    let total_swap = system.total_swap();
+    let used_swap = system.used_swap();
+    let cpu_count = system.cpus().len();
+    let uptime_seconds = System::uptime();
+    format!(
+        "cpu_count={cpu_count};memory(total={total_memory},available={available_memory},used={used_memory});swap(total={total_swap},used={used_swap});uptime_seconds={uptime_seconds}"
+    )
+}
+
+fn collect_network_summary() -> String {
+    let networks = Networks::new_with_refreshed_list();
+    let mut names = networks.keys().map(|name| name.to_string()).collect::<Vec<_>>();
+    names.sort();
+    format!("interface_count={};interfaces={}", names.len(), names.join(","))
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -94,9 +142,11 @@ async fn main() -> Result<()> {
         cortex,
         continuity.clone(),
         spine_runtime,
+        afferent_pathway.clone(),
         sense_rx,
         config.r#loop.tick_interval_ms,
         config.r#loop.tick_missed_behavior.clone(),
+        collect_main_startup_proprioception(),
     );
     let stem_task = tokio::spawn(
         async move { stem_runtime.run().await }

@@ -1,4 +1,5 @@
 use std::{
+    collections::{BTreeMap, BTreeSet},
     fs,
     io::ErrorKind,
     os::unix::fs::FileTypeExt,
@@ -22,8 +23,9 @@ use crate::{
     afferent_pathway::SenseAfferentPathway,
     spine::{EndpointBinding, runtime::Spine, types::NeuralSignalDescriptor},
     types::{
-        Act, NeuralSignalDescriptorDropPatch, NeuralSignalDescriptorPatch, Sense, SenseDatum,
-        is_uuid_v4, is_uuid_v7,
+        Act, NeuralSignalDescriptorDropPatch, NeuralSignalDescriptorPatch,
+        ProprioceptionDropPatch, ProprioceptionPatch, Sense, SenseDatum,
+        default_neural_signal_metadata, is_uuid_v4, is_uuid_v7,
     },
 };
 
@@ -45,8 +47,15 @@ enum InboundBodyMessage {
     Auth {
         endpoint_name: String,
         capabilities: Vec<NeuralSignalDescriptor>,
+        proprioceptions: BTreeMap<String, String>,
     },
     Sense(InboundSenseFrame),
+    NewProprioceptions {
+        entries: BTreeMap<String, String>,
+    },
+    DropProprioceptions {
+        keys: Vec<String>,
+    },
     ActAck {
         act_instance_id: String,
     },
@@ -58,6 +67,7 @@ struct InboundSenseFrame {
     sense_instance_id: String,
     neural_signal_descriptor_id: String,
     payload: serde_json::Value,
+    metadata: serde_json::Value,
 }
 
 #[derive(Debug, Deserialize)]
@@ -66,6 +76,22 @@ struct InboundAuthBody {
     endpoint_name: String,
     #[serde(default)]
     capabilities: Vec<NeuralSignalDescriptor>,
+    #[serde(default)]
+    proprioceptions: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InboundNewProprioceptionsBody {
+    #[serde(default)]
+    entries: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InboundDropProprioceptionsBody {
+    #[serde(default)]
+    keys: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -74,6 +100,8 @@ struct InboundSenseBody {
     sense_instance_id: String,
     neural_signal_descriptor_id: String,
     payload: serde_json::Value,
+    #[serde(default = "default_neural_signal_metadata")]
+    metadata: serde_json::Value,
 }
 
 #[derive(Debug, Deserialize)]
@@ -101,13 +129,23 @@ fn parse_body_afferent_message(line: &str) -> Result<InboundBodyMessage, serde_j
             InboundBodyMessage::Auth {
                 endpoint_name: body.endpoint_name,
                 capabilities: body.capabilities,
+                proprioceptions: body.proprioceptions,
             }
+        }
+        "new_proprioceptions" => {
+            let body: InboundNewProprioceptionsBody = decode_envelope_body(wire.body)?;
+            InboundBodyMessage::NewProprioceptions {
+                entries: body.entries,
+            }
+        }
+        "drop_proprioceptions" => {
+            let body: InboundDropProprioceptionsBody = decode_envelope_body(wire.body)?;
+            InboundBodyMessage::DropProprioceptions { keys: body.keys }
         }
         "sense" => {
             let body: InboundSenseBody = decode_envelope_body(wire.body)?;
-            let mut payload = body.payload;
-            normalize_correlated_sense_payload(&mut payload);
-            validate_correlated_sense_payload(&payload)?;
+            validate_neural_signal_metadata(&body.metadata)?;
+            validate_correlated_sense_metadata(&body.metadata)?;
             if !is_uuid_v4(&body.sense_instance_id) {
                 return Err(invalid_correlated_sense_error(
                     "sense_instance_id must be a valid uuid-v4 string",
@@ -121,7 +159,8 @@ fn parse_body_afferent_message(line: &str) -> Result<InboundBodyMessage, serde_j
             InboundBodyMessage::Sense(InboundSenseFrame {
                 sense_instance_id: body.sense_instance_id,
                 neural_signal_descriptor_id: body.neural_signal_descriptor_id,
-                payload,
+                payload: body.payload,
+                metadata: body.metadata,
             })
         }
         "act_ack" => {
@@ -143,7 +182,7 @@ fn parse_body_afferent_message(line: &str) -> Result<InboundBodyMessage, serde_j
         }
         _ => {
             return Err(invalid_correlated_sense_error(
-                "unsupported method, expected one of: auth|sense|act_ack|unplug",
+                "unsupported method, expected one of: auth|sense|act_ack|unplug|new_proprioceptions|drop_proprioceptions",
             ));
         }
     };
@@ -156,32 +195,19 @@ fn decode_envelope_body<T: DeserializeOwned>(
     serde_json::from_value(body)
 }
 
-fn normalize_correlated_sense_payload(payload: &mut serde_json::Value) {
-    let Some(object) = payload.as_object_mut() else {
-        return;
-    };
-
-    if object.contains_key("act_instance_id") {
-        return;
+fn validate_neural_signal_metadata(metadata: &serde_json::Value) -> Result<(), serde_json::Error> {
+    if metadata.is_object() {
+        return Ok(());
     }
-
-    let Some(neural_signal_id) = object
-        .get("neural_signal_id")
-        .and_then(|value| value.as_str())
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    else {
-        return;
-    };
-
-    object.insert(
-        "act_instance_id".to_string(),
-        serde_json::Value::String(neural_signal_id.to_string()),
-    );
+    Err(invalid_correlated_sense_error(
+        "metadata must be an object",
+    ))
 }
 
-fn validate_correlated_sense_payload(payload: &serde_json::Value) -> Result<(), serde_json::Error> {
-    let Some(object) = payload.as_object() else {
+fn validate_correlated_sense_metadata(
+    metadata: &serde_json::Value,
+) -> Result<(), serde_json::Error> {
+    let Some(object) = metadata.as_object() else {
         return Ok(());
     };
 
@@ -220,6 +246,104 @@ fn timestamp_millis() -> u64 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64
+}
+
+fn normalize_proprioception_key(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn namespaced_body_proprioception_key(body_endpoint_id: &str, key: &str) -> Option<String> {
+    let normalized = normalize_proprioception_key(key)?;
+    Some(format!("body.{body_endpoint_id}.{normalized}"))
+}
+
+fn namespaced_body_proprioception_entries(
+    body_endpoint_id: &str,
+    entries: &BTreeMap<String, String>,
+) -> BTreeMap<String, String> {
+    let mut mapped = BTreeMap::new();
+    for (key, value) in entries {
+        if let Some(namespaced) = namespaced_body_proprioception_key(body_endpoint_id, key) {
+            mapped.insert(namespaced, value.clone());
+        }
+    }
+    mapped
+}
+
+fn namespaced_body_proprioception_drop_keys(
+    body_endpoint_id: &str,
+    keys: &[String],
+) -> Vec<String> {
+    let mut mapped = Vec::new();
+    for key in keys {
+        if let Some(namespaced) = namespaced_body_proprioception_key(body_endpoint_id, key) {
+            mapped.push(namespaced);
+        }
+    }
+    mapped
+}
+
+async fn emit_proprioception_patch(
+    afferent_pathway: &SenseAfferentPathway,
+    entries: BTreeMap<String, String>,
+    reason: &'static str,
+) {
+    if entries.is_empty() {
+        return;
+    }
+
+    if let Err(err) = afferent_pathway
+        .send(Sense::NewProprioceptions(ProprioceptionPatch { entries }))
+        .await
+    {
+        tracing::warn!(
+            target: "spine.unix_socket",
+            error = %err,
+            reason = reason,
+            "dropping_proprioception_patch"
+        );
+    }
+}
+
+async fn emit_proprioception_drop(
+    afferent_pathway: &SenseAfferentPathway,
+    keys: Vec<String>,
+    reason: &'static str,
+) {
+    if keys.is_empty() {
+        return;
+    }
+
+    if let Err(err) = afferent_pathway
+        .send(Sense::DropProprioceptions(ProprioceptionDropPatch { keys }))
+        .await
+    {
+        tracing::warn!(
+            target: "spine.unix_socket",
+            error = %err,
+            reason = reason,
+            "dropping_proprioception_drop"
+        );
+    }
+}
+
+async fn emit_spine_topology_proprioception(
+    afferent_pathway: &SenseAfferentPathway,
+    spine: &Arc<Spine>,
+) {
+    let endpoint_ids = spine.body_endpoint_ids_snapshot();
+    let mut entries = BTreeMap::new();
+    entries.insert(
+        "spine.body_endpoint_count".to_string(),
+        endpoint_ids.len().to_string(),
+    );
+    entries.insert("spine.body_endpoints".to_string(), endpoint_ids.join(","));
+    emit_proprioception_patch(afferent_pathway, entries, "topology_refresh").await;
 }
 
 pub struct UnixSocketAdapter {
@@ -443,6 +567,7 @@ async fn handle_body_endpoint(
 
     let mut lines = BufReader::new(read_half).lines();
     let mut auth_endpoint_id: Option<String> = None;
+    let mut endpoint_proprioception_keys = BTreeSet::new();
 
     while let Some(line) = lines.next_line().await? {
         let line = line.trim();
@@ -455,6 +580,7 @@ async fn handle_body_endpoint(
                 InboundBodyMessage::Auth {
                     endpoint_name,
                     capabilities,
+                    proprioceptions,
                 } => {
                     if auth_endpoint_id.is_some() {
                         tracing::warn!(
@@ -516,6 +642,20 @@ async fn handle_body_endpoint(
                             "dropping_capability_patch_after_auth"
                         );
                     }
+
+                    let namespaced_entries = namespaced_body_proprioception_entries(
+                        &handle.body_endpoint_id,
+                        &proprioceptions,
+                    );
+                    endpoint_proprioception_keys
+                        .extend(namespaced_entries.keys().cloned());
+                    emit_proprioception_patch(
+                        &afferent_pathway,
+                        namespaced_entries,
+                        "auth_proprioception_patch",
+                    )
+                    .await;
+                    emit_spine_topology_proprioception(&afferent_pathway, &spine).await;
                 }
                 InboundBodyMessage::ActAck { act_instance_id } => {
                     tracing::debug!(
@@ -547,6 +687,18 @@ async fn handle_body_endpoint(
                                 "dropping_capability_drop_after_unplug"
                             );
                         }
+                        let drop_keys = endpoint_proprioception_keys
+                            .iter()
+                            .cloned()
+                            .collect::<Vec<_>>();
+                        endpoint_proprioception_keys.clear();
+                        emit_proprioception_drop(
+                            &afferent_pathway,
+                            drop_keys,
+                            "unplug_proprioception_drop",
+                        )
+                        .await;
+                        emit_spine_topology_proprioception(&afferent_pathway, &spine).await;
                     }
                     break;
                 }
@@ -565,6 +717,7 @@ async fn handle_body_endpoint(
                         endpoint_id: body_endpoint_id.to_string(),
                         neural_signal_descriptor_id: sense.neural_signal_descriptor_id,
                         payload: sense.payload,
+                        metadata: sense.metadata,
                     };
                     if let Err(err) = afferent_pathway.send(Sense::Domain(sense)).await {
                         tracing::warn!(
@@ -573,6 +726,47 @@ async fn handle_body_endpoint(
                             "dropping_sense_due_to_closed_afferent_pathway"
                         );
                     }
+                }
+                InboundBodyMessage::NewProprioceptions { entries } => {
+                    let Some(body_endpoint_id) = auth_endpoint_id.as_deref() else {
+                        tracing::warn!(
+                            target: "spine.unix_socket",
+                            "new_proprioceptions_rejected_endpoint_must_auth_first"
+                        );
+                        continue;
+                    };
+
+                    let namespaced_entries =
+                        namespaced_body_proprioception_entries(body_endpoint_id, &entries);
+                    endpoint_proprioception_keys
+                        .extend(namespaced_entries.keys().cloned());
+                    emit_proprioception_patch(
+                        &afferent_pathway,
+                        namespaced_entries,
+                        "runtime_proprioception_patch",
+                    )
+                    .await;
+                }
+                InboundBodyMessage::DropProprioceptions { keys } => {
+                    let Some(body_endpoint_id) = auth_endpoint_id.as_deref() else {
+                        tracing::warn!(
+                            target: "spine.unix_socket",
+                            "drop_proprioceptions_rejected_endpoint_must_auth_first"
+                        );
+                        continue;
+                    };
+
+                    let namespaced_keys =
+                        namespaced_body_proprioception_drop_keys(body_endpoint_id, &keys);
+                    for key in &namespaced_keys {
+                        endpoint_proprioception_keys.remove(key);
+                    }
+                    emit_proprioception_drop(
+                        &afferent_pathway,
+                        namespaced_keys,
+                        "runtime_proprioception_drop",
+                    )
+                    .await;
                 }
             },
             Err(err) => {
@@ -593,6 +787,17 @@ async fn handle_body_endpoint(
             ))
             .await;
     }
+
+    if !endpoint_proprioception_keys.is_empty() {
+        let drop_keys = endpoint_proprioception_keys.into_iter().collect::<Vec<_>>();
+        emit_proprioception_drop(
+            &afferent_pathway,
+            drop_keys,
+            "disconnect_proprioception_drop",
+        )
+        .await;
+    }
+    emit_spine_topology_proprioception(&afferent_pathway, &spine).await;
 
     writer_task.await??;
 
@@ -624,25 +829,22 @@ mod tests {
     #[test]
     fn accepts_correlated_sense_message_without_legacy_echo_fields() {
         let parsed = parse_body_afferent_message(
-            r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_instance_id":"9d60f110-af6d-42cb-853b-bf6f6ce6f0dc","neural_signal_descriptor_id":"present.message.result","payload":{"kind":"present_message_result","act_instance_id":"0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a"}}}"#,
+            r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_instance_id":"9d60f110-af6d-42cb-853b-bf6f6ce6f0dc","neural_signal_descriptor_id":"present.message.result","payload":{"kind":"present_message_result"},"metadata":{"act_instance_id":"0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a"}}}"#,
         )
         .expect("correlated sense should parse");
         assert!(matches!(parsed, InboundBodyMessage::Sense(_)));
     }
 
     #[test]
-    fn accepts_legacy_correlated_sense_message_with_neural_signal_alias() {
+    fn accepts_sense_message_without_metadata() {
         let parsed = parse_body_afferent_message(
-            r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_instance_id":"9d60f110-af6d-42cb-853b-bf6f6ce6f0dc","neural_signal_descriptor_id":"present.message.result","payload":{"kind":"present_message_result","neural_signal_id":"0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a"}}}"#,
+            r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_instance_id":"9d60f110-af6d-42cb-853b-bf6f6ce6f0dc","neural_signal_descriptor_id":"present.message.result","payload":{"kind":"present_message_result"}}}"#,
         )
-        .expect("legacy correlated sense should parse");
+        .expect("sense should parse");
 
         match parsed {
             InboundBodyMessage::Sense(sense) => {
-                assert_eq!(
-                    sense.payload.get("act_instance_id"),
-                    Some(&serde_json::json!("0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a"))
-                );
+                assert_eq!(sense.metadata, serde_json::json!({}));
             }
             _ => panic!("expected sense message"),
         }
@@ -652,7 +854,17 @@ mod tests {
     fn rejects_correlated_sense_message_invalid_act_instance_id() {
         assert!(
             parse_body_afferent_message(
-                r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_instance_id":"01234567-89ab-4cde-8f01-23456789abcd","neural_signal_descriptor_id":"present.message.result","payload":{"kind":"present_message_result","act_instance_id":"not-a-uuid-v7"}}}"#
+                r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_instance_id":"01234567-89ab-4cde-8f01-23456789abcd","neural_signal_descriptor_id":"present.message.result","payload":{"kind":"present_message_result"},"metadata":{"act_instance_id":"not-a-uuid-v7"}}}"#
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn rejects_sense_message_with_non_object_metadata() {
+        assert!(
+            parse_body_afferent_message(
+                r#"{"method":"sense","id":"2f8daebf-f529-4ea4-b322-7df109e86d66","timestamp":1739500000000,"body":{"sense_instance_id":"01234567-89ab-4cde-8f01-23456789abcd","neural_signal_descriptor_id":"present.message.result","payload":{"kind":"present_message_result"},"metadata":"invalid"}}"#
             )
             .is_err()
         );
@@ -739,12 +951,55 @@ mod tests {
             InboundBodyMessage::Auth {
                 endpoint_name,
                 capabilities,
+                proprioceptions,
             } => {
                 assert_eq!(endpoint_name, "cli");
                 assert!(capabilities.is_empty());
+                assert!(proprioceptions.is_empty());
             }
             _ => panic!("expected auth message"),
         }
+    }
+
+    #[test]
+    fn accepts_new_proprioceptions_message() {
+        let wire = serde_json::json!({
+            "method": "new_proprioceptions",
+            "id": "2f8daebf-f529-4ea4-b322-7df109e86d66",
+            "timestamp": 1739500000000_u64,
+            "body": {
+                "entries": {
+                    "platform": "macos",
+                    "window": "1440x900"
+                }
+            }
+        });
+
+        let parsed =
+            parse_body_afferent_message(&wire.to_string()).expect("new_proprioceptions should parse");
+        assert!(matches!(
+            parsed,
+            InboundBodyMessage::NewProprioceptions { .. }
+        ));
+    }
+
+    #[test]
+    fn accepts_drop_proprioceptions_message() {
+        let wire = serde_json::json!({
+            "method": "drop_proprioceptions",
+            "id": "2f8daebf-f529-4ea4-b322-7df109e86d66",
+            "timestamp": 1739500000000_u64,
+            "body": {
+                "keys": ["platform", "window"]
+            }
+        });
+
+        let parsed =
+            parse_body_afferent_message(&wire.to_string()).expect("drop_proprioceptions should parse");
+        assert!(matches!(
+            parsed,
+            InboundBodyMessage::DropProprioceptions { .. }
+        ));
     }
 
     #[test]

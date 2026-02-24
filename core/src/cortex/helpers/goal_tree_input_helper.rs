@@ -11,11 +11,11 @@ use crate::cortex::{
 };
 
 const GOAL_TREE_EMPTY_PURSUITS_ONE_SHOT: &str = concat!(
-    "Current pursuits are empty, following are examples:\n",
-    "1 (w=0.60, status=active) Some description about this pursuit item, keep simple and direct.\n",
-    "1.1 (w=0.50, status=active) Use hierarchy numbering to organize the pursuits.\n",
-    "1.2 (w=0.40, status=closed) You only need to output the new/modified pursuits.\n",
-    "2 (w=0.50, status=active) Image the pursuits as a forest.\n",
+    "Current willpower-matrix is empty, following are examples:\n",
+    "1 (w=0.60) [active] Brief description of this goal.\n",
+    "1.1 (w=0.50) [hang] Use hierarchy numbering and treat the willpower-matrix as a forest,  .\n",
+    "1.2 (w=0.40) [closed] Let your mind freely flow, there's no constraint to willpower-matrix.\n",
+    "2 (w=0.50) [active] Yeah, another tree here.\n",
 );
 
 #[derive(Clone, Default)]

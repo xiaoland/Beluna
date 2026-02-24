@@ -32,9 +32,13 @@
 
 ## Dispatch Middleware Rules
 
-- Per-act chain: `Continuity.on_act -> Spine.on_act`.
-- `Break` aborts current act propagation only.
-- Spine emits dispatch failure as domain sense through afferent sender.
+- Stem enqueues non-sleep acts into one bounded dispatch queue.
+- Dispatch worker is single-consumer serial.
+- Per-act chain in worker: `Continuity.on_act -> Spine.on_act_final`.
+- Dispatch terminal status is mapped to proprioception key:
+  - `DISPATCHING`
+  - `ACK | REJECTED | LOST`
+- Terminal dispatch status keys are retained in bounded history; overflow uses `drop_proprioceptions`.
 
 ## Capability Merge Rules
 
@@ -44,3 +48,14 @@
   - Stem control descriptors
 - Merge key: `(type, endpoint_id, neural_signal_descriptor_id)`.
 - Final entries are sorted deterministically.
+
+## Proprioception Rules
+
+- `main` startup proprioception is static base map for runtime lifetime.
+- Dynamic proprioception is updated only by control senses:
+  - `new_proprioceptions`
+  - `drop_proprioceptions`
+- Physical proprioception map passed to Cortex is:
+  - startup base map
+  - overlaid by dynamic map (last write wins by key)
+- Only `Sense::Domain` entries are forwarded to Cortex; control senses are intercepted in Stem.

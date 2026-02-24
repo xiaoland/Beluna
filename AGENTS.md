@@ -30,7 +30,7 @@ Read following documents if needed, and keep them current:
 - You are encouraged to add an AGENTS.md file under modules with significant complexity when needed.
 - Whenever new understanding emerges during implementation, you should decide whether that knowledge is reusable. If yes, it must be promoted from working memory to documentation.
 - Less is more; better none than inferior; quality over quantity; High cohension, low coupling.
-- Stop maintaining/running tests for all projects, just make sure the build passes.
+- Do NOT maintaining/running tests, just make sure the build passes.
 - No backward compability needed.
 
 ## Coding Guidelines

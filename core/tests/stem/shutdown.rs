@@ -15,6 +15,7 @@ async fn shutdown_gate_rejects_new_senses_and_sleep_send_blocks_until_space() {
             endpoint_id: "ep.demo".to_string(),
             neural_signal_descriptor_id: "sense.demo".to_string(),
             payload: serde_json::json!({}),
+            metadata: serde_json::json!({}),
         }))
         .await
         .expect("first sense should be accepted");
@@ -27,6 +28,7 @@ async fn shutdown_gate_rejects_new_senses_and_sleep_send_blocks_until_space() {
             endpoint_id: "ep.demo".to_string(),
             neural_signal_descriptor_id: "sense.demo".to_string(),
             payload: serde_json::json!({}),
+            metadata: serde_json::json!({}),
         }))
         .await
         .expect_err("closed afferent pathway should reject producer sends");

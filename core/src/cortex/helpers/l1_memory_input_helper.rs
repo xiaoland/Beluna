@@ -1,9 +1,6 @@
 use crate::cortex::helpers;
 
-const L1_MEMORY_EMPTY_ONE_SHOT: &str = concat!(
-    "- The focal awareness is now empty.\n",
-    "- Each focal entry a line. Each entry for a thing. Keep your statement concise and direct.\n",
-);
+const L1_MEMORY_EMPTY_ONE_SHOT: &str = concat!("The focal awareness is now empty.",);
 
 #[derive(Clone, Default)]
 pub(crate) struct L1MemoryInputHelper;
@@ -18,15 +15,19 @@ impl L1MemoryInputHelper {
         let output = if l1_memory.is_empty() {
             l1_memory_empty_one_shot().to_string()
         } else {
-            l1_memory_json(l1_memory)
+            l1_memory_markdown(l1_memory)
         };
         helpers::log_organ_output(cycle_id, stage, &output);
         output
     }
 }
 
-pub(crate) fn l1_memory_json(l1_memory: &[String]) -> String {
-    serde_json::to_string_pretty(l1_memory).unwrap_or_else(|_| "[]".to_string())
+pub(crate) fn l1_memory_markdown(l1_memory: &[String]) -> String {
+    l1_memory
+        .iter()
+        .map(|item| format!("- {}", item))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 pub(crate) fn l1_memory_empty_one_shot() -> &'static str {

@@ -16,7 +16,10 @@ use crate::{
     afferent_pathway::SenseAfferentPathway,
     config::InlineAdapterConfig,
     spine::{ActDispatchResult, Endpoint, EndpointBinding, NeuralSignalDescriptor, runtime::Spine},
-    types::{Act, NeuralSignalDescriptorDropPatch, NeuralSignalDescriptorPatch, Sense, SenseDatum},
+    types::{
+        Act, NeuralSignalDescriptorDropPatch, NeuralSignalDescriptorPatch,
+        ProprioceptionPatch, Sense, SenseDatum,
+    },
 };
 
 #[derive(Debug, Clone)]
@@ -141,6 +144,7 @@ impl SpineInlineAdapter {
                                 endpoint_id: body_endpoint_id_for_task.clone(),
                                 neural_signal_descriptor_id: sense.neural_signal_descriptor_id.clone(),
                                 payload: sense.payload.clone(),
+                                metadata: serde_json::json!({}),
                             };
                             if let Err(err) = adapter.afferent_pathway.send(Sense::Domain(sense)).await {
                                 tracing::warn!(
@@ -197,6 +201,7 @@ impl SpineInlineAdapter {
                 "dropped_neural_signal_descriptor_patch_after_attach"
             );
         }
+        emit_spine_topology_proprioception(&self.afferent_pathway, &spine).await;
 
         Ok(InlineEndpointRuntimeHandles { act_rx, sense_tx })
     }
@@ -301,7 +306,28 @@ impl SpineInlineAdapter {
                     "dropped_neural_signal_descriptor_drop_during_detach"
                 );
             }
+            emit_spine_topology_proprioception(&self.afferent_pathway, &spine).await;
         }
+    }
+}
+
+async fn emit_spine_topology_proprioception(afferent_pathway: &SenseAfferentPathway, spine: &Spine) {
+    let endpoint_ids = spine.body_endpoint_ids_snapshot();
+    let mut entries = BTreeMap::new();
+    entries.insert(
+        "spine.body_endpoint_count".to_string(),
+        endpoint_ids.len().to_string(),
+    );
+    entries.insert("spine.body_endpoints".to_string(), endpoint_ids.join(","));
+    if let Err(err) = afferent_pathway
+        .send(Sense::NewProprioceptions(ProprioceptionPatch { entries }))
+        .await
+    {
+        tracing::warn!(
+            target: "spine.inline_adapter",
+            error = %err,
+            "dropped_spine_topology_proprioception_patch"
+        );
     }
 }
 

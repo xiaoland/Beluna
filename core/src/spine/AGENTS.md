@@ -9,5 +9,6 @@ Spine defines contracts for endpoint-level routing of serial `Act` dispatches.
 - Spine executor is process-wide singleton initialized once at runtime boot.
 - Registry owns remote endpoint session channels and lifecycle ownership.
 - Inline adapter owns inline endpoint mailboxes and lifecycle ownership.
-- Middleware entrypoint is `on_act` and returns `Continue`/`Break`.
+- Middleware entrypoint is `on_act_final` and returns final dispatch status (`Acknowledged` / `Rejected` / `Lost`).
 - Dispatch failures are emitted back into afferent pathway as domain senses.
+- Correlated inbound domain senses should carry `act_instance_id` in `metadata` (object), not in payload.

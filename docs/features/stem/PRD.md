@@ -10,11 +10,14 @@ Stem is Beluna's tick-driven runtime orchestrator.
 - Default tick interval is `1s`.
 - Missed ticks are skipped.
 - One bounded MPSC sense queue is the afferent ingress.
-- No act queue exists; acts are dispatched inline and serially per cycle.
+- One bounded async dispatch queue exists; dispatch worker stays serial and ordered.
 - `hibernate` is shutdown control sense and terminates the loop.
 - Capability control senses:
   - `new_neural_signal_descriptors`: apply before same-cycle Cortex call
   - `drop_neural_signal_descriptors`: apply before same-cycle Cortex call
+- Proprioception control senses:
+  - `new_proprioceptions`: apply map upsert before same-cycle Cortex call
+  - `drop_proprioceptions`: apply key drop before same-cycle Cortex call
 - Stem publishes a built-in sleep act descriptor:
   - endpoint: `core.control`
   - act id: `sleep`
@@ -23,8 +26,9 @@ Stem is Beluna's tick-driven runtime orchestrator.
   - enters sleeping mode until deadline
   - new sense arrival wakes early and triggers immediate cycle
 - Dispatch path is per act middleware:
-  - `Continuity.on_act -> Spine.on_act`
-  - each stage returns `Continue|Break` for current act only
+  - `Continuity.on_act -> Spine.on_act_final`
+  - final status is `ACK | REJECTED | LOST`
+  - dispatch status is exposed as Stem proprioception key `stem.dispatch.<act_instance_id>.status`
 
 ## Out of Scope
 

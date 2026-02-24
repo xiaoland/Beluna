@@ -23,9 +23,10 @@ Patch ops:
 
 ## Tick Algorithm
 
-1. Run input helper instances (`sense`, `act-descriptor`, `goal-tree`, `l1-memory`).
+1. Run input helper instances (`sense`, `proprioception`, `act-descriptor`, `goal-tree`, `l1-memory`).
    - `sense_helper`: payload passthrough for small payloads, Postman Envelope for large payloads.
    - each `<somatic-sense>` is labeled with tick-local monotonic `sense-instance-id`.
+   - `proprioception_input_helper`: deterministic map rendering into natural-language lines.
 2. `goal_tree_input_helper` takes full `GoalTree` and consolidates both root-partition conversion (`<instincts>`) and user-partition conversion (`<willpower-matrix>`).
 3. `l1_memory_input_helper` emits `<focal-awareness>` from current l1-memory; empty l1-memory uses deterministic markdown bullet one-shot.
 4. Build `<input-ir>` with strict first-level XML sections.
@@ -52,6 +53,8 @@ Patch ops:
 - Keep semantic-first representation and implicit relational structure.
 - `<somatic-senses>` and `<somatic-act-descriptor-catalog>` carry fully-qualified ids.
 - `<somatic-senses>` additionally carries `sense-instance-id` (tick-local monotonic int), independent from external transport UUIDs.
+- `<proprioception>` is a dedicated first-level section and does not use `sense-instance-id`.
+- `sense` and `proprioception` are semantically distinct by contract.
 
 ## Helper JSON Contracts
 

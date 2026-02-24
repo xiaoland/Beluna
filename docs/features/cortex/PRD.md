@@ -5,7 +5,7 @@
 Cortex is Beluna's deliberative cognition boundary.
 
 Boundary shape:
-`[senses, physical_state(act_descriptor_catalog), cognition_state(goal-tree, l1-memory)] -> acts, cognition_state`
+`[senses, physical_state(act_descriptor_catalog + proprioception), cognition_state(goal-tree, l1-memory)] -> acts, cognition_state`
 
 ## Requirements
 
@@ -19,6 +19,7 @@ Boundary shape:
 - Cognitive Micro-loop hard stop is `max_internal_steps`.
 - Input IR first-level XML sections:
   - `<somatic-senses>`
+  - `<proprioception>`
   - `<somatic-act-descriptor-catalog>`
   - `<instincts>`
   - `<willpower-matrix>`
@@ -38,6 +39,10 @@ Boundary shape:
   - user partition: runtime mutable flat weighted forest (`GoalNode[]`) with hierarchy in `numbering` and node shape `numbering, weight, summary, content, status`
 - L1 memory model is ordered `string[]`.
 - `<somatic-senses>` section entries include `sense-instance-id` (tick-local monotonic int) and `fq-somatic-sense-id`.
+- `<proprioception>` is deterministic natural-language rendering of `PhysicalState.proprioception`.
+- Sense vs proprioception:
+  - sense = external point-in-time event
+  - proprioception = continuous internal state currently held by Beluna
 - Sense helper behavior:
   - payload bytes <= `sense_passthrough_max_bytes`: passthrough JSON
   - payload bytes > `sense_passthrough_max_bytes`: Postman Envelope JSON with `brief`, `original_size_in_bytes`, `confidence_score`, `omitted_features`

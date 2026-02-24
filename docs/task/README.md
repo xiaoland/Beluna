@@ -1,6 +1,6 @@
 # docs/task README
 
-## Workflow (Complex)
+## Complex task workflow
 
 Make progressive planning:  
 
@@ -17,6 +17,14 @@ Notes:
 - MUST ask user for explicit approval before getting into next planning.
 - Make use of sub agent to reduct your cognitive load.
 
-## Workflow (Moderate)
+## Simple task workflow
 
 Draft a simple implementation plan (expand key changes) and ask for my approval. If you find out key decisions needed, stop and discuss with me.
+
+## Refactoring task workflow
+
+Refactoring in all these three levels:
+
+- Local Refactoring: Rename, Extract function, Remove duplication, Improve naming -> improves readability.
+- Structural Refactoring: Split modules, Introduce boundaries, Change data flow, Replace patterns -> improves maintainability.
+- Architectural Reset: Remove features, Break backward compatibility, Redesign abstractions, Rewrite subsystems -> improves long-term velocity.

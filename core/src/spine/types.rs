@@ -25,6 +25,10 @@ pub enum ActDispatchResult {
         reason_code: String,
         reference_id: String,
     },
+    Lost {
+        reason_code: String,
+        reference_id: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

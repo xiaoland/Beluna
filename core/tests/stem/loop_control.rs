@@ -98,6 +98,7 @@ async fn stem_drains_all_queued_senses_into_one_cortex_cycle() {
             endpoint_id: "ep.demo".to_string(),
             neural_signal_descriptor_id: "sense.demo".to_string(),
             payload: serde_json::json!({"a":1}),
+            metadata: serde_json::json!({}),
         }))
         .await
         .expect("sense should enqueue");
@@ -107,6 +108,7 @@ async fn stem_drains_all_queued_senses_into_one_cortex_cycle() {
             endpoint_id: "ep.demo".to_string(),
             neural_signal_descriptor_id: "sense.demo".to_string(),
             payload: serde_json::json!({"b":2}),
+            metadata: serde_json::json!({}),
         }))
         .await
         .expect("sense should enqueue");
