@@ -30,6 +30,10 @@ pub(crate) fn l1_memory_markdown(l1_memory: &[String]) -> String {
         .join("\n")
 }
 
+pub(crate) fn l1_memory_json(l1_memory: &[String]) -> String {
+    serde_json::to_string_pretty(l1_memory).unwrap_or_else(|_| "[]".to_string())
+}
+
 pub(crate) fn l1_memory_empty_one_shot() -> &'static str {
     L1_MEMORY_EMPTY_ONE_SHOT
 }

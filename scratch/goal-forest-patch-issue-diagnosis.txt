@@ -1,0 +1,45 @@
+There's again:
+```
+2026-02-25T14:08:50.963699Z  WARN cortex: primary_internal_cognitive_action_failed cycle_id=3 step=0 tool_name=patch-goal-forest tool_call_id=call_02a5812fe7e9486e849743cc error=invalid type: map, expected a sequence at line 1 column 0
+2026-02-25T14:08:53.137650Z  WARN cortex: primary_internal_cognitive_action_failed cycle_id=3 step=1 tool_name=patch-goal-forest tool_call_id=call_1d2cdbc470514533afa05fe2 error=invalid type: map, expected a sequence at line 1 column 0
+2026-02-25T14:09:08.794214Z  WARN cortex: primary_internal_cognitive_action_failed cycle_id=3 step=2 tool_name=patch-goal-forest tool_call_id=call_8ae8d063f133496b9ea84706 error=invalid type: map, expected a sequence at line 1 column 0
+2026-02-25T14:09:27.145183Z  WARN cortex: primary_internal_cognitive_action_failed cycle_id=3 step=3 tool_name=patch-goal-forest tool_call_id=call_7ebdea307733495199fb2501 error=invalid type: map, expected a sequence at line 1 column 0
+2026-02-25T14:09:27.145340Z  WARN cortex: stage_failed cycle_id=3 stage="primary"
+2026-02-25T14:09:27.145385Z  WARN cortex: primary_failed_noop cycle_id=3 error=primary micro-loop exceeded max_internal_steps=4
+```
+Please check the log file logs/core/core.log.2026-02-25.3 and diagnose the reason. Even the cortex has realized the issue:
+```
+Goal forest appears empty despite focal-awareness indicating goals were previously created. This may be the bug being tested. Recreating goal structure to continue demonstration and verify system behavior.
+```
+
+---------
+
+Diagnosis from `/Users/lanzhijiang/Development/Beluna/logs/core/core.log.2026-02-25.3`:
+
+1. `patch-goal-forest` tool call argument shape mismatch is the direct failure.
+- Repeated warnings show: `invalid type: map, expected a sequence` at lines `82`, `84`, `86`, `88`.
+- Runtime currently parses tool args as `Vec<GoalForestPatchOp>` (top-level JSON array) in `/Users/lanzhijiang/Development/Beluna/core/src/cortex/runtime.rs:1057`.
+- `map` means the model sent a JSON object, not an array.  
+Inference: most likely shape is wrapper object (for example `{"ops":[...]}`), but the log level does not print raw `arguments_json`.
+
+2. There is a second behavior issue: Primary still sometimes emits legacy-style patch text in output instead of internal tool calls.
+- At line `54`, Primary output contains `<patch-goal-forest> ... </patch-goal-forest>` inside `<somatic-acts>`.
+- At line `56`, `acts_helper` receives that patch block as part of `acts_section`.
+- Since output IR patch sections were removed, this text does not mutate goal forest state.
+
+3. This explains the “goal forest empty but focal-awareness says goals were created” message.
+- The “created goals” were text claims, not successfully applied mutations.
+- Then later tool calls also failed due args shape mismatch, so state remained empty and Primary hit `max_internal_steps` (lines `90`, `91`).
+
+Recommended fix:
+
+1. Make parser tolerant again in `/Users/lanzhijiang/Development/Beluna/core/src/cortex/runtime.rs`.
+- Accept both top-level array and wrapped object (`{"ops":[...]}`).
+- Keep docs and prompt preferring array if you want, but runtime should be robust to backend/model variance.
+
+2. Add hard guardrail in prompt against legacy output patch text.
+- Explicitly forbid emitting `<patch-goal-forest>` tags in output text.
+- Require all goal mutations via tool calls only.
+
+3. Add temporary diagnostics for failed tool-call parse.
+- Log a truncated `arguments_json` on parse failure to confirm exact object shape in production.

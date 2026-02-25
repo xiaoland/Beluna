@@ -7,7 +7,7 @@ Beluna is a survival-oriented digital life runtime, not a chatbot.
 1. Natural language is the protocol across cognition and body affordances.
 2. Cortex is stateless and pure at runtime boundary.
 3. Cortex emits non-binding `Act[]`.
-4. Continuity persists cognition state (`goal-tree` + `l1-memory`) with deterministic guardrails.
+4. Continuity persists cognition state (`goal-forest` + `l1-memory`) with deterministic guardrails.
 5. Spine executes acts and can emit dispatch-failure senses.
 6. Stem loop is tick-driven (default 1s, missed tick skip).
 7. Body endpoints are Beluna's world interfaces.

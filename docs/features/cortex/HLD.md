@@ -17,12 +17,12 @@ Primary Output IR is internal protocol only and is not `CortexOutput`.
 
 ## Key Components
 
-- `runtime.rs`: cycle orchestration and IR assembly/parsing; helper-level timeout/fallback is consolidated inside each helper module.
+- `runtime.rs`: cycle orchestration, primary micro-loop, tool routing, and final cognition assembly.
 - `ir.rs`: `<input-ir>` and `<output-ir>` envelope assembly/parsing.
-- `helpers/`: one helper per submodule (`sense_input_helper`, `proprioception_input_helper`, `act_descriptor_input_helper`, `goal_tree_input_helper`, `l1_memory_input_helper`, `acts_output_helper`, `goal_tree_patch_output_helper`, `l1_memory_flush_output_helper`).
+- `helpers/`: one helper per submodule (`sense_input_helper`, `proprioception_input_helper`, `act_descriptor_input_helper`, `goal_forest_input_helper`, `l1_memory_input_helper`, `acts_output_helper`, `l1_memory_flush_output_helper`).
 - `cognition_patch.rs`: deterministic cognition patch application.
-- `prompts.rs`: primary prompt and helper prompts in one module.
-- `cognition.rs`: `GoalTree`, `GoalNode`, `L1Memory`, patch op contracts.
+- `prompts.rs`: primary prompt and helper prompts.
+- `cognition.rs`: `GoalForest`, `GoalNode`, `L1Memory`, patch op contracts.
 
 ## Organ Topology
 
@@ -30,33 +30,34 @@ Input helper stage (parallel):
 - `sense_helper`
 - `proprioception_input_helper` (deterministic map-to-natural-language rendering)
 - `act_descriptor_helper` with MD5 process cache
-- `goal_tree_helper` receives full goal-tree and keeps MD5 process cache keyed on user partition
-- `l1_memory_input_helper` emits focal-awareness section deterministically
+- `goal_forest_input_helper` (deterministic GoalForest -> ASCII-art `<goal-forest>`)
+- `l1_memory_input_helper`
 
 Primary stage:
 - `primary-micro-loop(<input-ir>, internal-tool-calls) -> <output-ir>`
-- Primary is the cognition engine core, not an LLM wrapper concept.
-- Internal tool calls are Internal Cognitive Actions (`expand-sense-raw`, `expand-sense-with-sub-agent`), not Somatic Acts.
-- Micro-loop is bounded by `max_internal_steps`.
+- Internal tools:
+  - `expand-sense-raw`
+  - `expand-sense-with-sub-agent`
+  - `patch-goal-forest`
+- `patch-goal-forest` updates cycle-local goal-forest state and returns updated ASCII-art.
 
 Output helper stage (parallel):
 - `acts_helper` -> `Act[]`
-- `goal_tree_patch_helper` -> `GoalTreePatchOp[]`
 - `l1_memory_flush_helper` -> `string[]`
 
-Patch application is done inside Cortex to produce full `new_cognition_state`.
+Final cognition state is composed inside Cortex from:
+- cycle-local goal-forest state produced by `patch-goal-forest`
+- l1-memory flush output
 
 ## Invariants
 
-- Root partition is immutable and never modified by Cortex patching.
-- User partition is a flat forest mutated by numbering-based `sprout/prune/tilt`; node shape is `numbering, weight, summary, content, status`; L1 memory is mutable through allowed op sets.
-- Output helpers consume section-local context only and do not require full Output IR text.
+- Goal instincts are in primary system prompt (no persisted root partition).
+- Goal-forest node shape is `numbering, status, weight, id, summary`.
+- Goal weights must already be valid `[0,1]`; no normalization.
+- Output IR has no goal-forest patch section.
+- Output helpers consume section-local context only.
 - Sense helper conversion contract: structured input -> Postman Envelope JSON for large payloads; passthrough JSON for small payloads.
 - Proprioception helper conversion contract: `BTreeMap<String, String> -> deterministic natural-language section`.
 - Sense entries expose `sense-instance-id` (tick-local monotonic int) and `fq-somatic-sense-id` attributes.
 - Input IR contains `<proprioception>` section distinct from `<somatic-senses>`.
-- Input helper conversion contract (non-sense): structured input -> cognition-friendly output.
-- Output helper conversion contract: cognition-friendly input -> structured output.
-- Primary behavior invariants are expressed by prompt contract, not hard-coded policy branches.
-- Helper protocol remains semantic-first and plumbing-free.
 - Input/Output IR uses fully-qualified somatic sense/act ids only and excludes instance ids.

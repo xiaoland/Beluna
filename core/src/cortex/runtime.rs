@@ -1,5 +1,5 @@
 // cortex/runtime.ts invariants:
-// - Should stops at sense, neural signal descriptor, goal tree, l1 memory, IR, act level.
+// - Should stop at sense, neural signal descriptor, goal forest, l1 memory, IR, act level.
 
 use std::{collections::BTreeMap, sync::Arc, time::Instant};
 
@@ -12,14 +12,14 @@ use crate::{
         chat::{ChatSessionOpenRequest, ChatThreadOpenRequest, ChatTurnRequest},
         gateway::AIGateway,
         types_chat::{
-            BelunaContentPart, BelunaMessage, BelunaRole, BelunaToolDefinition,
-            CanonicalToolCall, ChatResponse, OutputMode, RequestLimitOverrides, ToolChoice,
+            BelunaContentPart, BelunaMessage, BelunaRole, BelunaToolDefinition, CanonicalToolCall,
+            ChatResponse, OutputMode, RequestLimitOverrides, ToolChoice,
         },
     },
     config::CortexHelperRoutesConfig,
     cortex::{
-        cognition::{CognitionState, GoalTreePatchOp},
-        cognition_patch::apply_cognition_patches,
+        cognition::{CognitionState, GoalForestPatchOp, GoalNode},
+        cognition_patch::{apply_cognition_patches, apply_goal_forest_op},
         error::{CortexError, extractor_failed, filler_failed, invalid_input, primary_failed},
         helpers::{self, CognitionOrgan, CortexHelper, HelperRuntime, sense_input_helper},
         ir, prompts,
@@ -52,6 +52,7 @@ pub struct Cortex {
 
 const PRIMARY_TOOL_EXPAND_SENSE_RAW: &str = "expand-sense-raw";
 const PRIMARY_TOOL_EXPAND_SENSE_WITH_SUB_AGENT: &str = "expand-sense-with-sub-agent";
+const PRIMARY_TOOL_PATCH_GOAL_FOREST: &str = "patch-goal-forest";
 
 #[derive(Debug, Deserialize)]
 struct ExpandSenseRawArgs {
@@ -61,6 +62,12 @@ struct ExpandSenseRawArgs {
 #[derive(Debug, Deserialize)]
 struct ExpandSenseWithSubAgentArgs {
     tasks: Vec<sense_input_helper::SenseSubAgentTask>,
+}
+
+#[derive(Debug, Clone)]
+struct PrimaryEngineResult {
+    output_text: String,
+    goal_forest_nodes: Vec<GoalNode>,
 }
 
 impl Cortex {
@@ -119,13 +126,13 @@ impl Cortex {
             sense_input_helper::SenseToolContext::from_inputs(&senses_owned, &sense_descriptors);
         let sense_descriptors_for_helper = sense_descriptors.clone();
         let act_descriptors_for_helper = act_descriptors.clone();
-        let goal_tree = cognition_state.goal_tree.clone();
+        let goal_forest = cognition_state.goal_forest.clone();
 
         let (
             senses_section,
             proprioception_section,
             act_descriptor_catalog_section,
-            goal_tree_sections,
+            goal_forest_section,
             focal_awareness_section,
         ) = tokio::join!(
             self.helper.input.sense.to_input_ir_section(
@@ -147,11 +154,11 @@ impl Cortex {
                 deadline,
                 &act_descriptors_for_helper,
             ),
-            self.helper.input.goal_tree.to_input_ir_sections(
+            self.helper.input.goal_forest.to_input_ir_section(
                 self,
                 physical_state.cycle_id,
                 deadline,
-                &goal_tree,
+                &goal_forest,
             ),
             async {
                 self.helper
@@ -160,9 +167,6 @@ impl Cortex {
                     .to_input_ir_section(physical_state.cycle_id, &cognition_state.l1_memory)
             }
         );
-
-        let instincts_section = goal_tree_sections.instincts_section;
-        let willpower_matrix_section = goal_tree_sections.willpower_matrix_section;
 
         observability_metrics::record_cortex_input_ir_act_descriptor_catalog_count(
             act_descriptors.len(),
@@ -188,14 +192,8 @@ impl Cortex {
         tracing::debug!(
             target: "cortex",
             cycle_id = physical_state.cycle_id,
-            input_ir_instincts = %instincts_section,
-            "input_ir_instincts"
-        );
-        tracing::debug!(
-            target: "cortex",
-            cycle_id = physical_state.cycle_id,
-            input_ir_willpower_matrix = %willpower_matrix_section,
-            "input_ir_willpower_matrix"
+            input_ir_goal_forest = %goal_forest_section,
+            "input_ir_goal_forest"
         );
         tracing::debug!(
             target: "cortex",
@@ -208,16 +206,14 @@ impl Cortex {
             &senses_section,
             &proprioception_section,
             &act_descriptor_catalog_section,
-            &instincts_section,
-            &willpower_matrix_section,
+            &goal_forest_section,
             &focal_awareness_section,
         );
         let primary_input_payload = ir::build_primary_input_payload(
             &senses_section,
             &proprioception_section,
             &act_descriptor_catalog_section,
-            &instincts_section,
-            &willpower_matrix_section,
+            &goal_forest_section,
             &focal_awareness_section,
         );
 
@@ -228,6 +224,7 @@ impl Cortex {
                 primary_input_payload,
                 input_ir.text.clone(),
                 sense_tool_context,
+                goal_forest.nodes.clone(),
             ),
         )
         .await;
@@ -269,7 +266,7 @@ impl Cortex {
             }
         };
 
-        let (_output_ir, output_sections) = match ir::parse_output_ir(&primary_output) {
+        let (_output_ir, output_sections) = match ir::parse_output_ir(&primary_output.output_text) {
             Ok(parsed) => parsed,
             Err(err) => {
                 self.emit(CortexTelemetryEvent::StageFailed {
@@ -308,24 +305,6 @@ impl Cortex {
                 None => Vec::new(),
             }
         };
-        let goal_tree_patch_future = async {
-            match output_sections.goal_tree_patch_section.as_deref() {
-                Some(goal_tree_patch_section) => {
-                    self.helper
-                        .output
-                        .goal_tree_patch
-                        .to_structured_output(
-                            self,
-                            physical_state.cycle_id,
-                            deadline,
-                            goal_tree_patch_section,
-                            cognition_state,
-                        )
-                        .await
-                }
-                None => Vec::new(),
-            }
-        };
         let l1_memory_flush_future = async {
             match output_sections.l1_memory_flush_section.as_deref() {
                 Some(l1_memory_flush_section) => {
@@ -344,40 +323,14 @@ impl Cortex {
                 None => cognition_state.l1_memory.clone(),
             }
         };
-        let (acts, goal_tree_ops, l1_memory_flush) =
-            tokio::join!(acts_future, goal_tree_patch_future, l1_memory_flush_future);
-
-        if cognition_state.goal_tree.user_partition.is_empty()
-            && !goal_tree_ops.is_empty()
-            && !goal_tree_ops
-                .iter()
-                .any(|op| matches!(op, GoalTreePatchOp::Sprout { .. }))
-        {
-            tracing::warn!(
-                target: "cortex",
-                cycle_id = physical_state.cycle_id,
-                op_count = goal_tree_ops.len(),
-                "goal_tree_patch_no_sprout_for_empty_user_partition"
-            );
-        }
+        let (acts, l1_memory_flush) = tokio::join!(acts_future, l1_memory_flush_future);
 
         let apply_result = apply_cognition_patches(
             cognition_state,
-            &goal_tree_ops,
+            &[],
             &l1_memory_flush,
             self.limits.max_l1_memory_entries,
         );
-        if !goal_tree_ops.is_empty()
-            && apply_result.new_cognition_state.goal_tree.user_partition
-                == cognition_state.goal_tree.user_partition
-        {
-            tracing::warn!(
-                target: "cortex",
-                cycle_id = physical_state.cycle_id,
-                op_count = goal_tree_ops.len(),
-                "goal_tree_patch_ops_no_effect"
-            );
-        }
         if apply_result.l1_memory_overflow_count > 0 {
             tracing::warn!(
                 target: "cortex",
@@ -387,18 +340,18 @@ impl Cortex {
                 "l1_memory_flush_overflow_discarded"
             );
         }
-        let new_cognition_state = apply_result.new_cognition_state;
+        let mut new_cognition_state = apply_result.new_cognition_state;
+        let goal_forest_changed =
+            new_cognition_state.goal_forest.nodes != primary_output.goal_forest_nodes;
+        if goal_forest_changed {
+            new_cognition_state.goal_forest.nodes = primary_output.goal_forest_nodes.clone();
+            if new_cognition_state.revision == cognition_state.revision {
+                new_cognition_state.revision = new_cognition_state.revision.saturating_add(1);
+            }
+        }
 
         let acts_json = serde_json::to_string(&acts)
             .unwrap_or_else(|err| format!("{{\"serialization_error\":\"{}\"}}", err));
-        tracing::debug!(
-            target: "cortex",
-            cycle_id = physical_state.cycle_id,
-            output_ir_goal_tree_patch =
-                output_sections.goal_tree_patch_section.as_deref().unwrap_or(""),
-            output_ir_goal_tree_patch_present = output_sections.goal_tree_patch_section.is_some(),
-            "output_ir_goal_tree_patch"
-        );
         tracing::debug!(
             target: "cortex",
             cycle_id = physical_state.cycle_id,
@@ -414,6 +367,12 @@ impl Cortex {
             cycle_id = physical_state.cycle_id,
             output_ir_wait_for_sense = output_sections.wait_for_sense,
             "output_ir_wait_for_sense"
+        );
+        tracing::debug!(
+            target: "cortex",
+            cycle_id = physical_state.cycle_id,
+            goal_forest_changed = goal_forest_changed,
+            "goal_forest_state_update"
         );
         tracing::debug!(
             target: "cortex",
@@ -447,12 +406,14 @@ impl Cortex {
         primary_input: String,
         input_ir_internal: String,
         sense_tool_context: sense_input_helper::SenseToolContext,
-    ) -> Result<String, CortexError> {
+        initial_goal_forest_nodes: Vec<GoalNode>,
+    ) -> Result<PrimaryEngineResult, CortexError> {
         let stage = CognitionOrgan::Primary.stage();
         let input_payload = helpers::pretty_json(&serde_json::json!({
             "primary_input": &primary_input,
             "input_ir_internal": &input_ir_internal,
             "max_internal_steps": self.limits.max_internal_steps,
+            "goal_forest_size": initial_goal_forest_nodes.len(),
             "sense_ids": sense_tool_context
                 .entries()
                 .iter()
@@ -468,7 +429,10 @@ impl Cortex {
             })
             .await?;
             helpers::log_organ_output(cycle_id, stage, &output);
-            return Ok(output);
+            return Ok(PrimaryEngineResult {
+                output_text: output,
+                goal_forest_nodes: initial_goal_forest_nodes,
+            });
         }
 
         let gateway = self.gateway.as_ref().ok_or_else(|| {
@@ -519,6 +483,7 @@ impl Cortex {
             tool_name: None,
             tool_calls: vec![],
         }];
+        let mut working_goal_forest_nodes = initial_goal_forest_nodes;
 
         let max_internal_steps = self.limits.max_internal_steps.max(1);
         for step in 0..max_internal_steps {
@@ -543,7 +508,10 @@ impl Cortex {
                 }
                 helpers::log_organ_output(cycle_id, stage, &assistant_text);
                 session.close().await;
-                return Ok(assistant_text);
+                return Ok(PrimaryEngineResult {
+                    output_text: assistant_text,
+                    goal_forest_nodes: working_goal_forest_nodes,
+                });
             }
 
             let tool_messages = self
@@ -552,6 +520,7 @@ impl Cortex {
                     step,
                     &response.tool_calls,
                     &sense_tool_context,
+                    &mut working_goal_forest_nodes,
                 )
                 .await;
             turn_messages = tool_messages;
@@ -608,11 +577,18 @@ impl Cortex {
         step: u8,
         tool_calls: &[CanonicalToolCall],
         sense_tool_context: &sense_input_helper::SenseToolContext,
+        goal_forest_nodes: &mut Vec<GoalNode>,
     ) -> Vec<BelunaMessage> {
         let mut tool_messages = Vec::with_capacity(tool_calls.len());
         for call in tool_calls {
             let payload = self
-                .run_primary_internal_tool_call(cycle_id, step, call, sense_tool_context)
+                .run_primary_internal_tool_call(
+                    cycle_id,
+                    step,
+                    call,
+                    sense_tool_context,
+                    goal_forest_nodes,
+                )
                 .await;
             tool_messages.push(BelunaMessage {
                 role: BelunaRole::Tool,
@@ -631,6 +607,7 @@ impl Cortex {
         step: u8,
         call: &CanonicalToolCall,
         sense_tool_context: &sense_input_helper::SenseToolContext,
+        goal_forest_nodes: &mut Vec<GoalNode>,
     ) -> serde_json::Value {
         let tool_result = match call.name.as_str() {
             PRIMARY_TOOL_EXPAND_SENSE_RAW => {
@@ -666,6 +643,21 @@ impl Cortex {
                             .await
                             .map_err(|err| err.to_string())
                         }
+                    }
+                    Err(err) => Err(err),
+                }
+            }
+            PRIMARY_TOOL_PATCH_GOAL_FOREST => {
+                let parsed = parse_patch_goal_forest_ops(&call.arguments_json)
+                    .map_err(|err| err.to_string());
+                match parsed {
+                    Ok(ops) => {
+                        for op in &ops {
+                            apply_goal_forest_op(goal_forest_nodes, op);
+                        }
+                        Ok(serde_json::json!(
+                            helpers::goal_forest_input_helper::goal_forest_ascii(goal_forest_nodes)
+                        ))
                     }
                     Err(err) => Err(err),
                 }
@@ -845,9 +837,8 @@ impl Cortex {
             CognitionOrgan::Primary => self.helper_routes.primary.clone(),
             CognitionOrgan::Sense => self.helper_routes.sense_helper.clone(),
             CognitionOrgan::ActDescriptor => self.helper_routes.act_descriptor_helper.clone(),
-            CognitionOrgan::GoalTree => self.helper_routes.goal_tree_helper.clone(),
+            CognitionOrgan::GoalForest => self.helper_routes.goal_forest_helper.clone(),
             CognitionOrgan::Acts => self.helper_routes.acts_helper.clone(),
-            CognitionOrgan::GoalTreePatch => self.helper_routes.goal_tree_patch_helper.clone(),
             CognitionOrgan::L1MemoryFlush => self.helper_routes.l1_memory_flush_helper.clone(),
         };
         stage_route.or_else(|| self.helper_routes.default.clone())
@@ -980,10 +971,10 @@ fn build_turn_request(
 fn map_organ_gateway_error(organ: CognitionOrgan, message: String) -> CortexError {
     match organ {
         CognitionOrgan::Primary => primary_failed(message),
-        CognitionOrgan::GoalTreePatch | CognitionOrgan::L1MemoryFlush => filler_failed(message),
+        CognitionOrgan::L1MemoryFlush => filler_failed(message),
         CognitionOrgan::Sense
         | CognitionOrgan::ActDescriptor
-        | CognitionOrgan::GoalTree
+        | CognitionOrgan::GoalForest
         | CognitionOrgan::Acts => extractor_failed(message),
     }
 }
@@ -1042,5 +1033,171 @@ fn primary_internal_tools() -> Vec<BelunaToolDefinition> {
                 "required": ["tasks"],
             }),
         },
+        BelunaToolDefinition {
+            name: PRIMARY_TOOL_PATCH_GOAL_FOREST.to_string(),
+            description: Some(
+                "Patch the goal-forest"
+                    .to_string(),
+            ),
+            input_schema: patch_goal_forest_input_schema(),
+        },
     ]
+}
+
+fn patch_goal_forest_input_schema() -> serde_json::Value {
+    serde_json::json!({
+      "type": "array",
+      "minItems": 1,
+      "description": "patch operations to apply, in order",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "add a new root goal (a new tree root)",
+            "properties": {
+              "op": {
+                "type": "string",
+                "const": "plant"
+              },
+              "status": {
+                "type": "string",
+                "default": "open"
+              },
+              "weight": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "default": 0
+              },
+              "id": {
+                "type": "string",
+                "description": "kebab-case phrase"
+              },
+              "summary": {
+                "type": "string"
+              }
+            },
+            "required": ["op", "id", "summary"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "description": "add a non-root goal under selected parent",
+            "properties": {
+              "op": {
+                "type": "string",
+                "const": "sprout"
+              },
+              "parent_numbering": {
+                "type": "string",
+                "minLength": 1
+              },
+              "parent_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "numbering": {
+                "type": "string",
+                "description": "direct child numbering under parent, optional; auto-assign when omitted"
+              },
+              "status": {
+                "type": "string",
+                "default": "open"
+              },
+              "weight": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "default": 0
+              },
+              "id": {
+                "type": "string",
+                "description": "kebab-case phrase"
+              },
+              "summary": {
+                "type": "string"
+              }
+            },
+            "required": ["op", "id", "summary"],
+            "additionalProperties": false,
+            "anyOf": [
+              { "required": ["parent_numbering"] },
+              { "required": ["parent_id"] }
+            ]
+          },
+          {
+            "type": "object",
+            "description": "change node fields; select with numbering or id",
+            "properties": {
+              "op": {
+                "type": "string",
+                "const": "trim"
+              },
+              "numbering": {
+                "type": "string",
+                "minLength": 1
+              },
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "weight": {
+                "type": "number",
+                "description": "the new weight",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "status": {
+                "type": "string",
+                "description": "the new status"
+              }
+            },
+            "required": ["op"],
+            "additionalProperties": false,
+            "allOf": [
+              {
+                "anyOf": [
+                  { "required": ["numbering"] },
+                  { "required": ["id"] }
+                ]
+              },
+              {
+                "anyOf": [
+                  { "required": ["weight"] },
+                  { "required": ["status"] }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "object",
+            "description": "remove a goal node and its children; select with numbering or id",
+            "properties": {
+              "op": {
+                "type": "string",
+                "const": "prune"
+              },
+              "numbering": {
+                "type": "string",
+                "minLength": 1
+              },
+              "id": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": ["op"],
+            "additionalProperties": false,
+            "anyOf": [
+              { "required": ["numbering"] },
+              { "required": ["id"] }
+            ]
+          }
+        ]
+      }
+    })
+}
+
+fn parse_patch_goal_forest_ops(arguments_json: &str) -> Result<Vec<GoalForestPatchOp>, String> {
+    serde_json::from_str::<Vec<GoalForestPatchOp>>(arguments_json).map_err(|err| err.to_string())
 }

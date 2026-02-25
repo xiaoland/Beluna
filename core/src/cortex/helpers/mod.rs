@@ -9,8 +9,7 @@ use crate::{
 
 pub(crate) mod act_descriptor_input_helper;
 pub(crate) mod acts_output_helper;
-pub(crate) mod goal_tree_input_helper;
-pub(crate) mod goal_tree_patch_output_helper;
+pub(crate) mod goal_forest_input_helper;
 pub(crate) mod l1_memory_flush_output_helper;
 pub(crate) mod l1_memory_input_helper;
 pub(crate) mod proprioception_input_helper;
@@ -21,9 +20,8 @@ pub(crate) enum CognitionOrgan {
     Primary,
     Sense,
     ActDescriptor,
-    GoalTree,
+    GoalForest,
     Acts,
-    GoalTreePatch,
     L1MemoryFlush,
 }
 
@@ -33,9 +31,8 @@ impl CognitionOrgan {
             Self::Primary => "primary",
             Self::Sense => "sense_helper",
             Self::ActDescriptor => "act_descriptor_helper",
-            Self::GoalTree => "goal_tree_helper",
+            Self::GoalForest => "goal_forest_helper",
             Self::Acts => "acts_helper",
-            Self::GoalTreePatch => "goal_tree_patch_helper",
             Self::L1MemoryFlush => "l1_memory_flush_helper",
         }
     }
@@ -72,14 +69,13 @@ pub(crate) struct InputHelper {
     pub sense: sense_input_helper::SenseInputHelper,
     pub proprioception: proprioception_input_helper::ProprioceptionInputHelper,
     pub act_descriptor: act_descriptor_input_helper::ActDescriptorInputHelper,
-    pub goal_tree: goal_tree_input_helper::GoalTreeInputHelper,
+    pub goal_forest: goal_forest_input_helper::GoalForestInputHelper,
     pub l1_memory: l1_memory_input_helper::L1MemoryInputHelper,
 }
 
 #[derive(Clone, Default)]
 pub(crate) struct OutputHelper {
     pub acts: acts_output_helper::ActsOutputHelper,
-    pub goal_tree_patch: goal_tree_patch_output_helper::GoalTreePatchOutputHelper,
     pub l1_memory_flush: l1_memory_flush_output_helper::L1MemoryFlushOutputHelper,
 }
 

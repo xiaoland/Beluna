@@ -7,23 +7,19 @@ use crate::cortex::{
 pub(crate) const INPUT_IR_ROOT: &str = "input-ir";
 pub(crate) const OUTPUT_IR_ROOT: &str = "output-ir";
 const ACT_DESCRIPTOR_CATALOG_TAG: &str = "somatic-act-descriptor-catalog";
-const PRIMARY_INSTINCTS_TAG: &str = "instincts";
-const PRIMARY_WILLPOWER_MATRIX_TAG: &str = "willpower-matrix";
+const PRIMARY_GOAL_FOREST_TAG: &str = "goal-forest";
 const PRIMARY_FOCAL_AWARENESS_TAG: &str = "focal-awareness";
 const SENSES_TAG: &str = "somatic-senses";
 const PROPRIOCEPTION_TAG: &str = "proprioception";
 const ACTS_TAG: &str = "somatic-acts";
-const PRIMARY_GOAL_TREE_PATCH_TAG: &str = "willpower-matrix-patch";
 const PRIMARY_NEW_FOCAL_AWARENESS_TAG: &str = "new-focal-awareness";
 const PRIMARY_WAIT_FOR_SENSE_TAG: &str = "is-wait-for-sense";
-const INTERNAL_GOAL_TREE_PATCH_TAG: &str = "goal-tree-patch";
 const INTERNAL_L1_MEMORY_FLUSH_TAG: &str = "new-focal-awareness";
 const INTERNAL_WAIT_FOR_SENSE_TAG: &str = "is-wait-for-sense";
 
 #[derive(Debug, Clone)]
 pub(crate) struct OutputIrSections {
     pub acts_section: Option<String>,
-    pub goal_tree_patch_section: Option<String>,
     pub l1_memory_flush_section: Option<String>,
     pub wait_for_sense: bool,
 }
@@ -32,16 +28,14 @@ pub(crate) fn build_input_ir(
     senses_section: &str,
     proprioception_section: &str,
     act_descriptor_catalog_section: &str,
-    instincts_section: &str,
-    willpower_matrix_section: &str,
+    goal_forest_section: &str,
     focal_awareness_section: &str,
 ) -> InputIr {
     let primary_payload = build_primary_input_payload(
         senses_section,
         proprioception_section,
         act_descriptor_catalog_section,
-        instincts_section,
-        willpower_matrix_section,
+        goal_forest_section,
         focal_awareness_section,
     );
     InputIr {
@@ -57,24 +51,21 @@ pub(crate) fn build_primary_input_payload(
     senses_section: &str,
     proprioception_section: &str,
     act_descriptor_catalog_section: &str,
-    instincts_section: &str,
-    willpower_matrix_section: &str,
+    goal_forest_section: &str,
     focal_awareness_section: &str,
 ) -> String {
     format!(
-        "<{senses}>\n{a}\n</{senses}>\n<{proprioception}>\n{b}\n</{proprioception}>\n<{act_catalog}>\n{c}\n</{act_catalog}>\n<{instincts}>\n{d}\n</{instincts}>\n<{willpower_matrix}>\n{e}\n</{willpower_matrix}>\n<{focal_awareness}>\n{f}\n</{focal_awareness}>",
+        "<{senses}>\n{a}\n</{senses}>\n<{proprioception}>\n{b}\n</{proprioception}>\n<{act_catalog}>\n{c}\n</{act_catalog}>\n<{goal_forest}>\n{d}\n</{goal_forest}>\n<{focal_awareness}>\n{e}\n</{focal_awareness}>",
         senses = SENSES_TAG,
         proprioception = PROPRIOCEPTION_TAG,
         act_catalog = ACT_DESCRIPTOR_CATALOG_TAG,
-        instincts = PRIMARY_INSTINCTS_TAG,
-        willpower_matrix = PRIMARY_WILLPOWER_MATRIX_TAG,
+        goal_forest = PRIMARY_GOAL_FOREST_TAG,
         focal_awareness = PRIMARY_FOCAL_AWARENESS_TAG,
         a = senses_section.trim(),
         b = proprioception_section.trim(),
         c = act_descriptor_catalog_section.trim(),
-        d = instincts_section.trim(),
-        e = willpower_matrix_section.trim(),
-        f = focal_awareness_section.trim(),
+        d = goal_forest_section.trim(),
+        e = focal_awareness_section.trim(),
     )
 }
 
@@ -91,27 +82,23 @@ pub(crate) fn parse_output_ir(
     let parse_target =
         extract_tag_body(&output_ir.text, OUTPUT_IR_ROOT).unwrap_or_else(|| output_ir.text.clone());
     let acts_section = extract_tag_body(&parse_target, ACTS_TAG);
-    let goal_tree_patch_section = extract_tag_body(&parse_target, PRIMARY_GOAL_TREE_PATCH_TAG);
     let l1_memory_flush_section = extract_tag_body(&parse_target, PRIMARY_NEW_FOCAL_AWARENESS_TAG);
     let wait_for_sense = extract_tag_body(&parse_target, PRIMARY_WAIT_FOR_SENSE_TAG)
         .map_or(false, |raw| parse_wait_for_sense_flag(&raw));
 
     let internal_acts_section = acts_section.clone().unwrap_or_default();
-    let internal_goal_tree_patch_section = goal_tree_patch_section.clone().unwrap_or_default();
     let internal_l1_memory_flush_section = l1_memory_flush_section.clone().unwrap_or_default();
 
     Ok((
         OutputIr {
             text: build_internal_output_ir(
                 &internal_acts_section,
-                &internal_goal_tree_patch_section,
                 &internal_l1_memory_flush_section,
                 wait_for_sense,
             ),
         },
         OutputIrSections {
             acts_section,
-            goal_tree_patch_section,
             l1_memory_flush_section,
             wait_for_sense,
         },
@@ -120,21 +107,18 @@ pub(crate) fn parse_output_ir(
 
 fn build_internal_output_ir(
     acts_section: &str,
-    goal_tree_patch_section: &str,
     l1_memory_flush_section: &str,
     wait_for_sense: bool,
 ) -> String {
     format!(
-        "<{root}>\n<{acts}>\n{a}\n</{acts}>\n<{goal_tree_patch}>\n{b}\n</{goal_tree_patch}>\n<{l1_memory_flush}>\n{c}\n</{l1_memory_flush}>\n<{wait_for_sense}>\n{d}\n</{wait_for_sense}>\n</{root}>",
+        "<{root}>\n<{acts}>\n{a}\n</{acts}>\n<{l1_memory_flush}>\n{b}\n</{l1_memory_flush}>\n<{wait_for_sense}>\n{c}\n</{wait_for_sense}>\n</{root}>",
         root = OUTPUT_IR_ROOT,
         acts = ACTS_TAG,
-        goal_tree_patch = INTERNAL_GOAL_TREE_PATCH_TAG,
         l1_memory_flush = INTERNAL_L1_MEMORY_FLUSH_TAG,
         wait_for_sense = INTERNAL_WAIT_FOR_SENSE_TAG,
         a = acts_section.trim(),
-        b = goal_tree_patch_section.trim(),
-        c = l1_memory_flush_section.trim(),
-        d = if wait_for_sense { "true" } else { "false" },
+        b = l1_memory_flush_section.trim(),
+        c = if wait_for_sense { "true" } else { "false" },
     )
 }
 
@@ -162,7 +146,6 @@ mod tests {
         let output = "<is-wait-for-sense>true</is-wait-for-sense>";
         let (_, sections) = parse_output_ir(output).expect("parse should succeed");
         assert!(sections.acts_section.is_none());
-        assert!(sections.goal_tree_patch_section.is_none());
         assert!(sections.l1_memory_flush_section.is_none());
         assert!(sections.wait_for_sense);
     }
@@ -172,7 +155,6 @@ mod tests {
         let output = "plain monologue without tags";
         let (_, sections) = parse_output_ir(output).expect("parse should succeed");
         assert!(sections.acts_section.is_none());
-        assert!(sections.goal_tree_patch_section.is_none());
         assert!(sections.l1_memory_flush_section.is_none());
         assert!(!sections.wait_for_sense);
     }

@@ -24,7 +24,8 @@ Outputs:
 
 ## Guardrails
 
-- Root partition must match compile-time constants exactly.
 - Goal numbering must be valid dotted-positive-integer paths (for example `1`, `1.2`, `3.4.5`).
-- Goal numbering must be globally unique in user partition forest.
-- Goal weights must be finite and normalized in `[0,1]`.
+- Goal numbering must be globally unique in goal-forest.
+- Goal id must be non-empty and globally unique in goal-forest.
+- Goal weight must be finite and in `[0,1]`.
+- Goal `status` and `summary` must be non-empty.

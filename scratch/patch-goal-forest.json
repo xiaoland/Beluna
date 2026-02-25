@@ -1,0 +1,194 @@
+{
+  "type": "array",
+  "minItems": 1,
+  "items": {
+    "oneOf": [
+      {
+        "type": "object",
+        "description": "add a new root goal (a new tree root)",
+        "properties": {
+          "op": {
+            "type": "string",
+            "const": "plant"
+          },
+          "status": {
+            "type": "string",
+            "default": "open"
+          },
+          "weight": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0
+          },
+          "id": {
+            "type": "string",
+            "description": "kebab-case phrase"
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "op",
+          "id",
+          "summary"
+        ],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "description": "add a non-root goal under selected parent",
+        "properties": {
+          "op": {
+            "type": "string",
+            "const": "sprout"
+          },
+          "parent_numbering": {
+            "type": "string",
+            "minLength": 1
+          },
+          "parent_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "numbering": {
+            "type": "string",
+            "description": "direct child numbering under parent, optional; auto-assign when omitted"
+          },
+          "status": {
+            "type": "string",
+            "default": "open"
+          },
+          "weight": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0
+          },
+          "id": {
+            "type": "string",
+            "description": "kebab-case phrase"
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "op",
+          "id",
+          "summary"
+        ],
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "required": [
+              "parent_numbering"
+            ]
+          },
+          {
+            "required": [
+              "parent_id"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "object",
+        "description": "change node fields; select with numbering or id",
+        "properties": {
+          "op": {
+            "type": "string",
+            "const": "trim"
+          },
+          "numbering": {
+            "type": "string",
+            "minLength": 1
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "weight": {
+            "type": "number",
+            "description": "the new weight",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "status": {
+            "type": "string",
+            "description": "the new status"
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "anyOf": [
+              {
+                "required": [
+                  "numbering"
+                ]
+              },
+              {
+                "required": [
+                  "id"
+                ]
+              }
+            ]
+          },
+          {
+            "anyOf": [
+              {
+                "required": [
+                  "weight"
+                ]
+              },
+              {
+                "required": [
+                  "status"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "object",
+        "description": "remove a goal node and its children; select with numbering or id",
+        "properties": {
+          "op": {
+            "type": "string",
+            "const": "prune"
+          },
+          "numbering": {
+            "type": "string",
+            "minLength": 1
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "required": [
+              "numbering"
+            ]
+          },
+          {
+            "required": [
+              "id"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

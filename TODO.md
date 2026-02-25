@@ -11,14 +11,14 @@
 ### Cortex
 
 - [ ] IR 改进 <https://gemini.google.com/u/1/app/e9c1e8ff7b2377bf>
-- [x] 添加 proprioception
-- [ ] 移除 wait-for-sense
-- [ ] 除了 cognition-state，其它都不可以被动地 convert
-- [ ] 重构 goal tree
-  - [ ] weight 是基于一棵树的，而不是整个森林的
-  - [ ] 移除本能（加入到 Primary Prompt 中）
-  - [ ] 重新设计 node
-  - [ ] patch-goal-tool
+- [ ] 增加对 sense 消费的控制力
+- [ ] 除了 cognition-state，其它都不可以给 input-helper 主动"解释"
+- [x] 重构 goal tree
+  - [x] weight 是基于一棵树的，而不是整个森林的
+  - [x] 移除本能（加入到 Primary Prompt 中）
+  - [x] 重新设计 node
+  - [x] patch-goal-tool
+- [ ] goal forest patching 总是不成功（改成 ops 就可以了但是），更多见 scratch/goal-forest-patch-issue-diagnosis.txt
 
 ### Continuity
 

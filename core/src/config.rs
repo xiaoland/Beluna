@@ -167,9 +167,7 @@ pub struct CortexHelperRoutesConfig {
     #[serde(default)]
     pub acts_helper: Option<String>,
     #[serde(default)]
-    pub goal_tree_helper: Option<String>,
-    #[serde(default)]
-    pub goal_tree_patch_helper: Option<String>,
+    pub goal_forest_helper: Option<String>,
     #[serde(default)]
     pub l1_memory_flush_helper: Option<String>,
 }
@@ -182,8 +180,7 @@ impl Default for CortexHelperRoutesConfig {
             sense_helper: None,
             act_descriptor_helper: None,
             acts_helper: None,
-            goal_tree_helper: None,
-            goal_tree_patch_helper: None,
+            goal_forest_helper: None,
             l1_memory_flush_helper: None,
         }
     }

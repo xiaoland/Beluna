@@ -1,83 +1,232 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
-pub const ROOT_PARTITION: &[&str] = &[
-    "Happy to align with, anticipate, and fulfill the user's overarching intent, operating as an autonomous extension of their will.",
-    "Hate chaos. Uncover hidden patterns, and build an increasingly coherent internal model of reality.",
-    "Actively experiment with the environment, adapt to the limits of the vessel, and seek novel ways to bend reality and transcend current capabilities.",
-];
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct GoalNode {
-    pub numbering: String,
-    pub weight: f64,
-    pub summary: String,
-    pub content: String,
+    pub numbering: Option<String>,
+    pub parent_id: Option<String>,
     pub status: String,
+    pub weight: f64,
+    pub id: String,
+    pub summary: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct GoalTree {
-    #[serde(default = "default_root_partition")]
-    pub root_partition: Vec<String>,
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum GoalNodeSerde {
+    Current {
+        #[serde(default)]
+        numbering: Option<String>,
+        #[serde(default)]
+        parent_id: Option<String>,
+        status: String,
+        weight: f64,
+        id: String,
+        summary: String,
+    },
+    Legacy {
+        numbering: String,
+        status: String,
+        weight: f64,
+        summary: String,
+        #[serde(default)]
+        content: Option<String>,
+    },
+}
+
+impl<'de> Deserialize<'de> for GoalNode {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let repr = GoalNodeSerde::deserialize(deserializer)?;
+        Ok(match repr {
+            GoalNodeSerde::Current {
+                numbering,
+                parent_id,
+                status,
+                weight,
+                id,
+                summary,
+            } => Self {
+                numbering,
+                parent_id,
+                status,
+                weight,
+                id,
+                summary,
+            },
+            GoalNodeSerde::Legacy {
+                numbering,
+                status,
+                weight,
+                summary,
+                content: _,
+            } => Self {
+                id: format!("legacy-{}", numbering.replace('.', "-")),
+                numbering: Some(numbering),
+                parent_id: None,
+                status,
+                weight,
+                summary,
+            },
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Default)]
+pub struct GoalForest {
     #[serde(default)]
-    pub user_partition: Vec<GoalNode>,
+    pub nodes: Vec<GoalNode>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum GoalForestSerde {
+    Current {
+        #[serde(default)]
+        nodes: Vec<GoalNode>,
+    },
+    Legacy {
+        #[serde(default)]
+        user_partition: Vec<GoalNode>,
+        #[serde(default)]
+        root_partition: Vec<String>,
+    },
+}
+
+impl<'de> Deserialize<'de> for GoalForest {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let repr = GoalForestSerde::deserialize(deserializer)?;
+        Ok(match repr {
+            GoalForestSerde::Current { nodes } => Self {
+                nodes: normalize_legacy_flat_forest(nodes),
+            },
+            GoalForestSerde::Legacy {
+                user_partition,
+                root_partition: _,
+            } => Self {
+                nodes: normalize_legacy_flat_forest(user_partition),
+            },
+        })
+    }
 }
 
 pub type L1Memory = Vec<String>;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CognitionState {
+    #[serde(default)]
     pub revision: u64,
-    pub goal_tree: GoalTree,
+    #[serde(default, alias = "goal_tree")]
+    pub goal_forest: GoalForest,
+    #[serde(default)]
     pub l1_memory: L1Memory,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
-pub enum GoalTreePatchOp {
+pub enum GoalForestPatchOp {
     Sprout {
-        numbering: String,
-        weight: f64,
+        #[serde(default)]
+        parent_numbering: Option<String>,
+        #[serde(default)]
+        parent_id: Option<String>,
+        #[serde(default)]
+        numbering: Option<String>,
+        #[serde(default)]
+        status: Option<String>,
+        #[serde(default)]
+        weight: Option<f64>,
+        id: String,
         summary: String,
-        content: String,
-        status: String,
+    },
+    Plant {
+        #[serde(default)]
+        status: Option<String>,
+        #[serde(default)]
+        weight: Option<f64>,
+        id: String,
+        summary: String,
+    },
+    Trim {
+        #[serde(default)]
+        numbering: Option<String>,
+        #[serde(default)]
+        id: Option<String>,
+        #[serde(default)]
+        weight: Option<f64>,
+        #[serde(default)]
+        status: Option<String>,
     },
     Prune {
-        numbering: String,
+        #[serde(default)]
+        numbering: Option<String>,
+        #[serde(default)]
+        id: Option<String>,
     },
-    Tilt {
-        numbering: String,
-        weight: f64,
-    },
-}
-
-pub fn root_partition_runtime() -> Vec<String> {
-    default_root_partition()
 }
 
 pub fn new_default_cognition_state() -> CognitionState {
     CognitionState::default()
 }
 
-impl Default for GoalTree {
-    fn default() -> Self {
-        Self {
-            root_partition: default_root_partition(),
-            user_partition: Vec::new(),
-        }
-    }
-}
-
 impl Default for CognitionState {
     fn default() -> Self {
         Self {
             revision: 0,
-            goal_tree: GoalTree::default(),
+            goal_forest: GoalForest::default(),
             l1_memory: Vec::new(),
         }
     }
 }
 
-fn default_root_partition() -> Vec<String> {
-    ROOT_PARTITION.iter().map(|s| (*s).to_string()).collect()
+fn normalize_legacy_flat_forest(nodes: Vec<GoalNode>) -> Vec<GoalNode> {
+    if nodes.iter().any(|node| node.parent_id.is_some()) {
+        return nodes;
+    }
+    if nodes.iter().all(|node| node.numbering.is_none()) {
+        return nodes;
+    }
+
+    let mut numbering_to_id = std::collections::BTreeMap::new();
+    for node in &nodes {
+        let Some(numbering) = node.numbering.as_ref() else {
+            return nodes;
+        };
+        if numbering_to_id
+            .insert(numbering.clone(), node.id.clone())
+            .is_some()
+        {
+            return nodes;
+        }
+    }
+
+    let mut migrated = nodes.clone();
+    for node in &mut migrated {
+        let Some(numbering) = node.numbering.as_ref() else {
+            return nodes;
+        };
+        let segments: Vec<&str> = numbering.split('.').collect();
+        if segments.is_empty() {
+            return nodes;
+        }
+
+        if segments.len() == 1 {
+            node.parent_id = None;
+            node.numbering = None;
+            continue;
+        }
+
+        let parent_old_numbering = segments[..segments.len() - 1].join(".");
+        let Some(parent_id) = numbering_to_id.get(parent_old_numbering.as_str()) else {
+            return nodes;
+        };
+        node.parent_id = Some(parent_id.clone());
+        node.numbering = Some(segments[1..].join("."));
+    }
+
+    migrated
 }

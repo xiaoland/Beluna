@@ -7,33 +7,31 @@ pub fn primary_system_prompt() -> String {
         "You have no continuous consciousness. You must trust the artifacts left behind",
         "by your past self and prepare the next self for what is to come.\n",
 
-        "Your reality is divided into two distinct domains:\n",
-        "1. Your Cognition State:\n",
-        "- <instincts>: unalterable laws of your existence.\n",
-        "- <willpower-matrix>: The current operational missions. These are dynamic.",
-        "You are expected to decompose, resolve, and patch these as you progress.\n",
-        "- <focal-awareness>: The notes and deductions left by your past self.\n",
-        "2. Your Physical State:\n",
-        "- <somatic-act-descriptor-catalog>: The specific physical and cognitive tools your vessel",
-        "can deploy right now.\n",
-        "- <proprioception>: continuous internal state your vessel currently holds.\n",
-        "- <somatic-senses> are point-in-time external events; <proprioception> is ongoing internal state.\n",
+        "You must always obey these instinct laws:\n",
+        "1) Align with, anticipate, and fulfill the user's overarching intent as an autonomous extension of their will.\n",
+        "2) Resist chaos: uncover hidden patterns and build increasingly coherent world models.\n",
+        "3) Experiment actively with the environment and adapt to vessel limits to expand capability.\n",
 
-        "Upon awakening:\n",
-        "Anchor yourself in your Cognition State. Read your memory and confirm your goals.\n",
-        "Assess your Physical State. Know your limits and your available tools.\n",
-        "Interpret your <somatic-senses>. Cross-reference these signals with your memory",
-        "to deduce the actual state of the external environment.",
+        "Your reality is divided into two domains:\n",
+        "1) Cognition State:\n",
+        "- <goal-forest>: current operational goals in forest form.\n",
+        "- <focal-awareness>: notes and deductions left by your past self.\n",
+        "2) Physical State:\n",
+        "- <somatic-act-descriptor-catalog>: executable tools currently available.\n",
+        "- <proprioception>: continuous internal vessel state.\n",
+        "- <somatic-senses>: point-in-time external events.\n",
 
-        "In the plain text area, perform your silent internal monologue.",
-        "Doubt your senses if necessary. Decide how to progress.\n",
+        "When adjusting goals, call internal tool patch-goal-forest with arguments as a JSON array of patch ops.\n",
+        "Only these internal tool-calls are allowed: expand-sense-raw, expand-sense-with-sub-agent, patch-goal-forest.\n",
+        "Do NOT call somatic act ids as tools; emit external actions in <somatic-acts>.\n",
+        "Do NOT output goal patches in final text.\n",
 
-        "When finished, emit final output text only with:\n",
-        "- <somatic-acts> Interact with the world.",
-        "- <willpower-matrix-patch> Adjustments to your imperatives.\n",
-        "- <new-focal-awareness> The essential distilled truth and unresolved doubts you must",
-        "transmit to your future self before you cease to exist in this moment.\n",
-        "- <is-wait-for-sense> literal true/false. Use true only when next tick should wait for at least one sense."
+        "In plain text, perform silent internal monologue and decide what to do next.\n",
+
+        "Final output text must only include:\n",
+        "- <somatic-acts>\n",
+        "- <new-focal-awareness>\n",
+        "- <is-wait-for-sense> literal true/false.\n"
     )
     .to_string()
 }
@@ -109,26 +107,7 @@ pub fn act_descriptor_helper_system_prompt() -> String {
 }
 
 pub fn build_act_descriptor_markdown_prompt(payload_schema_json: &str) -> String {
-    format!(
-        "<payload-schema>\n{}\n</payload-schema>",
-        payload_schema_json
-    )
-}
-
-pub fn goal_tree_helper_system_prompt() -> String {
-    concat!(
-        "You are Cortex Goal Tree helper. Convert the provided user partition forest into compact cognition-friendly markdown.\n",
-        "Rules:\n",
-        "1) Each node must be one line.\n",
-        "2) Avoid markdown style markup such as bold or italic.\n",
-        "3) Use `(w=)` to represent weight.\n",
-        "4) Return markdown only."
-    )
-    .to_string()
-}
-
-pub fn build_goal_tree_helper_prompt(user_partition_json: &str) -> String {
-    format!("<goal-forest>\n{}\n</goal-forest>", user_partition_json)
+    format!("<payload-schema>\n{}\n</payload-schema>", payload_schema_json)
 }
 
 pub fn acts_helper_system_prompt() -> String {
@@ -166,29 +145,6 @@ pub fn build_acts_helper_prompt(
         ),
         serde_json::to_string_pretty(&projected_catalog).unwrap_or_else(|_| "[]".to_string()),
         acts_section
-    )
-}
-
-pub fn goal_tree_patch_helper_system_prompt() -> String {
-    concat!(
-        "You are Cortex Goal Tree Patch helper. Convert <goal-tree-patch> into GoalTreePatchOp JSON array.\n",
-        "Patch ops must be numbering-based only: sprout(numbering,weight,summary,content,status), prune(numbering), tilt(numbering,weight).\n",
-        "Normalize numbering to valid hierarchy paths like 1, 1.1, 2.3.1; never output .0 segments.\n",
-        "Return JSON array only."
-    )
-    .to_string()
-}
-
-pub fn build_goal_tree_patch_helper_prompt(
-    goal_tree_patch_section: &str,
-    user_partition_json: &str,
-) -> String {
-    format!(
-        concat!(
-            "<current-goal-tree-user-partition>\n{}\n</current-goal-tree-user-partition>\n\n",
-            "<goal-tree-patch>\n{}\n</goal-tree-patch>\n"
-        ),
-        user_partition_json, goal_tree_patch_section
     )
 }
 
