@@ -62,6 +62,7 @@ impl RequestNormalizer {
             metadata: request.metadata,
             cost_attribution_id: request.cost_attribution_id,
             stream,
+            enable_thinking: request.enable_thinking,
         })
     }
 

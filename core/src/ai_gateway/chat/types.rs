@@ -30,6 +30,7 @@ pub struct ChatTurnRequest {
     pub limits: RequestLimitOverrides,
     pub metadata: BTreeMap<String, String>,
     pub cost_attribution_id: Option<String>,
+    pub enable_thinking: bool,
 }
 
 impl Default for ChatTurnRequest {
@@ -44,6 +45,7 @@ impl Default for ChatTurnRequest {
             limits: RequestLimitOverrides::default(),
             metadata: BTreeMap::new(),
             cost_attribution_id: None,
+            enable_thinking: false,
         }
     }
 }

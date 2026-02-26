@@ -90,7 +90,7 @@ impl BackendAdapter for OpenAiCompatibleAdapter {
         let mut body = json!({
             "model": model,
             "messages": http_common::canonical_messages_to_openai(&req.messages),
-            "stream": false,
+            "stream": false
         });
 
         if !req.tools.is_empty() {
@@ -121,6 +121,11 @@ impl BackendAdapter for OpenAiCompatibleAdapter {
 
         if let Some(max_tokens) = req.limits.max_output_tokens {
             body["max_tokens"] = Value::Number(max_tokens.into());
+        }
+
+        if req.enable_thinking {
+            body["thinking"] = json!({"type": "enabled", "budget_tokens": req.limits.max_output_tokens.unwrap_or(10000)});
+            body["enable_thinking"] = json!(true);
         }
 
         let mut req_builder = self
@@ -270,6 +275,10 @@ impl BackendAdapter for OpenAiCompatibleAdapter {
 
                 if let Some(max_tokens) = req.limits.max_output_tokens {
                     body["max_tokens"] = Value::Number(max_tokens.into());
+                }
+
+                if req.enable_thinking {
+                    body["enable_thinking"] = json!(true); // Bailian
                 }
 
                 let mut req_builder = client
@@ -716,7 +725,15 @@ fn parse_non_stream_payload(
 fn aggregate_once_events(
     events: Vec<BackendRawEvent>,
     backend_id: &str,
-) -> Result<(String, Vec<CanonicalToolCall>, Option<UsageStats>, FinishReason), GatewayError> {
+) -> Result<
+    (
+        String,
+        Vec<CanonicalToolCall>,
+        Option<UsageStats>,
+        FinishReason,
+    ),
+    GatewayError,
+> {
     let mut output_text = String::new();
     let mut tool_calls = Vec::new();
     let mut usage: Option<UsageStats> = None;

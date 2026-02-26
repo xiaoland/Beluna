@@ -113,6 +113,7 @@ pub struct CanonicalRequest {
     pub metadata: BTreeMap<String, String>,
     pub cost_attribution_id: Option<String>,
     pub stream: bool,
+    pub enable_thinking: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -134,6 +135,8 @@ pub struct ChatRequest {
     pub metadata: BTreeMap<String, String>,
     #[serde(default)]
     pub cost_attribution_id: Option<String>,
+    #[serde(default)]
+    pub enable_thinking: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

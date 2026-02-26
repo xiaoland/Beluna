@@ -19,8 +19,8 @@ use crate::ai_gateway::{
     error::{GatewayError, GatewayErrorKind},
     types::{AdapterContext, BackendCapabilities, BackendDialect},
     types_chat::{
-        AdapterInvocation, BackendIdentity, BackendOnceResponse, BackendRawEvent,
-        CanonicalRequest, CanonicalToolCall, FinishReason, ToolCallStatus, UsageStats,
+        AdapterInvocation, BackendIdentity, BackendOnceResponse, BackendRawEvent, CanonicalRequest,
+        CanonicalToolCall, FinishReason, ToolCallStatus, UsageStats,
     },
 };
 
@@ -97,6 +97,9 @@ impl BackendAdapter for OllamaAdapter {
         }
         if let Some(max_tokens) = req.limits.max_output_tokens {
             body["options"] = json!({"num_predict": max_tokens});
+        }
+        if req.enable_thinking {
+            body["think"] = Value::Bool(true);
         }
 
         let mut req_builder = self
@@ -214,6 +217,9 @@ impl BackendAdapter for OllamaAdapter {
                 }
                 if let Some(max_tokens) = req.limits.max_output_tokens {
                     body["options"] = json!({"num_predict": max_tokens});
+                }
+                if req.enable_thinking {
+                    body["think"] = Value::Bool(true);
                 }
 
                 let mut req_builder = client
@@ -541,7 +547,15 @@ fn parse_ollama_payload(payload: &Value) -> Result<Vec<BackendRawEvent>, Gateway
 fn aggregate_once_events(
     events: Vec<BackendRawEvent>,
     backend_id: &str,
-) -> Result<(String, Vec<CanonicalToolCall>, Option<UsageStats>, FinishReason), GatewayError> {
+) -> Result<
+    (
+        String,
+        Vec<CanonicalToolCall>,
+        Option<UsageStats>,
+        FinishReason,
+    ),
+    GatewayError,
+> {
     let mut output_text = String::new();
     let mut tool_calls = Vec::new();
     let mut usage: Option<UsageStats> = None;

@@ -35,6 +35,7 @@ fn request(max_output_tokens: Option<u64>) -> CanonicalRequest {
         metadata: Default::default(),
         cost_attribution_id: None,
         stream: true,
+        enable_thinking: false,
     }
 }
 

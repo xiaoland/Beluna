@@ -103,7 +103,10 @@ impl ChatSessionHandle {
     }
 
     pub async fn close(&self) {
-        self.chat_gateway.store.close_session(&self.session_id).await;
+        self.chat_gateway
+            .store
+            .close_session(&self.session_id)
+            .await;
         tracing::info!(
             target: "ai_gateway",
             event = "chat_session_lifecycle",
@@ -131,13 +134,11 @@ impl ChatThreadHandle {
         mut request: ChatTurnRequest,
     ) -> Result<ChatTurnResponse, GatewayError> {
         if request.input_messages.is_empty() {
-            return Err(
-                GatewayError::new(
-                    GatewayErrorKind::InvalidRequest,
-                    "chat turn requires at least one input message",
-                )
-                .with_retryable(false),
-            );
+            return Err(GatewayError::new(
+                GatewayErrorKind::InvalidRequest,
+                "chat turn requires at least one input message",
+            )
+            .with_retryable(false));
         }
 
         let started_at = Instant::now();
@@ -187,6 +188,7 @@ impl ChatThreadHandle {
             limits: request.limits,
             metadata: request.metadata,
             cost_attribution_id: request.cost_attribution_id,
+            enable_thinking: request.enable_thinking,
         };
 
         let response_result = self.chat_gateway.gateway.chat_once(dispatch_request).await;
@@ -273,18 +275,21 @@ impl ChatThreadHandle {
         }
     }
 
-    pub async fn turn_stream(&self, _request: ChatTurnRequest) -> Result<ChatEventStream, GatewayError> {
-        Err(
-            GatewayError::new(
-                GatewayErrorKind::UnsupportedCapability,
-                "chat thread streaming is not implemented yet; use turn_once",
-            )
-            .with_retryable(false),
+    pub async fn turn_stream(
+        &self,
+        _request: ChatTurnRequest,
+    ) -> Result<ChatEventStream, GatewayError> {
+        Err(GatewayError::new(
+            GatewayErrorKind::UnsupportedCapability,
+            "chat thread streaming is not implemented yet; use turn_once",
         )
+        .with_retryable(false))
     }
 }
 
-fn assistant_message_from_response(response: &crate::ai_gateway::types_chat::ChatResponse) -> BelunaMessage {
+fn assistant_message_from_response(
+    response: &crate::ai_gateway::types_chat::ChatResponse,
+) -> BelunaMessage {
     let tool_calls = response
         .tool_calls
         .iter()

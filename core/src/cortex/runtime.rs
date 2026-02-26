@@ -985,6 +985,7 @@ fn build_turn_request(
         },
         metadata,
         cost_attribution_id: None,
+        enable_thinking: false,
     }
 }
 

@@ -19,10 +19,12 @@
   - [x] 重新设计 node
   - [x] patch-goal-tool
 - [ ] goal forest patching 总是不成功（改成 ops 就可以了但是），更多见 scratch/goal-forest-patch-issue-diagnosis.txt
-  - 解决方案尝试：将 goal-forest-patch 变为 natural-language based
+  - [x] 解决方案尝试：将 goal-forest-patch 变为 natural-language based；
+        结论：还是不太稳定，但至少可以了，随着后面 Dual Loop 的修复，删掉对 focal-awareness, somatic-acts 输出的要求等，使 content 就是纯粹的思考
 - [ ] Cortex / Stem Dual loop
   - [ ] 移除 l1-memory：goal-forest, 对话历史承担了这个角色
   - [ ] goal-forest helper 是全局单例，实现为一个 trait
+  - [ ] 将 act 的输出也变为工具调用，但是立即返回；如果开启 wait，则等待响应的 sense (act-descriptor 配置 sense-matcher)
 
 ### Continuity
 
