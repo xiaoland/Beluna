@@ -28,7 +28,6 @@ final class ChatViewModel: ObservableObject {
     @Published private(set) var logDirectoryPath: String
     @Published private(set) var logStatusText: String = "Logs ready"
     @Published private(set) var logLastRefreshedAt: Date?
-    @Published private(set) var isLogRefreshing: Bool = false
 
     @Published var messageCapacityDraft: String
     @Published private(set) var messageCapacity: Int
@@ -128,7 +127,7 @@ final class ChatViewModel: ObservableObject {
     private var handledActionOrder: [String] = []
 
     private var metricsPollingTask: Task<Void, Never>?
-    private var logPollingTask: Task<Void, Never>?
+    private var logWatcher: LogDirectoryWatcher?
 
     private var messageBuffer: [ChatMessage] = []
     private var visibleMessageRange: Range<Int> = 0..<0
@@ -158,8 +157,7 @@ final class ChatViewModel: ObservableObject {
     private static let logDirectoryPathDefaultsKey = "beluna.apple-universal.log_directory_path"
     private static let messageCapacityDefaultsKey = "beluna.apple-universal.message_capacity"
 
-    private nonisolated static let maxLogReadBytes: Int64 = 512 * 1024
-    private nonisolated static let coreLogFilePrefix = "core.log"
+
 
     private static let metricsTimeFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -230,7 +228,8 @@ final class ChatViewModel: ObservableObject {
 
     deinit {
         metricsPollingTask?.cancel()
-        logPollingTask?.cancel()
+        logWatcher?.stop()
+        logWatcher = nil
 
         let bodyEndpoint = bodyEndpointClient
         Task {
@@ -245,7 +244,7 @@ final class ChatViewModel: ObservableObject {
 
         started = true
         startMetricsPollingIfNeeded()
-        startLogPollingIfNeeded()
+        startLogWatcher()
 
         guard isConnectionEnabled else {
             log("startup with connection disabled")
@@ -303,10 +302,7 @@ final class ChatViewModel: ObservableObject {
         logDirectoryPathDraft = normalized
         resetOrganLogTracking()
         persistLogDirectorySettings()
-
-        Task {
-            await pollOrganLogsNow()
-        }
+        restartLogWatcher()
     }
 
     func applyMessageCapacityDraft() {
@@ -613,24 +609,35 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
-    private func startLogPollingIfNeeded() {
-        guard logPollingTask == nil else {
+    private func startLogWatcher() {
+        guard logWatcher == nil else {
             return
         }
 
-        logPollingTask = Task { [weak self] in
-            guard let self else {
-                return
+        let directoryPath = logDirectoryPath
+        logWatcher = LogDirectoryWatcher(directoryPath: directoryPath) { [weak self] events, statusText in
+            Task { @MainActor [weak self] in
+                self?.handleWatcherEvents(events, statusText: statusText)
             }
+        }
+        logWatcher?.start()
+    }
 
-            await self.pollOrganLogsNow()
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 3_000_000_000)
-                if Task.isCancelled {
-                    break
-                }
-                await self.pollOrganLogsNow()
+    private func restartLogWatcher() {
+        logWatcher?.stop()
+        logWatcher = nil
+        startLogWatcher()
+    }
+
+    private func handleWatcherEvents(_ events: [OrganLogEvent], statusText: String) {
+        logStatusText = statusText
+        logLastRefreshedAt = Date()
+
+        for event in events {
+            guard rememberSeenOrganEvent(event.eventID) else {
+                continue
             }
+            handleOrganLogEvent(event)
         }
     }
 
@@ -663,34 +670,6 @@ final class ChatViewModel: ObservableObject {
     private func setMetricsPollingPausedStatus() {
         if metricsStatusText != "Metrics polling paused (socket disconnected)." {
             metricsStatusText = "Metrics polling paused (socket disconnected)."
-        }
-    }
-
-    private func pollOrganLogsNow() async {
-        guard !isLogRefreshing else {
-            return
-        }
-
-        isLogRefreshing = true
-        let directoryPath = logDirectoryPath
-        let snapshot = await Task.detached(priority: .utility) {
-            Self.loadOrganLogsSnapshot(directoryPath: directoryPath)
-        }.value
-
-        if Task.isCancelled {
-            isLogRefreshing = false
-            return
-        }
-
-        isLogRefreshing = false
-        logLastRefreshedAt = Date()
-        logStatusText = snapshot.statusText
-
-        for event in snapshot.events {
-            guard rememberSeenOrganEvent(event.eventID) else {
-                continue
-            }
-            handleOrganLogEvent(event)
         }
     }
 
@@ -1203,295 +1182,6 @@ final class ChatViewModel: ObservableObject {
         return latestValue
     }
 
-    private nonisolated static func loadOrganLogsSnapshot(directoryPath: String) -> OrganLogsSnapshot {
-        let normalizedDirectoryPath = normalizeDirectoryPath(directoryPath)
-        guard !normalizedDirectoryPath.isEmpty else {
-            return OrganLogsSnapshot(events: [], statusText: "Log directory path is empty.")
-        }
-
-        let directoryURL = URL(fileURLWithPath: normalizedDirectoryPath).standardizedFileURL
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: directoryURL.path, isDirectory: &isDirectory) else {
-            return OrganLogsSnapshot(
-                events: [],
-                statusText: "Log directory does not exist: \(directoryURL.path)"
-            )
-        }
-        guard isDirectory.boolValue else {
-            return OrganLogsSnapshot(
-                events: [],
-                statusText: "Configured log directory is not a directory: \(directoryURL.path)"
-            )
-        }
-
-        do {
-            let files = try listLogFiles(in: directoryURL)
-            guard !files.isEmpty else {
-                return OrganLogsSnapshot(events: [], statusText: "No log files found in \(directoryURL.path)")
-            }
-
-            let candidates = Array(files.suffix(2))
-            var events: [OrganLogEvent] = []
-            events.reserveCapacity(512)
-
-            for file in candidates {
-                let content = loadTailContent(fileURL: file.url, maxReadBytes: maxLogReadBytes)
-                let fileEvents = parseOrganLogEvents(
-                    from: content,
-                    sourcePath: file.url.path,
-                    sourceAwakeSequence: file.awakeSequence
-                )
-                events.append(contentsOf: fileEvents)
-            }
-
-            events.sort { lhs, rhs in
-                let leftTimestamp = lhs.timestamp ?? .distantPast
-                let rightTimestamp = rhs.timestamp ?? .distantPast
-                if leftTimestamp != rightTimestamp {
-                    return leftTimestamp < rightTimestamp
-                }
-                if lhs.cycleID != rhs.cycleID {
-                    return lhs.cycleID < rhs.cycleID
-                }
-                if lhs.awakeSequence != rhs.awakeSequence {
-                    return (lhs.awakeSequence ?? 0) < (rhs.awakeSequence ?? 0)
-                }
-                if lhs.stage != rhs.stage {
-                    return lhs.stage < rhs.stage
-                }
-                return lhs.kind.sortOrder < rhs.kind.sortOrder
-            }
-
-            return OrganLogsSnapshot(
-                events: events,
-                statusText: "Loaded \(events.count) organ log events from \(candidates.count) file(s)."
-            )
-        } catch {
-            return OrganLogsSnapshot(
-                events: [],
-                statusText: "Failed to read log directory: \(error.localizedDescription)"
-            )
-        }
-    }
-
-    private nonisolated static func listLogFiles(in directoryURL: URL) throws -> [LogFileMetadata] {
-        let resourceKeys: [URLResourceKey] = [
-            .isRegularFileKey,
-            .contentModificationDateKey,
-        ]
-
-        let entries = try FileManager.default.contentsOfDirectory(
-            at: directoryURL,
-            includingPropertiesForKeys: resourceKeys,
-            options: [.skipsHiddenFiles]
-        )
-
-        var files: [LogFileMetadata] = []
-        files.reserveCapacity(entries.count)
-
-        for url in entries {
-            let values = try url.resourceValues(forKeys: Set(resourceKeys))
-            guard values.isRegularFile == true else {
-                continue
-            }
-            let fileName = url.lastPathComponent
-            guard fileName.hasPrefix(coreLogFilePrefix) else {
-                continue
-            }
-
-            files.append(
-                LogFileMetadata(
-                    url: url.standardizedFileURL,
-                    modifiedAt: values.contentModificationDate,
-                    awakeSequence: parseAwakeSequence(from: fileName)
-                )
-            )
-        }
-
-        files.sort { lhs, rhs in
-            let leftDate = lhs.modifiedAt ?? .distantPast
-            let rightDate = rhs.modifiedAt ?? .distantPast
-            if leftDate != rightDate {
-                return leftDate < rightDate
-            }
-            return lhs.url.lastPathComponent < rhs.url.lastPathComponent
-        }
-
-        return files
-    }
-
-    private nonisolated static func loadTailContent(fileURL: URL, maxReadBytes: Int64) -> String {
-        do {
-            let attributes = try FileManager.default.attributesOfItem(atPath: fileURL.path)
-            let sizeBytes = (attributes[.size] as? NSNumber)?.int64Value ?? 0
-
-            let handle = try FileHandle(forReadingFrom: fileURL)
-            defer { try? handle.close() }
-
-            let offset = sizeBytes > maxReadBytes ? sizeBytes - maxReadBytes : 0
-            try handle.seek(toOffset: UInt64(offset))
-            let data = try handle.readToEnd() ?? Data()
-            return String(decoding: data, as: UTF8.self)
-        } catch {
-            return ""
-        }
-    }
-
-    private nonisolated static func parseOrganLogEvents(
-        from content: String,
-        sourcePath: String,
-        sourceAwakeSequence: UInt64?
-    ) -> [OrganLogEvent] {
-        var events: [OrganLogEvent] = []
-
-        for rawLineSlice in content.split(whereSeparator: \.isNewline) {
-            let rawLine = String(rawLineSlice).trimmingCharacters(in: .whitespacesAndNewlines)
-            guard rawLine.first == "{" else {
-                continue
-            }
-            guard let data = rawLine.data(using: .utf8),
-                  let payload = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-                  let fields = payload["fields"] as? [String: Any],
-                  let message = fields["message"] as? String
-            else {
-                continue
-            }
-
-            let kind: OrganLogEventKind
-            let payloadField: String
-            switch message {
-            case "cortex_organ_input":
-                kind = .input
-                payloadField = "input_payload"
-            case "cortex_organ_output":
-                kind = .output
-                payloadField = "output_payload"
-            default:
-                continue
-            }
-
-            guard let cycleID = parseUInt64(fields["cycle_id"]),
-                  let stage = fields["stage"] as? String,
-                  !stage.isEmpty,
-                  let eventPayload = stringifyLogField(fields[payloadField])
-            else {
-                continue
-            }
-
-            let timestampRaw = payload["timestamp"] as? String ?? ""
-            let awakePart = sourceAwakeSequence.map(String.init) ?? "unknown"
-            let eventID =
-                "\(sourcePath)|\(awakePart)|\(timestampRaw)|\(message)|\(cycleID)|\(stage)|\(eventPayload.hashValue)"
-
-            events.append(
-                OrganLogEvent(
-                    eventID: eventID,
-                    kind: kind,
-                    timestamp: parseTimestamp(timestampRaw),
-                    cycleID: cycleID,
-                    awakeSequence: sourceAwakeSequence,
-                    stage: stage,
-                    payload: eventPayload
-                )
-            )
-        }
-
-        return events
-    }
-
-    private nonisolated static func parseUInt64(_ value: Any?) -> UInt64? {
-        switch value {
-        case let number as NSNumber:
-            return number.uint64Value
-        case let string as String:
-            return UInt64(string)
-        case let intValue as Int where intValue >= 0:
-            return UInt64(intValue)
-        case let int64Value as Int64 where int64Value >= 0:
-            return UInt64(int64Value)
-        case let uintValue as UInt:
-            return UInt64(uintValue)
-        case let uint64Value as UInt64:
-            return uint64Value
-        default:
-            return nil
-        }
-    }
-
-    private nonisolated static func stringifyLogField(_ value: Any?) -> String? {
-        guard let value else {
-            return nil
-        }
-
-        if let text = value as? String {
-            return text
-        }
-
-        if JSONSerialization.isValidJSONObject(value),
-           let data = try? JSONSerialization.data(withJSONObject: value, options: [.prettyPrinted]),
-           let text = String(data: data, encoding: .utf8)
-        {
-            return text
-        }
-
-        return String(describing: value)
-    }
-
-    private nonisolated static func parseTimestamp(_ value: String) -> Date? {
-        guard !value.isEmpty else {
-            return nil
-        }
-
-        let formatterWithFractional = ISO8601DateFormatter()
-        formatterWithFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = formatterWithFractional.date(from: value) {
-            return date
-        }
-
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter.date(from: value)
-    }
-
-    private nonisolated static func parseAwakeSequence(from fileName: String) -> UInt64? {
-        let prefix = "\(coreLogFilePrefix)."
-        guard fileName.hasPrefix(prefix) else {
-            return nil
-        }
-        let suffix = fileName.dropFirst(prefix.count)
-        let parts = suffix.split(separator: ".", omittingEmptySubsequences: false)
-        guard parts.count == 2 else {
-            return nil
-        }
-        let datePart = String(parts[0])
-        let sequencePart = String(parts[1])
-        guard isDateLiteral(datePart), let sequence = UInt64(sequencePart), sequence > 0 else {
-            return nil
-        }
-        return sequence
-    }
-
-    private nonisolated static func isDateLiteral(_ value: String) -> Bool {
-        let bytes = Array(value.utf8)
-        guard bytes.count == 10 else {
-            return false
-        }
-        return isASCIIDigit(bytes[0])
-            && isASCIIDigit(bytes[1])
-            && isASCIIDigit(bytes[2])
-            && isASCIIDigit(bytes[3])
-            && bytes[4] == 45
-            && isASCIIDigit(bytes[5])
-            && isASCIIDigit(bytes[6])
-            && bytes[7] == 45
-            && isASCIIDigit(bytes[8])
-            && isASCIIDigit(bytes[9])
-    }
-
-    private nonisolated static func isASCIIDigit(_ value: UInt8) -> Bool {
-        value >= 48 && value <= 57
-    }
-
     private nonisolated static func organPairKey(
         cycleID: UInt64,
         awakeSequence: UInt64?,
@@ -1511,37 +1201,4 @@ private struct MetricsSnapshot: Sendable {
     let statusText: String
 }
 
-private struct LogFileMetadata: Sendable {
-    let url: URL
-    let modifiedAt: Date?
-    let awakeSequence: UInt64?
-}
 
-private struct OrganLogsSnapshot: Sendable {
-    let events: [OrganLogEvent]
-    let statusText: String
-}
-
-private enum OrganLogEventKind: Sendable {
-    case input
-    case output
-
-    var sortOrder: Int {
-        switch self {
-        case .input:
-            return 0
-        case .output:
-            return 1
-        }
-    }
-}
-
-private struct OrganLogEvent: Sendable {
-    let eventID: String
-    let kind: OrganLogEventKind
-    let timestamp: Date?
-    let cycleID: UInt64
-    let awakeSequence: UInt64?
-    let stage: String
-    let payload: String
-}
