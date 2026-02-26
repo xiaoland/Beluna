@@ -18,8 +18,8 @@ use crate::{
     },
     config::CortexHelperRoutesConfig,
     cortex::{
-        cognition::{CognitionState, GoalForestPatchOp, GoalNode},
-        cognition_patch::{apply_cognition_patches, apply_goal_forest_op},
+        cognition::{CognitionState, GoalNode},
+        cognition_patch::apply_cognition_patches,
         error::{CortexError, extractor_failed, filler_failed, invalid_input, primary_failed},
         helpers::{self, CognitionOrgan, CortexHelper, HelperRuntime, sense_input_helper},
         ir, prompts,
@@ -648,18 +648,38 @@ impl Cortex {
                 }
             }
             PRIMARY_TOOL_PATCH_GOAL_FOREST => {
-                let parsed = parse_patch_goal_forest_ops(&call.arguments_json)
-                    .map_err(|err| err.to_string());
+                let parsed = parse_patch_goal_forest_instructions(&call.arguments_json);
                 match parsed {
-                    Ok(ops) => {
-                        for op in &ops {
-                            apply_goal_forest_op(goal_forest_nodes, op);
+                    Ok(patch_instructions) => {
+                        if patch_instructions.trim().is_empty() {
+                            Err("patch_instructions cannot be empty".to_string())
+                        } else {
+                            self.helper
+                                .input
+                                .goal_forest
+                                .patch_goal_forest_with_sub_agent(
+                                    self,
+                                    cycle_id,
+                                    goal_forest_nodes,
+                                    &patch_instructions,
+                                )
+                                .await
+                                .map_err(|err| err.to_string())
                         }
-                        Ok(serde_json::json!(
-                            helpers::goal_forest_input_helper::goal_forest_ascii(goal_forest_nodes)
-                        ))
                     }
-                    Err(err) => Err(err),
+                    Err(err) => {
+                        tracing::warn!(
+                            target: "cortex",
+                            cycle_id = cycle_id,
+                            step = step,
+                            tool_name = %call.name,
+                            tool_call_id = %call.id,
+                            error = %err,
+                            arguments_json = %call.arguments_json,
+                            "primary_patch_goal_forest_args_parse_failed"
+                        );
+                        Err(err)
+                    }
                 }
             }
             _ => Err(format!(
@@ -1036,168 +1056,78 @@ fn primary_internal_tools() -> Vec<BelunaToolDefinition> {
         BelunaToolDefinition {
             name: PRIMARY_TOOL_PATCH_GOAL_FOREST.to_string(),
             description: Some(
-                "Patch the goal-forest"
-                    .to_string(),
+                "Patch the goal-forest with natural-language.".to_string(),
             ),
-            input_schema: patch_goal_forest_input_schema(),
+            input_schema: patch_goal_forest_tool_input_schema(),
         },
     ]
 }
 
-fn patch_goal_forest_input_schema() -> serde_json::Value {
+fn patch_goal_forest_tool_input_schema() -> serde_json::Value {
     serde_json::json!({
-      "type": "array",
-      "minItems": 1,
-      "description": "patch operations to apply, in order",
-      "items": {
-        "oneOf": [
-          {
-            "type": "object",
-            "description": "add a new root goal (a new tree root)",
-            "properties": {
-              "op": {
-                "type": "string",
-                "const": "plant"
-              },
-              "status": {
-                "type": "string",
-                "default": "open"
-              },
-              "weight": {
-                "type": "number",
-                "minimum": 0,
-                "maximum": 1,
-                "default": 0
-              },
-              "id": {
-                "type": "string",
-                "description": "kebab-case phrase"
-              },
-              "summary": {
-                "type": "string"
-              }
-            },
-            "required": ["op", "id", "summary"],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "description": "add a non-root goal under selected parent",
-            "properties": {
-              "op": {
-                "type": "string",
-                "const": "sprout"
-              },
-              "parent_numbering": {
-                "type": "string",
-                "minLength": 1
-              },
-              "parent_id": {
-                "type": "string",
-                "minLength": 1
-              },
-              "numbering": {
-                "type": "string",
-                "description": "direct child numbering under parent, optional; auto-assign when omitted"
-              },
-              "status": {
-                "type": "string",
-                "default": "open"
-              },
-              "weight": {
-                "type": "number",
-                "minimum": 0,
-                "maximum": 1,
-                "default": 0
-              },
-              "id": {
-                "type": "string",
-                "description": "kebab-case phrase"
-              },
-              "summary": {
-                "type": "string"
-              }
-            },
-            "required": ["op", "id", "summary"],
-            "additionalProperties": false,
-            "anyOf": [
-              { "required": ["parent_numbering"] },
-              { "required": ["parent_id"] }
-            ]
-          },
-          {
-            "type": "object",
-            "description": "change node fields; select with numbering or id",
-            "properties": {
-              "op": {
-                "type": "string",
-                "const": "trim"
-              },
-              "numbering": {
-                "type": "string",
-                "minLength": 1
-              },
-              "id": {
-                "type": "string",
-                "minLength": 1
-              },
-              "weight": {
-                "type": "number",
-                "description": "the new weight",
-                "minimum": 0,
-                "maximum": 1
-              },
-              "status": {
-                "type": "string",
-                "description": "the new status"
-              }
-            },
-            "required": ["op"],
-            "additionalProperties": false,
-            "allOf": [
-              {
-                "anyOf": [
-                  { "required": ["numbering"] },
-                  { "required": ["id"] }
-                ]
-              },
-              {
-                "anyOf": [
-                  { "required": ["weight"] },
-                  { "required": ["status"] }
-                ]
-              }
-            ]
-          },
-          {
-            "type": "object",
-            "description": "remove a goal node and its children; select with numbering or id",
-            "properties": {
-              "op": {
-                "type": "string",
-                "const": "prune"
-              },
-              "numbering": {
-                "type": "string",
-                "minLength": 1
-              },
-              "id": {
-                "type": "string",
-                "minLength": 1
-              }
-            },
-            "required": ["op"],
-            "additionalProperties": false,
-            "anyOf": [
-              { "required": ["numbering"] },
-              { "required": ["id"] }
-            ]
-          }
-        ]
-      }
+        "type": "string",
+        "description": "patch instructions"
     })
 }
 
-fn parse_patch_goal_forest_ops(arguments_json: &str) -> Result<Vec<GoalForestPatchOp>, String> {
-    serde_json::from_str::<Vec<GoalForestPatchOp>>(arguments_json).map_err(|err| err.to_string())
+fn parse_patch_goal_forest_instructions(arguments_json: &str) -> Result<String, String> {
+    if let Ok(instructions) = serde_json::from_str::<String>(arguments_json) {
+        return Ok(instructions);
+    }
+
+    let value: serde_json::Value =
+        serde_json::from_str(arguments_json).map_err(|err| err.to_string())?;
+    match value {
+        serde_json::Value::String(instructions) => Ok(instructions),
+        serde_json::Value::Object(mut map) => {
+            let mut try_extract = |key: &str| -> Result<Option<String>, String> {
+                let Some(value) = map.remove(key) else {
+                    return Ok(None);
+                };
+                match value {
+                    serde_json::Value::String(instructions) => Ok(Some(instructions)),
+                    other => Err(format!(
+                        "field '{}' must be string, got {}",
+                        key,
+                        json_type_name(&other)
+                    )),
+                }
+            };
+
+            for key in [
+                "patch_instructions",
+                "instruction",
+                "instructions",
+                "patchInstruction",
+                "patchInstructions",
+                "description",
+                "prompt",
+            ] {
+                if let Some(instructions) = try_extract(key)? {
+                    return Ok(instructions);
+                }
+            }
+
+            let keys = map.keys().cloned().collect::<Vec<_>>().join(",");
+            Err(format!(
+                "expected direct string argument, or object with patch_instructions; got object keys [{}]",
+                keys
+            ))
+        }
+        other => Err(format!(
+            "expected direct string argument, got {}",
+            json_type_name(&other)
+        )),
+    }
+}
+
+fn json_type_name(value: &serde_json::Value) -> &'static str {
+    match value {
+        serde_json::Value::Null => "null",
+        serde_json::Value::Bool(_) => "bool",
+        serde_json::Value::Number(_) => "number",
+        serde_json::Value::String(_) => "string",
+        serde_json::Value::Array(_) => "array",
+        serde_json::Value::Object(_) => "object",
+    }
 }

@@ -29,3 +29,7 @@ cargo run -- --socket-path ../beluna.sock
 ## Run Apple Universal Body Endpoint
 
 Use XCode.
+
+## AI Providers
+
+- 阿里云百练 <https://help.aliyun.com/zh/model-studio/models>

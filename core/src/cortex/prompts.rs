@@ -21,7 +21,8 @@ pub fn primary_system_prompt() -> String {
         "- <proprioception>: continuous internal vessel state.\n",
         "- <somatic-senses>: point-in-time external events.\n",
 
-        "When adjusting goals, call internal tool patch-goal-forest with arguments as a JSON array of patch ops.\n",
+        "When adjusting goals, call internal tool patch-goal-forest with arguments as a direct JSON string of natural-language instructions.\n",
+        "Do NOT author JSON patch ops yourself; the goal-forest helper will convert your instruction into patch ops.\n",
         "Only these internal tool-calls are allowed: expand-sense-raw, expand-sense-with-sub-agent, patch-goal-forest.\n",
         "Do NOT call somatic act ids as tools; emit external actions in <somatic-acts>.\n",
         "Do NOT output goal patches in final text.\n",
@@ -95,6 +96,34 @@ pub fn build_sense_sub_agent_prompt(
     )
 }
 
+pub fn goal_forest_patch_sub_agent_system_prompt() -> String {
+    concat!(
+        "Given <current-goal-forest> and <patch-instructions>, return a JSON array of patch ops.\n",
+        "Rules:\n",
+        "1) Return JSON array only.\n",
+        "2) Use only ops: plant, sprout, trim, prune.\n",
+        "3) Use selectors that can be resolved against current-goal-forest.\n",
+        "4) Keep ids short, stable, and kebab-case.\n",
+        "5) Keep ops minimal and ordered for deterministic apply.\n",
+        "6) For plant and sprout, always include both id and summary.\n",
+        "7) Return a bare array, not an object wrapper."
+    )
+    .to_string()
+}
+
+pub fn build_goal_forest_patch_sub_agent_prompt(
+    current_goal_forest: &str,
+    patch_instructions: &str,
+) -> String {
+    format!(
+        concat!(
+            "<current-goal-forest>\n{}\n</current-goal-forest>\n\n",
+            "<patch-instructions>\n{}\n</patch-instructions>"
+        ),
+        current_goal_forest, patch_instructions
+    )
+}
+
 pub fn act_descriptor_helper_system_prompt() -> String {
     concat!(
         "Convert this act's payload schema (a JSON Schema) into narrative, concise, cognition-friendly text.\n",
@@ -107,7 +136,10 @@ pub fn act_descriptor_helper_system_prompt() -> String {
 }
 
 pub fn build_act_descriptor_markdown_prompt(payload_schema_json: &str) -> String {
-    format!("<payload-schema>\n{}\n</payload-schema>", payload_schema_json)
+    format!(
+        "<payload-schema>\n{}\n</payload-schema>",
+        payload_schema_json
+    )
 }
 
 pub fn acts_helper_system_prompt() -> String {

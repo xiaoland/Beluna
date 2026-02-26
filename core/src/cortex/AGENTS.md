@@ -11,7 +11,8 @@ Cortex is a stateless cognition boundary that consumes `senses + physical_state 
 - Primary runs a bounded cognitive micro-loop (`max_internal_steps`).
 - Internal tools are Internal Cognitive Actions, not Somatic Act outputs.
 - Internal tools are `expand-sense-raw`, `expand-sense-with-sub-agent`, `patch-goal-forest`.
-- `patch-goal-forest` tool arguments are a top-level JSON array of ops.
+- `patch-goal-forest` tool arguments are a direct JSON string of natural-language patch instructions; Primary does not author patch ops.
+- `goal_forest_helper` runs a one-shot sub-agent to convert `current-goal-forest + patch-instructions` into JSON patch ops.
 - `plant` adds a root node (`numbering=null`), while `sprout` adds a non-root node under a parent selector.
 - Goal instincts are consolidated into Primary system prompt; there is no persisted root partition.
 - Input IR sections are `<somatic-senses>`, `<proprioception>`, `<somatic-act-descriptor-catalog>`, `<goal-forest>`, `<focal-awareness>`.
@@ -21,9 +22,9 @@ Cortex is a stateless cognition boundary that consumes `senses + physical_state 
   - `<somatic-acts>` => no acts
   - `<new-focal-awareness>` => keep current l1-memory
   - `<is-wait-for-sense>` => false
-- Input helpers (`sense_helper`, `proprioception_input_helper`, `act_descriptor_helper`, `goal_forest_input_helper`, `l1_memory_input_helper`) run concurrently.
+- Input helpers (`sense_helper`, `proprioception_input_helper`, `act_descriptor_helper`, `goal_forest_helper`, `l1_memory_input_helper`) run concurrently.
 - Output helpers (`acts_helper`, `l1_memory_flush_helper`) run concurrently.
-- `goal_forest_input_helper` is deterministic (no LLM call).
+- `goal_forest_helper` renders input IR deterministically and uses an LLM only for patch-op conversion.
 - `act_descriptor_helper` cache is in-memory and process-scoped (MD5 input hash).
 - Sense helper assigns tick-local monotonic integer `sense-instance-id`; internal sense expansion tools consume these IDs.
 - `acts_helper` owns act structuring/materialization and generates `act_instance_id` in code (UUIDv7).

@@ -9,7 +9,7 @@ use crate::{
 
 pub(crate) mod act_descriptor_input_helper;
 pub(crate) mod acts_output_helper;
-pub(crate) mod goal_forest_input_helper;
+pub(crate) mod goal_forest_helper;
 pub(crate) mod l1_memory_flush_output_helper;
 pub(crate) mod l1_memory_input_helper;
 pub(crate) mod proprioception_input_helper;
@@ -69,7 +69,7 @@ pub(crate) struct InputHelper {
     pub sense: sense_input_helper::SenseInputHelper,
     pub proprioception: proprioception_input_helper::ProprioceptionInputHelper,
     pub act_descriptor: act_descriptor_input_helper::ActDescriptorInputHelper,
-    pub goal_forest: goal_forest_input_helper::GoalForestInputHelper,
+    pub goal_forest: goal_forest_helper::GoalForestHelper,
     pub l1_memory: l1_memory_input_helper::L1MemoryInputHelper,
 }
 
