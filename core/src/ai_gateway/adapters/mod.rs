@@ -3,44 +3,46 @@ use std::{collections::HashMap, sync::Arc};
 use async_trait::async_trait;
 
 use crate::ai_gateway::{
+    chat::types::{AdapterInvocation, BackendCompleteResponse, TurnPayload},
     error::GatewayError,
     types::{AdapterContext, BackendCapabilities, BackendDialect},
-    types_chat::{AdapterInvocation, BackendOnceResponse, CanonicalRequest},
 };
 
 pub mod github_copilot;
-pub mod http_common;
+pub(crate) mod http_errors;
+pub(crate) mod http_stream;
 pub mod ollama;
 pub mod openai_compatible;
+pub(crate) mod wire;
 
 #[async_trait]
-pub trait BackendAdapter: Send + Sync {
+pub(crate) trait BackendAdapter: Send + Sync {
     fn dialect(&self) -> BackendDialect;
     fn static_capabilities(&self) -> BackendCapabilities;
     fn supports_tool_retry(&self) -> bool {
         false
     }
 
-    async fn invoke_once(
+    async fn complete(
         &self,
         _ctx: AdapterContext,
-        _req: CanonicalRequest,
-    ) -> Result<BackendOnceResponse, GatewayError> {
+        _payload: &TurnPayload,
+    ) -> Result<BackendCompleteResponse, GatewayError> {
         Err(GatewayError::new(
             crate::ai_gateway::error::GatewayErrorKind::UnsupportedCapability,
-            "adapter does not implement chat once",
+            "adapter does not implement chat complete",
         )
         .with_retryable(false))
     }
 
-    async fn invoke_stream(
+    async fn stream(
         &self,
         ctx: AdapterContext,
-        req: CanonicalRequest,
+        payload: &TurnPayload,
     ) -> Result<AdapterInvocation, GatewayError>;
 }
 
-pub fn build_default_adapters() -> HashMap<BackendDialect, Arc<dyn BackendAdapter>> {
+pub(crate) fn build_default_adapters() -> HashMap<BackendDialect, Arc<dyn BackendAdapter>> {
     let mut adapters: HashMap<BackendDialect, Arc<dyn BackendAdapter>> = HashMap::new();
     adapters.insert(
         BackendDialect::OpenAiCompatible,

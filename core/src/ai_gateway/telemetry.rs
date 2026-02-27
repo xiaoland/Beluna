@@ -1,7 +1,7 @@
 use crate::ai_gateway::{
+    chat::types::UsageStats,
     error::GatewayErrorKind,
     types::{BackendId, RequestId},
-    types_chat::UsageStats,
 };
 
 #[derive(Debug, Clone)]

@@ -25,6 +25,7 @@
   - [ ] 移除 l1-memory：goal-forest, 对话历史承担了这个角色
   - [ ] goal-forest helper 是全局单例，实现为一个 trait
   - [ ] 将 act 的输出也变为工具调用，但是立即返回；如果开启 wait，则等待响应的 sense (act-descriptor 配置 sense-matcher)
+  - [ ] goal-forest patch helper 应该自动生成 numbering 啊，numbering 是 required 的现在/
 
 ### Continuity
 
@@ -47,6 +48,7 @@
 - [ ] attempt 是什么鬼
 - [x] 日志需要精简
 - [ ] Tool trait (mainly for o11y)
+- [ ] retry, budget, relibability 都可以 consolidate 进入 adapter 实现
 
 ### Std BodyEndpoint
 

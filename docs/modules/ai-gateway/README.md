@@ -13,4 +13,7 @@ This module documentation answers: what AI Gateway is, what boundaries it owns, 
 - [Configuration](./configuration.md)
 - [Testing and Contracts](./testing-and-contracts.md)
 - [Known Limits](./known-limits.md)
+- [Topology](./topology.md)
+- [Chat Sequence Diagrams](./chat-sequence.md)
+- [Backend Compatibility Map](./backend-compatibility.md)
 - [Observability (cross-cutting)](../observability/README.md)

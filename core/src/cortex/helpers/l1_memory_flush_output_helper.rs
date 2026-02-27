@@ -1,5 +1,5 @@
 use crate::{
-    ai_gateway::types_chat::OutputMode,
+    ai_gateway::chat::OutputMode,
     cortex::{
         cognition::CognitionState,
         error::filler_failed,

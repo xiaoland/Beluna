@@ -10,7 +10,7 @@ use tracing::Instrument;
 
 use beluna::{
     afferent_pathway::SenseAfferentPathway,
-    ai_gateway::{credentials::EnvCredentialProvider, gateway::AIGateway},
+    ai_gateway::{chat::ChatFactory, credentials::EnvCredentialProvider},
     body::register_inline_body_endpoints,
     cli::config_path_from_args,
     config::Config,
@@ -105,14 +105,14 @@ async fn main() -> Result<()> {
     let (afferent_pathway, sense_rx) =
         SenseAfferentPathway::new(config.r#loop.sense_queue_capacity);
 
-    let gateway = Arc::new(
-        AIGateway::new(config.ai_gateway.clone(), Arc::new(EnvCredentialProvider))
-            .context("failed to construct ai gateway for cortex")?,
+    let chat_factory = Arc::new(
+        ChatFactory::new(&config.ai_gateway, Arc::new(EnvCredentialProvider))
+            .context("failed to construct chat factory for cortex")?,
     );
 
     let cortex = Arc::new(Cortex::from_config(
         &config.cortex,
-        Arc::clone(&gateway),
+        Arc::clone(&chat_factory),
         None,
     ));
 

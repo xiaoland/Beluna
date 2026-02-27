@@ -8,13 +8,9 @@ use serde::Deserialize;
 use tokio::time::{Duration, timeout};
 
 use crate::{
-    ai_gateway::{
-        chat::{ChatSessionOpenRequest, ChatThreadOpenRequest, ChatTurnRequest},
-        gateway::AIGateway,
-        types_chat::{
-            BelunaContentPart, BelunaMessage, BelunaRole, BelunaToolDefinition, CanonicalToolCall,
-            ChatResponse, OutputMode, RequestLimitOverrides, ToolChoice,
-        },
+    ai_gateway::chat::{
+        ChatFactory, ChatMessage, ChatOptions, ChatRole, ChatToolDefinition, ContentPart,
+        OutputMode, Thread, ThreadOptions, ToolCallResult, TurnInput, TurnLimits, TurnResponse,
     },
     config::CortexHelperRoutesConfig,
     cortex::{
@@ -42,7 +38,7 @@ pub type CortexTelemetryHook = Arc<dyn Fn(CortexTelemetryEvent) + Send + Sync>;
 
 #[derive(Clone)]
 pub struct Cortex {
-    gateway: Option<Arc<AIGateway>>,
+    chat_factory: Option<Arc<ChatFactory>>,
     helper_routes: CortexHelperRoutesConfig,
     hooks: Option<TestHooks>,
     helper: CortexHelper,
@@ -73,13 +69,13 @@ struct PrimaryEngineResult {
 impl Cortex {
     pub fn from_config(
         config: &crate::config::CortexRuntimeConfig,
-        gateway: Arc<AIGateway>,
+        chat_factory: Arc<ChatFactory>,
         telemetry_hook: Option<CortexTelemetryHook>,
     ) -> Self {
         let limits = config.default_limits.clone();
         log_output_token_limits_paused(&limits);
         Self {
-            gateway: Some(gateway),
+            chat_factory: Some(chat_factory),
             helper_routes: config.helper_routes.clone(),
             hooks: None,
             helper: CortexHelper::default(),
@@ -91,7 +87,7 @@ impl Cortex {
     pub(crate) fn for_test_with_hooks(hooks: TestHooks, limits: ReactionLimits) -> Self {
         log_output_token_limits_paused(&limits);
         Self {
-            gateway: None,
+            chat_factory: None,
             helper_routes: CortexHelperRoutesConfig::default(),
             hooks: Some(hooks),
             helper: CortexHelper::default(),
@@ -435,48 +431,39 @@ impl Cortex {
             });
         }
 
-        let gateway = self.gateway.as_ref().ok_or_else(|| {
+        let gateway = self.chat_factory.as_ref().ok_or_else(|| {
             CortexError::new(
                 crate::cortex::error::CortexErrorKind::Internal,
                 "AI Gateway is not configured for this Cortex instance",
             )
         })?;
-        let chat_gateway = gateway.clone().chat();
         let route = self.resolve_route(CognitionOrgan::Primary);
-        let session = chat_gateway
-            .open_session(ChatSessionOpenRequest {
-                session_id: Some(format!("cortex-primary-session-{cycle_id}")),
-                default_route_ref: route,
-                metadata: BTreeMap::new(),
+        let chat = gateway
+            .create(ChatOptions {
+                chat_id: Some(format!("cortex-primary-{cycle_id}")),
+                tools: primary_internal_tools(),
+                system_prompt: Some(prompts::primary_system_prompt()),
+                default_route: route,
+                ..ChatOptions::default()
             })
-            .await
-            .map_err(|err| primary_failed(err.to_string()))?;
-        let thread = match session
-            .open_thread(ChatThreadOpenRequest {
+            .await;
+        let thread = match chat
+            .open_thread(ThreadOptions {
                 thread_id: Some(format!("cortex-primary-thread-{cycle_id}")),
-                seed_messages: vec![BelunaMessage {
-                    role: BelunaRole::System,
-                    parts: vec![BelunaContentPart::Text {
-                        text: prompts::primary_system_prompt(),
-                    }],
-                    tool_call_id: None,
-                    tool_name: None,
-                    tool_calls: vec![],
-                }],
-                metadata: BTreeMap::new(),
+                ..ThreadOptions::default()
             })
             .await
         {
             Ok(thread) => thread,
             Err(err) => {
-                session.close().await;
+                chat.close().await;
                 return Err(primary_failed(err.to_string()));
             }
         };
 
-        let mut turn_messages = vec![BelunaMessage {
-            role: BelunaRole::User,
-            parts: vec![BelunaContentPart::Text {
+        let mut turn_messages = vec![ChatMessage {
+            role: ChatRole::User,
+            parts: vec![ContentPart::Text {
                 text: prompts::build_primary_user_prompt(&primary_input),
             }],
             tool_call_id: None,
@@ -493,7 +480,7 @@ impl Cortex {
             {
                 Ok(response) => response,
                 Err(err) => {
-                    session.close().await;
+                    chat.close().await;
                     return Err(err);
                 }
             };
@@ -501,13 +488,13 @@ impl Cortex {
 
             if response.tool_calls.is_empty() {
                 if assistant_text.is_empty() {
-                    session.close().await;
+                    chat.close().await;
                     return Err(primary_failed(
                         "primary produced empty output without internal tool actions",
                     ));
                 }
                 helpers::log_organ_output(cycle_id, stage, &assistant_text);
-                session.close().await;
+                chat.close().await;
                 return Ok(PrimaryEngineResult {
                     output_text: assistant_text,
                     goal_forest_nodes: working_goal_forest_nodes,
@@ -526,7 +513,7 @@ impl Cortex {
             turn_messages = tool_messages;
         }
 
-        session.close().await;
+        chat.close().await;
         Err(primary_failed(format!(
             "primary micro-loop exceeded max_internal_steps={}",
             max_internal_steps
@@ -537,23 +524,21 @@ impl Cortex {
         &self,
         cycle_id: u64,
         step: u8,
-        thread: &crate::ai_gateway::chat::ChatThreadHandle,
-        input_messages: Vec<BelunaMessage>,
-    ) -> Result<ChatResponse, CortexError> {
+        thread: &Thread,
+        input_messages: Vec<ChatMessage>,
+    ) -> Result<TurnResponse, CortexError> {
         let stage = CognitionOrgan::Primary.stage();
         let request_id = format!("cortex-{stage}-{cycle_id}-turn-{step}");
         let started_at = Instant::now();
-        let request = build_turn_request(
+        let input = build_turn_input(
             request_id.clone(),
             self.limits.max_primary_output_tokens,
             self.limits.max_cycle_time_ms,
             input_messages,
-            primary_internal_tools(),
-            ToolChoice::Auto,
             stage,
             OutputMode::Text,
         );
-        let response = thread.turn_once(request).await.map_err(|err| {
+        let output = thread.complete(input).await.map_err(|err| {
             tracing::debug!(
                 target: "cortex",
                 stage = stage,
@@ -568,17 +553,17 @@ impl Cortex {
             primary_failed(err.to_string())
         })?;
 
-        Ok(response.response)
+        Ok(output.response)
     }
 
     async fn run_primary_internal_tool_calls(
         &self,
         cycle_id: u64,
         step: u8,
-        tool_calls: &[CanonicalToolCall],
+        tool_calls: &[ToolCallResult],
         sense_tool_context: &sense_input_helper::SenseToolContext,
         goal_forest_nodes: &mut Vec<GoalNode>,
-    ) -> Vec<BelunaMessage> {
+    ) -> Vec<ChatMessage> {
         let mut tool_messages = Vec::with_capacity(tool_calls.len());
         for call in tool_calls {
             let payload = self
@@ -590,9 +575,9 @@ impl Cortex {
                     goal_forest_nodes,
                 )
                 .await;
-            tool_messages.push(BelunaMessage {
-                role: BelunaRole::Tool,
-                parts: vec![BelunaContentPart::Json { value: payload }],
+            tool_messages.push(ChatMessage {
+                role: ChatRole::Tool,
+                parts: vec![ContentPart::Json { value: payload }],
                 tool_call_id: Some(call.id.clone()),
                 tool_name: Some(call.name.clone()),
                 tool_calls: vec![],
@@ -605,7 +590,7 @@ impl Cortex {
         &self,
         cycle_id: u64,
         step: u8,
-        call: &CanonicalToolCall,
+        call: &ToolCallResult,
         sense_tool_context: &sense_input_helper::SenseToolContext,
         goal_forest_nodes: &mut Vec<GoalNode>,
     ) -> serde_json::Value {
@@ -759,69 +744,57 @@ impl Cortex {
         system_prompt: String,
         user_prompt: String,
         output_mode: OutputMode,
-    ) -> Result<ChatResponse, CortexError> {
+    ) -> Result<TurnResponse, CortexError> {
         let stage = organ.stage();
         let request_id = format!("cortex-{stage}-{cycle_id}");
         let started_at = Instant::now();
         let route = self.resolve_route(organ);
-        let request = build_turn_request(
+        let input = build_turn_input(
             request_id.clone(),
             max_output_tokens,
             self.limits.max_cycle_time_ms,
-            vec![BelunaMessage {
-                role: BelunaRole::User,
-                parts: vec![BelunaContentPart::Text { text: user_prompt }],
+            vec![ChatMessage {
+                role: ChatRole::User,
+                parts: vec![ContentPart::Text { text: user_prompt }],
                 tool_call_id: None,
                 tool_name: None,
                 tool_calls: vec![],
             }],
-            vec![],
-            ToolChoice::None,
             stage,
             output_mode,
         );
 
-        let gateway = self.gateway.as_ref().ok_or_else(|| {
+        let factory = self.chat_factory.as_ref().ok_or_else(|| {
             CortexError::new(
                 crate::cortex::error::CortexErrorKind::Internal,
                 "AI Gateway is not configured for this Cortex instance",
             )
         })?;
-        let chat_gateway = gateway.clone().chat();
-        let session = chat_gateway
-            .open_session(ChatSessionOpenRequest {
-                session_id: Some(format!("cortex-{stage}-{cycle_id}-session")),
-                default_route_ref: route,
-                metadata: BTreeMap::new(),
+        let chat = factory
+            .create(ChatOptions {
+                chat_id: Some(format!("cortex-{stage}-{cycle_id}")),
+                system_prompt: Some(system_prompt),
+                default_route: route,
+                ..ChatOptions::default()
             })
-            .await
-            .map_err(|err| map_organ_gateway_error(organ, err.to_string()))?;
-        let thread = match session
-            .open_thread(ChatThreadOpenRequest {
+            .await;
+        let thread = match chat
+            .open_thread(ThreadOptions {
                 thread_id: Some(format!("cortex-{stage}-{cycle_id}-thread")),
-                seed_messages: vec![BelunaMessage {
-                    role: BelunaRole::System,
-                    parts: vec![BelunaContentPart::Text {
-                        text: system_prompt,
-                    }],
-                    tool_call_id: None,
-                    tool_name: None,
-                    tool_calls: vec![],
-                }],
-                metadata: BTreeMap::new(),
+                ..ThreadOptions::default()
             })
             .await
         {
             Ok(thread) => thread,
             Err(err) => {
-                session.close().await;
+                chat.close().await;
                 return Err(map_organ_gateway_error(organ, err.to_string()));
             }
         };
 
-        let response_result = thread.turn_once(request).await;
-        session.close().await;
-        let response = response_result.map_err(|err| {
+        let result = thread.complete(input).await;
+        chat.close().await;
+        let output = result.map_err(|err| {
             tracing::debug!(
                 target: "cortex",
                 stage = stage,
@@ -835,7 +808,7 @@ impl Cortex {
             map_organ_gateway_error(organ, err.to_string())
         })?;
 
-        Ok(response.response)
+        Ok(output.response)
     }
 
     fn noop_output(
@@ -945,7 +918,7 @@ impl HelperRuntime for Cortex {
         system_prompt: String,
         user_prompt: String,
         output_mode: OutputMode,
-    ) -> Result<ChatResponse, CortexError> {
+    ) -> Result<TurnResponse, CortexError> {
         Cortex::run_organ(
             self,
             cycle_id,
@@ -959,33 +932,28 @@ impl HelperRuntime for Cortex {
     }
 }
 
-fn build_turn_request(
+fn build_turn_input(
     request_id: String,
     _max_output_tokens: u64,
     max_request_time_ms: u64,
-    input_messages: Vec<BelunaMessage>,
-    tools: Vec<BelunaToolDefinition>,
-    tool_choice: ToolChoice,
+    messages: Vec<ChatMessage>,
     stage: &'static str,
     output_mode: OutputMode,
-) -> ChatTurnRequest {
+) -> TurnInput {
     let mut metadata = BTreeMap::new();
     metadata.insert("cortex_stage".to_string(), stage.to_string());
-    ChatTurnRequest {
-        request_id: Some(request_id),
-        route_ref_override: None,
-        input_messages,
-        tools,
-        tool_choice,
-        output_mode,
-        limits: RequestLimitOverrides {
+    metadata.insert("request_id".to_string(), request_id);
+    TurnInput {
+        messages,
+        output_mode: Some(output_mode),
+        limits: Some(TurnLimits {
             // Paused: keep config contract for future resume, but do not enforce token caps now.
             max_output_tokens: None,
             max_request_time_ms: Some(max_request_time_ms),
-        },
+        }),
+        enable_thinking: Some(false),
         metadata,
-        cost_attribution_id: None,
-        enable_thinking: false,
+        ..TurnInput::default()
     }
 }
 
@@ -1009,9 +977,9 @@ fn log_output_token_limits_paused(limits: &ReactionLimits) {
     );
 }
 
-fn primary_internal_tools() -> Vec<BelunaToolDefinition> {
+fn primary_internal_tools() -> Vec<ChatToolDefinition> {
     vec![
-        BelunaToolDefinition {
+        ChatToolDefinition {
             name: PRIMARY_TOOL_EXPAND_SENSE_RAW.to_string(),
             description: Some(
                 "Get the raw payload plus schema of the senses you asked for."
@@ -1029,7 +997,7 @@ fn primary_internal_tools() -> Vec<BelunaToolDefinition> {
                 "required": ["sense_ids"]
             }),
         },
-        BelunaToolDefinition {
+        ChatToolDefinition {
             name: PRIMARY_TOOL_EXPAND_SENSE_WITH_SUB_AGENT.to_string(),
             description: Some(
                 "Delegate few sub-agents summarizing the sense for you to avoid your own cognitive load."
@@ -1054,7 +1022,7 @@ fn primary_internal_tools() -> Vec<BelunaToolDefinition> {
                 "required": ["tasks"],
             }),
         },
-        BelunaToolDefinition {
+        ChatToolDefinition {
             name: PRIMARY_TOOL_PATCH_GOAL_FOREST.to_string(),
             description: Some(
                 "Patch the goal-forest with natural-language.".to_string(),

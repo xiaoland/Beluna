@@ -1,44 +1,32 @@
 use crate::ai_gateway::{
     error::{GatewayError, unsupported_capability},
     types::BackendCapabilities,
-    types_chat::{
-        CanonicalContentPart, CanonicalOutputMode, CanonicalRequest, CanonicalToolChoice,
-    },
 };
+
+use super::types::{ContentPart, OutputMode, TurnPayload};
 
 #[derive(Default)]
 pub struct CapabilityGuard;
 
 impl CapabilityGuard {
-    pub fn assert_supported(
+    pub(crate) fn assert_supported(
         &self,
-        request: &CanonicalRequest,
+        payload: &TurnPayload,
         capabilities: &BackendCapabilities,
     ) -> Result<(), GatewayError> {
-        if request.stream && !capabilities.streaming {
-            return Err(unsupported_capability(
-                "backend does not support streaming requests",
-            ));
-        }
-
-        let requests_tool_calls = !request.tools.is_empty()
-            || matches!(
-                request.tool_choice,
-                CanonicalToolChoice::Required | CanonicalToolChoice::Specific { .. }
-            );
+        let requests_tool_calls = !payload.tools.is_empty();
         if requests_tool_calls && !capabilities.tool_calls {
             return Err(unsupported_capability(
                 "backend does not support tool calling",
             ));
         }
 
-        if matches!(request.output_mode, CanonicalOutputMode::JsonObject) && !capabilities.json_mode
-        {
+        if matches!(payload.output_mode, OutputMode::JsonObject) && !capabilities.json_mode {
             return Err(unsupported_capability(
                 "backend does not support json output mode",
             ));
         }
-        if matches!(request.output_mode, CanonicalOutputMode::JsonSchema { .. })
+        if matches!(payload.output_mode, OutputMode::JsonSchema { .. })
             && !capabilities.json_schema_mode
         {
             return Err(unsupported_capability(
@@ -46,11 +34,11 @@ impl CapabilityGuard {
             ));
         }
 
-        let needs_vision = request.messages.iter().any(|message| {
+        let needs_vision = payload.messages.iter().any(|message| {
             message
                 .parts
                 .iter()
-                .any(|part| matches!(part, CanonicalContentPart::ImageUrl { .. }))
+                .any(|part| matches!(part, ContentPart::ImageUrl { .. }))
         });
         if needs_vision && !capabilities.vision {
             return Err(unsupported_capability(

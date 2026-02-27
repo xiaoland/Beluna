@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use crate::ai_gateway::{
     error::{GatewayError, invalid_request},
     types::{AIGatewayConfig, BackendId, BackendProfile, DEFAULT_ROUTE_ALIAS, ModelTarget},
-    types_chat::CanonicalRequest,
 };
 
 #[derive(Clone)]
@@ -100,13 +99,10 @@ impl BackendRouter {
         })
     }
 
-    pub fn select(&self, req: &CanonicalRequest) -> Result<SelectedBackend, GatewayError> {
-        let route_ref = req
-            .route_hint
-            .clone()
-            .unwrap_or_else(|| DEFAULT_ROUTE_ALIAS.to_string());
+    pub fn select(&self, route: Option<&str>) -> Result<SelectedBackend, GatewayError> {
+        let route_ref = route.unwrap_or(DEFAULT_ROUTE_ALIAS);
 
-        let target = self.resolve_route_ref(&route_ref)?;
+        let target = self.resolve_route_ref(route_ref)?;
         let profile = self
             .backends
             .get(&target.backend_id)

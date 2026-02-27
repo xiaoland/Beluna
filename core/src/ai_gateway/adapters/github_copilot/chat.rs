@@ -16,12 +16,12 @@ use tracing::Instrument;
 
 use crate::ai_gateway::{
     adapters::{BackendAdapter, github_copilot::rpc::RpcIo},
+    chat::types::{
+        AdapterInvocation, BackendIdentity, BackendCompleteResponse, BackendRawEvent, ContentPart,
+        FinishReason, TurnPayload,
+    },
     error::{GatewayError, GatewayErrorKind},
     types::{AdapterContext, BackendCapabilities, BackendDialect},
-    types_chat::{
-        AdapterInvocation, BackendIdentity, BackendOnceResponse, BackendRawEvent,
-        CanonicalContentPart, CanonicalRequest, FinishReason,
-    },
 };
 
 #[derive(Default)]
@@ -44,19 +44,19 @@ impl BackendAdapter for GitHubCopilotAdapter {
         }
     }
 
-    async fn invoke_once(
+    async fn complete(
         &self,
         ctx: AdapterContext,
-        mut req: CanonicalRequest,
-    ) -> Result<BackendOnceResponse, GatewayError> {
-        req.stream = false;
+        payload: &TurnPayload,
+    ) -> Result<BackendCompleteResponse, GatewayError> {
         let backend_id = ctx.backend_id.clone();
         let model = ctx.model.clone();
-        let mut invocation = self.invoke_stream(ctx, req).await?;
+        let invocation = self.stream(ctx, payload).await?;
+        let mut stream = invocation.stream;
         let mut output_text = String::new();
         let mut finish_reason: Option<FinishReason> = None;
 
-        while let Some(item) = invocation.stream.next().await {
+        while let Some(item) = stream.next().await {
             match item? {
                 BackendRawEvent::OutputTextDelta { delta } => {
                     output_text.push_str(&delta);
@@ -83,7 +83,7 @@ impl BackendAdapter for GitHubCopilotAdapter {
             .with_backend_id(backend_id.clone())
         })?;
 
-        Ok(BackendOnceResponse {
+        Ok(BackendCompleteResponse {
             backend_identity: BackendIdentity {
                 backend_id,
                 dialect: BackendDialect::GitHubCopilotSdk,
@@ -96,10 +96,10 @@ impl BackendAdapter for GitHubCopilotAdapter {
         })
     }
 
-    async fn invoke_stream(
+    async fn stream(
         &self,
         ctx: AdapterContext,
-        req: CanonicalRequest,
+        payload: &TurnPayload,
     ) -> Result<AdapterInvocation, GatewayError> {
         let (tx, rx) = mpsc::channel::<Result<BackendRawEvent, GatewayError>>(16);
         let cancel_flag = Arc::new(AtomicBool::new(false));
@@ -116,20 +116,13 @@ impl BackendAdapter for GitHubCopilotAdapter {
             request_id = %request_id,
             backend_id = %backend_id,
             model = %model_for_task,
-            stream = req.stream
         );
+
+        let prompt_text = extract_text_from_payload(payload);
 
         tokio::spawn(
             async move {
-                let request_started_at = Instant::now();
-                tracing::debug!(
-                    target: "ai_gateway.github_copilot",
-                    request_id = %request_id,
-                    backend_id = %backend_id,
-                    model = %model_for_task,
-                    stream = req.stream,
-                    "copilot_dispatch_start"
-                );
+                let _request_started_at = Instant::now();
                 let copilot_config = match copilot_config {
                     Some(config) => config,
                     None => {
@@ -155,14 +148,6 @@ impl BackendAdapter for GitHubCopilotAdapter {
                 let mut child = match command.spawn() {
                     Ok(child) => child,
                     Err(err) => {
-                        tracing::debug!(
-                            target: "ai_gateway.github_copilot",
-                            request_id = %request_id,
-                            backend_id = %backend_id,
-                            elapsed_ms = request_started_at.elapsed().as_millis() as u64,
-                            error = %err,
-                            "copilot_spawn_failed"
-                        );
                         let _ = tx
                             .send(Err(GatewayError::new(
                                 GatewayErrorKind::BackendTransient,
@@ -221,14 +206,6 @@ impl BackendAdapter for GitHubCopilotAdapter {
                     )
                     .await
                 {
-                    tracing::debug!(
-                        target: "ai_gateway.github_copilot",
-                        request_id = %request_id,
-                        backend_id = %backend_id,
-                        elapsed_ms = request_started_at.elapsed().as_millis() as u64,
-                        error = %err,
-                        "copilot_initialize_failed"
-                    );
                     let _ = tx.send(Err(err.with_backend_id(backend_id.clone()))).await;
                     let _ = child.kill().await;
                     return;
@@ -240,14 +217,6 @@ impl BackendAdapter for GitHubCopilotAdapter {
                 }
 
                 if let Err(err) = rpc.send_notification("initialized", json!({})).await {
-                    tracing::debug!(
-                        target: "ai_gateway.github_copilot",
-                        request_id = %request_id,
-                        backend_id = %backend_id,
-                        elapsed_ms = request_started_at.elapsed().as_millis() as u64,
-                        error = %err,
-                        "copilot_initialized_notification_failed"
-                    );
                     let _ = tx.send(Err(err.with_backend_id(backend_id.clone()))).await;
                     let _ = child.kill().await;
                     return;
@@ -256,14 +225,6 @@ impl BackendAdapter for GitHubCopilotAdapter {
                 let status_result = match rpc.request(2, "checkStatus", json!({})).await {
                     Ok(result) => result,
                     Err(err) => {
-                        tracing::debug!(
-                            target: "ai_gateway.github_copilot",
-                            request_id = %request_id,
-                            backend_id = %backend_id,
-                            elapsed_ms = request_started_at.elapsed().as_millis() as u64,
-                            error = %err,
-                            "copilot_check_status_failed"
-                        );
                         let _ = tx.send(Err(err.with_backend_id(backend_id.clone()))).await;
                         let _ = child.kill().await;
                         return;
@@ -271,13 +232,6 @@ impl BackendAdapter for GitHubCopilotAdapter {
                 };
 
                 if !status_is_ready(&status_result) {
-                    tracing::debug!(
-                        target: "ai_gateway.github_copilot",
-                        request_id = %request_id,
-                        backend_id = %backend_id,
-                        elapsed_ms = request_started_at.elapsed().as_millis() as u64,
-                        "copilot_not_ready"
-                    );
                     let _ = tx
                         .send(Err(GatewayError::new(
                             GatewayErrorKind::Authentication,
@@ -295,7 +249,7 @@ impl BackendAdapter for GitHubCopilotAdapter {
                     return;
                 }
 
-                let panel_params = build_panel_completion_params(&req);
+                let panel_params = build_panel_completion_params(&prompt_text);
                 let completion_result = match rpc
                     .request(3, "textDocument/copilotPanelCompletion", panel_params)
                     .await
@@ -305,20 +259,12 @@ impl BackendAdapter for GitHubCopilotAdapter {
                         .request(
                             4,
                             "textDocument/inlineCompletion",
-                            build_inline_completion_params(&req),
+                            build_panel_completion_params(&prompt_text),
                         )
                         .await
                     {
                         Ok(result) => result,
                         Err(err) => {
-                            tracing::debug!(
-                                target: "ai_gateway.github_copilot",
-                                request_id = %request_id,
-                                backend_id = %backend_id,
-                                elapsed_ms = request_started_at.elapsed().as_millis() as u64,
-                                error = %err,
-                                "copilot_completion_failed"
-                            );
                             let _ = tx.send(Err(err.with_backend_id(backend_id.clone()))).await;
                             let _ = child.kill().await;
                             return;
@@ -328,14 +274,6 @@ impl BackendAdapter for GitHubCopilotAdapter {
 
                 if let Some(text) = extract_completion_text(&completion_result) {
                     if !text.is_empty() {
-                        tracing::debug!(
-                            target: "ai_gateway.github_copilot",
-                            request_id = %request_id,
-                            backend_id = %backend_id,
-                            output_chars = text.len(),
-                            elapsed_ms = request_started_at.elapsed().as_millis() as u64,
-                            "copilot_completion_text_ready"
-                        );
                         if tx
                             .send(Ok(BackendRawEvent::OutputTextDelta {
                                 delta: text.to_string(),
@@ -343,12 +281,6 @@ impl BackendAdapter for GitHubCopilotAdapter {
                             .await
                             .is_err()
                         {
-                            tracing::debug!(
-                                target: "ai_gateway.github_copilot",
-                                request_id = %request_id,
-                                backend_id = %backend_id,
-                                "copilot_stream_receiver_closed"
-                            );
                             let _ = child.kill().await;
                             return;
                         }
@@ -360,13 +292,6 @@ impl BackendAdapter for GitHubCopilotAdapter {
                         }))
                         .await;
                 } else {
-                    tracing::debug!(
-                        target: "ai_gateway.github_copilot",
-                        request_id = %request_id,
-                        backend_id = %backend_id,
-                        elapsed_ms = request_started_at.elapsed().as_millis() as u64,
-                        "copilot_completion_missing_text"
-                    );
                     let _ = tx
                         .send(Err(GatewayError::new(
                             GatewayErrorKind::ProtocolViolation,
@@ -411,27 +336,25 @@ fn status_is_ready(value: &Value) -> bool {
     true
 }
 
-fn build_panel_completion_params(req: &CanonicalRequest) -> Value {
-    let text = req
+fn extract_text_from_payload(payload: &TurnPayload) -> String {
+    payload
         .messages
         .iter()
         .flat_map(|message| message.parts.iter())
         .filter_map(|part| match part {
-            CanonicalContentPart::Text { text } => Some(text.as_str()),
+            ContentPart::Text { text } => Some(text.as_str()),
             _ => None,
         })
         .collect::<Vec<_>>()
-        .join("\n");
+        .join("\n")
+}
 
+fn build_panel_completion_params(text: &str) -> Value {
     json!({
         "textDocument": {"uri": "file:///beluna/copilot-synthetic.txt"},
         "position": {"line": 0, "character": text.len()},
         "context": {"prefix": text},
     })
-}
-
-fn build_inline_completion_params(req: &CanonicalRequest) -> Value {
-    build_panel_completion_params(req)
 }
 
 fn extract_completion_text(value: &Value) -> Option<&str> {

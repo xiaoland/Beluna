@@ -1,209 +1,279 @@
-use std::{sync::Arc, time::Instant};
+use std::{collections::BTreeMap, sync::Arc, time::Instant};
 
 use crate::{
     ai_gateway::{
+        credentials::CredentialProvider,
         error::{GatewayError, GatewayErrorKind},
-        gateway::AIGateway,
-        types_chat::{
-            BelunaContentPart, BelunaMessage, BelunaMessageToolCall, ChatEventStream, ChatRequest,
-        },
+        types::AIGatewayConfig,
     },
     observability::metrics as observability_metrics,
 };
 
 use super::{
-    session_store::{InMemoryChatSessionStore, TurnCommitOutcome},
+    dispatcher::{ChatDispatcher, DispatchResult},
+    store::{ThreadStore, TurnCommitOutcome},
+    tool::{ChatToolDefinition, ToolOverride, resolve_tools},
     types::{
-        ChatSessionOpenRequest, ChatThreadOpenRequest, ChatThreadState, ChatTurnRequest,
-        ChatTurnResponse,
+        ChatEventStream, ChatMessage, ChatRole, ContentPart, OutputMode, TurnLimits, TurnPayload,
+        TurnResponse,
     },
 };
 
+// ---------------------------------------------------------------------------
+// Chat — definition aggregate
+// ---------------------------------------------------------------------------
+
+/// A Chat defines the *what* of a conversation: tools, system prompt,
+/// default route, output mode. It is an immutable definition; runtime state
+/// lives in [`Thread`] instances derived from it.
 #[derive(Clone)]
-pub struct ChatGateway {
-    gateway: Arc<AIGateway>,
-    store: Arc<InMemoryChatSessionStore>,
-    default_route_ref: Option<String>,
+pub struct Chat {
+    chat_id: String,
+    tools: Vec<ChatToolDefinition>,
+    system_prompt: Option<String>,
+    default_route: Option<String>,
+    default_output_mode: OutputMode,
+    default_limits: TurnLimits,
+    default_turn_timeout_ms: u64,
+    enable_thinking: bool,
+    dispatcher: Arc<ChatDispatcher>,
+    store: Arc<ThreadStore>,
+}
+
+/// Options for creating a new [`Chat`].
+#[derive(Default)]
+pub struct ChatOptions {
+    pub chat_id: Option<String>,
+    pub tools: Vec<ChatToolDefinition>,
+    pub system_prompt: Option<String>,
+    pub default_route: Option<String>,
+    pub default_output_mode: Option<OutputMode>,
+    pub default_limits: Option<TurnLimits>,
+    pub enable_thinking: bool,
+}
+
+/// Builder that owns the shared infrastructure for constructing `Chat` instances.
+#[derive(Clone)]
+pub struct ChatFactory {
+    dispatcher: Arc<ChatDispatcher>,
+    store: Arc<ThreadStore>,
+    default_route: Option<String>,
     default_turn_timeout_ms: u64,
 }
 
-#[derive(Clone)]
-pub struct ChatSessionHandle {
-    chat_gateway: ChatGateway,
-    session_id: String,
-}
+impl ChatFactory {
+    pub fn new(
+        config: &AIGatewayConfig,
+        credential_provider: Arc<dyn CredentialProvider>,
+    ) -> Result<Self, GatewayError> {
+        let dispatcher = Arc::new(ChatDispatcher::new(config, credential_provider)?);
+        let store = Arc::new(ThreadStore::new(
+            config.chat.default_session_ttl_seconds,
+            config.chat.default_max_turn_context_messages,
+        ));
 
-#[derive(Clone)]
-pub struct ChatThreadHandle {
-    chat_gateway: ChatGateway,
-    session_id: String,
-    thread_id: String,
-}
-
-impl ChatGateway {
-    pub(crate) fn new(
-        gateway: Arc<AIGateway>,
-        store: Arc<InMemoryChatSessionStore>,
-        default_route_ref: Option<String>,
-        default_turn_timeout_ms: u64,
-    ) -> Self {
-        Self {
-            gateway,
+        Ok(Self {
+            dispatcher,
             store,
-            default_route_ref,
-            default_turn_timeout_ms,
-        }
+            default_route: config.chat.default_route.clone(),
+            default_turn_timeout_ms: config.chat.default_turn_timeout_ms,
+        })
     }
 
-    pub async fn open_session(
-        &self,
-        request: ChatSessionOpenRequest,
-    ) -> Result<ChatSessionHandle, GatewayError> {
-        let (session_id, default_route_ref) = self
+    pub async fn create(&self, opts: ChatOptions) -> Chat {
+        static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        let chat_id = opts.chat_id.unwrap_or_else(|| {
+            format!(
+                "chat-{}",
+                SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            )
+        });
+
+        // Register in store so threads can be opened immediately.
+        self.store.register_chat(&chat_id).await;
+
+        Chat {
+            chat_id,
+            tools: opts.tools,
+            system_prompt: opts.system_prompt,
+            default_route: opts.default_route.or_else(|| self.default_route.clone()),
+            default_output_mode: opts.default_output_mode.unwrap_or(OutputMode::Text),
+            default_limits: opts.default_limits.unwrap_or_default(),
+            default_turn_timeout_ms: self.default_turn_timeout_ms,
+            enable_thinking: opts.enable_thinking,
+            dispatcher: Arc::clone(&self.dispatcher),
+            store: Arc::clone(&self.store),
+        }
+    }
+}
+
+impl Chat {
+    pub fn chat_id(&self) -> &str {
+        &self.chat_id
+    }
+
+    pub fn tools(&self) -> &[ChatToolDefinition] {
+        &self.tools
+    }
+
+    pub async fn open_thread(&self, opts: ThreadOptions) -> Result<Thread, GatewayError> {
+        let thread_id = self
             .store
-            .open_session(request, self.default_route_ref.clone())
+            .open_thread(&self.chat_id, opts.thread_id, opts.seed_messages)
             .await?;
 
         tracing::info!(
             target: "ai_gateway",
-            event = "chat_session_lifecycle",
+            event = "chat_thread_lifecycle",
             action = "opened",
-            session_id = %session_id,
-            default_route_ref = default_route_ref.as_deref().unwrap_or("-"),
-            "chat_session_lifecycle"
+            chat_id = %self.chat_id,
+            thread_id = %thread_id,
+            "chat_thread_lifecycle"
         );
 
-        Ok(ChatSessionHandle {
-            chat_gateway: self.clone(),
-            session_id,
-        })
-    }
-}
-
-impl ChatSessionHandle {
-    pub fn session_id(&self) -> &str {
-        &self.session_id
-    }
-
-    pub async fn open_thread(
-        &self,
-        request: ChatThreadOpenRequest,
-    ) -> Result<ChatThreadHandle, GatewayError> {
-        let thread_id = self
-            .chat_gateway
-            .store
-            .open_thread(&self.session_id, request)
-            .await?;
-
-        Ok(ChatThreadHandle {
-            chat_gateway: self.chat_gateway.clone(),
-            session_id: self.session_id.clone(),
+        Ok(Thread {
+            chat: self.clone(),
             thread_id,
+            tool_overrides: opts.tool_overrides,
         })
     }
 
     pub async fn close(&self) {
-        self.chat_gateway
-            .store
-            .close_session(&self.session_id)
-            .await;
+        self.store.remove_chat(&self.chat_id).await;
         tracing::info!(
             target: "ai_gateway",
-            event = "chat_session_lifecycle",
+            event = "chat_lifecycle",
             action = "closed",
-            session_id = %self.session_id,
-            "chat_session_lifecycle"
+            chat_id = %self.chat_id,
+            "chat_lifecycle"
         );
     }
 }
 
-impl ChatThreadHandle {
+// ---------------------------------------------------------------------------
+// Thread — runtime conversation derived from a Chat
+// ---------------------------------------------------------------------------
+
+/// Options for opening a new [`Thread`].
+#[derive(Default)]
+pub struct ThreadOptions {
+    pub thread_id: Option<String>,
+    pub seed_messages: Vec<ChatMessage>,
+    pub tool_overrides: Vec<ToolOverride>,
+}
+
+/// A Thread is a runtime conversation bound to a parent [`Chat`].
+/// It holds the growing message history and can execute turns.
+#[derive(Clone)]
+pub struct Thread {
+    chat: Chat,
+    thread_id: String,
+    tool_overrides: Vec<ToolOverride>,
+}
+
+impl Thread {
     pub fn thread_id(&self) -> &str {
         &self.thread_id
     }
 
-    pub async fn state(&self) -> Result<ChatThreadState, GatewayError> {
-        self.chat_gateway
-            .store
-            .thread_state(&self.session_id, &self.thread_id)
-            .await
+    pub fn chat_id(&self) -> &str {
+        self.chat.chat_id()
     }
 
-    pub async fn turn_once(
-        &self,
-        mut request: ChatTurnRequest,
-    ) -> Result<ChatTurnResponse, GatewayError> {
-        if request.input_messages.is_empty() {
+    /// Execute a non-streaming turn.
+    pub async fn complete(&self, input: TurnInput) -> Result<TurnOutput, GatewayError> {
+        if input.messages.is_empty() {
             return Err(GatewayError::new(
                 GatewayErrorKind::InvalidRequest,
-                "chat turn requires at least one input message",
+                "turn requires at least one input message",
             )
             .with_retryable(false));
         }
 
         let started_at = Instant::now();
         let prepared = self
-            .chat_gateway
+            .chat
             .store
-            .prepare_turn(
-                &self.session_id,
-                &self.thread_id,
-                request.route_ref_override.clone(),
-                self.chat_gateway.default_route_ref.clone(),
-                &request.input_messages,
-            )
+            .prepare_turn(&self.chat.chat_id, &self.thread_id, &input.messages)
             .await?;
 
         let turn_id = prepared.turn_id;
-        let request_id = request.request_id.take().unwrap_or_else(|| {
-            format!(
-                "chat-{}-{}-turn-{}",
-                self.session_id, self.thread_id, turn_id
-            )
-        });
+        let effective_tools = resolve_tools(
+            &self.chat.tools,
+            if input.tool_overrides.is_empty() {
+                &self.tool_overrides
+            } else {
+                &input.tool_overrides
+            },
+        );
 
-        if request.limits.max_request_time_ms.is_none() {
-            request.limits.max_request_time_ms = Some(self.chat_gateway.default_turn_timeout_ms);
+        let route = input
+            .route_override
+            .as_deref()
+            .or(self.chat.default_route.as_deref());
+
+        let mut limits = input
+            .limits
+            .unwrap_or_else(|| self.chat.default_limits.clone());
+        if limits.max_request_time_ms.is_none() {
+            limits.max_request_time_ms = Some(self.chat.default_turn_timeout_ms);
         }
-        request
-            .metadata
-            .entry("chat_session_id".to_string())
-            .or_insert_with(|| self.session_id.clone());
-        request
-            .metadata
-            .entry("chat_thread_id".to_string())
-            .or_insert_with(|| self.thread_id.clone());
-        request
-            .metadata
-            .entry("chat_turn_id".to_string())
-            .or_insert_with(|| turn_id.to_string());
 
-        let dispatch_request = ChatRequest {
-            request_id: Some(request_id),
-            route: prepared.route_ref,
-            messages: prepared.messages,
-            tools: request.tools,
-            tool_choice: request.tool_choice,
-            output_mode: request.output_mode,
-            limits: request.limits,
-            metadata: request.metadata,
-            cost_attribution_id: request.cost_attribution_id,
-            enable_thinking: request.enable_thinking,
+        // Prepend system prompt if present
+        let messages = if let Some(ref sys) = self.chat.system_prompt {
+            let mut msgs = Vec::with_capacity(prepared.messages.len() + 1);
+            msgs.push(ChatMessage {
+                role: ChatRole::System,
+                parts: vec![ContentPart::Text { text: sys.clone() }],
+                tool_call_id: None,
+                tool_name: None,
+                tool_calls: vec![],
+            });
+            msgs.extend(prepared.messages.iter().cloned());
+            Arc::new(msgs)
+        } else {
+            prepared.messages
         };
 
-        let response_result = self.chat_gateway.gateway.chat_once(dispatch_request).await;
+        let mut metadata = input.metadata;
+        metadata
+            .entry("chat_id".to_string())
+            .or_insert_with(|| self.chat.chat_id.clone());
+        metadata
+            .entry("thread_id".to_string())
+            .or_insert_with(|| self.thread_id.clone());
+        metadata
+            .entry("turn_id".to_string())
+            .or_insert_with(|| turn_id.to_string());
+
+        let payload = TurnPayload {
+            messages,
+            tools: effective_tools,
+            output_mode: input
+                .output_mode
+                .unwrap_or_else(|| self.chat.default_output_mode.clone()),
+            limits,
+            enable_thinking: input.enable_thinking.unwrap_or(self.chat.enable_thinking),
+            metadata,
+        };
+
+        let dispatch_result = self.chat.dispatcher.complete(&payload, route).await;
         let latency_ms = started_at.elapsed().as_millis() as u64;
 
-        match response_result {
-            Ok(response) => {
+        match dispatch_result {
+            Ok(DispatchResult {
+                response,
+                backend_id: _,
+                model_id: _,
+            }) => {
                 let assistant_message = assistant_message_from_response(&response);
                 let commit = self
-                    .chat_gateway
+                    .chat
                     .store
                     .commit_turn_success(
-                        &self.session_id,
+                        &self.chat.chat_id,
                         &self.thread_id,
-                        request.input_messages,
+                        input.messages,
                         assistant_message,
                         response.usage.clone(),
                         response.tool_calls.len(),
@@ -212,7 +282,7 @@ impl ChatThreadHandle {
                     .await?;
 
                 emit_turn_summary(
-                    &self.session_id,
+                    &self.chat.chat_id,
                     &self.thread_id,
                     turn_id,
                     &response,
@@ -220,17 +290,16 @@ impl ChatThreadHandle {
                     latency_ms,
                     "ok",
                 );
-
                 record_turn_metrics(
-                    &self.session_id,
+                    &self.chat.chat_id,
                     &self.thread_id,
                     &response,
                     &commit,
                     latency_ms,
                 );
 
-                Ok(ChatTurnResponse {
-                    session_id: self.session_id.clone(),
+                Ok(TurnOutput {
+                    chat_id: self.chat.chat_id.clone(),
                     thread_id: self.thread_id.clone(),
                     turn_id,
                     response,
@@ -238,15 +307,15 @@ impl ChatThreadHandle {
             }
             Err(err) => {
                 let commit = self
-                    .chat_gateway
+                    .chat
                     .store
-                    .commit_turn_failure(&self.session_id, &self.thread_id, latency_ms)
+                    .commit_turn_failure(&self.chat.chat_id, &self.thread_id, latency_ms)
                     .await?;
 
                 tracing::info!(
                     target: "ai_gateway",
                     event = "chat_turn_anomaly",
-                    session_id = %self.session_id,
+                    chat_id = %self.chat.chat_id,
                     thread_id = %self.thread_id,
                     turn_id = turn_id,
                     latency_ms = latency_ms,
@@ -260,12 +329,12 @@ impl ChatThreadHandle {
                     &format!("{:?}", err.kind),
                 );
                 observability_metrics::increment_chat_thread_failures_total(
-                    &self.session_id,
+                    &self.chat.chat_id,
                     &self.thread_id,
                     &format!("{:?}", err.kind),
                 );
                 observability_metrics::set_chat_thread_last_turn_latency_ms(
-                    &self.session_id,
+                    &self.chat.chat_id,
                     &self.thread_id,
                     commit.last_turn_latency_ms.unwrap_or(latency_ms),
                 );
@@ -275,34 +344,57 @@ impl ChatThreadHandle {
         }
     }
 
-    pub async fn turn_stream(
-        &self,
-        _request: ChatTurnRequest,
-    ) -> Result<ChatEventStream, GatewayError> {
+    /// Execute a streaming turn.
+    pub async fn stream(&self, _input: TurnInput) -> Result<ChatEventStream, GatewayError> {
         Err(GatewayError::new(
             GatewayErrorKind::UnsupportedCapability,
-            "chat thread streaming is not implemented yet; use turn_once",
+            "thread streaming is not yet implemented; use complete()",
         )
         .with_retryable(false))
     }
 }
 
-fn assistant_message_from_response(
-    response: &crate::ai_gateway::types_chat::ChatResponse,
-) -> BelunaMessage {
+// ---------------------------------------------------------------------------
+// Turn input / output
+// ---------------------------------------------------------------------------
+
+#[derive(Default)]
+pub struct TurnInput {
+    pub messages: Vec<ChatMessage>,
+    pub route_override: Option<String>,
+    pub tool_overrides: Vec<ToolOverride>,
+    pub output_mode: Option<OutputMode>,
+    pub limits: Option<TurnLimits>,
+    pub enable_thinking: Option<bool>,
+    pub metadata: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TurnOutput {
+    pub chat_id: String,
+    pub thread_id: String,
+    pub turn_id: u64,
+    pub response: TurnResponse,
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+fn assistant_message_from_response(response: &TurnResponse) -> ChatMessage {
     let tool_calls = response
         .tool_calls
         .iter()
-        .map(|call| BelunaMessageToolCall {
+        .map(|call| super::types::MessageToolCall {
             id: call.id.clone(),
             name: call.name.clone(),
             arguments_json: call.arguments_json.clone(),
         })
         .collect::<Vec<_>>();
 
-    BelunaMessage {
-        role: crate::ai_gateway::types_chat::BelunaRole::Assistant,
-        parts: vec![BelunaContentPart::Text {
+    ChatMessage {
+        role: ChatRole::Assistant,
+        parts: vec![ContentPart::Text {
             text: response.output_text.clone(),
         }],
         tool_call_id: None,
@@ -312,10 +404,10 @@ fn assistant_message_from_response(
 }
 
 fn emit_turn_summary(
-    session_id: &str,
+    chat_id: &str,
     thread_id: &str,
     turn_id: u64,
-    response: &crate::ai_gateway::types_chat::ChatResponse,
+    response: &TurnResponse,
     commit: &TurnCommitOutcome,
     latency_ms: u64,
     outcome: &str,
@@ -336,12 +428,11 @@ fn emit_turn_summary(
     tracing::info!(
         target: "ai_gateway",
         event = "chat_turn_summary",
-        session_id = %session_id,
+        chat_id = %chat_id,
         thread_id = %thread_id,
         turn_id = turn_id,
         backend_id = backend_id,
         model = model,
-        attempts = 1,
         latency_ms = latency_ms,
         tool_rounds = response.tool_calls.len(),
         usage_in_tokens = ?usage_in_tokens,
@@ -356,10 +447,10 @@ fn emit_turn_summary(
 }
 
 fn record_turn_metrics(
-    session_id: &str,
+    chat_id: &str,
     thread_id: &str,
-    response: &crate::ai_gateway::types_chat::ChatResponse,
-    commit: &TurnCommitOutcome,
+    response: &TurnResponse,
+    _commit: &TurnCommitOutcome,
     latency_ms: u64,
 ) {
     let backend = response
@@ -374,15 +465,15 @@ fn record_turn_metrics(
         .unwrap_or("-");
 
     observability_metrics::record_chat_task_latency_ms("backend_infer", backend, model, latency_ms);
-    observability_metrics::increment_chat_thread_turns_total(session_id, thread_id);
+    observability_metrics::increment_chat_thread_turns_total(chat_id, thread_id);
     observability_metrics::add_chat_thread_tool_calls_total(
-        session_id,
+        chat_id,
         thread_id,
         "model_tool_calls",
         response.tool_calls.len() as u64,
     );
     observability_metrics::add_chat_thread_tokens_in_total(
-        session_id,
+        chat_id,
         thread_id,
         response
             .usage
@@ -391,7 +482,7 @@ fn record_turn_metrics(
             .unwrap_or(0),
     );
     observability_metrics::add_chat_thread_tokens_out_total(
-        session_id,
+        chat_id,
         thread_id,
         response
             .usage
@@ -399,8 +490,5 @@ fn record_turn_metrics(
             .and_then(|usage| usage.output_tokens)
             .unwrap_or(0),
     );
-    observability_metrics::set_chat_thread_last_turn_latency_ms(session_id, thread_id, latency_ms);
-
-    let _ = commit.tokens_in_total;
-    let _ = commit.tokens_out_total;
+    observability_metrics::set_chat_thread_last_turn_latency_ms(chat_id, thread_id, latency_ms);
 }

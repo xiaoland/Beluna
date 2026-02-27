@@ -1,10 +1,13 @@
 pub mod api;
-pub(crate) mod session_store;
+pub mod capabilities;
+pub(crate) mod dispatcher;
+pub(crate) mod store;
+pub mod tool;
 pub mod types;
 
-pub use api::{ChatGateway, ChatSessionHandle, ChatThreadHandle};
-pub(crate) use session_store::InMemoryChatSessionStore;
+pub use api::{Chat, ChatFactory, ChatOptions, Thread, ThreadOptions, TurnInput, TurnOutput};
+pub use tool::{ChatToolDefinition, ToolOverride};
 pub use types::{
-    ChatSessionOpenRequest, ChatThreadOpenRequest, ChatThreadState, ChatTurnRequest,
-    ChatTurnResponse,
+    ChatEvent, ChatEventStream, ChatMessage, ChatRole, ContentPart, FinishReason, MessageToolCall,
+    OutputMode, ToolCallResult, TurnLimits, TurnResponse, UsageStats,
 };

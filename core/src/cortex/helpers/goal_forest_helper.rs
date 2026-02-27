@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use tokio::time::Duration;
 
 use crate::{
-    ai_gateway::types_chat::OutputMode,
+    ai_gateway::chat::OutputMode,
     cortex::{
         cognition::{GoalForest, GoalForestPatchOp, GoalNode},
         cognition_patch::apply_goal_forest_op,

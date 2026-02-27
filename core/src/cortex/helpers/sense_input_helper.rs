@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use tokio::time::{Duration, timeout};
 
 use crate::{
-    ai_gateway::types_chat::OutputMode,
+    ai_gateway::chat::OutputMode,
     cortex::{
         error::{CortexError, extractor_failed},
         helpers::{self, CognitionOrgan, HelperRuntime},

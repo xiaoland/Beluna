@@ -3,37 +3,45 @@ use std::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use async_trait::async_trait;
 use futures_util::StreamExt;
-use reqwest::{Client, header};
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::Instrument;
 
 use crate::ai_gateway::{
-    adapters::{BackendAdapter, http_common},
+    adapters::{
+        BackendAdapter,
+        http_stream::{self, HttpRequestConfig},
+        wire,
+    },
+    chat::types::{
+        AdapterInvocation, BackendCompleteResponse, BackendIdentity, BackendRawEvent,
+        FinishReason, OutputMode, ToolCallResult, ToolCallStatus, TurnPayload, UsageStats,
+    },
     error::{GatewayError, GatewayErrorKind},
     types::{AdapterContext, BackendCapabilities, BackendDialect},
-    types_chat::{
-        AdapterInvocation, BackendIdentity, BackendOnceResponse, BackendRawEvent,
-        CanonicalOutputMode, CanonicalRequest, CanonicalToolCall, FinishReason, ToolCallStatus,
-        UsageStats,
-    },
 };
+
+use super::wire as openai_wire;
+
+// ---------------------------------------------------------------------------
+// Adapter
+// ---------------------------------------------------------------------------
 
 #[derive(Clone)]
 pub struct OpenAiCompatibleAdapter {
-    client: Client,
+    client: reqwest::Client,
 }
 
 impl Default for OpenAiCompatibleAdapter {
     fn default() -> Self {
         Self {
-            client: Client::builder()
+            client: reqwest::Client::builder()
                 .pool_idle_timeout(Duration::from_secs(30))
                 .build()
                 .expect("reqwest client must build"),
@@ -58,488 +66,142 @@ impl BackendAdapter for OpenAiCompatibleAdapter {
         }
     }
 
-    async fn invoke_once(
+    async fn complete(
         &self,
         ctx: AdapterContext,
-        req: CanonicalRequest,
-    ) -> Result<BackendOnceResponse, GatewayError> {
-        let endpoint = ctx.profile.endpoint.clone().ok_or_else(|| {
-            GatewayError::new(
-                GatewayErrorKind::InvalidRequest,
-                "openai-compatible backend requires endpoint",
-            )
-            .with_retryable(false)
-            .with_backend_id(ctx.backend_id.clone())
-        })?;
-
-        let url = format!("{}/chat/completions", endpoint.trim_end_matches('/'));
+        payload: &TurnPayload,
+    ) -> Result<BackendCompleteResponse, GatewayError> {
+        let url = validated_url(&ctx)?;
         let backend_id = ctx.backend_id.clone();
-        let model = ctx.model.clone();
-        let request_id = ctx.request_id.clone();
-        let timeout_ms = ctx.timeout.as_millis();
-        tracing::debug!(
-            target: "ai_gateway.openai_compatible",
-            request_id = %request_id,
-            backend_id = %backend_id,
-            model = %model,
-            timeout_ms = timeout_ms as u64,
-            url = %url,
-            "openai_once_dispatch_start"
-        );
 
-        let mut body = json!({
-            "model": model,
-            "messages": http_common::canonical_messages_to_openai(&req.messages),
-            "stream": false
-        });
-
-        if !req.tools.is_empty() {
-            body["tools"] = Value::Array(http_common::tools_to_openai(&req.tools));
-            body["tool_choice"] = http_common::tool_choice_to_openai(&req.tool_choice);
-        }
-
-        match &req.output_mode {
-            CanonicalOutputMode::JsonObject => {
-                body["response_format"] = json!({"type": "json_object"});
-            }
-            CanonicalOutputMode::JsonSchema {
-                name,
-                schema,
-                strict,
-            } => {
-                body["response_format"] = json!({
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": name,
-                        "schema": schema,
-                        "strict": strict
-                    }
-                });
-            }
-            CanonicalOutputMode::Text => {}
-        }
-
-        if let Some(max_tokens) = req.limits.max_output_tokens {
-            body["max_tokens"] = Value::Number(max_tokens.into());
-        }
-
-        if req.enable_thinking {
-            body["thinking"] = json!({"type": "enabled", "budget_tokens": req.limits.max_output_tokens.unwrap_or(10000)});
-            body["enable_thinking"] = json!(true);
-        }
-
-        let mut req_builder = self
-            .client
-            .post(url)
-            .timeout(ctx.timeout)
-            .header(header::CONTENT_TYPE, "application/json")
-            .header("x-request-id", request_id.clone())
-            .json(&body);
-
-        if let Some(auth_header) = ctx.credential.auth_header.clone() {
-            req_builder = req_builder.header(header::AUTHORIZATION, auth_header);
-        }
-        for (k, v) in ctx.credential.extra_headers.clone() {
-            req_builder = req_builder.header(k, v);
-        }
-
-        let send_started_at = Instant::now();
-        let response = req_builder.send().await.map_err(|err| {
-            tracing::debug!(
-                target: "ai_gateway.openai_compatible",
-                request_id = %request_id,
-                backend_id = %backend_id,
-                elapsed_ms = send_started_at.elapsed().as_millis() as u64,
-                error = %err,
-                "openai_once_http_error"
-            );
-            GatewayError::new(
-                GatewayErrorKind::BackendTransient,
-                format!("openai-compatible request failed: {}", err),
-            )
-            .with_retryable(true)
-            .with_backend_id(backend_id.clone())
-        })?;
-
-        if !response.status().is_success() {
-            let status = response.status().as_u16();
-            let body = response.text().await.unwrap_or_default();
-            return Err(http_common::map_http_error(status, &backend_id, &body));
-        }
-
-        let payload = response.json::<Value>().await.map_err(|err| {
-            GatewayError::new(
-                GatewayErrorKind::ProtocolViolation,
-                format!("invalid openai-compatible response payload: {}", err),
-            )
-            .with_retryable(false)
-            .with_backend_id(backend_id.clone())
-        })?;
-
-        let events = parse_non_stream_payload(&payload, &backend_id)?;
-        let (output_text, tool_calls, usage, finish_reason) =
-            aggregate_once_events(events, &backend_id)?;
-
-        Ok(BackendOnceResponse {
-            backend_identity: BackendIdentity {
-                backend_id,
-                dialect: BackendDialect::OpenAiCompatible,
-                model: ctx.model,
-            },
-            output_text,
-            tool_calls,
-            usage,
-            finish_reason,
+        let body = build_body(&ctx.model, payload, false);
+        let json_response = http_stream::post_json(&HttpRequestConfig {
+            client: self.client.clone(),
+            url,
+            body,
+            backend_id: backend_id.clone(),
+            request_id: ctx.request_id.clone(),
+            credential: ctx.credential,
+            timeout: ctx.timeout,
         })
+        .await?;
+
+        parse_complete_response(&json_response, &backend_id, &ctx.model)
     }
 
-    async fn invoke_stream(
+    async fn stream(
         &self,
         ctx: AdapterContext,
-        req: CanonicalRequest,
+        payload: &TurnPayload,
     ) -> Result<AdapterInvocation, GatewayError> {
-        let endpoint = ctx.profile.endpoint.clone().ok_or_else(|| {
-            GatewayError::new(
-                GatewayErrorKind::InvalidRequest,
-                "openai-compatible backend requires endpoint",
-            )
-            .with_retryable(false)
-            .with_backend_id(ctx.backend_id.clone())
-        })?;
-
-        let url = format!("{}/chat/completions", endpoint.trim_end_matches('/'));
+        let url = validated_url(&ctx)?;
         let cancel_flag = Arc::new(AtomicBool::new(false));
         let cancel_flag_task = cancel_flag.clone();
 
         let (tx, rx) = mpsc::channel::<Result<BackendRawEvent, GatewayError>>(64);
-        let client = self.client.clone();
         let backend_id = ctx.backend_id.clone();
         let model = ctx.model.clone();
         let request_id = ctx.request_id.clone();
-        let credential = ctx.credential.clone();
-        let timeout_ms = ctx.timeout.as_millis();
         let dispatch_span = tracing::debug_span!(
             target: "ai_gateway.openai_compatible",
             "openai_dispatch",
             request_id = %request_id,
             backend_id = %backend_id,
             model = %model,
-            stream = req.stream,
-            timeout_ms = timeout_ms as u64
         );
+
+        let body = build_body(&model, payload, true);
+        let http_config = HttpRequestConfig {
+            client: self.client.clone(),
+            url,
+            body,
+            backend_id: backend_id.clone(),
+            request_id,
+            credential: ctx.credential.clone(),
+            timeout: ctx.timeout,
+        };
 
         tokio::spawn(
             async move {
-                let request_started_at = Instant::now();
-                tracing::debug!(
-                    target: "ai_gateway.openai_compatible",
-                    request_id = %request_id,
-                    backend_id = %backend_id,
-                    model = %model,
-                    stream = req.stream,
-                    timeout_ms = timeout_ms as u64,
-                    url = %url,
-                    "openai_dispatch_start"
-                );
-                let mut body = json!({
-                    "model": model,
-                    "messages": http_common::canonical_messages_to_openai(&req.messages),
-                    "stream": req.stream,
-                });
-
-                if !req.tools.is_empty() {
-                    body["tools"] = Value::Array(http_common::tools_to_openai(&req.tools));
-                    body["tool_choice"] = http_common::tool_choice_to_openai(&req.tool_choice);
-                }
-
-                match &req.output_mode {
-                    CanonicalOutputMode::JsonObject => {
-                        body["response_format"] = json!({"type": "json_object"});
-                    }
-                    CanonicalOutputMode::JsonSchema {
-                        name,
-                        schema,
-                        strict,
-                    } => {
-                        body["response_format"] = json!({
-                            "type": "json_schema",
-                            "json_schema": {
-                                "name": name,
-                                "schema": schema,
-                                "strict": strict
-                            }
-                        });
-                    }
-                    CanonicalOutputMode::Text => {}
-                }
-
-                if let Some(max_tokens) = req.limits.max_output_tokens {
-                    body["max_tokens"] = Value::Number(max_tokens.into());
-                }
-
-                if req.enable_thinking {
-                    body["enable_thinking"] = json!(true); // Bailian
-                }
-
-                let mut req_builder = client
-                    .post(url)
-                    .timeout(ctx.timeout)
-                    .header(header::CONTENT_TYPE, "application/json")
-                    .header("x-request-id", request_id.clone())
-                    .json(&body);
-
-                if let Some(auth_header) = credential.auth_header {
-                    req_builder = req_builder.header(header::AUTHORIZATION, auth_header);
-                }
-                for (k, v) in credential.extra_headers {
-                    req_builder = req_builder.header(k, v);
-                }
-
-                let send_started_at = Instant::now();
-                tracing::debug!(
-                    target: "ai_gateway.openai_compatible",
-                    request_id = %request_id,
-                    backend_id = %backend_id,
-                    timeout_ms = timeout_ms as u64,
-                    "openai_http_send"
-                );
-                let response = match req_builder.send().await {
-                    Ok(response) => response,
+                let response = match http_stream::send_post(&http_config).await {
+                    Ok(r) => r,
                     Err(err) => {
-                        tracing::debug!(
-                            target: "ai_gateway.openai_compatible",
-                            request_id = %request_id,
-                            backend_id = %backend_id,
-                            elapsed_ms = send_started_at.elapsed().as_millis() as u64,
-                            error = %err,
-                            "openai_http_error"
-                        );
-                        let _ = tx
-                            .send(Err(GatewayError::new(
-                                GatewayErrorKind::BackendTransient,
-                                format!("openai-compatible request failed: {}", err),
-                            )
-                            .with_retryable(true)
-                            .with_backend_id(backend_id)))
-                            .await;
+                        let _ = tx.send(Err(err)).await;
                         return;
                     }
                 };
-                tracing::debug!(
-                    target: "ai_gateway.openai_compatible",
-                    request_id = %request_id,
-                    backend_id = %backend_id,
-                    status = response.status().as_u16(),
-                    elapsed_ms = send_started_at.elapsed().as_millis() as u64,
-                    "openai_http_headers"
-                );
 
-                if !response.status().is_success() {
-                    let status = response.status().as_u16();
-                    let body = response.text().await.unwrap_or_default();
-                    tracing::debug!(
-                        target: "ai_gateway.openai_compatible",
-                        request_id = %request_id,
-                        backend_id = %backend_id,
-                        status = status,
-                        elapsed_ms = request_started_at.elapsed().as_millis() as u64,
-                        body_bytes = body.len(),
-                        "openai_http_non_success"
-                    );
-                    let _ = tx
-                        .send(Err(http_common::map_http_error(status, &backend_id, &body)))
-                        .await;
-                    return;
-                }
+                let mut byte_stream = response.bytes_stream();
+                let mut buffer = String::new();
+                let mut saw_terminal = false;
 
-                if req.stream {
-                    let mut stream = response.bytes_stream();
-                    let mut buffer = String::new();
-                    let mut saw_terminal = false;
-                    let mut saw_first_chunk = false;
+                while let Some(item) = byte_stream.next().await {
+                    if cancel_flag_task.load(Ordering::SeqCst) {
+                        return;
+                    }
 
-                    while let Some(item) = stream.next().await {
-                        if cancel_flag_task.load(Ordering::SeqCst) {
-                            tracing::debug!(
-                                target: "ai_gateway.openai_compatible",
-                                request_id = %request_id,
-                                backend_id = %backend_id,
-                                elapsed_ms = request_started_at.elapsed().as_millis() as u64,
-                                "openai_stream_cancelled"
-                            );
+                    let chunk = match item {
+                        Ok(chunk) => chunk,
+                        Err(err) => {
+                            let _ = tx
+                                .send(Err(GatewayError::new(
+                                    GatewayErrorKind::BackendTransient,
+                                    format!("openai-compatible stream chunk error: {}", err),
+                                )
+                                .with_retryable(true)
+                                .with_backend_id(backend_id.clone())))
+                                .await;
                             return;
                         }
+                    };
 
-                        let chunk = match item {
-                            Ok(chunk) => chunk,
+                    buffer.push_str(&String::from_utf8_lossy(&chunk));
+                    let (frames, done) =
+                        match http_stream::extract_sse_frames(&mut buffer, &backend_id) {
+                            Ok(result) => result,
                             Err(err) => {
-                                tracing::debug!(
-                                    target: "ai_gateway.openai_compatible",
-                                    request_id = %request_id,
-                                    backend_id = %backend_id,
-                                    elapsed_ms = request_started_at.elapsed().as_millis() as u64,
-                                    error = %err,
-                                    "openai_stream_chunk_error"
-                                );
-                                let _ = tx
-                                    .send(Err(GatewayError::new(
-                                        GatewayErrorKind::BackendTransient,
-                                        format!("openai-compatible stream chunk error: {}", err),
-                                    )
-                                    .with_retryable(true)
-                                    .with_backend_id(backend_id.clone())))
-                                    .await;
+                                let _ = tx.send(Err(err)).await;
                                 return;
                             }
                         };
-                        if !saw_first_chunk {
-                            saw_first_chunk = true;
-                            tracing::debug!(
-                                target: "ai_gateway.openai_compatible",
-                                request_id = %request_id,
-                                backend_id = %backend_id,
-                                elapsed_ms = request_started_at.elapsed().as_millis() as u64,
-                                chunk_bytes = chunk.len(),
-                                "openai_stream_first_chunk"
-                            );
-                        }
 
-                        buffer.push_str(&String::from_utf8_lossy(&chunk));
-                        while let Some(idx) = buffer.find('\n') {
-                            let line = buffer[..idx].trim_end_matches('\r').to_string();
-                            buffer = buffer[idx + 1..].to_string();
-
-                            if !line.starts_with("data:") {
-                                continue;
-                            }
-
-                            let data = line[5..].trim();
-                            if data.is_empty() {
-                                continue;
-                            }
-                            if data == "[DONE]" {
-                                tracing::debug!(
-                                    target: "ai_gateway.openai_compatible",
-                                    request_id = %request_id,
-                                    backend_id = %backend_id,
-                                    elapsed_ms = request_started_at.elapsed().as_millis() as u64,
-                                    saw_terminal = saw_terminal,
-                                    "openai_stream_done"
-                                );
-                                if !saw_terminal {
-                                    let _ = tx
-                                        .send(Ok(BackendRawEvent::Completed {
-                                            finish_reason: FinishReason::Stop,
-                                        }))
-                                        .await;
-                                }
-                                return;
-                            }
-
-                            let parsed = match serde_json::from_str::<Value>(data) {
-                                Ok(parsed) => parsed,
-                                Err(err) => {
-                                    let _ = tx
-                                        .send(Err(GatewayError::new(
-                                            GatewayErrorKind::ProtocolViolation,
-                                            format!(
-                                                "failed to parse openai-compatible SSE payload: {}",
-                                                err
-                                            ),
-                                        )
-                                        .with_retryable(false)
-                                        .with_backend_id(backend_id.clone())))
-                                        .await;
-                                    return;
-                                }
-                            };
-
-                            match parse_stream_payload(&parsed, &backend_id) {
-                                Ok(events) => {
-                                    for event in events {
-                                        if matches!(event, BackendRawEvent::Completed { .. }) {
-                                            saw_terminal = true;
-                                        }
-                                        if tx.send(Ok(event)).await.is_err() {
-                                            return;
-                                        }
+                    for json in frames {
+                        match parse_stream_delta(&json, &backend_id) {
+                            Ok(events) => {
+                                for event in events {
+                                    if matches!(event, BackendRawEvent::Completed { .. }) {
+                                        saw_terminal = true;
+                                    }
+                                    if tx.send(Ok(event)).await.is_err() {
+                                        return;
                                     }
                                 }
-                                Err(err) => {
-                                    let _ = tx.send(Err(err)).await;
-                                    return;
-                                }
                             }
-                        }
-                    }
-
-                    if !saw_terminal {
-                        tracing::debug!(
-                            target: "ai_gateway.openai_compatible",
-                            request_id = %request_id,
-                            backend_id = %backend_id,
-                            elapsed_ms = request_started_at.elapsed().as_millis() as u64,
-                            "openai_stream_end_without_terminal"
-                        );
-                        let _ = tx
-                            .send(Ok(BackendRawEvent::Completed {
-                                finish_reason: FinishReason::Stop,
-                            }))
-                            .await;
-                    }
-                    tracing::debug!(
-                        target: "ai_gateway.openai_compatible",
-                        request_id = %request_id,
-                        backend_id = %backend_id,
-                        elapsed_ms = request_started_at.elapsed().as_millis() as u64,
-                        saw_first_chunk = saw_first_chunk,
-                        saw_terminal = saw_terminal,
-                        "openai_stream_end"
-                    );
-                    return;
-                }
-
-                let payload = match response.json::<Value>().await {
-                    Ok(payload) => payload,
-                    Err(err) => {
-                        tracing::debug!(
-                            target: "ai_gateway.openai_compatible",
-                            request_id = %request_id,
-                            backend_id = %backend_id,
-                            elapsed_ms = request_started_at.elapsed().as_millis() as u64,
-                            error = %err,
-                            "openai_body_decode_error"
-                        );
-                        let _ = tx
-                            .send(Err(GatewayError::new(
-                                GatewayErrorKind::ProtocolViolation,
-                                format!("openai-compatible body decode failed: {}", err),
-                            )
-                            .with_retryable(false)
-                            .with_backend_id(backend_id.clone())))
-                            .await;
-                        return;
-                    }
-                };
-                tracing::debug!(
-                    target: "ai_gateway.openai_compatible",
-                    request_id = %request_id,
-                    backend_id = %backend_id,
-                    elapsed_ms = request_started_at.elapsed().as_millis() as u64,
-                    "openai_non_stream_payload_ready"
-                );
-
-                match parse_non_stream_payload(&payload, &backend_id) {
-                    Ok(events) => {
-                        for event in events {
-                            if tx.send(Ok(event)).await.is_err() {
+                            Err(err) => {
+                                let _ = tx.send(Err(err)).await;
                                 return;
                             }
                         }
                     }
-                    Err(err) => {
-                        let _ = tx.send(Err(err)).await;
+
+                    if done {
+                        if !saw_terminal {
+                            let _ = tx
+                                .send(Ok(BackendRawEvent::Completed {
+                                    finish_reason: FinishReason::Stop,
+                                }))
+                                .await;
+                        }
+                        return;
                     }
+                }
+
+                if !saw_terminal {
+                    let _ = tx
+                        .send(Ok(BackendRawEvent::Completed {
+                            finish_reason: FinishReason::Stop,
+                        }))
+                        .await;
                 }
             }
             .instrument(dispatch_span),
@@ -564,7 +226,172 @@ impl BackendAdapter for OpenAiCompatibleAdapter {
     }
 }
 
-fn parse_stream_payload(
+// ---------------------------------------------------------------------------
+// Helpers — URL / body
+// ---------------------------------------------------------------------------
+
+fn validated_url(ctx: &AdapterContext) -> Result<String, GatewayError> {
+    let endpoint = ctx.profile.endpoint.clone().ok_or_else(|| {
+        GatewayError::new(
+            GatewayErrorKind::InvalidRequest,
+            "openai-compatible backend requires endpoint",
+        )
+        .with_retryable(false)
+        .with_backend_id(ctx.backend_id.clone())
+    })?;
+    Ok(format!(
+        "{}/chat/completions",
+        endpoint.trim_end_matches('/')
+    ))
+}
+
+fn build_body(model: &str, payload: &TurnPayload, stream: bool) -> Value {
+    let mut body = json!({
+        "model": model,
+        "messages": openai_wire::messages_to_openai(&payload.messages),
+        "stream": stream,
+    });
+
+    if !payload.tools.is_empty() {
+        body["tools"] = Value::Array(openai_wire::tools_to_openai(&payload.tools));
+        body["tool_choice"] = Value::String("auto".to_string());
+    }
+
+    match &payload.output_mode {
+        OutputMode::JsonObject => {
+            body["response_format"] = json!({"type": "json_object"});
+        }
+        OutputMode::JsonSchema {
+            name,
+            schema,
+            strict,
+        } => {
+            body["response_format"] = json!({
+                "type": "json_schema",
+                "json_schema": {
+                    "name": name,
+                    "schema": schema,
+                    "strict": strict
+                }
+            });
+        }
+        OutputMode::Text => {}
+    }
+
+    if let Some(max_tokens) = payload.limits.max_output_tokens {
+        body["max_tokens"] = Value::Number(max_tokens.into());
+    }
+
+    if payload.enable_thinking {
+        body["thinking"] = json!({
+            "type": "enabled",
+            "budget_tokens": payload.limits.max_output_tokens.unwrap_or(10000)
+        });
+        body["enable_thinking"] = json!(true);
+    }
+
+    body
+}
+
+// ---------------------------------------------------------------------------
+// Response parsing — complete (non-stream)
+// ---------------------------------------------------------------------------
+
+fn parse_complete_response(
+    payload: &Value,
+    backend_id: &str,
+    model: &str,
+) -> Result<BackendCompleteResponse, GatewayError> {
+    let choice = payload
+        .get("choices")
+        .and_then(Value::as_array)
+        .and_then(|choices| choices.first())
+        .ok_or_else(|| {
+            GatewayError::new(
+                GatewayErrorKind::ProtocolViolation,
+                "openai-compatible response missing choices",
+            )
+            .with_retryable(false)
+            .with_backend_id(backend_id.to_string())
+        })?;
+
+    let output_text = choice
+        .get("message")
+        .and_then(|m| m.get("content"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+
+    let tool_calls = parse_tool_calls_from_message(choice.get("message"));
+
+    let usage = payload.get("usage").map(parse_usage);
+
+    let finish_reason = wire::parse_finish_reason(
+        choice.get("finish_reason").and_then(Value::as_str),
+    );
+
+    Ok(BackendCompleteResponse {
+        backend_identity: BackendIdentity {
+            backend_id: backend_id.to_string(),
+            dialect: BackendDialect::OpenAiCompatible,
+            model: model.to_string(),
+        },
+        output_text,
+        tool_calls,
+        usage,
+        finish_reason,
+    })
+}
+
+fn parse_tool_calls_from_message(message: Option<&Value>) -> Vec<ToolCallResult> {
+    let Some(tool_calls) = message
+        .and_then(|m| m.get("tool_calls"))
+        .and_then(Value::as_array)
+    else {
+        return Vec::new();
+    };
+
+    tool_calls
+        .iter()
+        .map(|tc| {
+            let id = tc
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or("call_0")
+                .to_string();
+            let name = tc
+                .get("function")
+                .and_then(|f| f.get("name"))
+                .and_then(Value::as_str)
+                .unwrap_or("unknown_tool")
+                .to_string();
+            let arguments_json = tc
+                .get("function")
+                .and_then(|f| f.get("arguments"))
+                .map(|v| {
+                    if let Some(s) = v.as_str() {
+                        s.to_string()
+                    } else {
+                        v.to_string()
+                    }
+                })
+                .unwrap_or_else(|| "{}".to_string());
+
+            ToolCallResult {
+                id,
+                name,
+                arguments_json,
+                status: ToolCallStatus::Ready,
+            }
+        })
+        .collect()
+}
+
+// ---------------------------------------------------------------------------
+// Response parsing — stream
+// ---------------------------------------------------------------------------
+
+fn parse_stream_delta(
     payload: &Value,
     backend_id: &str,
 ) -> Result<Vec<BackendRawEvent>, GatewayError> {
@@ -629,7 +456,7 @@ fn parse_stream_payload(
         let finish_reason = choice.get("finish_reason").and_then(Value::as_str);
         if finish_reason.is_some() {
             events.push(BackendRawEvent::Completed {
-                finish_reason: http_common::parse_finish_reason(finish_reason),
+                finish_reason: wire::parse_finish_reason(finish_reason),
             });
         }
     }
@@ -637,130 +464,9 @@ fn parse_stream_payload(
     Ok(events)
 }
 
-fn parse_non_stream_payload(
-    payload: &Value,
-    backend_id: &str,
-) -> Result<Vec<BackendRawEvent>, GatewayError> {
-    let mut events = Vec::new();
-
-    let choice = payload
-        .get("choices")
-        .and_then(Value::as_array)
-        .and_then(|choices| choices.first())
-        .ok_or_else(|| {
-            GatewayError::new(
-                GatewayErrorKind::ProtocolViolation,
-                "openai-compatible response missing choices",
-            )
-            .with_retryable(false)
-            .with_backend_id(backend_id.to_string())
-        })?;
-
-    if let Some(content) = choice
-        .get("message")
-        .and_then(|message| message.get("content"))
-        .and_then(Value::as_str)
-    {
-        if !content.is_empty() {
-            events.push(BackendRawEvent::OutputTextDelta {
-                delta: content.to_string(),
-            });
-        }
-    }
-
-    if let Some(tool_calls) = choice
-        .get("message")
-        .and_then(|message| message.get("tool_calls"))
-        .and_then(Value::as_array)
-    {
-        for tool_call in tool_calls {
-            let id = tool_call
-                .get("id")
-                .and_then(Value::as_str)
-                .unwrap_or("call_0")
-                .to_string();
-            let name = tool_call
-                .get("function")
-                .and_then(|f| f.get("name"))
-                .and_then(Value::as_str)
-                .unwrap_or("unknown_tool")
-                .to_string();
-            let arguments_json = tool_call
-                .get("function")
-                .and_then(|f| f.get("arguments"))
-                .map(|v| {
-                    if let Some(arguments) = v.as_str() {
-                        arguments.to_string()
-                    } else {
-                        v.to_string()
-                    }
-                })
-                .unwrap_or_else(|| "{}".to_string());
-
-            events.push(BackendRawEvent::ToolCallReady {
-                call: CanonicalToolCall {
-                    id,
-                    name,
-                    arguments_json,
-                    status: ToolCallStatus::Ready,
-                },
-            });
-        }
-    }
-
-    if let Some(usage) = payload.get("usage") {
-        events.push(BackendRawEvent::Usage {
-            usage: parse_usage(usage),
-        });
-    }
-
-    let finish_reason = choice.get("finish_reason").and_then(Value::as_str);
-    events.push(BackendRawEvent::Completed {
-        finish_reason: http_common::parse_finish_reason(finish_reason),
-    });
-
-    Ok(events)
-}
-
-fn aggregate_once_events(
-    events: Vec<BackendRawEvent>,
-    backend_id: &str,
-) -> Result<
-    (
-        String,
-        Vec<CanonicalToolCall>,
-        Option<UsageStats>,
-        FinishReason,
-    ),
-    GatewayError,
-> {
-    let mut output_text = String::new();
-    let mut tool_calls = Vec::new();
-    let mut usage: Option<UsageStats> = None;
-    let mut finish_reason: Option<FinishReason> = None;
-
-    for event in events {
-        match event {
-            BackendRawEvent::OutputTextDelta { delta } => output_text.push_str(&delta),
-            BackendRawEvent::ToolCallReady { call } => tool_calls.push(call),
-            BackendRawEvent::Usage { usage: u } => usage = Some(u),
-            BackendRawEvent::Completed { finish_reason: f } => finish_reason = Some(f),
-            BackendRawEvent::Failed { error } => return Err(error),
-            BackendRawEvent::ToolCallDelta { .. } => {}
-        }
-    }
-
-    let finish_reason = finish_reason.ok_or_else(|| {
-        GatewayError::new(
-            GatewayErrorKind::ProtocolViolation,
-            "openai-compatible response missing terminal finish reason",
-        )
-        .with_retryable(false)
-        .with_backend_id(backend_id.to_string())
-    })?;
-
-    Ok((output_text, tool_calls, usage, finish_reason))
-}
+// ---------------------------------------------------------------------------
+// Usage parsing
+// ---------------------------------------------------------------------------
 
 fn parse_usage(usage: &Value) -> UsageStats {
     UsageStats {

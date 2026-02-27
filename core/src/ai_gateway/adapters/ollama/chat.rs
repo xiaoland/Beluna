@@ -1,39 +1,44 @@
-use std::{
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
-    time::{Duration, Instant},
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
 };
 
 use async_trait::async_trait;
 use futures_util::StreamExt;
-use reqwest::{Client, header};
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::Instrument;
 
 use crate::ai_gateway::{
-    adapters::{BackendAdapter, http_common},
+    adapters::{
+        BackendAdapter,
+        http_stream::{self, HttpRequestConfig},
+    },
+    chat::types::{
+        AdapterInvocation, BackendCompleteResponse, BackendIdentity, BackendRawEvent,
+        FinishReason, ToolCallResult, ToolCallStatus, TurnPayload, UsageStats,
+    },
     error::{GatewayError, GatewayErrorKind},
     types::{AdapterContext, BackendCapabilities, BackendDialect},
-    types_chat::{
-        AdapterInvocation, BackendIdentity, BackendOnceResponse, BackendRawEvent, CanonicalRequest,
-        CanonicalToolCall, FinishReason, ToolCallStatus, UsageStats,
-    },
 };
+
+use super::wire as ollama_wire;
+
+// ---------------------------------------------------------------------------
+// Adapter
+// ---------------------------------------------------------------------------
 
 #[derive(Clone)]
 pub struct OllamaAdapter {
-    client: Client,
+    client: reqwest::Client,
 }
 
 impl Default for OllamaAdapter {
     fn default() -> Self {
         Self {
-            client: Client::builder()
-                .pool_idle_timeout(Duration::from_secs(30))
+            client: reqwest::Client::builder()
+                .pool_idle_timeout(std::time::Duration::from_secs(30))
                 .build()
                 .expect("reqwest client must build"),
         }
@@ -57,396 +62,133 @@ impl BackendAdapter for OllamaAdapter {
         }
     }
 
-    async fn invoke_once(
+    async fn complete(
         &self,
         ctx: AdapterContext,
-        req: CanonicalRequest,
-    ) -> Result<BackendOnceResponse, GatewayError> {
-        let endpoint = ctx.profile.endpoint.clone().ok_or_else(|| {
-            GatewayError::new(
-                GatewayErrorKind::InvalidRequest,
-                "ollama backend requires endpoint",
-            )
-            .with_retryable(false)
-            .with_backend_id(ctx.backend_id.clone())
-        })?;
-
-        let url = format!("{}/api/chat", endpoint.trim_end_matches('/'));
+        payload: &TurnPayload,
+    ) -> Result<BackendCompleteResponse, GatewayError> {
+        let url = validated_url(&ctx)?;
         let backend_id = ctx.backend_id.clone();
-        let model = ctx.model.clone();
-        let request_id = ctx.request_id.clone();
-        let timeout_ms = ctx.timeout.as_millis();
-        tracing::debug!(
-            target: "ai_gateway.ollama",
-            request_id = %request_id,
-            backend_id = %backend_id,
-            model = %model,
-            timeout_ms = timeout_ms as u64,
-            url = %url,
-            "ollama_once_dispatch_start"
-        );
 
-        let mut body = json!({
-            "model": model,
-            "messages": http_common::canonical_messages_to_ollama(&req.messages),
-            "stream": false,
-        });
-
-        if !req.tools.is_empty() {
-            body["tools"] = Value::Array(http_common::tools_to_ollama(&req.tools));
-        }
-        if let Some(max_tokens) = req.limits.max_output_tokens {
-            body["options"] = json!({"num_predict": max_tokens});
-        }
-        if req.enable_thinking {
-            body["think"] = Value::Bool(true);
-        }
-
-        let mut req_builder = self
-            .client
-            .post(url)
-            .timeout(ctx.timeout)
-            .header(header::CONTENT_TYPE, "application/json")
-            .header("x-request-id", request_id.clone())
-            .json(&body);
-
-        if let Some(auth_header) = ctx.credential.auth_header.clone() {
-            req_builder = req_builder.header(header::AUTHORIZATION, auth_header);
-        }
-        for (k, v) in ctx.credential.extra_headers.clone() {
-            req_builder = req_builder.header(k, v);
-        }
-
-        let response = req_builder.send().await.map_err(|err| {
-            GatewayError::new(
-                GatewayErrorKind::BackendTransient,
-                format!("ollama request failed: {}", err),
-            )
-            .with_retryable(true)
-            .with_backend_id(backend_id.clone())
-        })?;
-
-        if !response.status().is_success() {
-            let status = response.status().as_u16();
-            let body = response.text().await.unwrap_or_default();
-            return Err(http_common::map_http_error(status, &backend_id, &body));
-        }
-
-        let payload = response.json::<Value>().await.map_err(|err| {
-            GatewayError::new(
-                GatewayErrorKind::ProtocolViolation,
-                format!("invalid ollama response payload: {}", err),
-            )
-            .with_retryable(false)
-            .with_backend_id(backend_id.clone())
-        })?;
-
-        let events = parse_ollama_payload(&payload)?;
-        let (output_text, tool_calls, usage, finish_reason) =
-            aggregate_once_events(events, &backend_id)?;
-
-        Ok(BackendOnceResponse {
-            backend_identity: BackendIdentity {
-                backend_id,
-                dialect: BackendDialect::Ollama,
-                model: ctx.model,
-            },
-            output_text,
-            tool_calls,
-            usage,
-            finish_reason,
+        let body = build_body(&ctx.model, payload, false);
+        let json_response = http_stream::post_json(&HttpRequestConfig {
+            client: self.client.clone(),
+            url,
+            body,
+            backend_id: backend_id.clone(),
+            request_id: ctx.request_id.clone(),
+            credential: ctx.credential,
+            timeout: ctx.timeout,
         })
+        .await?;
+
+        parse_complete_response(&json_response, &backend_id, &ctx.model)
     }
 
-    async fn invoke_stream(
+    async fn stream(
         &self,
         ctx: AdapterContext,
-        req: CanonicalRequest,
+        payload: &TurnPayload,
     ) -> Result<AdapterInvocation, GatewayError> {
-        let endpoint = ctx.profile.endpoint.clone().ok_or_else(|| {
-            GatewayError::new(
-                GatewayErrorKind::InvalidRequest,
-                "ollama backend requires endpoint",
-            )
-            .with_retryable(false)
-            .with_backend_id(ctx.backend_id.clone())
-        })?;
-
-        let url = format!("{}/api/chat", endpoint.trim_end_matches('/'));
+        let url = validated_url(&ctx)?;
         let cancel_flag = Arc::new(AtomicBool::new(false));
         let cancel_flag_task = cancel_flag.clone();
 
         let (tx, rx) = mpsc::channel::<Result<BackendRawEvent, GatewayError>>(64);
-        let client = self.client.clone();
         let backend_id = ctx.backend_id.clone();
         let model = ctx.model.clone();
         let request_id = ctx.request_id.clone();
-        let credential = ctx.credential.clone();
-        let timeout_ms = ctx.timeout.as_millis();
         let dispatch_span = tracing::debug_span!(
             target: "ai_gateway.ollama",
             "ollama_dispatch",
             request_id = %request_id,
             backend_id = %backend_id,
             model = %model,
-            stream = req.stream,
-            timeout_ms = timeout_ms as u64
         );
+
+        let body = build_body(&model, payload, true);
+        let http_config = HttpRequestConfig {
+            client: self.client.clone(),
+            url,
+            body,
+            backend_id: backend_id.clone(),
+            request_id,
+            credential: ctx.credential.clone(),
+            timeout: ctx.timeout,
+        };
 
         tokio::spawn(
             async move {
-                let request_started_at = Instant::now();
-                tracing::debug!(
-                    target: "ai_gateway.ollama",
-                    request_id = %request_id,
-                    backend_id = %backend_id,
-                    model = %model,
-                    stream = req.stream,
-                    timeout_ms = timeout_ms as u64,
-                    url = %url,
-                    "ollama_dispatch_start"
-                );
-                let mut body = json!({
-                    "model": model,
-                    "messages": http_common::canonical_messages_to_ollama(&req.messages),
-                    "stream": req.stream,
-                });
-
-                if !req.tools.is_empty() {
-                    body["tools"] = Value::Array(http_common::tools_to_ollama(&req.tools));
-                }
-                if let Some(max_tokens) = req.limits.max_output_tokens {
-                    body["options"] = json!({"num_predict": max_tokens});
-                }
-                if req.enable_thinking {
-                    body["think"] = Value::Bool(true);
-                }
-
-                let mut req_builder = client
-                    .post(url)
-                    .timeout(ctx.timeout)
-                    .header(header::CONTENT_TYPE, "application/json")
-                    .header("x-request-id", request_id.clone())
-                    .json(&body);
-
-                if let Some(auth_header) = credential.auth_header {
-                    req_builder = req_builder.header(header::AUTHORIZATION, auth_header);
-                }
-                for (k, v) in credential.extra_headers {
-                    req_builder = req_builder.header(k, v);
-                }
-
-                let response = match req_builder.send().await {
-                    Ok(response) => response,
+                let response = match http_stream::send_post(&http_config).await {
+                    Ok(r) => r,
                     Err(err) => {
-                        tracing::debug!(
-                            target: "ai_gateway.ollama",
-                            request_id = %request_id,
-                            backend_id = %backend_id,
-                            elapsed_ms = request_started_at.elapsed().as_millis() as u64,
-                            error = %err,
-                            "ollama_http_error"
-                        );
-                        let _ = tx
-                            .send(Err(GatewayError::new(
-                                GatewayErrorKind::BackendTransient,
-                                format!("ollama request failed: {}", err),
-                            )
-                            .with_retryable(true)
-                            .with_backend_id(backend_id.clone())))
-                            .await;
+                        let _ = tx.send(Err(err)).await;
                         return;
                     }
                 };
-                tracing::debug!(
-                    target: "ai_gateway.ollama",
-                    request_id = %request_id,
-                    backend_id = %backend_id,
-                    status = response.status().as_u16(),
-                    elapsed_ms = request_started_at.elapsed().as_millis() as u64,
-                    "ollama_http_headers"
-                );
 
-                if !response.status().is_success() {
-                    let status = response.status().as_u16();
-                    let body = response.text().await.unwrap_or_default();
-                    tracing::debug!(
-                        target: "ai_gateway.ollama",
-                        request_id = %request_id,
-                        backend_id = %backend_id,
-                        status = status,
-                        body_bytes = body.len(),
-                        elapsed_ms = request_started_at.elapsed().as_millis() as u64,
-                        "ollama_http_non_success"
-                    );
-                    let _ = tx
-                        .send(Err(http_common::map_http_error(status, &backend_id, &body)))
-                        .await;
-                    return;
-                }
+                let mut byte_stream = response.bytes_stream();
+                let mut buffer = String::new();
+                let mut saw_terminal = false;
 
-                if req.stream {
-                    let mut stream = response.bytes_stream();
-                    let mut buffer = String::new();
-                    let mut saw_terminal = false;
-                    let mut saw_first_chunk = false;
+                while let Some(item) = byte_stream.next().await {
+                    if cancel_flag_task.load(Ordering::SeqCst) {
+                        return;
+                    }
 
-                    while let Some(item) = stream.next().await {
-                        if cancel_flag_task.load(Ordering::SeqCst) {
-                            tracing::debug!(
-                                target: "ai_gateway.ollama",
-                                request_id = %request_id,
-                                backend_id = %backend_id,
-                                elapsed_ms = request_started_at.elapsed().as_millis() as u64,
-                                "ollama_stream_cancelled"
-                            );
+                    let chunk = match item {
+                        Ok(chunk) => chunk,
+                        Err(err) => {
+                            let _ = tx
+                                .send(Err(GatewayError::new(
+                                    GatewayErrorKind::BackendTransient,
+                                    format!("ollama stream chunk error: {}", err),
+                                )
+                                .with_retryable(true)
+                                .with_backend_id(backend_id.clone())))
+                                .await;
                             return;
                         }
+                    };
 
-                        let chunk = match item {
-                            Ok(chunk) => chunk,
+                    buffer.push_str(&String::from_utf8_lossy(&chunk));
+                    let frames =
+                        match http_stream::extract_ndjson_frames(&mut buffer, &backend_id) {
+                            Ok(result) => result,
                             Err(err) => {
-                                tracing::debug!(
-                                    target: "ai_gateway.ollama",
-                                    request_id = %request_id,
-                                    backend_id = %backend_id,
-                                    elapsed_ms = request_started_at.elapsed().as_millis() as u64,
-                                    error = %err,
-                                    "ollama_stream_chunk_error"
-                                );
-                                let _ = tx
-                                    .send(Err(GatewayError::new(
-                                        GatewayErrorKind::BackendTransient,
-                                        format!("ollama stream chunk error: {}", err),
-                                    )
-                                    .with_retryable(true)
-                                    .with_backend_id(backend_id.clone())))
-                                    .await;
+                                let _ = tx.send(Err(err)).await;
                                 return;
                             }
                         };
-                        if !saw_first_chunk {
-                            saw_first_chunk = true;
-                            tracing::debug!(
-                                target: "ai_gateway.ollama",
-                                request_id = %request_id,
-                                backend_id = %backend_id,
-                                elapsed_ms = request_started_at.elapsed().as_millis() as u64,
-                                chunk_bytes = chunk.len(),
-                                "ollama_stream_first_chunk"
-                            );
-                        }
 
-                        buffer.push_str(&String::from_utf8_lossy(&chunk));
-                        while let Some(idx) = buffer.find('\n') {
-                            let line = buffer[..idx].trim_end_matches('\r').to_string();
-                            buffer = buffer[idx + 1..].to_string();
-                            if line.trim().is_empty() {
-                                continue;
-                            }
-
-                            let payload = match serde_json::from_str::<Value>(&line) {
-                                Ok(payload) => payload,
-                                Err(err) => {
-                                    let _ = tx
-                                        .send(Err(GatewayError::new(
-                                            GatewayErrorKind::ProtocolViolation,
-                                            format!("invalid ollama ndjson payload: {}", err),
-                                        )
-                                        .with_retryable(false)
-                                        .with_backend_id(backend_id.clone())))
-                                        .await;
-                                    return;
-                                }
-                            };
-
-                            match parse_ollama_payload(&payload) {
-                                Ok(events) => {
-                                    for event in events {
-                                        if matches!(event, BackendRawEvent::Completed { .. }) {
-                                            saw_terminal = true;
-                                        }
-                                        if tx.send(Ok(event)).await.is_err() {
-                                            return;
-                                        }
+                    for json in frames {
+                        match parse_stream_delta(&json) {
+                            Ok(events) => {
+                                for event in events {
+                                    if matches!(event, BackendRawEvent::Completed { .. }) {
+                                        saw_terminal = true;
+                                    }
+                                    if tx.send(Ok(event)).await.is_err() {
+                                        return;
                                     }
                                 }
-                                Err(err) => {
-                                    let _ =
-                                        tx.send(Err(err.with_backend_id(backend_id.clone()))).await;
-                                    return;
-                                }
                             }
-                        }
-                    }
-
-                    if !saw_terminal {
-                        tracing::debug!(
-                            target: "ai_gateway.ollama",
-                            request_id = %request_id,
-                            backend_id = %backend_id,
-                            elapsed_ms = request_started_at.elapsed().as_millis() as u64,
-                            "ollama_stream_end_without_terminal"
-                        );
-                        let _ = tx
-                            .send(Ok(BackendRawEvent::Completed {
-                                finish_reason: FinishReason::Stop,
-                            }))
-                            .await;
-                    }
-                    tracing::debug!(
-                        target: "ai_gateway.ollama",
-                        request_id = %request_id,
-                        backend_id = %backend_id,
-                        elapsed_ms = request_started_at.elapsed().as_millis() as u64,
-                        saw_first_chunk = saw_first_chunk,
-                        saw_terminal = saw_terminal,
-                        "ollama_stream_end"
-                    );
-                    return;
-                }
-
-                let payload = match response.json::<Value>().await {
-                    Ok(payload) => payload,
-                    Err(err) => {
-                        tracing::debug!(
-                            target: "ai_gateway.ollama",
-                            request_id = %request_id,
-                            backend_id = %backend_id,
-                            elapsed_ms = request_started_at.elapsed().as_millis() as u64,
-                            error = %err,
-                            "ollama_body_decode_error"
-                        );
-                        let _ = tx
-                            .send(Err(GatewayError::new(
-                                GatewayErrorKind::ProtocolViolation,
-                                format!("invalid ollama response payload: {}", err),
-                            )
-                            .with_retryable(false)
-                            .with_backend_id(backend_id.clone())))
-                            .await;
-                        return;
-                    }
-                };
-                tracing::debug!(
-                    target: "ai_gateway.ollama",
-                    request_id = %request_id,
-                    backend_id = %backend_id,
-                    elapsed_ms = request_started_at.elapsed().as_millis() as u64,
-                    "ollama_non_stream_payload_ready"
-                );
-
-                match parse_ollama_payload(&payload) {
-                    Ok(events) => {
-                        for event in events {
-                            if tx.send(Ok(event)).await.is_err() {
+                            Err(err) => {
+                                let _ = tx
+                                    .send(Err(err.with_backend_id(backend_id.clone())))
+                                    .await;
                                 return;
                             }
                         }
                     }
-                    Err(err) => {
-                        let _ = tx.send(Err(err.with_backend_id(backend_id.clone()))).await;
-                    }
+                }
+
+                if !saw_terminal {
+                    let _ = tx
+                        .send(Ok(BackendRawEvent::Completed {
+                            finish_reason: FinishReason::Stop,
+                        }))
+                        .await;
                 }
             }
             .instrument(dispatch_span),
@@ -471,12 +213,133 @@ impl BackendAdapter for OllamaAdapter {
     }
 }
 
-fn parse_ollama_payload(payload: &Value) -> Result<Vec<BackendRawEvent>, GatewayError> {
+// ---------------------------------------------------------------------------
+// Helpers — URL / body
+// ---------------------------------------------------------------------------
+
+fn validated_url(ctx: &AdapterContext) -> Result<String, GatewayError> {
+    let endpoint = ctx.profile.endpoint.clone().ok_or_else(|| {
+        GatewayError::new(
+            GatewayErrorKind::InvalidRequest,
+            "ollama backend requires endpoint",
+        )
+        .with_retryable(false)
+        .with_backend_id(ctx.backend_id.clone())
+    })?;
+    Ok(format!("{}/api/chat", endpoint.trim_end_matches('/')))
+}
+
+fn build_body(model: &str, payload: &TurnPayload, stream: bool) -> Value {
+    let mut body = json!({
+        "model": model,
+        "messages": ollama_wire::messages_to_ollama(&payload.messages),
+        "stream": stream,
+    });
+
+    if !payload.tools.is_empty() {
+        body["tools"] = Value::Array(ollama_wire::tools_to_ollama(&payload.tools));
+    }
+    if let Some(max_tokens) = payload.limits.max_output_tokens {
+        body["options"] = json!({"num_predict": max_tokens});
+    }
+    if payload.enable_thinking {
+        body["think"] = Value::Bool(true);
+    }
+
+    body
+}
+
+// ---------------------------------------------------------------------------
+// Response parsing — complete (non-stream)
+// ---------------------------------------------------------------------------
+
+fn parse_complete_response(
+    payload: &Value,
+    backend_id: &str,
+    model: &str,
+) -> Result<BackendCompleteResponse, GatewayError> {
+    let output_text = payload
+        .get("message")
+        .and_then(|m| m.get("content"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+
+    let tool_calls = parse_tool_calls_from_message(payload.get("message"));
+
+    let done = payload.get("done").and_then(Value::as_bool).unwrap_or(false);
+    if !done {
+        return Err(GatewayError::new(
+            GatewayErrorKind::ProtocolViolation,
+            "ollama complete response missing done:true",
+        )
+        .with_retryable(false)
+        .with_backend_id(backend_id.to_string()));
+    }
+
+    let usage = parse_usage(payload);
+
+    Ok(BackendCompleteResponse {
+        backend_identity: BackendIdentity {
+            backend_id: backend_id.to_string(),
+            dialect: BackendDialect::Ollama,
+            model: model.to_string(),
+        },
+        output_text,
+        tool_calls,
+        usage: Some(usage),
+        finish_reason: FinishReason::Stop,
+    })
+}
+
+fn parse_tool_calls_from_message(message: Option<&Value>) -> Vec<ToolCallResult> {
+    let Some(tool_calls) = message
+        .and_then(|m| m.get("tool_calls"))
+        .and_then(Value::as_array)
+    else {
+        return Vec::new();
+    };
+
+    tool_calls
+        .iter()
+        .map(|tc| {
+            let id = tc
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or("tool_call_0")
+                .to_string();
+            let name = tc
+                .get("function")
+                .and_then(|f| f.get("name"))
+                .and_then(Value::as_str)
+                .unwrap_or("unknown_tool")
+                .to_string();
+            let arguments_json = tc
+                .get("function")
+                .and_then(|f| f.get("arguments"))
+                .map(Value::to_string)
+                .unwrap_or_else(|| "{}".to_string());
+
+            ToolCallResult {
+                id,
+                name,
+                arguments_json,
+                status: ToolCallStatus::Ready,
+            }
+        })
+        .collect()
+}
+
+// ---------------------------------------------------------------------------
+// Response parsing — stream
+// ---------------------------------------------------------------------------
+
+fn parse_stream_delta(payload: &Value) -> Result<Vec<BackendRawEvent>, GatewayError> {
     let mut events = Vec::new();
 
     if let Some(content) = payload
         .get("message")
-        .and_then(|message| message.get("content"))
+        .and_then(|m| m.get("content"))
         .and_then(Value::as_str)
     {
         if !content.is_empty() {
@@ -488,29 +351,29 @@ fn parse_ollama_payload(payload: &Value) -> Result<Vec<BackendRawEvent>, Gateway
 
     if let Some(tool_calls) = payload
         .get("message")
-        .and_then(|message| message.get("tool_calls"))
+        .and_then(|m| m.get("tool_calls"))
         .and_then(Value::as_array)
     {
-        for tool_call in tool_calls {
-            let name = tool_call
+        for tc in tool_calls {
+            let id = tc
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or("tool_call_0")
+                .to_string();
+            let name = tc
                 .get("function")
                 .and_then(|f| f.get("name"))
                 .and_then(Value::as_str)
                 .unwrap_or("unknown_tool")
                 .to_string();
-            let arguments_json = tool_call
+            let arguments_json = tc
                 .get("function")
                 .and_then(|f| f.get("arguments"))
                 .map(Value::to_string)
                 .unwrap_or_else(|| "{}".to_string());
-            let id = tool_call
-                .get("id")
-                .and_then(Value::as_str)
-                .unwrap_or("tool_call_0")
-                .to_string();
 
             events.push(BackendRawEvent::ToolCallReady {
-                call: CanonicalToolCall {
+                call: ToolCallResult {
                     id,
                     name,
                     arguments_json,
@@ -522,19 +385,9 @@ fn parse_ollama_payload(payload: &Value) -> Result<Vec<BackendRawEvent>, Gateway
 
     if let Some(done) = payload.get("done").and_then(Value::as_bool) {
         if done {
-            let usage = UsageStats {
-                input_tokens: payload.get("prompt_eval_count").and_then(Value::as_u64),
-                output_tokens: payload.get("eval_count").and_then(Value::as_u64),
-                total_tokens: match (
-                    payload.get("prompt_eval_count").and_then(Value::as_u64),
-                    payload.get("eval_count").and_then(Value::as_u64),
-                ) {
-                    (Some(a), Some(b)) => Some(a + b),
-                    _ => None,
-                },
-                provider_usage_raw: Some(payload.clone()),
-            };
-            events.push(BackendRawEvent::Usage { usage });
+            events.push(BackendRawEvent::Usage {
+                usage: parse_usage(payload),
+            });
             events.push(BackendRawEvent::Completed {
                 finish_reason: FinishReason::Stop,
             });
@@ -544,42 +397,20 @@ fn parse_ollama_payload(payload: &Value) -> Result<Vec<BackendRawEvent>, Gateway
     Ok(events)
 }
 
-fn aggregate_once_events(
-    events: Vec<BackendRawEvent>,
-    backend_id: &str,
-) -> Result<
-    (
-        String,
-        Vec<CanonicalToolCall>,
-        Option<UsageStats>,
-        FinishReason,
-    ),
-    GatewayError,
-> {
-    let mut output_text = String::new();
-    let mut tool_calls = Vec::new();
-    let mut usage: Option<UsageStats> = None;
-    let mut finish_reason: Option<FinishReason> = None;
+// ---------------------------------------------------------------------------
+// Usage parsing
+// ---------------------------------------------------------------------------
 
-    for event in events {
-        match event {
-            BackendRawEvent::OutputTextDelta { delta } => output_text.push_str(&delta),
-            BackendRawEvent::ToolCallReady { call } => tool_calls.push(call),
-            BackendRawEvent::Usage { usage: u } => usage = Some(u),
-            BackendRawEvent::Completed { finish_reason: f } => finish_reason = Some(f),
-            BackendRawEvent::Failed { error } => return Err(error),
-            BackendRawEvent::ToolCallDelta { .. } => {}
-        }
+fn parse_usage(payload: &Value) -> UsageStats {
+    let input = payload.get("prompt_eval_count").and_then(Value::as_u64);
+    let output = payload.get("eval_count").and_then(Value::as_u64);
+    UsageStats {
+        input_tokens: input,
+        output_tokens: output,
+        total_tokens: match (input, output) {
+            (Some(a), Some(b)) => Some(a + b),
+            _ => None,
+        },
+        provider_usage_raw: Some(payload.clone()),
     }
-
-    let finish_reason = finish_reason.ok_or_else(|| {
-        GatewayError::new(
-            GatewayErrorKind::ProtocolViolation,
-            "ollama response missing terminal finish reason",
-        )
-        .with_retryable(false)
-        .with_backend_id(backend_id.to_string())
-    })?;
-
-    Ok((output_text, tool_calls, usage, finish_reason))
 }

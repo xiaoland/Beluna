@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use serde::Serialize;
 
 use crate::{
-    ai_gateway::types_chat::{ChatResponse, OutputMode},
+    ai_gateway::chat::{OutputMode, TurnResponse},
     cortex::{error::CortexError, testing::TestHooks, types::ReactionLimits},
     types::{NeuralSignalDescriptor, NeuralSignalType},
 };
@@ -61,7 +61,7 @@ pub(crate) trait HelperRuntime: Send + Sync {
         system_prompt: String,
         user_prompt: String,
         output_mode: OutputMode,
-    ) -> Result<ChatResponse, CortexError>;
+    ) -> Result<TurnResponse, CortexError>;
 }
 
 #[derive(Clone, Default)]

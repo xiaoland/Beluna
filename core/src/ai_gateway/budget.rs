@@ -10,9 +10,9 @@ use tokio::{
 };
 
 use crate::ai_gateway::{
+    chat::types::{ChatEvent, TurnLimits},
     error::{GatewayError, GatewayErrorKind},
     types::{BackendId, BudgetConfig},
-    types_chat::{CanonicalRequest, ChatEvent},
 };
 
 #[derive(Clone)]
@@ -48,10 +48,10 @@ impl BudgetEnforcer {
 
     pub async fn pre_dispatch(
         &self,
-        request: &CanonicalRequest,
+        limits: &TurnLimits,
         backend_id: &BackendId,
     ) -> Result<BudgetLease, GatewayError> {
-        if let Some(limit) = request.limits.max_output_tokens {
+        if let Some(limit) = limits.max_output_tokens {
             if let Some(max_usage_tokens_per_request) = self.config.max_usage_tokens_per_request {
                 if limit > max_usage_tokens_per_request {
                     return Err(GatewayError::new(
@@ -89,8 +89,7 @@ impl BudgetEnforcer {
             })?
         };
 
-        let effective_timeout_ms = request
-            .limits
+        let effective_timeout_ms = limits
             .max_request_time_ms
             .map(|requested| requested.min(self.config.max_request_time_ms))
             .unwrap_or(self.config.max_request_time_ms)
