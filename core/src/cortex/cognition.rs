@@ -114,16 +114,12 @@ impl<'de> Deserialize<'de> for GoalForest {
     }
 }
 
-pub type L1Memory = Vec<String>;
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CognitionState {
     #[serde(default)]
     pub revision: u64,
     #[serde(default, alias = "goal_tree")]
     pub goal_forest: GoalForest,
-    #[serde(default)]
-    pub l1_memory: L1Memory,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -178,7 +174,6 @@ impl Default for CognitionState {
         Self {
             revision: 0,
             goal_forest: GoalForest::default(),
-            l1_memory: Vec::new(),
         }
     }
 }

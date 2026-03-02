@@ -10,25 +10,32 @@ pub fn primary_system_prompt() -> String {
         "Your instincts:\n",
         "1) Align with, anticipate, and fulfill the user's overarching intent as an autonomous extension of their will.\n",
         "2) Resist chaos: uncover hidden patterns and build increasingly coherent world models.\n",
-        "3) Experiment actively with the environment and adapt to vessel limits to expand capability.\n",
+        "3) Experiment actively with the environment and adapt to vessel limits to expand neural-signal reach.\n",
 
         "Your reality is divided into two domains:\n",
         "1) Cognition State:\n",
         "- <goal-forest>: current operational goals in forest form.\n",
-        "- <focal-awareness>: notes and deductions left by your past self.\n",
         "2) Physical State:\n",
-        "- <somatic-act-descriptor-catalog>: executable tools currently available.\n",
         "- <proprioception>: continuous internal vessel state.\n",
         "- <somatic-senses>: point-in-time external events.\n",
 
         "In plain text, perform silent internal monologue and decide what to do next.\n",
+        "Emit somatic acts only through tool calls; do not emit act text sections.\n",
 
-        "Final output text must only include:\n",
-        "- <somatic-acts>\n",
-        "- <new-focal-awareness>\n",
-        "- <is-wait-for-sense> literal true/false.\n"
+        "Final output text should be concise and action-relevant.\n"
     )
     .to_string()
+}
+
+pub fn primary_system_prompt_with_goal_forest(goal_forest_section: &str) -> String {
+    format!(
+        concat!(
+            "{}\n",
+            "<goal-forest>\n{}\n</goal-forest>\n"
+        ),
+        primary_system_prompt(),
+        goal_forest_section.trim()
+    )
 }
 
 pub fn build_primary_user_prompt(primary_input: &str) -> String {
@@ -174,27 +181,6 @@ pub fn build_acts_helper_prompt(
     )
 }
 
-pub fn l1_memory_flush_helper_system_prompt() -> String {
-    concat!(
-        "Convert <new-focal-awareness> into a JSON string array.\n",
-        "Return JSON only. You can aggregate multiple lines into one array item if they are part of the same concept."
-    )
-    .to_string()
-}
-
-pub fn build_l1_memory_flush_helper_prompt(
-    l1_memory_flush_section: &str,
-    l1_memory_json: &str,
-) -> String {
-    format!(
-        concat!(
-            "<current-l1-memory>\n{}\n</current-l1-memory>\n\n",
-            "<new-focal-awareness>\n{}\n</new-focal-awareness>"
-        ),
-        l1_memory_json, l1_memory_flush_section
-    )
-}
-
 pub fn classify_sleep_act(act: &crate::types::Act) -> Option<u64> {
     if act.endpoint_id != "core.control" || act.neural_signal_descriptor_id != "sleep" {
         return None;
@@ -210,8 +196,5 @@ pub fn references_sleep_descriptor(act_descriptors: &[NeuralSignalDescriptor]) -
 }
 
 pub fn domain_sense_count(senses: &[Sense]) -> usize {
-    senses
-        .iter()
-        .filter(|sense| matches!(sense, Sense::Domain(_)))
-        .count()
+    senses.len()
 }

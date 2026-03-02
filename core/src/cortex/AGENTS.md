@@ -1,6 +1,9 @@
 # AGENTS.md for core/src/cortex
 
-Cortex is a stateless cognition boundary that consumes `senses + physical_state + cognition_state` and emits `Act[] + new_cognition_state + wait_for_sense`.
+Cortex consumes `senses + physical_state + cognition_state` and emits:
+1. `emitted_acts` (materialized acts with per-act wait metadata),
+2. `new_cognition_state`,
+3. control directives (for example sleep gate).
 
 ## Invariants
 - Cortex can be called with empty senses on tick-driven cycles.
@@ -9,23 +12,26 @@ Cortex is a stateless cognition boundary that consumes `senses + physical_state 
 - Input IR root is `<input-ir>` and Output IR root is `<output-ir>`.
 - Primary accepts only assembled Input IR payload (no direct side channels).
 - Primary runs a bounded cognitive micro-loop (`max_internal_steps`).
-- Internal tools are Internal Cognitive Actions, not Somatic Act outputs.
-- Internal tools are `expand-sense-raw`, `expand-sense-with-sub-agent`, `patch-goal-forest`.
+- Somatic act emission is tool-call-native; prompt text is not used to dispatch acts.
+- Dynamic act tools are generated per turn with transport-safe aliases; aliases are mapped to fq act ids (`endpoint_id/neural_signal_descriptor_id`) in runtime code.
+- Each dynamic act tool accepts:
+  - `payload`
+  - `wait_for_sense` (seconds, `0` means no wait)
+- `wait_for_sense` is bounded by `max_waiting_seconds`.
+- Internal static tools are:
+  - `expand-senses`
+  - `overwrite-sense-deferral-rule`
+  - `reset-sense-deferral-rules`
+  - `sleep`
+  - `patch-goal-forest`
+- `expand-senses` consumes `senses_to_expand[].sense_id` where `sense_id` is the rendered sense reference id:
+  - `{monotonic_internal_sense_id}. {fq-sense-id}`
+- Sense lines delivered to Primary are deterministic text:
+  - `- [monotonic internal sense id]. [fq-sense-id]: [key=value,...]; [payload-truncated-if-needed]`
+- Runtime wait implementation uses afferent deferral-rule control (overwrite/reset path), not a Stem scheduler hook.
 - `patch-goal-forest` tool arguments are a direct JSON string of natural-language patch instructions; Primary does not author patch ops.
 - `goal_forest_helper` runs a one-shot sub-agent to convert `current-goal-forest + patch-instructions` into JSON patch ops.
 - `plant` adds a root node (`numbering=null`), while `sprout` adds a non-root node under a parent selector.
 - Goal instincts are consolidated into Primary system prompt; there is no persisted root partition.
-- Input IR sections are `<somatic-senses>`, `<proprioception>`, `<somatic-act-descriptor-catalog>`, `<goal-forest>`, `<focal-awareness>`.
-- `<goal-forest>` is ASCII-art forest text rendered with `+--` / `|--` by deterministic Rust code.
-- Primary does not emit goal-forest patch sections in Output IR; goal updates happen through `patch-goal-forest` tool calls.
-- Primary output sections are optional; missing sections degrade deterministically:
-  - `<somatic-acts>` => no acts
-  - `<new-focal-awareness>` => keep current l1-memory
-  - `<is-wait-for-sense>` => false
-- Input helpers (`sense_helper`, `proprioception_input_helper`, `act_descriptor_helper`, `goal_forest_helper`, `l1_memory_input_helper`) run concurrently.
-- Output helpers (`acts_helper`, `l1_memory_flush_helper`) run concurrently.
-- `goal_forest_helper` renders input IR deterministically and uses an LLM only for patch-op conversion.
-- `act_descriptor_helper` cache is in-memory and process-scoped (MD5 input hash).
-- Sense helper assigns tick-local monotonic integer `sense-instance-id`; internal sense expansion tools consume these IDs.
-- `acts_helper` owns act structuring/materialization and generates `act_instance_id` in code (UUIDv7).
+- Primary output text no longer carries `<somatic-acts>` / `<is-wait-for-sense>` contracts.
 - Primary failure/timeout is fail-closed noop; helper failures degrade with deterministic fallback.

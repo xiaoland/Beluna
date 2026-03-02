@@ -19,8 +19,8 @@ use beluna::ai_gateway::{
     gateway::AIGateway,
     types::{
         AIGatewayConfig, AdapterContext, BackendCapabilities, BackendDialect, BackendProfile,
-        BudgetConfig, ChatConfig, CredentialRef, ModelProfile, ReliabilityConfig, ResolvedCredential,
-        RetryPolicy,
+        BudgetConfig, ChatConfig, CredentialRef, ModelProfile, ReliabilityConfig,
+        ResolvedCredential, RetryPolicy,
     },
     types_chat::{
         AdapterInvocation, BackendIdentity, BackendOnceResponse, BackendRawEvent,
@@ -153,8 +153,10 @@ impl BackendAdapter for OutputThenFailAdapter {
         _req: CanonicalRequest,
     ) -> Result<BackendOnceResponse, GatewayError> {
         self.calls.fetch_add(1, Ordering::SeqCst);
-        Err(GatewayError::new(GatewayErrorKind::BackendTransient, "once failed")
-            .with_retryable(false))
+        Err(
+            GatewayError::new(GatewayErrorKind::BackendTransient, "once failed")
+                .with_retryable(false),
+        )
     }
 
     async fn invoke_stream(

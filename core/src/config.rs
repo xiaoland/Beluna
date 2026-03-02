@@ -168,8 +168,6 @@ pub struct CortexHelperRoutesConfig {
     pub acts_helper: Option<String>,
     #[serde(default)]
     pub goal_forest_helper: Option<String>,
-    #[serde(default)]
-    pub l1_memory_flush_helper: Option<String>,
 }
 
 impl Default for CortexHelperRoutesConfig {
@@ -181,7 +179,6 @@ impl Default for CortexHelperRoutesConfig {
             act_descriptor_helper: None,
             acts_helper: None,
             goal_forest_helper: None,
-            l1_memory_flush_helper: None,
         }
     }
 }
@@ -237,10 +234,28 @@ fn default_tick_missed_behavior() -> TickMissedBehavior {
     TickMissedBehavior::Skip
 }
 
+fn default_max_deferring_nums() -> usize {
+    256
+}
+
+fn default_afferent_sidecar_capacity() -> usize {
+    128
+}
+
+fn default_efferent_shutdown_drain_timeout_ms() -> u64 {
+    5_000
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CoreLoopConfig {
     #[serde(default = "default_sense_queue_capacity")]
     pub sense_queue_capacity: usize,
+    #[serde(default = "default_max_deferring_nums")]
+    pub max_deferring_nums: usize,
+    #[serde(default = "default_afferent_sidecar_capacity")]
+    pub afferent_sidecar_capacity: usize,
+    #[serde(default = "default_efferent_shutdown_drain_timeout_ms")]
+    pub efferent_shutdown_drain_timeout_ms: u64,
     #[serde(default = "default_tick_interval_ms")]
     pub tick_interval_ms: u64,
     #[serde(default = "default_tick_missed_behavior")]
@@ -251,6 +266,9 @@ impl Default for CoreLoopConfig {
     fn default() -> Self {
         Self {
             sense_queue_capacity: default_sense_queue_capacity(),
+            max_deferring_nums: default_max_deferring_nums(),
+            afferent_sidecar_capacity: default_afferent_sidecar_capacity(),
+            efferent_shutdown_drain_timeout_ms: default_efferent_shutdown_drain_timeout_ms(),
             tick_interval_ms: default_tick_interval_ms(),
             tick_missed_behavior: default_tick_missed_behavior(),
         }

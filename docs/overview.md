@@ -6,10 +6,10 @@ Beluna is a survival-oriented digital life runtime, not a chatbot.
 
 1. Natural language is the protocol across cognition and body affordances.
 2. Cortex is stateless and pure at runtime boundary.
-3. Cortex emits non-binding `Act[]`.
-4. Continuity persists cognition state (`goal-forest` + `l1-memory`) with deterministic guardrails.
+3. Cortex emits non-binding `EmittedAct[]` in `CortexOutput`.
+4. Continuity persists cognition state (`goal-forest`) with deterministic guardrails.
 5. Spine executes acts and can emit dispatch-failure senses.
-6. Stem loop is tick-driven (default 1s, missed tick skip).
+6. Stem emits tick grants; Cortex runtime owns hybrid loop execution (tick + sense + act).
 7. Body endpoints are Beluna's world interfaces.
 8. Neural signal identity is descriptor-based (`sense_id` / `act_id`), while runtime envelopes use `sense_instance_id` / `act_instance_id`.
 9. Proprioception is continuous internal state and is passed to Cortex as `<proprioception>` in Input IR.
@@ -22,42 +22,41 @@ Beluna runtime process:
 
 Beluna Core top-level components:
 1. Cortex (cognition)
-2. Stem (runtime loop/orchestrator)
-3. Continuity (operational memory + capability overlay)
-4. Ledger (resource control, currently short-circuited from Stem dispatch path)
+2. Stem (tick/pathway/physical-state owner)
+3. Continuity (operational cognition memory)
+4. Ledger (resource control)
 5. Spine (execution routing + dispatch-failure sense producer)
 
 Operational flow:
 
 ```text
-[BodyEndpoint, Spine, Continuity, Ledger] -> SenseQueue (bounded mpsc) -> Stem
+[BodyEndpoint, Spine, Continuity, Ledger] -> Afferent Pathway (bounded mpsc + deferral) -> Cortex Runtime
 Stem:
-  drained senses -> apply control patches (descriptor/proprioception) -> compose(physical_state + cognition_state) -> Cortex
-  Cortex -> (acts, new_cognition_state)
+  emits tick grants
+  applies runtime control updates for ns_descriptor/proprioception
+Cortex Runtime:
+  drains afferent senses + tick grants -> Cortex Primary turn
   new_cognition_state -> Continuity persist
-  acts -> async serial dispatch worker: Continuity -> Spine
+  emitted_acts -> Efferent Pathway (FIFO) -> serial dispatch worker: Continuity -> Spine
 ```
 
-Control senses:
-1. `hibernate`: stops Stem loop.
-2. `new_neural_signal_descriptors`: applies patch before same-cycle Cortex call.
-3. `drop_neural_signal_descriptors`: applies drop patch before same-cycle Cortex call.
-4. `new_proprioceptions`: applies proprioception map upsert before same-cycle Cortex call.
-5. `drop_proprioceptions`: applies proprioception key removal before same-cycle Cortex call.
+Runtime control:
+1. Descriptor/proprioception mutations are direct runtime control calls (`Spine runtime -> StemControlPort`).
+2. `hibernate` control sense and Stem sleep act dispatch are removed.
 
 Shutdown flow:
 1. `main` catches SIGINT/SIGTERM.
-2. closes ingress gate (rejects producer sends).
-3. blocks until `hibernate` is enqueued.
-4. waits for Stem completion and runs cleanup.
+2. closes afferent ingress gate.
+3. cancels runtime tasks.
+4. waits for bounded efferent drain and cleanup.
 
 ## Runtime Logging
 
 Core runtime logs are emitted through `tracing` only.
 
 Default behavior:
-1. JSON logs are written to `./logs/core` (relative to process current working directory unless `logging.dir` overrides).
-2. Log file names follow `core.log.<YYYY-MM-DD>.<awake_sequence>` (for example `core.log.2026-02-20.1`, `core.log.2026-02-20.2`).
-3. Retention cleanup removes prefixed historical log files older than `logging.retention_days` (default: 14).
-4. `warn` and `error` are mirrored to stderr when `logging.stderr_warn_enabled=true` (default).
+1. JSON logs are written to `./logs/core` (unless `logging.dir` overrides).
+2. Log file names follow `core.log.<YYYY-MM-DD>.<awake_sequence>`.
+3. Retention cleanup removes historical log files older than `logging.retention_days` (default: 14).
+4. `warn` and `error` are mirrored to stderr when `logging.stderr_warn_enabled=true`.
 5. Log level/filter is configured via `logging.filter` (default: `info`).

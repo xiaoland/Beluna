@@ -25,6 +25,8 @@ Read following documents if needed, and keep them current:
 - [Apple Universal App's AGENTS.md](./apple-universal/AGENTS.md)
 - [CLI's AGENTS.md](./core/AGENTS.md)
 
+> Do NOT use task documents (docs/task) as a source of truth, as they are procedural artifacts and are often outdated.
+
 ## Development Workflow
 
 - You are encouraged to add an AGENTS.md file under modules with significant complexity when needed.

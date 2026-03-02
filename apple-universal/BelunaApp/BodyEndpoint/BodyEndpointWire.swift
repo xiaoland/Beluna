@@ -49,25 +49,27 @@ struct NDJSONEnvelope<Body: Codable>: Codable {
 
 struct AuthBodyWire: Codable {
     let endpointName: String
-    let capabilities: [NeuralSignalDescriptorWire]
+    let nsDescriptors: [NeuralSignalDescriptorWire]
 
     enum CodingKeys: String, CodingKey {
         case endpointName = "endpoint_name"
-        case capabilities
+        case nsDescriptors = "ns_descriptors"
     }
 }
 
 struct SenseBodyWire: Codable {
     let senseID: String
     let neuralSignalDescriptorID: String
-    let payload: JSONValue
-    let metadata: JSONValue?
+    let payload: String
+    let weight: Double
+    let actInstanceID: String?
 
     enum CodingKeys: String, CodingKey {
         case senseID = "sense_instance_id"
         case neuralSignalDescriptorID = "neural_signal_descriptor_id"
         case payload
-        case metadata
+        case weight
+        case actInstanceID = "act_instance_id"
     }
 }
 
@@ -132,7 +134,7 @@ func makeBodyEndpointRegisterEnvelope() -> NDJSONEnvelope<AuthBodyWire> {
         method: "auth",
         body: AuthBodyWire(
             endpointName: runtimeBodyEndpointID,
-            capabilities: [
+            nsDescriptors: [
                 NeuralSignalDescriptorWire(
                     type: .act,
                     endpointID: runtimeBodyEndpointID,
@@ -151,19 +153,13 @@ func makeBodyEndpointRegisterEnvelope() -> NDJSONEnvelope<AuthBodyWire> {
                 makeSenseDescriptor(
                     id: bodyEndpointSensePresentMessageTextSuccessDescriptorID,
                     payloadSchema: .object([
-                        "type": .string("object"),
-                        "properties": .object([:])
+                        "type": .string("string")
                     ])
                 ),
                 makeSenseDescriptor(
                     id: bodyEndpointSensePresentMessageTextFailureDescriptorID,
                     payloadSchema: .object([
-                        "type": .string("object"),
-                        "properties": .object([
-                            "reason_code": .object([
-                                "type": .string("string")
-                            ])
-                        ])
+                        "type": .string("string")
                     ])
                 )
             ]
@@ -177,8 +173,9 @@ func makeUserTextSubmittedSenseEnvelope(text: String) -> NDJSONEnvelope<SenseBod
         body: SenseBodyWire(
             senseID: UUID().uuidString.lowercased(),
             neuralSignalDescriptorID: bodyEndpointSenseUserMessageTextDescriptorID,
-            payload: .string(text),
-            metadata: nil
+            payload: text,
+            weight: 1.0,
+            actInstanceID: nil
         )
     )
 }
@@ -189,10 +186,9 @@ func makeActPresentationSucceededSenseEnvelope(action: InboundActWire) -> NDJSON
         body: SenseBodyWire(
             senseID: UUID().uuidString.lowercased(),
             neuralSignalDescriptorID: bodyEndpointSensePresentMessageTextSuccessDescriptorID,
-            payload: .object([:]),
-            metadata: .object([
-                "act_instance_id": .string(action.actID)
-            ])
+            payload: "presentation_result status=success",
+            weight: 0.0,
+            actInstanceID: action.actID
         )
     )
 }
@@ -206,12 +202,9 @@ func makeActPresentationRejectedSenseEnvelope(
         body: SenseBodyWire(
             senseID: UUID().uuidString.lowercased(),
             neuralSignalDescriptorID: bodyEndpointSensePresentMessageTextFailureDescriptorID,
-            payload: .object([
-                "reason_code": .string(reasonCode)
-            ]),
-            metadata: .object([
-                "act_instance_id": .string(action.actID)
-            ])
+            payload: "presentation_result status=failure reason_code=\(reasonCode)",
+            weight: 1.0,
+            actInstanceID: action.actID
         )
     )
 }

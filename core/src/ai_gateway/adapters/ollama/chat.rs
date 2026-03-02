@@ -16,8 +16,8 @@ use crate::ai_gateway::{
         http_stream::{self, HttpRequestConfig},
     },
     chat::types::{
-        AdapterInvocation, BackendCompleteResponse, BackendIdentity, BackendRawEvent,
-        FinishReason, ToolCallResult, ToolCallStatus, TurnPayload, UsageStats,
+        AdapterInvocation, BackendCompleteResponse, BackendIdentity, BackendRawEvent, FinishReason,
+        ToolCallResult, ToolCallStatus, TurnPayload, UsageStats,
     },
     error::{GatewayError, GatewayErrorKind},
     types::{AdapterContext, BackendCapabilities, BackendDialect},
@@ -152,14 +152,14 @@ impl BackendAdapter for OllamaAdapter {
                     };
 
                     buffer.push_str(&String::from_utf8_lossy(&chunk));
-                    let frames =
-                        match http_stream::extract_ndjson_frames(&mut buffer, &backend_id) {
-                            Ok(result) => result,
-                            Err(err) => {
-                                let _ = tx.send(Err(err)).await;
-                                return;
-                            }
-                        };
+                    let frames = match http_stream::extract_ndjson_frames(&mut buffer, &backend_id)
+                    {
+                        Ok(result) => result,
+                        Err(err) => {
+                            let _ = tx.send(Err(err)).await;
+                            return;
+                        }
+                    };
 
                     for json in frames {
                         match parse_stream_delta(&json) {
@@ -174,9 +174,7 @@ impl BackendAdapter for OllamaAdapter {
                                 }
                             }
                             Err(err) => {
-                                let _ = tx
-                                    .send(Err(err.with_backend_id(backend_id.clone())))
-                                    .await;
+                                let _ = tx.send(Err(err.with_backend_id(backend_id.clone()))).await;
                                 return;
                             }
                         }
@@ -267,7 +265,10 @@ fn parse_complete_response(
 
     let tool_calls = parse_tool_calls_from_message(payload.get("message"));
 
-    let done = payload.get("done").and_then(Value::as_bool).unwrap_or(false);
+    let done = payload
+        .get("done")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     if !done {
         return Err(GatewayError::new(
             GatewayErrorKind::ProtocolViolation,

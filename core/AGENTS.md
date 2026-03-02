@@ -19,9 +19,12 @@ Beluna Core is the runnable runtime and domain agent implementation.
     ├── main.rs
     ├── cli.rs
     ├── config.rs
-    ├── afferent_pathway.rs
     ├── types.rs                 # Sense, Act, Neural-Signal Descriptor and other shared types
     ├── stem.rs
+    ├── stem/
+    │   ├── runtime.rs
+    │   ├── afferent_pathway.rs
+    │   └── efferent_pathway.rs
     ├── cortex/                  # The highness, cognition engine of Beluna
     ├── continuity/
     ├── ledger/
@@ -38,30 +41,35 @@ Beluna Core is the runnable runtime and domain agent implementation.
 
 ## Current State
 
-> Last Updated At: 2026-02-21T16:40+08:00
+> Last Updated At: 2026-03-02T18:05+08:00
 
 ### Live Capabilities
 
 - Core runs as a foreground binary: `beluna [--config <path>]`.
 - Config defaults to `./beluna.jsonc` and validates against `core/beluna.schema.json`.
 - Runtime uses one bounded Rust MPSC sense queue with native sender backpressure.
-- `main` boots continuity/spine/cortex, starts the Stem loop, and listens for SIGTERM/SIGINT.
-- Shutdown closes ingress gate first, then blocks until `hibernate` sense is enqueued.
+- `main` boots continuity/spine/cortex, starts Stem tick runtime and Cortex runtime on separate tasks, and listens for SIGTERM/SIGINT.
+- Shutdown closes ingress gate and cancels runtime tasks (no `hibernate` control sense).
 - Runtime logging is `tracing`-only: JSON file logs named `core.log.<YYYY-MM-DD>.<awake_sequence>` with retention cleanup and optional stderr warn/error mirroring via `logging.*` config.
-- Stem is tick-driven (`loop.tick_interval_ms`, default 10s) with missed tick skip behavior.
-- Stem can invoke Cortex with empty domain senses on timer ticks.
-- Stem waits for incoming sense before next Active tick only when Cortex output declares `wait_for_sense=true` (derived from Primary `<is-wait-for-sense>` tag).
-- Stem composes physical+cognition state (including merged proprioception map), invokes pure Cortex boundary, persists returned cognition state, then enqueues acts into async serial dispatch worker (`Continuity -> Spine`).
-- Control senses:
-  - `hibernate` breaks loop immediately.
-  - `new_neural_signal_descriptors` / `drop_neural_signal_descriptors` mutate capability state before same-cycle Cortex call.
-  - `new_proprioceptions` / `drop_proprioceptions` mutate proprioception state before same-cycle Cortex call.
-- Stem exposes a built-in act descriptor `core.control/sleep` with payload `{seconds}` for timed sleep mode.
-- Continuity persists cognition state (`goal-tree` + `l1-memory`) to JSON and enforces deterministic guardrails.
-- Continuity and Spine both hold afferent-pathway sender handles.
+- Stem is tick-driven (`loop.tick_interval_ms`, default 10s) and only emits tick grants.
+- Cortex owns cycle execution (hybrid tick + sense trigger), persists cognition state through Continuity, and enqueues acts to the efferent pathway.
+- Cortex Primary act tools emit per-act `wait_for_sense` integer seconds (`0` means no wait) and use unified `expand-senses`.
+- Stem owns physical state mutation for `ns_descriptor`/proprioception through `StemControlPort` + shared store.
+- Control senses were removed from afferent flow; descriptor/proprioception updates are direct runtime control calls.
+- Continuity persists cognition state (`goal-forest`) to JSON and enforces deterministic guardrails.
+- Afferent queue carries domain senses only and runs a deferral scheduler before Cortex consumption.
+- Deferral rules are managed by pathway-owned control API:
+  - `overwrite_rule` upserts one rule by `rule_id`.
+  - `reset_rules` clears all rules.
+  - `min_weight` selector defers when `sense.weight < min_weight`.
+  - `fq-sense-id` selector defers when regex matches `endpoint_id/neural_signal_descriptor_id`.
+- Deferred senses are buffered FIFO with `loop.max_deferring_nums` cap; overflow evicts oldest deferred entries with warnings.
+- Afferent sidecar is observe-only and emits rule/defer/release/eviction events.
+- Efferent shutdown drains with bounded timeout (`loop.efferent_shutdown_drain_timeout_ms`) before forced drop.
 - Spine `on_act_final` emits dispatch-failure senses to afferent pathway on reject/lost.
 - Built-in inline body endpoints (shell/web under `core/src/body`) are started by `main` after Spine boot, each on a dedicated thread, and attach through Spine Inline Adapter configured in `spine.adapters`.
-- External body endpoints register over UnixSocket and publish senses/capability patches.
+- External body endpoints register over UnixSocket and publish text-payload senses (`payload`, `weight`, optional `act_instance_id`).
+- Adapter-initiated descriptor/proprioception updates flow `adapter -> Spine runtime -> StemControlPort` (adapters do not call Stem directly).
 - AI Gateway MVP provides deterministic routing, strict normalization, reliability controls, budget enforcement, and tracing-structured telemetry events.
 
 ### Known Limitations & Mocks

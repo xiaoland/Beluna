@@ -16,7 +16,7 @@ struct BelunaAppTests {
 
         #expect(envelope.method == "auth")
         #expect(envelope.body.endpointName == runtimeBodyEndpointID)
-        #expect(envelope.body.capabilities.count == 4)
+        #expect(envelope.body.nsDescriptors.count == 4)
         #expect(UUID(uuidString: envelope.id) != nil)
         #expect(envelope.timestamp > 0)
     }
@@ -25,7 +25,7 @@ struct BelunaAppTests {
         let envelope = makeBodyEndpointRegisterEnvelope()
         guard let descriptor = descriptor(
             withID: bodyEndpointActPresentMessageTextDescriptorID,
-            in: envelope.body.capabilities
+            in: envelope.body.nsDescriptors
         ) else {
             Issue.record("missing act descriptor \(bodyEndpointActPresentMessageTextDescriptorID)")
             return
@@ -46,7 +46,7 @@ struct BelunaAppTests {
 
         guard let userSense = descriptor(
             withID: bodyEndpointSenseUserMessageTextDescriptorID,
-            in: envelope.body.capabilities
+            in: envelope.body.nsDescriptors
         ) else {
             Issue.record("missing sense descriptor \(bodyEndpointSenseUserMessageTextDescriptorID)")
             return
@@ -55,7 +55,7 @@ struct BelunaAppTests {
 
         guard let successSense = descriptor(
             withID: bodyEndpointSensePresentMessageTextSuccessDescriptorID,
-            in: envelope.body.capabilities
+            in: envelope.body.nsDescriptors
         ) else {
             Issue.record("missing sense descriptor \(bodyEndpointSensePresentMessageTextSuccessDescriptorID)")
             return
@@ -65,7 +65,7 @@ struct BelunaAppTests {
 
         guard let failureSense = descriptor(
             withID: bodyEndpointSensePresentMessageTextFailureDescriptorID,
-            in: envelope.body.capabilities
+            in: envelope.body.nsDescriptors
         ) else {
             Issue.record("missing sense descriptor \(bodyEndpointSensePresentMessageTextFailureDescriptorID)")
             return
@@ -193,9 +193,9 @@ struct BelunaAppTests {
 
     private func descriptor(
         withID id: String,
-        in capabilities: [NeuralSignalDescriptorWire]
+        in nsDescriptors: [NeuralSignalDescriptorWire]
     ) -> NeuralSignalDescriptorWire? {
-        capabilities.first(where: { $0.neuralSignalDescriptorID == id })
+        nsDescriptors.first(where: { $0.neuralSignalDescriptorID == id })
     }
 
 }

@@ -4,14 +4,11 @@ use crate::cortex::cognition::{CognitionState, GoalForestPatchOp, GoalNode};
 
 pub(crate) struct CognitionPatchApplyResult {
     pub new_cognition_state: CognitionState,
-    pub l1_memory_overflow_count: usize,
 }
 
 pub(crate) fn apply_cognition_patches(
     previous: &CognitionState,
     goal_forest_ops: &[GoalForestPatchOp],
-    l1_memory_flush: &[String],
-    max_l1_memory_entries: usize,
 ) -> CognitionPatchApplyResult {
     let mut next = previous.clone();
     let mut changed = false;
@@ -22,18 +19,11 @@ pub(crate) fn apply_cognition_patches(
         }
     }
 
-    let (l1_memory_changed, l1_memory_overflow_count) =
-        apply_l1_memory_flush(&mut next.l1_memory, l1_memory_flush, max_l1_memory_entries);
-    if l1_memory_changed {
-        changed = true;
-    }
-
     if changed {
         next.revision = next.revision.saturating_add(1);
     }
     CognitionPatchApplyResult {
         new_cognition_state: next,
-        l1_memory_overflow_count,
     }
 }
 
@@ -62,15 +52,13 @@ pub(crate) fn apply_goal_forest_op(nodes: &mut Vec<GoalNode>, op: &GoalForestPat
 
             let parent_id_value = nodes[parent_index].id.clone();
             let parent_numbering_value = nodes[parent_index].numbering.as_deref();
-            let resolved_numbering = match numbering {
-                Some(value) => {
-                    let trimmed = value.trim();
-                    if trimmed.is_empty() {
-                        return false;
-                    }
-                    trimmed.to_string()
-                }
-                None => next_child_numbering(nodes, parent_id_value.as_str(), parent_numbering_value),
+            let Some(resolved_numbering) = resolve_sprout_numbering(
+                nodes,
+                numbering.as_deref(),
+                parent_id_value.as_str(),
+                parent_numbering_value,
+            ) else {
+                return false;
             };
 
             if !is_direct_child_numbering(&resolved_numbering, parent_numbering_value) {
@@ -136,6 +124,24 @@ pub(crate) fn apply_goal_forest_op(nodes: &mut Vec<GoalNode>, op: &GoalForestPat
     }
 }
 
+fn resolve_sprout_numbering(
+    nodes: &[GoalNode],
+    requested_numbering: Option<&str>,
+    parent_id: &str,
+    parent_numbering: Option<&str>,
+) -> Option<String> {
+    match requested_numbering {
+        Some(value) => {
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                return None;
+            }
+            Some(trimmed.to_string())
+        }
+        None => Some(next_child_numbering(nodes, parent_id, parent_numbering)),
+    }
+}
+
 fn insert_goal_node(
     nodes: &mut Vec<GoalNode>,
     parent_id: Option<String>,
@@ -169,7 +175,8 @@ fn insert_goal_node(
             }
         }
         Some(parent_id_value) => {
-            let Some(parent_index) = nodes.iter().position(|node| node.id == parent_id_value) else {
+            let Some(parent_index) = nodes.iter().position(|node| node.id == parent_id_value)
+            else {
                 return false;
             };
             let Some(numbering_value) = numbering.as_deref() else {
@@ -178,7 +185,8 @@ fn insert_goal_node(
             if !is_valid_numbering(numbering_value) {
                 return false;
             }
-            if !is_direct_child_numbering(numbering_value, nodes[parent_index].numbering.as_deref()) {
+            if !is_direct_child_numbering(numbering_value, nodes[parent_index].numbering.as_deref())
+            {
                 return false;
             }
             if nodes.iter().any(|node| {
@@ -221,26 +229,15 @@ fn collect_descendant_ids(nodes: &[GoalNode], target_id: &str) -> BTreeSet<Strin
     ids
 }
 
-fn apply_l1_memory_flush(
-    l1_memory: &mut Vec<String>,
-    flush_entries: &[String],
-    max_l1_memory_entries: usize,
-) -> (bool, usize) {
-    let max_entries = max_l1_memory_entries.max(1);
-    let truncated: Vec<String> = flush_entries.iter().take(max_entries).cloned().collect();
-    let overflow_count = flush_entries.len().saturating_sub(max_entries);
-    let changed = *l1_memory != truncated;
-    if changed {
-        *l1_memory = truncated;
-    }
-    (changed, overflow_count)
-}
-
 fn is_valid_weight(weight: f64) -> bool {
     weight.is_finite() && (0.0..=1.0).contains(&weight)
 }
 
-fn resolve_selector_index(nodes: &[GoalNode], numbering: Option<&str>, id: Option<&str>) -> Option<usize> {
+fn resolve_selector_index(
+    nodes: &[GoalNode],
+    numbering: Option<&str>,
+    id: Option<&str>,
+) -> Option<usize> {
     if numbering.is_none() && id.is_none() {
         return None;
     }

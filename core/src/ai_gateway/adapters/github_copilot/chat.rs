@@ -17,7 +17,7 @@ use tracing::Instrument;
 use crate::ai_gateway::{
     adapters::{BackendAdapter, github_copilot::rpc::RpcIo},
     chat::types::{
-        AdapterInvocation, BackendIdentity, BackendCompleteResponse, BackendRawEvent, ContentPart,
+        AdapterInvocation, BackendCompleteResponse, BackendIdentity, BackendRawEvent, ContentPart,
         FinishReason, TurnPayload,
     },
     error::{GatewayError, GatewayErrorKind},

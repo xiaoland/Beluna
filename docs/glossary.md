@@ -1,24 +1,24 @@
 # Product Glossary
 
-- Cortex: Stateless cognition boundary `cortex(senses, physical_state, cognition_state) -> (acts, new_cognition_state, wait_for_sense)`.
-- Stem: Runtime loop that consumes senses, invokes cortex, persists cognition, and dispatches acts serially.
-- Continuity: Operational state owner for cognition persistence and capability overlay patch/drop.
-- Ledger: Survival budget subsystem that reserves, settles, refunds, expires, and records debits.
-- Spine: Transport-agnostic execution substrate that routes acts and emits ordered settlement events.
+- Cortex: Stateless cognition boundary `cortex(senses, physical_state, cognition_state) -> CortexOutput`.
+- CortexOutput: `{ emitted_acts, new_cognition_state, control }`.
+- EmittedAct: `{ act, wait_for_sense_seconds, expected_fq_sense_ids }`.
+- Stem: Runtime subsystem that owns tick grants, physical state mutation, and pathway construction.
+- Continuity: Operational cognition persistence and act-gating owner.
+- Spine: Transport-agnostic execution substrate that routes acts and emits dispatch-failure senses.
 - Neural Signal: Canonical signal category with two types: `sense` and `act`.
-- Sense: One neural signal type used for ingress.
-- Act: One neural signal type used for executable proposals.
-- Sense ID / Act ID: In cognition contracts, this refers to neural signal descriptor identity.
-- Sense Instance ID / Act Instance ID: Runtime event instance identity. In Cortex Primary IR, `sense-instance-id` is a tick-local monotonic integer mapped from runtime sense events.
-- Fully-Qualified Neural Signal ID: `endpoint_id + neural_signal_descriptor_id` combined identity.
-- Sense Queue: Bounded Rust MPSC queue shared by all afferent producers.
-- Capability Patch: Incremental upsert payload for capability catalog updates.
-- Capability Drop Patch: Incremental removal payload by route key.
-- Proprioception: Continuous internal state Beluna holds as key/value properties.
-- Proprioception Patch: Incremental upsert payload for proprioception map updates.
-- Proprioception Drop Patch: Incremental removal payload by proprioception keys.
-- Physical State: Current ledger snapshot + merged capabilities + merged proprioception visible to Cortex.
-- Cognition State: Persisted goal-tree + l1-memory state.
+- Sense: Ingress neural signal with text payload, `weight`, and optional `act_instance_id`.
+- Act: Executable neural signal proposal emitted by Cortex and dispatched by efferent pipeline.
+- Sense ID / Act ID: Neural signal descriptor identity.
+- Sense Instance ID / Act Instance ID: Runtime event identity.
+- Fully-Qualified Neural Signal ID: `endpoint_id/neural_signal_descriptor_id`.
+- Sense Queue: Bounded Rust MPSC ingress queue wrapped by afferent pathway.
+- Afferent Deferral Rule: Pathway rule that defers senses by `min_weight` and/or fq-sense-id regex.
+- Efferent Pathway: Stem-owned FIFO act queue consumed serially by `Continuity -> Spine`.
+- wait_for_sense_seconds: Per-act bounded wait directive (`0` means no wait).
+- expected_fq_sense_ids: Optional emitted-sense ids declared by act descriptor, used to correlate wait completion.
+- expand-senses: Primary tool for sense expansion with `mode: raw|sub-agent` and `senses_to_expand[].sense_id`.
+- Physical State: Ledger snapshot + `ns_descriptor` catalog + proprioception visible to Cortex.
+- Cognition State: Persisted goal-forest state.
 - Dispatch Decision: Pipeline control signal (`Continue` or `Break`) for current act only.
-- Route Key: Composite (`endpoint_id`, `capability_id`) routing identity in Spine.
-- Reservation Terminality: Exactly one terminal transition per reservation (`Settled`, `Refunded`, `Expired`), idempotent by reference.
+- Route Key: Composite (`type`, `endpoint_id`, `neural_signal_descriptor_id`) routing identity in Spine.

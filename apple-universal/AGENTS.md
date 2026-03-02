@@ -27,7 +27,7 @@ Beluna Apple Universal App is the app that bridges human interaction with Beluna
 
 ## Current State
 
-> Last Updated At: 2026-02-24T21:40+08:00
+> Last Updated At: 2026-03-02T17:40+08:00
 
 ### Live Capabilities
 
@@ -45,15 +45,13 @@ Beluna Apple Universal App is the app that bridges human interaction with Beluna
 - Clicking a cortex cycle card opens a popup that lists per-stage organ activity messages with selectable input/output payload text.
 - Chat view keeps a bounded in-memory message ring buffer and incrementally loads older/newer pages on scroll.
 - Beluna lifecycle state uses `Hibernate` (instead of `Sleeping`) when Core is unavailable after connection history exists.
-- Auth capability descriptors follow Apple endpoint identity and semantic IDs:
-  - endpoint IDs: `apple-universal` / `macos-app` / `ios-app`
-  - act: `present.message.text`
-  - senses: `user.message.text`, `present.message.text.success`, `present.message.text.failure`
-  - sense payload schemas are intentionally simple:
-    - `user.message.text`: `{ "type": "string" }`
-    - `present.message.text.success`: `{ "type": "object", "properties": {} }` (without `additionalProperties`)
-    - `present.message.text.failure`: object with `reason_code` string (without `additionalProperties`)
-  - correlated result senses carry `act_instance_id` in neural-signal `metadata` (not in payload)
+- Auth `ns_descriptors` follow Apple endpoint identity and semantic IDs:
+- endpoint IDs: `apple-universal` / `macos-app` / `ios-app`
+- act: `present.message.text`
+- senses: `user.message.text`, `present.message.text.success`, `present.message.text.failure`
+- sense payload schemas are intentionally simple and text-only.
+- correlated result senses carry `act_instance_id` as sense body field.
+- Spine may canonicalize endpoint id to generated body endpoint id on auth.
 
 ### Known Limitations & Mocks
 

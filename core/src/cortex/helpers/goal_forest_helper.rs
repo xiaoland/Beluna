@@ -157,13 +157,7 @@ pub(crate) fn goal_forest_ascii(goal_forest_nodes: &[GoalNode]) -> String {
 
     if let Some(roots) = children_by_parent.get(&None) {
         for root in roots {
-            append_goal_node_lines(
-                &mut lines,
-                &mut visited,
-                &children_by_parent,
-                root,
-                0,
-            );
+            append_goal_node_lines(&mut lines, &mut visited, &children_by_parent, root, 0);
         }
     }
 
@@ -171,13 +165,7 @@ pub(crate) fn goal_forest_ascii(goal_forest_nodes: &[GoalNode]) -> String {
         if visited.contains(node.id.as_str()) {
             continue;
         }
-        append_goal_node_lines(
-            &mut lines,
-            &mut visited,
-            &children_by_parent,
-            node,
-            0,
-        );
+        append_goal_node_lines(&mut lines, &mut visited, &children_by_parent, node, 0);
     }
 
     lines.join("\n")

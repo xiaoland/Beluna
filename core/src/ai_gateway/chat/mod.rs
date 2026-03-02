@@ -8,6 +8,8 @@ pub mod types;
 pub use api::{Chat, ChatFactory, ChatOptions, Thread, ThreadOptions, TurnInput, TurnOutput};
 pub use tool::{ChatToolDefinition, ToolOverride};
 pub use types::{
-    ChatEvent, ChatEventStream, ChatMessage, ChatRole, ContentPart, FinishReason, MessageToolCall,
-    OutputMode, ToolCallResult, TurnLimits, TurnResponse, UsageStats,
+    ChatEvent, ChatEventStream, ChatMessage, ChatRole, ContentPart, FinishReason,
+    MessageBoundarySelector, MessageRangeSelector, MessageToolCall, OutputMode, SystemPromptUpdate,
+    ThreadMessageMutationOutcome, ThreadMessageMutationRequest, ToolCallResult, TurnLimits,
+    TurnResponse, UsageStats,
 };

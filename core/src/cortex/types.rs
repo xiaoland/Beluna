@@ -2,16 +2,16 @@ use serde::{Deserialize, Serialize};
 
 use crate::{cortex::cognition::CognitionState, types::Act};
 
-fn default_max_l1_memory_entries() -> usize {
-    10
-}
-
 fn default_max_internal_steps() -> u8 {
     4
 }
 
 fn default_sense_passthrough_max_bytes() -> usize {
     2_048
+}
+
+fn default_max_waiting_seconds() -> u64 {
+    30
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -31,8 +31,8 @@ pub struct ReactionLimits {
     pub max_internal_steps: u8,
     #[serde(default = "default_sense_passthrough_max_bytes")]
     pub sense_passthrough_max_bytes: usize,
-    #[serde(default = "default_max_l1_memory_entries")]
-    pub max_l1_memory_entries: usize,
+    #[serde(default = "default_max_waiting_seconds")]
+    pub max_waiting_seconds: u64,
 }
 
 impl Default for ReactionLimits {
@@ -48,18 +48,33 @@ impl Default for ReactionLimits {
             max_sub_output_tokens: 768,
             max_internal_steps: default_max_internal_steps(),
             sense_passthrough_max_bytes: default_sense_passthrough_max_bytes(),
-            max_l1_memory_entries: default_max_l1_memory_entries(),
+            max_waiting_seconds: default_max_waiting_seconds(),
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EmittedAct {
+    pub act: Act,
+    #[serde(default)]
+    pub wait_for_sense_seconds: u64,
+    #[serde(default)]
+    pub expected_fq_sense_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct CortexControlDirective {
+    #[serde(default)]
+    pub ignore_all_trigger_for_seconds: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CortexOutput {
     #[serde(default)]
-    pub acts: Vec<Act>,
+    pub emitted_acts: Vec<EmittedAct>,
     pub new_cognition_state: CognitionState,
     #[serde(default)]
-    pub wait_for_sense: bool,
+    pub control: CortexControlDirective,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

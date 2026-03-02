@@ -342,7 +342,7 @@
               "type": "integer",
               "minimum": 1
             },
-            "max_l1_memory_entries": {
+            "max_waiting_seconds": {
               "type": "integer",
               "minimum": 1
             }
@@ -393,12 +393,6 @@
                 "string",
                 "null"
               ]
-            },
-            "l1_memory_flush_helper": {
-              "type": [
-                "string",
-                "null"
-              ]
             }
           },
           "additionalProperties": false
@@ -420,6 +414,18 @@
       "type": "object",
       "properties": {
         "sense_queue_capacity": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_deferring_nums": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "afferent_sidecar_capacity": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "efferent_shutdown_drain_timeout_ms": {
           "type": "integer",
           "minimum": 1
         },

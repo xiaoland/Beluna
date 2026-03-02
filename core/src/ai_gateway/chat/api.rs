@@ -14,8 +14,8 @@ use super::{
     store::{ThreadStore, TurnCommitOutcome},
     tool::{ChatToolDefinition, ToolOverride, resolve_tools},
     types::{
-        ChatEventStream, ChatMessage, ChatRole, ContentPart, OutputMode, TurnLimits, TurnPayload,
-        TurnResponse,
+        ChatEventStream, ChatMessage, ChatRole, ContentPart, OutputMode, ThreadMessageMutationOutcome,
+        ThreadMessageMutationRequest, TurnLimits, TurnPayload, TurnResponse,
     },
 };
 
@@ -194,7 +194,12 @@ impl Thread {
         let prepared = self
             .chat
             .store
-            .prepare_turn(&self.chat.chat_id, &self.thread_id, &input.messages)
+            .prepare_turn(
+                &self.chat.chat_id,
+                &self.thread_id,
+                &input.messages,
+                self.chat.system_prompt.as_deref(),
+            )
             .await?;
 
         let turn_id = prepared.turn_id;
@@ -219,8 +224,8 @@ impl Thread {
             limits.max_request_time_ms = Some(self.chat.default_turn_timeout_ms);
         }
 
-        // Prepend system prompt if present
-        let messages = if let Some(ref sys) = self.chat.system_prompt {
+        // Prepend effective system prompt snapshot if present.
+        let messages = if let Some(ref sys) = prepared.system_prompt {
             let mut msgs = Vec::with_capacity(prepared.messages.len() + 1);
             msgs.push(ChatMessage {
                 role: ChatRole::System,
@@ -351,6 +356,29 @@ impl Thread {
             "thread streaming is not yet implemented; use complete()",
         )
         .with_retryable(false))
+    }
+
+    pub async fn mutate_messages_atomically(
+        &self,
+        request: ThreadMessageMutationRequest,
+    ) -> Result<ThreadMessageMutationOutcome, GatewayError> {
+        let outcome = self
+            .chat
+            .store
+            .mutate_thread_messages_atomically(&self.chat.chat_id, &self.thread_id, request)
+            .await?;
+
+        tracing::info!(
+            target: "ai_gateway",
+            event = "chat_thread_message_mutation",
+            chat_id = %self.chat.chat_id,
+            thread_id = %self.thread_id,
+            removed_messages = outcome.removed_messages,
+            remaining_messages = outcome.remaining_messages,
+            effective_system_prompt_changed = outcome.effective_system_prompt_changed,
+            "chat_thread_message_mutation"
+        );
+        Ok(outcome)
     }
 }
 

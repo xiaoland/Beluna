@@ -86,6 +86,8 @@ struct NeuralSignalDescriptor {
     endpoint_id: String,
     neural_signal_descriptor_id: String,
     payload_schema: serde_json::Value,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    emitted_sense_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -102,14 +104,17 @@ where
 #[derive(Debug, Clone, PartialEq, Serialize)]
 struct AuthBody {
     endpoint_name: String,
-    capabilities: Vec<NeuralSignalDescriptor>,
+    ns_descriptors: Vec<NeuralSignalDescriptor>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 struct SenseBody {
     sense_instance_id: String,
     neural_signal_descriptor_id: String,
-    payload: serde_json::Value,
+    payload: String,
+    weight: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    act_instance_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -159,7 +164,7 @@ async fn main() -> Result<()> {
         "auth",
         AuthBody {
             endpoint_name: options.endpoint_name.clone(),
-            capabilities: vec![
+            ns_descriptors: vec![
                 plain_text_descriptor(&options.endpoint_name),
                 user_message_descriptor(&options.endpoint_name),
             ],
@@ -202,12 +207,14 @@ async fn main() -> Result<()> {
                             SenseBody {
                                 sense_instance_id: uuid::Uuid::new_v4().to_string(),
                                 neural_signal_descriptor_id: USER_MESSAGE_NEURAL_SIGNAL_DESCRIPTOR_ID.to_string(),
-                                payload: serde_json::json!({
-                                    "kind": "user_message",
-                                    "text": message,
-                                    "seq_no": counter.fetch_add(1, Ordering::Relaxed),
-                                    "timestamp_ms": now_epoch_millis(),
-                                }),
+                                payload: format!(
+                                    "user_message seq_no={} timestamp_ms={}\n{}",
+                                    counter.fetch_add(1, Ordering::Relaxed),
+                                    now_epoch_millis(),
+                                    message
+                                ),
+                                weight: 1.0,
+                                act_instance_id: None,
                             },
                         )
                         .await?;
@@ -304,6 +311,7 @@ fn plain_text_descriptor(endpoint_name: &str) -> NeuralSignalDescriptor {
                 "text": { "type": "string" }
             }
         }),
+        emitted_sense_ids: Vec::new(),
     }
 }
 
@@ -312,16 +320,8 @@ fn user_message_descriptor(endpoint_name: &str) -> NeuralSignalDescriptor {
         r#type: NeuralSignalType::Sense,
         endpoint_id: endpoint_name.to_string(),
         neural_signal_descriptor_id: USER_MESSAGE_NEURAL_SIGNAL_DESCRIPTOR_ID.to_string(),
-        payload_schema: serde_json::json!({
-            "type": "object",
-            "required": ["kind", "text"],
-            "properties": {
-                "kind": { "type": "string" },
-                "text": { "type": "string" },
-                "seq_no": { "type": "integer" },
-                "timestamp_ms": { "type": "integer" }
-            }
-        }),
+        payload_schema: serde_json::json!({ "type": "string" }),
+        emitted_sense_ids: Vec::new(),
     }
 }
 

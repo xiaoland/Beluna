@@ -1,28 +1,23 @@
 # Stem Module
 
-Stem is the runtime orchestrator for tick scheduling, sense ingestion, Cortex invocation, and serial act dispatch.
+Stem is the runtime substrate for ticks, pathway ownership, and physical-state mutation.
 
 Code:
 - `core/src/stem.rs`
-- `core/src/afferent_pathway.rs`
+- `core/src/stem/runtime.rs`
+- `core/src/stem/afferent_pathway.rs`
+- `core/src/stem/efferent_pathway.rs`
 
 Key properties:
-- one bounded sense queue with backpressure
-- no act queue; inline serial dispatch
-- interval/tick-driven loop (default 1s, missed tick skip)
-- dispatch stages per act: Continuity -> Spine
-- stage decision contract: `Continue` / `Break`
-- `Break` affects current act only
-- shutdown path gates ingress before blocking hibernate enqueue
-- built-in Stem control act: `core.control/sleep` with `seconds`
+1. Stem runtime does not invoke Cortex.
+2. Stem emits tick grants consumed by Cortex runtime.
+3. Stem owns canonical `Arc<RwLock<PhysicalState>>` writer path via `StemControlPort`.
+4. Afferent pathway is Stem-owned and consumed by Cortex runtime.
+5. Efferent pathway is Stem-owned FIFO and consumed serially as `Continuity -> Spine`.
+6. Shutdown supports bounded efferent drain timeout.
 
 Communication model:
-- Afferent-Pathway:
-  - producers: body endpoints (via Spine adapters), Spine failures, Main shutdown, Continuity (reserved)
-  - consumer: Stem loop
-- Efferent-Pathway:
-  - producer: Stem (from Cortex acts)
-  - consumers: Continuity middleware then Spine routing
-
-See also:
-- [Observability Module](../observability/README.md)
+1. Afferent producers: Spine adapters, Spine dispatch-failure emitter, other runtime producers.
+2. Afferent consumer: Cortex runtime.
+3. Efferent producer: Cortex runtime.
+4. Efferent consumer pipeline: Continuity then Spine.

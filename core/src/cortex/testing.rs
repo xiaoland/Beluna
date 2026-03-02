@@ -1,7 +1,7 @@
 use std::{future::Future, pin::Pin, sync::Arc};
 
 use crate::{
-    cortex::{CognitionState, Cortex, CortexError, ReactionLimits},
+    cortex::{Cortex, CortexError, ReactionLimits},
     types::{NeuralSignalDescriptor, Sense},
 };
 
@@ -36,13 +36,6 @@ pub struct ActsHelperRequest {
     pub acts_section: String,
 }
 
-#[derive(Debug, Clone)]
-pub struct L1MemoryFlushHelperRequest {
-    pub cycle_id: u64,
-    pub l1_memory_flush_section: String,
-    pub cognition_state: CognitionState,
-}
-
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TestActDraft {
     pub endpoint_id: String,
@@ -52,7 +45,6 @@ pub struct TestActDraft {
 }
 
 pub type TestActsHelperOutput = Vec<TestActDraft>;
-pub type TestL1MemoryFlushOutput = Vec<String>;
 
 type SenseHelperFuture = Pin<Box<dyn Future<Output = Result<String, CortexError>> + Send>>;
 type ActDescriptorHelperFuture = Pin<Box<dyn Future<Output = Result<String, CortexError>> + Send>>;
@@ -60,8 +52,6 @@ type GoalForestHelperFuture = Pin<Box<dyn Future<Output = Result<String, CortexE
 type PrimaryFuture = Pin<Box<dyn Future<Output = Result<String, CortexError>> + Send>>;
 type ActsHelperFuture =
     Pin<Box<dyn Future<Output = Result<TestActsHelperOutput, CortexError>> + Send>>;
-type L1MemoryFlushHelperFuture =
-    Pin<Box<dyn Future<Output = Result<TestL1MemoryFlushOutput, CortexError>> + Send>>;
 
 pub type SenseHelperHook = Arc<dyn Fn(SenseHelperRequest) -> SenseHelperFuture + Send + Sync>;
 pub type ActDescriptorHelperHook =
@@ -70,8 +60,6 @@ pub type GoalForestHelperHook =
     Arc<dyn Fn(GoalForestHelperRequest) -> GoalForestHelperFuture + Send + Sync>;
 pub type PrimaryHook = Arc<dyn Fn(PrimaryRequest) -> PrimaryFuture + Send + Sync>;
 pub type ActsHelperHook = Arc<dyn Fn(ActsHelperRequest) -> ActsHelperFuture + Send + Sync>;
-pub type L1MemoryFlushHelperHook =
-    Arc<dyn Fn(L1MemoryFlushHelperRequest) -> L1MemoryFlushHelperFuture + Send + Sync>;
 
 pub fn boxed<T>(
     future: impl Future<Output = T> + Send + 'static,
@@ -89,7 +77,6 @@ pub struct TestHooks {
     pub goal_forest_helper: GoalForestHelperHook,
     pub primary: PrimaryHook,
     pub acts_helper: ActsHelperHook,
-    pub l1_memory_flush_helper: L1MemoryFlushHelperHook,
 }
 
 impl TestHooks {
@@ -99,7 +86,6 @@ impl TestHooks {
         goal_forest_helper: GoalForestHelperHook,
         primary: PrimaryHook,
         acts_helper: ActsHelperHook,
-        l1_memory_flush_helper: L1MemoryFlushHelperHook,
     ) -> Self {
         Self {
             sense_helper,
@@ -107,7 +93,6 @@ impl TestHooks {
             goal_forest_helper,
             primary,
             acts_helper,
-            l1_memory_flush_helper,
         }
     }
 }

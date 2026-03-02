@@ -1,8 +1,8 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{
-        atomic::{AtomicU64, Ordering},
         Arc,
+        atomic::{AtomicU64, Ordering},
     },
     time::{Duration, Instant},
 };
@@ -11,7 +11,10 @@ use tokio::sync::RwLock;
 
 use crate::ai_gateway::error::{GatewayError, GatewayErrorKind};
 
-use super::types::{ChatMessage, UsageStats};
+use super::types::{
+    ChatMessage, ChatRole, MessageBoundarySelector, SystemPromptUpdate,
+    ThreadMessageMutationOutcome, ThreadMessageMutationRequest, UsageStats,
+};
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -31,6 +34,7 @@ pub struct ThreadState {
 pub(crate) struct PreparedTurn {
     pub turn_id: u64,
     pub messages: Arc<Vec<ChatMessage>>,
+    pub system_prompt: Option<String>,
 }
 
 pub(crate) struct TurnCommitOutcome {
@@ -48,8 +52,17 @@ pub(crate) struct TurnCommitOutcome {
 
 struct ThreadData {
     messages: Vec<ChatMessage>,
+    system_prompt_mode: ThreadSystemPromptMode,
     next_turn_id: u64,
     metrics: ThreadMetrics,
+}
+
+#[derive(Default)]
+enum ThreadSystemPromptMode {
+    #[default]
+    UseChatDefault,
+    Override(String),
+    Cleared,
 }
 
 #[derive(Default)]
@@ -133,6 +146,7 @@ impl ThreadStore {
             .entry(thread_id.clone())
             .or_insert_with(|| ThreadData {
                 messages: Vec::new(),
+                system_prompt_mode: ThreadSystemPromptMode::UseChatDefault,
                 next_turn_id: 0,
                 metrics: ThreadMetrics::default(),
             });
@@ -149,6 +163,7 @@ impl ThreadStore {
         chat_id: &str,
         thread_id: &str,
         input_messages: &[ChatMessage],
+        chat_system_prompt: Option<&str>,
     ) -> Result<PreparedTurn, GatewayError> {
         let mut guard = self.chats.write().await;
         self.sweep_expired(&mut guard);
@@ -172,9 +187,11 @@ impl ThreadStore {
 
         let mut messages = thread.messages.clone();
         messages.extend_from_slice(input_messages);
+        let system_prompt = thread.system_prompt_mode.resolve(chat_system_prompt);
         Ok(PreparedTurn {
             turn_id: thread.next_turn_id,
             messages: Arc::new(messages),
+            system_prompt,
         })
     }
 
@@ -302,6 +319,80 @@ impl ThreadStore {
         })
     }
 
+    pub(crate) async fn mutate_thread_messages_atomically(
+        &self,
+        chat_id: &str,
+        thread_id: &str,
+        request: ThreadMessageMutationRequest,
+    ) -> Result<ThreadMessageMutationOutcome, GatewayError> {
+        let mut guard = self.chats.write().await;
+        let chat = guard.get_mut(chat_id).ok_or_else(|| {
+            GatewayError::new(
+                GatewayErrorKind::InvalidRequest,
+                format!("chat '{}' not found", chat_id),
+            )
+            .with_retryable(false)
+        })?;
+        chat.expires_at = Instant::now() + self.ttl;
+
+        let thread = chat.threads.get_mut(thread_id).ok_or_else(|| {
+            GatewayError::new(
+                GatewayErrorKind::InvalidRequest,
+                format!("thread '{}' not found", thread_id),
+            )
+            .with_retryable(false)
+        })?;
+
+        let mut removed_messages = 0usize;
+        if let Some(range) = request.trim_message_range.as_ref() {
+            let start_idx = resolve_message_boundary(&thread.messages, &range.start).ok_or_else(|| {
+                GatewayError::new(
+                    GatewayErrorKind::InvalidRequest,
+                    format!(
+                        "cannot resolve start message boundary '{:?}' for thread '{}'",
+                        range.start, thread_id
+                    ),
+                )
+                .with_retryable(false)
+            })?;
+            let end_idx = resolve_message_boundary(&thread.messages, &range.end).ok_or_else(|| {
+                GatewayError::new(
+                    GatewayErrorKind::InvalidRequest,
+                    format!(
+                        "cannot resolve end message boundary '{:?}' for thread '{}'",
+                        range.end, thread_id
+                    ),
+                )
+                .with_retryable(false)
+            })?;
+            if start_idx > end_idx {
+                return Err(
+                    GatewayError::new(
+                        GatewayErrorKind::InvalidRequest,
+                        format!(
+                            "invalid message range: start={} is after end={} for thread '{}'",
+                            start_idx, end_idx, thread_id
+                        ),
+                    )
+                    .with_retryable(false),
+                );
+            }
+
+            removed_messages = end_idx - start_idx + 1;
+            thread.messages.drain(start_idx..=end_idx);
+        }
+
+        let effective_system_prompt_changed = thread
+            .system_prompt_mode
+            .apply_update(request.system_prompt_update)?;
+
+        Ok(ThreadMessageMutationOutcome {
+            removed_messages,
+            remaining_messages: thread.messages.len(),
+            effective_system_prompt_changed,
+        })
+    }
+
     fn sweep_expired(&self, chats: &mut HashMap<String, ChatData>) {
         let now = Instant::now();
         chats.retain(|_, c| c.expires_at > now);
@@ -321,5 +412,97 @@ impl ThreadStore {
     fn next_thread_id(&self) -> String {
         let value = self.thread_seq.fetch_add(1, Ordering::Relaxed);
         format!("thread-{value}")
+    }
+}
+
+impl ThreadSystemPromptMode {
+    fn resolve(&self, chat_system_prompt: Option<&str>) -> Option<String> {
+        match self {
+            ThreadSystemPromptMode::UseChatDefault => {
+                chat_system_prompt.map(std::string::ToString::to_string)
+            }
+            ThreadSystemPromptMode::Override(value) => Some(value.clone()),
+            ThreadSystemPromptMode::Cleared => None,
+        }
+    }
+
+    fn apply_update(&mut self, update: SystemPromptUpdate) -> Result<bool, GatewayError> {
+        match update {
+            SystemPromptUpdate::Keep => Ok(false),
+            SystemPromptUpdate::Replace(prompt) => {
+                let trimmed = prompt.trim();
+                if trimmed.is_empty() {
+                    return Err(
+                        GatewayError::new(
+                            GatewayErrorKind::InvalidRequest,
+                            "system_prompt_update.replace must not be empty",
+                        )
+                        .with_retryable(false),
+                    );
+                }
+                let next = ThreadSystemPromptMode::Override(trimmed.to_string());
+                let changed = match self {
+                    ThreadSystemPromptMode::Override(current) => current != trimmed,
+                    ThreadSystemPromptMode::UseChatDefault | ThreadSystemPromptMode::Cleared => {
+                        true
+                    }
+                };
+                *self = next;
+                Ok(changed)
+            }
+            SystemPromptUpdate::Clear => {
+                let changed = !matches!(self, ThreadSystemPromptMode::Cleared);
+                *self = ThreadSystemPromptMode::Cleared;
+                Ok(changed)
+            }
+        }
+    }
+}
+
+fn resolve_message_boundary(
+    messages: &[ChatMessage],
+    selector: &MessageBoundarySelector,
+) -> Option<usize> {
+    match selector {
+        MessageBoundarySelector::FirstUserMessage => messages
+            .iter()
+            .position(|message| matches!(message.role, ChatRole::User)),
+        MessageBoundarySelector::LatestAssistantToolBatchEnd => {
+            let assistant_idx = messages
+                .iter()
+                .enumerate()
+                .rev()
+                .find_map(|(index, message)| {
+                    if matches!(message.role, ChatRole::Assistant) && !message.tool_calls.is_empty()
+                    {
+                        Some(index)
+                    } else {
+                        None
+                    }
+                })?;
+            let call_ids = messages[assistant_idx]
+                .tool_calls
+                .iter()
+                .map(|call| call.id.as_str())
+                .collect::<HashSet<_>>();
+            if call_ids.is_empty() {
+                return Some(assistant_idx);
+            }
+
+            let mut boundary = assistant_idx;
+            for (index, message) in messages.iter().enumerate().skip(assistant_idx + 1) {
+                if !matches!(message.role, ChatRole::Tool) {
+                    break;
+                }
+                let Some(tool_call_id) = message.tool_call_id.as_deref() else {
+                    break;
+                };
+                if !call_ids.contains(tool_call_id) {
+                    break;
+                }
+                boundary = index;
+            }
+            Some(boundary)
+        }
     }
 }

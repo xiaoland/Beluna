@@ -6,8 +6,8 @@ pub type SenseInstanceId = String;
 pub type ActInstanceId = String;
 pub type CycleId = u64;
 
-pub fn default_neural_signal_metadata() -> serde_json::Value {
-    serde_json::json!({})
+pub fn default_sense_weight() -> f64 {
+    0.0
 }
 
 pub fn is_uuid_v4(id: &str) -> bool {
@@ -54,6 +54,8 @@ pub struct NeuralSignalDescriptor {
     pub endpoint_id: String,
     pub neural_signal_descriptor_id: String,
     pub payload_schema: serde_json::Value,
+    #[serde(default)]
+    pub emitted_sense_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -88,24 +90,15 @@ pub struct ProprioceptionDropPatch {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SenseDatum {
+pub struct Sense {
     pub sense_instance_id: SenseInstanceId,
     pub endpoint_id: String,
     pub neural_signal_descriptor_id: String,
-    pub payload: serde_json::Value,
-    #[serde(default = "default_neural_signal_metadata")]
-    pub metadata: serde_json::Value,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum Sense {
-    Domain(SenseDatum),
-    Hibernate,
-    NewNeuralSignalDescriptors(NeuralSignalDescriptorPatch),
-    DropNeuralSignalDescriptors(NeuralSignalDescriptorDropPatch),
-    NewProprioceptions(ProprioceptionPatch),
-    DropProprioceptions(ProprioceptionDropPatch),
+    pub payload: String,
+    #[serde(default = "default_sense_weight")]
+    pub weight: f64,
+    #[serde(default)]
+    pub act_instance_id: Option<ActInstanceId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -126,7 +119,7 @@ pub struct PhysicalLedgerSnapshot {
 pub struct PhysicalState {
     pub cycle_id: CycleId,
     pub ledger: PhysicalLedgerSnapshot,
-    pub capabilities: NeuralSignalDescriptorCatalog,
+    pub ns_descriptor: NeuralSignalDescriptorCatalog,
     #[serde(default)]
     pub proprioception: BTreeMap<String, String>,
 }

@@ -10,7 +10,7 @@ pub mod types;
 
 pub use endpoint::{Endpoint, NativeFunctionEndpoint};
 pub use error::{SpineError, SpineErrorKind};
-pub use runtime::{EndpointBinding, Spine, shutdown_global_spine};
+pub use runtime::{EndpointBinding, Spine, SpineControlPort, shutdown_global_spine};
 pub use types::{
     ActDispatchResult, CostAttributionId, EndpointExecutionOutcome, NeuralSignalDescriptor,
     NeuralSignalDescriptorCatalog, NeuralSignalDescriptorRouteKey, ReserveEntryId, SpineEvent,

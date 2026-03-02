@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use tokio::time::{Duration, timeout};
+use tokio::time::Duration;
 
 use crate::{
     ai_gateway::chat::OutputMode,
@@ -7,7 +7,6 @@ use crate::{
         error::{CortexError, extractor_failed},
         helpers::{self, CognitionOrgan, HelperRuntime},
         prompts,
-        testing::SenseHelperRequest as TestSenseHelperRequest,
     },
     types::{NeuralSignalDescriptor, Sense, build_fq_neural_signal_id},
 };
@@ -40,10 +39,13 @@ impl SenseToolContext {
                 .unwrap_or_else(|| serde_json::json!({}));
             entries.push(SenseToolContextEntry {
                 sense_instance_id: event.sense_instance_id,
+                sense_ref_id: event.sense_ref_id,
                 fq_sense_id: event.fq_sense_id,
                 payload: event.payload,
                 payload_schema,
                 original_size_in_bytes: event.original_size_in_bytes,
+                weight: event.weight,
+                act_instance_id: event.act_instance_id,
             });
         }
         Self { entries }
@@ -53,26 +55,30 @@ impl SenseToolContext {
         &self.entries
     }
 
-    fn entry_by_id(&self, sense_instance_id: u64) -> Option<&SenseToolContextEntry> {
+    fn entry_by_ref_id(&self, sense_ref_id: &str) -> Option<&SenseToolContextEntry> {
         self.entries
             .iter()
-            .find(|entry| entry.sense_instance_id == sense_instance_id)
+            .find(|entry| entry.sense_ref_id == sense_ref_id)
     }
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct SenseToolContextEntry {
     pub sense_instance_id: u64,
+    pub sense_ref_id: String,
     pub fq_sense_id: String,
-    pub payload: serde_json::Value,
+    pub payload: String,
     pub payload_schema: serde_json::Value,
     pub original_size_in_bytes: usize,
+    pub weight: f64,
+    pub act_instance_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct SenseSubAgentTask {
-    pub sense_id: u64,
-    pub instruction: String,
+    pub sense_id: String,
+    #[serde(default)]
+    pub instruction: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -94,7 +100,7 @@ impl SenseInputHelper {
         &self,
         runtime: &impl HelperRuntime,
         cycle_id: u64,
-        deadline: Duration,
+        _deadline: Duration,
         senses: &[Sense],
         sense_descriptors: &[NeuralSignalDescriptor],
     ) -> String {
@@ -116,73 +122,9 @@ impl SenseInputHelper {
             "sense_passthrough_max_bytes": runtime.limits().sense_passthrough_max_bytes,
         }));
         helpers::log_organ_input(cycle_id, stage, &input_payload);
-        let output_result = timeout(deadline, async {
-            if let Some(hooks) = runtime.hooks() {
-                (hooks.sense_helper)(TestSenseHelperRequest {
-                    cycle_id,
-                    senses: senses.to_vec(),
-                    sense_descriptors: sense_descriptors.to_vec(),
-                })
-                .await
-            } else {
-                self.build_with_organ(
-                    runtime,
-                    cycle_id,
-                    &context,
-                    runtime.limits().sense_passthrough_max_bytes,
-                )
-                .await
-            }
-        })
-        .await;
-        match output_result {
-            Ok(Ok(output)) if !output.trim().is_empty() => {
-                helpers::log_organ_output(cycle_id, stage, &output);
-                output
-            }
-            Ok(Ok(_)) => {
-                let fallback = fallback_senses_section(
-                    senses,
-                    sense_descriptors,
-                    runtime.limits().sense_passthrough_max_bytes,
-                );
-                helpers::log_organ_output(cycle_id, stage, &fallback);
-                fallback
-            }
-            Ok(Err(err)) => {
-                runtime.emit_stage_failed(cycle_id, stage);
-                tracing::warn!(
-                    target: "cortex",
-                    cycle_id = cycle_id,
-                    stage = stage,
-                    error = %err,
-                    "sense_helper_failed_fallback_raw"
-                );
-                let fallback = fallback_senses_section(
-                    senses,
-                    sense_descriptors,
-                    runtime.limits().sense_passthrough_max_bytes,
-                );
-                helpers::log_organ_output(cycle_id, stage, &fallback);
-                fallback
-            }
-            Err(_) => {
-                runtime.emit_stage_failed(cycle_id, stage);
-                tracing::warn!(
-                    target: "cortex",
-                    cycle_id = cycle_id,
-                    stage = stage,
-                    "sense_helper_timeout_fallback_raw"
-                );
-                let fallback = fallback_senses_section(
-                    senses,
-                    sense_descriptors,
-                    runtime.limits().sense_passthrough_max_bytes,
-                );
-                helpers::log_organ_output(cycle_id, stage, &fallback);
-                fallback
-            }
-        }
+        let output = render_sense_lines(&context, runtime.limits().sense_passthrough_max_bytes);
+        helpers::log_organ_output(cycle_id, stage, &output);
+        output
     }
 
     async fn build_with_organ(
@@ -204,7 +146,7 @@ impl SenseInputHelper {
                 .await
                 .unwrap_or_else(|_| SensePostmanEnvelope {
                     brief:
-                        "Payload omitted by fallback; call expand-sense-raw for complete details."
+                        "Payload omitted by fallback; call expand-senses(mode=raw) for complete details."
                             .to_string(),
                     original_size_in_bytes: entry.original_size_in_bytes,
                     confidence_score: 0.0,
@@ -222,12 +164,11 @@ impl SenseInputHelper {
         cycle_id: u64,
         entry: &SenseToolContextEntry,
     ) -> Result<SensePostmanEnvelope, CortexError> {
-        let payload_json =
-            serde_json::to_string_pretty(&entry.payload).unwrap_or_else(|_| "{}".to_string());
+        let payload_text = entry.payload.clone();
         let payload_schema_json = serde_json::to_string_pretty(&entry.payload_schema)
             .unwrap_or_else(|_| "{}".to_string());
         let prompt = prompts::build_sense_postman_envelope_prompt(
-            &payload_json,
+            &payload_text,
             &payload_schema_json,
             entry.original_size_in_bytes,
         );
@@ -262,42 +203,28 @@ pub(crate) fn fallback_senses_section(
     if context.entries().is_empty() {
         return "[]".to_string();
     }
-
-    let mut entries = Vec::with_capacity(context.entries().len());
-    for entry in context.entries() {
-        if should_passthrough(entry.original_size_in_bytes, sense_passthrough_max_bytes) {
-            entries.push(wrap_passthrough_entry(entry));
-            continue;
-        }
-
-        let envelope = SensePostmanEnvelope {
-            brief: "Payload omitted by deterministic fallback; call expand-sense-raw for complete details."
-                .to_string(),
-            original_size_in_bytes: entry.original_size_in_bytes,
-            confidence_score: 0.0,
-            omitted_features: vec!["payload".to_string()],
-        };
-        entries.push(wrap_postman_envelope_entry(entry, &envelope));
-    }
-
-    entries.join("\n")
+    render_sense_lines(&context, sense_passthrough_max_bytes)
 }
 
-pub(crate) fn expand_sense_raw(context: &SenseToolContext, sense_ids: &[u64]) -> serde_json::Value {
+pub(crate) fn expand_sense_raw(
+    context: &SenseToolContext,
+    sense_ids: &[String],
+) -> serde_json::Value {
     let mut items = Vec::new();
     let mut not_found_sense_ids = Vec::new();
 
     for sense_id in sense_ids {
-        if let Some(entry) = context.entry_by_id(*sense_id) {
+        if let Some(entry) = context.entry_by_ref_id(sense_id) {
             items.push(serde_json::json!({
-                "sense_id": entry.sense_instance_id,
+                "sense_id": entry.sense_ref_id,
+                "monotonic_internal_sense_id": entry.sense_instance_id,
                 "fq_sense_id": entry.fq_sense_id,
                 "payload": entry.payload,
                 "payload_schema": entry.payload_schema,
                 "original_size_in_bytes": entry.original_size_in_bytes,
             }));
         } else {
-            not_found_sense_ids.push(*sense_id);
+            not_found_sense_ids.push(sense_id.clone());
         }
     }
 
@@ -317,19 +244,19 @@ pub(crate) async fn expand_sense_with_sub_agent(
     let mut not_found_sense_ids = Vec::new();
 
     for task in tasks {
-        let Some(entry) = context.entry_by_id(task.sense_id) else {
-            not_found_sense_ids.push(task.sense_id);
+        let Some(entry) = context.entry_by_ref_id(&task.sense_id) else {
+            not_found_sense_ids.push(task.sense_id.clone());
             continue;
         };
 
-        let payload_json =
-            serde_json::to_string_pretty(&entry.payload).unwrap_or_else(|_| "{}".to_string());
+        let instruction = task.instruction.clone().unwrap_or_default();
+        let payload_text = entry.payload.clone();
         let payload_schema_json = serde_json::to_string_pretty(&entry.payload_schema)
             .unwrap_or_else(|_| "{}".to_string());
         let prompt = prompts::build_sense_sub_agent_prompt(
-            &payload_json,
+            &payload_text,
             &payload_schema_json,
-            &task.instruction,
+            &instruction,
         );
         let response = runtime
             .run_organ(
@@ -350,9 +277,9 @@ pub(crate) async fn expand_sense_with_sub_agent(
         envelope.confidence_score = envelope.confidence_score.clamp(0.0, 1.0);
 
         results.push(serde_json::json!({
-            "sense_id": entry.sense_instance_id,
+            "sense_id": entry.sense_ref_id,
             "fq_sense_id": entry.fq_sense_id,
-            "instruction": task.instruction,
+            "instruction": instruction,
             "result": envelope.result,
             "confidence_score": envelope.confidence_score,
         }));
@@ -367,9 +294,12 @@ pub(crate) async fn expand_sense_with_sub_agent(
 #[derive(Debug, Clone, Serialize)]
 struct SenseInputEvent {
     sense_instance_id: u64,
+    sense_ref_id: String,
     fq_sense_id: String,
-    payload: serde_json::Value,
+    payload: String,
     original_size_in_bytes: usize,
+    weight: f64,
+    act_instance_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -382,20 +312,17 @@ fn project_domain_sense_events(senses: &[Sense]) -> Vec<SenseInputEvent> {
     let mut next_sense_instance_id = 1_u64;
     let mut events = Vec::new();
     for sense in senses {
-        let Sense::Domain(domain) = sense else {
-            continue;
-        };
-        let payload_bytes = serde_json::to_vec(&domain.payload)
-            .map(|bytes| bytes.len())
-            .unwrap_or(0);
+        let payload_bytes = sense.payload.as_bytes().len();
+        let fq_sense_id =
+            build_fq_neural_signal_id(&sense.endpoint_id, &sense.neural_signal_descriptor_id);
         events.push(SenseInputEvent {
             sense_instance_id: next_sense_instance_id,
-            fq_sense_id: build_fq_neural_signal_id(
-                &domain.endpoint_id,
-                &domain.neural_signal_descriptor_id,
-            ),
-            payload: domain.payload.clone(),
+            sense_ref_id: format!("{}. {}", next_sense_instance_id, fq_sense_id),
+            fq_sense_id,
+            payload: sense.payload.clone(),
             original_size_in_bytes: payload_bytes,
+            weight: sense.weight,
+            act_instance_id: sense.act_instance_id.clone(),
         });
         next_sense_instance_id += 1;
     }
@@ -422,12 +349,12 @@ fn should_passthrough(original_size_in_bytes: usize, sense_passthrough_max_bytes
 }
 
 fn wrap_passthrough_entry(entry: &SenseToolContextEntry) -> String {
-    let payload_json = serde_json::to_string(&entry.payload).unwrap_or_else(|_| "{}".to_string());
+    let payload = truncate_payload(&entry.payload, usize::MAX);
     format!(
-        "<somatic-sense sense-instance-id=\"{}\" fq-somatic-sense-id=\"{}\" body=\"full-payload\">\n{}\n</somatic-sense>",
-        entry.sense_instance_id,
-        escape_xml_attr(&entry.fq_sense_id),
-        payload_json
+        "- {}: {}; {}",
+        entry.sense_ref_id,
+        render_metadata(entry, entry.original_size_in_bytes),
+        payload
     )
 }
 
@@ -437,11 +364,56 @@ fn wrap_postman_envelope_entry(
 ) -> String {
     let envelope_json = serde_json::to_string_pretty(envelope).unwrap_or_else(|_| "{}".to_string());
     format!(
-        "<somatic-sense sense-instance-id=\"{}\" fq-somatic-sense-id=\"{}\" body-format=\"postman-envelope-json\">\n{}\n</somatic-sense>",
-        entry.sense_instance_id,
-        escape_xml_attr(&entry.fq_sense_id),
+        "- {}: {}; {}",
+        entry.sense_ref_id,
+        render_metadata(entry, envelope.original_size_in_bytes),
         envelope_json
     )
+}
+
+fn render_sense_lines(context: &SenseToolContext, sense_passthrough_max_bytes: usize) -> String {
+    context
+        .entries()
+        .iter()
+        .map(|entry| {
+            let payload = truncate_payload(&entry.payload, sense_passthrough_max_bytes);
+            format!(
+                "- {}: {}; {}",
+                entry.sense_ref_id,
+                render_metadata(entry, entry.original_size_in_bytes),
+                payload
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn render_metadata(entry: &SenseToolContextEntry, original_size_in_bytes: usize) -> String {
+    let mut kv = Vec::with_capacity(3);
+    kv.push(format!("weight={:.3}", entry.weight));
+    if let Some(act_instance_id) = &entry.act_instance_id {
+        kv.push(format!("act_instance_id={act_instance_id}"));
+    }
+    kv.push(format!("original_size_in_bytes={original_size_in_bytes}"));
+    kv.join(",")
+}
+
+fn truncate_payload(payload: &str, max_bytes: usize) -> String {
+    if payload.len() <= max_bytes {
+        return payload.to_string();
+    }
+    if max_bytes == 0 {
+        return "...(truncated)".to_string();
+    }
+
+    let mut end = max_bytes.min(payload.len());
+    while end > 0 && !payload.is_char_boundary(end) {
+        end -= 1;
+    }
+    if end == 0 {
+        return "...(truncated)".to_string();
+    }
+    format!("{}...(truncated)", &payload[..end])
 }
 
 fn sense_postman_envelope_json_schema() -> serde_json::Value {
@@ -480,4 +452,11 @@ fn escape_xml_attr(value: &str) -> String {
         .replace('>', "&gt;")
         .replace('"', "&quot;")
         .replace('\'', "&apos;")
+}
+
+fn escape_xml_text(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
 }

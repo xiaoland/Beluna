@@ -119,17 +119,17 @@ pub async fn handle_shell_invoke(
             sense: Some(InlineSenseDatum {
                 sense_instance_id: uuid::Uuid::new_v4().to_string(),
                 neural_signal_descriptor_id: "body.std.shell.result".to_string(),
-                payload: serde_json::json!({
-                    "kind": "shell_result",
-                    "act_instance_id": act.act_instance_id,
-                    "neural_signal_descriptor_id": act.neural_signal_descriptor_id,
-                    "exit_code": exit_code,
-                    "stdout_text": stdout_text,
-                    "stderr_text": stderr_text,
-                    "stdout_truncated": stdout_truncated,
-                    "stderr_truncated": stderr_truncated,
-                    "success": false
-                }),
+                payload: build_shell_result_payload(
+                    act,
+                    exit_code,
+                    &stdout_text,
+                    &stderr_text,
+                    stdout_truncated,
+                    stderr_truncated,
+                    false,
+                ),
+                weight: 1.0,
+                act_instance_id: Some(act.act_instance_id.clone()),
             }),
         };
     }
@@ -142,19 +142,46 @@ pub async fn handle_shell_invoke(
         sense: Some(InlineSenseDatum {
             sense_instance_id: uuid::Uuid::new_v4().to_string(),
             neural_signal_descriptor_id: "body.std.shell.result".to_string(),
-            payload: serde_json::json!({
-                "kind": "shell_result",
-                "act_instance_id": act.act_instance_id,
-                "neural_signal_descriptor_id": act.neural_signal_descriptor_id,
-                "exit_code": exit_code,
-                "stdout_text": stdout_text,
-                "stderr_text": stderr_text,
-                "stdout_truncated": stdout_truncated,
-                "stderr_truncated": stderr_truncated,
-                "success": true
-            }),
+            payload: build_shell_result_payload(
+                act,
+                exit_code,
+                &stdout_text,
+                &stderr_text,
+                stdout_truncated,
+                stderr_truncated,
+                true,
+            ),
+            weight: 0.0,
+            act_instance_id: Some(act.act_instance_id.clone()),
         }),
     }
+}
+
+fn build_shell_result_payload(
+    act: &Act,
+    exit_code: i32,
+    stdout_text: &str,
+    stderr_text: &str,
+    stdout_truncated: bool,
+    stderr_truncated: bool,
+    success: bool,
+) -> String {
+    format!(
+        concat!(
+            "shell_result act_instance_id={}; neural_signal_descriptor_id={}; ",
+            "success={}; exit_code={}; stdout_truncated={}; stderr_truncated={}\n",
+            "stdout:\n{}\n",
+            "stderr:\n{}"
+        ),
+        act.act_instance_id,
+        act.neural_signal_descriptor_id,
+        success,
+        exit_code,
+        stdout_truncated,
+        stderr_truncated,
+        stdout_text,
+        stderr_text
+    )
 }
 
 fn truncate_to_text(bytes: &[u8], cap: usize) -> (String, bool) {

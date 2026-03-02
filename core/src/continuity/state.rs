@@ -3,29 +3,18 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::{
     continuity::error::{ContinuityError, invariant_violation},
     cortex::{CognitionState, GoalNode},
-    types::{
-        Act, DispatchDecision, NeuralSignalDescriptor, NeuralSignalDescriptorCatalog,
-        NeuralSignalDescriptorDropPatch, NeuralSignalDescriptorPatch,
-        NeuralSignalDescriptorRouteKey,
-    },
+    types::{Act, DispatchDecision},
 };
 
 #[derive(Debug, Clone)]
 pub struct ContinuityState {
     pub cognition_state: CognitionState,
-    neural_signal_descriptor_version: u64,
-    neural_signal_descriptor_entries:
-        BTreeMap<NeuralSignalDescriptorRouteKey, NeuralSignalDescriptor>,
-    tombstoned_routes: BTreeSet<NeuralSignalDescriptorRouteKey>,
 }
 
 impl Default for ContinuityState {
     fn default() -> Self {
         Self {
             cognition_state: CognitionState::default(),
-            neural_signal_descriptor_version: 0,
-            neural_signal_descriptor_entries: BTreeMap::new(),
-            tombstoned_routes: BTreeSet::new(),
         }
     }
 }
@@ -55,54 +44,6 @@ impl ContinuityState {
         Ok(())
     }
 
-    pub fn apply_neural_signal_descriptor_patch(&mut self, patch: &NeuralSignalDescriptorPatch) {
-        for descriptor in &patch.entries {
-            let route = NeuralSignalDescriptorRouteKey {
-                r#type: descriptor.r#type,
-                endpoint_id: descriptor.endpoint_id.clone(),
-                neural_signal_descriptor_id: descriptor.neural_signal_descriptor_id.clone(),
-            };
-            self.tombstoned_routes.remove(&route);
-            self.neural_signal_descriptor_entries
-                .insert(route, descriptor.clone());
-            self.neural_signal_descriptor_version =
-                self.neural_signal_descriptor_version.saturating_add(1);
-        }
-    }
-
-    pub fn apply_neural_signal_descriptor_drop(
-        &mut self,
-        drop_patch: &NeuralSignalDescriptorDropPatch,
-    ) {
-        for route in &drop_patch.routes {
-            self.neural_signal_descriptor_entries.remove(route);
-            self.tombstoned_routes.insert(route.clone());
-            self.neural_signal_descriptor_version =
-                self.neural_signal_descriptor_version.saturating_add(1);
-        }
-    }
-
-    pub fn neural_signal_descriptor_snapshot(&self) -> NeuralSignalDescriptorCatalog {
-        let mut entries: Vec<_> = self
-            .neural_signal_descriptor_entries
-            .values()
-            .cloned()
-            .collect();
-        entries.sort_by(|lhs, rhs| {
-            lhs.r#type
-                .cmp(&rhs.r#type)
-                .then_with(|| lhs.endpoint_id.cmp(&rhs.endpoint_id))
-                .then_with(|| {
-                    lhs.neural_signal_descriptor_id
-                        .cmp(&rhs.neural_signal_descriptor_id)
-                })
-        });
-        NeuralSignalDescriptorCatalog {
-            version: format!("continuity:v{}", self.neural_signal_descriptor_version),
-            entries,
-        }
-    }
-
     pub fn on_act(&self, _act: &Act) -> DispatchDecision {
         DispatchDecision::Continue
     }
@@ -130,9 +71,7 @@ fn validate_goal_node_fields(
         )));
     }
     if node.id.trim().is_empty() {
-        return Err(invariant_violation(format!(
-            "goal id cannot be empty"
-        )));
+        return Err(invariant_violation(format!("goal id cannot be empty")));
     }
     if !id_set.insert(node.id.clone()) {
         return Err(invariant_violation(format!(
@@ -157,7 +96,8 @@ fn validate_goal_node_fields(
 }
 
 fn validate_goal_forest_topology(nodes: &[GoalNode]) -> Result<(), ContinuityError> {
-    let node_by_id: BTreeMap<&str, &GoalNode> = nodes.iter().map(|node| (node.id.as_str(), node)).collect();
+    let node_by_id: BTreeMap<&str, &GoalNode> =
+        nodes.iter().map(|node| (node.id.as_str(), node)).collect();
 
     for node in nodes {
         validate_parent_chain_no_cycle(node, &node_by_id)?;

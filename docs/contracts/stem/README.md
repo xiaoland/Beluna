@@ -1,20 +1,20 @@
 # Stem Runtime Contracts
 
 Boundary:
-- input: `Sense` queue (bounded mpsc)
-- output: async serial act dispatch side effects across Continuity -> Spine
+1. Stem owns pathway construction and physical-state mutation.
+2. Stem emits tick grants and hosts the efferent serial dispatch worker.
 
 Must hold:
-- one bounded sense queue; no act queue.
-- producer backpressure follows native bounded-channel blocking semantics.
-- loop is tick-driven with configurable interval; default 1s.
-- missed ticks are skipped.
-- after any non-tick-triggered cycle (`wait_for_sense` wake or sleep wake), interval schedule is reset so the next Active tick waits a full period.
-- `hibernate` breaks loop immediately.
-- `new_neural_signal_descriptors` / `drop_neural_signal_descriptors` are applied before same-cycle Cortex call.
-- `new_proprioceptions` / `drop_proprioceptions` are applied before same-cycle Cortex call.
-- domain senses sent to Cortex exclude control senses (`hibernate`, descriptor patch/drop, proprioception patch/drop).
-- dispatch stage order is deterministic within dispatch worker: Continuity gate -> Spine dispatch.
-- dispatch worker keeps ordered serial processing (`DISPATCHING -> ACK|REJECTED|LOST`).
-- shutdown path closes ingress gate first and then blocks until `hibernate` is enqueued.
-- sleep behavior is represented as Stem-provided act `core.control/sleep` with payload seconds.
+1. Afferent pathway is bounded MPSC with backpressure, deferral scheduler, and observe-only sidecar.
+2. Cortex owns afferent consumption; Stem must never invoke Cortex directly.
+3. Tick runtime emits `TickGrant` at configured interval (default 10s) with missed behavior `skip`.
+4. Physical state mutation (`ns_descriptor`, proprioception) is write-only through `StemControlPort`.
+5. Efferent dispatch order is deterministic and serial per queue order:
+- stage 1: Continuity `on_act`
+- stage 2: Spine `on_act_final`.
+6. Continuity `Break` only short-circuits current act.
+7. Dispatch status proprioception is emitted as `DISPATCHING -> ACK|REJECTED|LOST` with bounded retention.
+8. Shutdown is bounded:
+- close afferent ingress gate
+- cancel runtimes
+- efferent worker drains queued acts until timeout.

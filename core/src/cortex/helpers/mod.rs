@@ -10,8 +10,6 @@ use crate::{
 pub(crate) mod act_descriptor_input_helper;
 pub(crate) mod acts_output_helper;
 pub(crate) mod goal_forest_helper;
-pub(crate) mod l1_memory_flush_output_helper;
-pub(crate) mod l1_memory_input_helper;
 pub(crate) mod proprioception_input_helper;
 pub(crate) mod sense_input_helper;
 
@@ -22,7 +20,6 @@ pub(crate) enum CognitionOrgan {
     ActDescriptor,
     GoalForest,
     Acts,
-    L1MemoryFlush,
 }
 
 impl CognitionOrgan {
@@ -33,7 +30,6 @@ impl CognitionOrgan {
             Self::ActDescriptor => "act_descriptor_helper",
             Self::GoalForest => "goal_forest_helper",
             Self::Acts => "acts_helper",
-            Self::L1MemoryFlush => "l1_memory_flush_helper",
         }
     }
 }
@@ -70,13 +66,11 @@ pub(crate) struct InputHelper {
     pub proprioception: proprioception_input_helper::ProprioceptionInputHelper,
     pub act_descriptor: act_descriptor_input_helper::ActDescriptorInputHelper,
     pub goal_forest: goal_forest_helper::GoalForestHelper,
-    pub l1_memory: l1_memory_input_helper::L1MemoryInputHelper,
 }
 
 #[derive(Clone, Default)]
 pub(crate) struct OutputHelper {
     pub acts: acts_output_helper::ActsOutputHelper,
-    pub l1_memory_flush: l1_memory_flush_output_helper::L1MemoryFlushOutputHelper,
 }
 
 #[derive(Clone, Default)]
@@ -111,9 +105,9 @@ pub(crate) fn pretty_json<T: Serialize>(value: &T) -> String {
 }
 
 pub(crate) fn sense_descriptors(
-    capability_entries: &[NeuralSignalDescriptor],
+    ns_descriptor_entries: &[NeuralSignalDescriptor],
 ) -> Vec<NeuralSignalDescriptor> {
-    let mut entries: Vec<_> = capability_entries
+    let mut entries: Vec<_> = ns_descriptor_entries
         .iter()
         .filter(|entry| entry.r#type == NeuralSignalType::Sense)
         .cloned()
@@ -133,9 +127,9 @@ pub(crate) fn sense_descriptors(
 }
 
 pub(crate) fn act_descriptors(
-    capability_entries: &[NeuralSignalDescriptor],
+    ns_descriptor_entries: &[NeuralSignalDescriptor],
 ) -> Vec<NeuralSignalDescriptor> {
-    let mut entries: Vec<_> = capability_entries
+    let mut entries: Vec<_> = ns_descriptor_entries
         .iter()
         .filter(|entry| entry.r#type == NeuralSignalType::Act)
         .cloned()

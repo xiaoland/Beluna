@@ -7,12 +7,12 @@ use std::{
 };
 
 use anyhow::Result;
+use async_trait::async_trait;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::Instrument;
 
 use crate::{
-    afferent_pathway::SenseAfferentPathway,
     config::SpineRuntimeConfig,
     spine::{
         SpineExecutionMode,
@@ -21,7 +21,11 @@ use crate::{
         error::{SpineError, backend_failure, invalid_batch, registration_invalid},
         types::{ActDispatchResult, NeuralSignalDescriptor, NeuralSignalDescriptorRouteKey},
     },
-    types::{Act, NeuralSignalDescriptorCatalog, Sense, SenseDatum},
+    stem::{SenseAfferentPathway, StemControlPort},
+    types::{
+        Act, NeuralSignalDescriptorCatalog, NeuralSignalDescriptorDropPatch,
+        NeuralSignalDescriptorPatch, ProprioceptionDropPatch, ProprioceptionPatch, Sense,
+    },
 };
 
 #[derive(Debug, Clone)]
@@ -112,10 +116,29 @@ pub struct Spine {
     endpoint_state: Mutex<EndpointState>,
     inline_adapter: OnceLock<Arc<SpineInlineAdapter>>,
     afferent_pathway: SenseAfferentPathway,
+    stem_control: Arc<dyn StemControlPort>,
+    endpoint_proprioception: RwLock<BTreeMap<String, String>>,
+}
+
+#[async_trait]
+pub trait SpineControlPort: Send + Sync {
+    async fn publish_sense(&self, sense: Sense);
+    async fn apply_neural_signal_descriptor_patch(&self, entries: Vec<NeuralSignalDescriptor>);
+    async fn apply_neural_signal_descriptor_drop(
+        &self,
+        routes: Vec<NeuralSignalDescriptorRouteKey>,
+    );
+    async fn apply_proprioception_patch(&self, entries: BTreeMap<String, String>);
+    async fn apply_proprioception_drop(&self, keys: Vec<String>);
+    async fn refresh_topology_proprioception(&self);
 }
 
 impl Spine {
-    pub fn new(config: &SpineRuntimeConfig, afferent_pathway: SenseAfferentPathway) -> Arc<Self> {
+    pub fn new(
+        config: &SpineRuntimeConfig,
+        afferent_pathway: SenseAfferentPathway,
+        stem_control: Arc<dyn StemControlPort>,
+    ) -> Arc<Self> {
         let spine = Arc::new(Self {
             mode: SpineExecutionMode::SerializedDeterministic,
             routing: RwLock::new(RoutingState::default()),
@@ -126,17 +149,15 @@ impl Spine {
             endpoint_state: Mutex::new(EndpointState::default()),
             inline_adapter: OnceLock::new(),
             afferent_pathway: afferent_pathway.clone(),
+            stem_control,
+            endpoint_proprioception: RwLock::new(BTreeMap::new()),
         });
 
-        spine.start_adapters(config, afferent_pathway);
+        spine.start_adapters(config);
         spine
     }
 
-    fn start_adapters(
-        self: &Arc<Self>,
-        config: &SpineRuntimeConfig,
-        afferent_pathway: SenseAfferentPathway,
-    ) {
+    fn start_adapters(self: &Arc<Self>, config: &SpineRuntimeConfig) {
         for (index, adapter_config) in config.adapters.iter().enumerate() {
             let adapter_id = (index as u64) + 1;
             match adapter_config {
@@ -147,7 +168,6 @@ impl Spine {
                         adapter_id,
                         adapter_cfg.clone(),
                         Arc::clone(self),
-                        afferent_pathway.clone(),
                         self.shutdown.clone(),
                     ));
 
@@ -174,7 +194,6 @@ impl Spine {
                 } => {
                     let adapter =
                         UnixSocketAdapter::new(adapter_cfg.socket_path.clone(), adapter_id);
-                    let afferent_pathway = afferent_pathway.clone();
                     let spine = Arc::clone(self);
                     let shutdown = self.shutdown.clone();
                     let socket_path = adapter_cfg.socket_path.clone();
@@ -193,7 +212,7 @@ impl Spine {
                                 socket_path = %socket_path.display(),
                                 "adapter_started"
                             );
-                            adapter.run(afferent_pathway, spine, shutdown).await
+                            adapter.run(spine, shutdown).await
                         }
                         .instrument(adapter_span),
                     );
@@ -261,13 +280,10 @@ impl Spine {
             }
             Err(err) => {
                 let reason_code = "spine_dispatch_error".to_string();
-                let reference_id = format!("spine:error:{}:{}", act.act_instance_id, err.kind as u8);
-                self.emit_dispatch_failure_sense(
-                    &act,
-                    &reason_code,
-                    &reference_id,
-                )
-                .await;
+                let reference_id =
+                    format!("spine:error:{}:{}", act.act_instance_id, err.kind as u8);
+                self.emit_dispatch_failure_sense(&act, &reason_code, &reference_id)
+                    .await;
                 Ok(ActDispatchResult::Lost {
                     reason_code,
                     reference_id,
@@ -368,19 +384,21 @@ impl Spine {
     }
 
     async fn emit_dispatch_failure_sense(&self, act: &Act, reason_code: &str, reference_id: &str) {
-        let sense = Sense::Domain(SenseDatum {
+        let sense = Sense {
             sense_instance_id: uuid::Uuid::new_v4().to_string(),
             endpoint_id: "core.spine".to_string(),
             neural_signal_descriptor_id: "dispatch.failed".to_string(),
-            payload: serde_json::json!({
-                "act_instance_id": act.act_instance_id,
-                "endpoint_id": act.endpoint_id,
-                "neural_signal_descriptor_id": act.neural_signal_descriptor_id,
-                "reason_code": reason_code,
-                "reference_id": reference_id,
-            }),
-            metadata: serde_json::json!({}),
-        });
+            payload: format!(
+                "act_instance_id={}; endpoint_id={}; neural_signal_descriptor_id={}; reason_code={}; reference_id={}",
+                act.act_instance_id,
+                act.endpoint_id,
+                act.neural_signal_descriptor_id,
+                reason_code,
+                reference_id
+            ),
+            weight: 1.0,
+            act_instance_id: Some(act.act_instance_id.clone()),
+        };
         if let Err(err) = self.afferent_pathway.send(sense).await {
             tracing::warn!(
                 target: "spine.dispatch",
@@ -448,7 +466,7 @@ impl Spine {
         Ok(BodyEndpointHandle { body_endpoint_id })
     }
 
-    pub fn add_capabilities(
+    pub fn add_ns_descriptors(
         &self,
         body_endpoint_id: &str,
         descriptors: Vec<NeuralSignalDescriptor>,
@@ -811,6 +829,81 @@ impl Spine {
         }
 
         removed
+    }
+}
+
+#[async_trait]
+impl SpineControlPort for Spine {
+    async fn publish_sense(&self, sense: Sense) {
+        if let Err(err) = self.afferent_pathway.send(sense).await {
+            tracing::warn!(
+                target = "spine.control",
+                error = %err,
+                "dropping_sense_due_to_closed_afferent_pathway"
+            );
+        }
+    }
+
+    async fn apply_neural_signal_descriptor_patch(&self, entries: Vec<NeuralSignalDescriptor>) {
+        if entries.is_empty() {
+            return;
+        }
+        self.stem_control
+            .apply_neural_signal_descriptor_patch(NeuralSignalDescriptorPatch { entries })
+            .await;
+    }
+
+    async fn apply_neural_signal_descriptor_drop(
+        &self,
+        routes: Vec<NeuralSignalDescriptorRouteKey>,
+    ) {
+        if routes.is_empty() {
+            return;
+        }
+        self.stem_control
+            .apply_neural_signal_descriptor_drop(NeuralSignalDescriptorDropPatch { routes })
+            .await;
+    }
+
+    async fn apply_proprioception_patch(&self, entries: BTreeMap<String, String>) {
+        if entries.is_empty() {
+            return;
+        }
+        {
+            let mut state = self.endpoint_proprioception.write().expect("lock poisoned");
+            for (key, value) in &entries {
+                state.insert(key.clone(), value.clone());
+            }
+        }
+        self.stem_control
+            .apply_proprioception_patch(ProprioceptionPatch { entries })
+            .await;
+    }
+
+    async fn apply_proprioception_drop(&self, keys: Vec<String>) {
+        if keys.is_empty() {
+            return;
+        }
+        {
+            let mut state = self.endpoint_proprioception.write().expect("lock poisoned");
+            for key in &keys {
+                state.remove(key);
+            }
+        }
+        self.stem_control
+            .apply_proprioception_drop(ProprioceptionDropPatch { keys })
+            .await;
+    }
+
+    async fn refresh_topology_proprioception(&self) {
+        let endpoint_ids = self.body_endpoint_ids_snapshot();
+        let mut entries = BTreeMap::new();
+        entries.insert(
+            "spine.body_endpoint_count".to_string(),
+            endpoint_ids.len().to_string(),
+        );
+        entries.insert("spine.body_endpoints".to_string(), endpoint_ids.join(","));
+        self.apply_proprioception_patch(entries).await;
     }
 }
 

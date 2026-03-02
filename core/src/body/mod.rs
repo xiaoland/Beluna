@@ -23,8 +23,8 @@ pub mod web;
 
 pub const SHELL_ENDPOINT_NAME: &str = "std-shell";
 pub const WEB_ENDPOINT_NAME: &str = "std-web";
-pub const SHELL_CAPABILITY_ID: &str = "tool.shell.exec";
-pub const WEB_CAPABILITY_ID: &str = "tool.web.fetch";
+pub const SHELL_NS_DESCRIPTOR_ID: &str = "tool.shell.exec";
+pub const WEB_NS_DESCRIPTOR_ID: &str = "tool.web.fetch";
 
 /// Inline Body Endpoints are built into Core, started by `main`, and attached through Spine inline adapter.
 pub fn register_inline_body_endpoints(
@@ -196,7 +196,7 @@ fn shell_registration_descriptor() -> NeuralSignalDescriptor {
     NeuralSignalDescriptor {
         r#type: NeuralSignalType::Act,
         endpoint_id: SHELL_ENDPOINT_NAME.to_string(),
-        neural_signal_descriptor_id: SHELL_CAPABILITY_ID.to_string(),
+        neural_signal_descriptor_id: SHELL_NS_DESCRIPTOR_ID.to_string(),
         payload_schema: serde_json::json!({
             "type": "object",
             "required": ["argv"],
@@ -209,6 +209,7 @@ fn shell_registration_descriptor() -> NeuralSignalDescriptor {
                 "stderr_max_bytes": {"type": "integer", "minimum": 1}
             }
         }),
+        emitted_sense_ids: Vec::new(),
     }
 }
 
@@ -217,7 +218,7 @@ fn web_registration_descriptor() -> NeuralSignalDescriptor {
     NeuralSignalDescriptor {
         r#type: NeuralSignalType::Act,
         endpoint_id: WEB_ENDPOINT_NAME.to_string(),
-        neural_signal_descriptor_id: WEB_CAPABILITY_ID.to_string(),
+        neural_signal_descriptor_id: WEB_NS_DESCRIPTOR_ID.to_string(),
         payload_schema: serde_json::json!({
             "type": "object",
             "required": ["url"],
@@ -230,5 +231,6 @@ fn web_registration_descriptor() -> NeuralSignalDescriptor {
                 "response_max_bytes": {"type": "integer", "minimum": 1}
             }
         }),
+        emitted_sense_ids: Vec::new(),
     }
 }

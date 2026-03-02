@@ -165,16 +165,21 @@ pub async fn handle_web_invoke(
         sense: Some(InlineSenseDatum {
             sense_instance_id: uuid::Uuid::new_v4().to_string(),
             neural_signal_descriptor_id: "body.std.web.result".to_string(),
-            payload: serde_json::json!({
-                "kind": "web_fetch_result",
-                "act_instance_id": act.act_instance_id,
-                "neural_signal_descriptor_id": act.neural_signal_descriptor_id,
-                "url": final_url,
-                "status_code": status_code,
-                "body_text": body_text,
-                "body_truncated": body_truncated,
-                "success": true
-            }),
+            payload: format!(
+                concat!(
+                    "web_fetch_result act_instance_id={}; neural_signal_descriptor_id={}; ",
+                    "url={}; status_code={}; body_truncated={}; success=true\n",
+                    "body:\n{}"
+                ),
+                act.act_instance_id,
+                act.neural_signal_descriptor_id,
+                final_url,
+                status_code,
+                body_truncated,
+                body_text
+            ),
+            weight: 0.0,
+            act_instance_id: Some(act.act_instance_id.clone()),
         }),
     }
 }

@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use crate::{
-    afferent_pathway::SenseAfferentPathway,
     continuity::{
         error::ContinuityError,
         persistence::ContinuityPersistence,
@@ -9,36 +8,24 @@ use crate::{
         types::DispatchContext,
     },
     cortex::CognitionState,
-    types::{
-        Act, DispatchDecision, NeuralSignalDescriptorCatalog, NeuralSignalDescriptorDropPatch,
-        NeuralSignalDescriptorPatch,
-    },
+    types::{Act, DispatchDecision},
 };
 
 #[derive(Clone)]
 pub struct ContinuityEngine {
     state: ContinuityState,
     persistence: ContinuityPersistence,
-    afferent_pathway: SenseAfferentPathway,
 }
 
 impl ContinuityEngine {
     pub fn new(
         state: ContinuityState,
         persistence: ContinuityPersistence,
-        afferent_pathway: SenseAfferentPathway,
     ) -> Self {
-        Self {
-            state,
-            persistence,
-            afferent_pathway,
-        }
+        Self { state, persistence }
     }
 
-    pub fn with_defaults_at(
-        path: PathBuf,
-        afferent_pathway: SenseAfferentPathway,
-    ) -> Result<Self, ContinuityError> {
+    pub fn with_defaults_at(path: PathBuf) -> Result<Self, ContinuityError> {
         let persistence = ContinuityPersistence::new(path);
         let cognition_state = match persistence.load()? {
             Some(state) => {
@@ -51,7 +38,6 @@ impl ContinuityEngine {
         Ok(Self {
             state: ContinuityState::with_cognition_state(cognition_state),
             persistence,
-            afferent_pathway,
         })
     }
 
@@ -72,27 +58,11 @@ impl ContinuityEngine {
             .save(&self.state.cognition_state_snapshot())
     }
 
-    pub fn apply_neural_signal_descriptor_patch(&mut self, patch: &NeuralSignalDescriptorPatch) {
-        self.state.apply_neural_signal_descriptor_patch(patch);
-    }
-
-    pub fn apply_neural_signal_descriptor_drop(
-        &mut self,
-        drop_patch: &NeuralSignalDescriptorDropPatch,
-    ) {
-        self.state.apply_neural_signal_descriptor_drop(drop_patch);
-    }
-
-    pub fn neural_signal_descriptor_snapshot(&self) -> NeuralSignalDescriptorCatalog {
-        self.state.neural_signal_descriptor_snapshot()
-    }
-
     pub fn on_act(
         &self,
         act: &Act,
         _ctx: &DispatchContext,
     ) -> Result<DispatchDecision, ContinuityError> {
-        let _ = &self.afferent_pathway;
         Ok(self.state.on_act(act))
     }
 

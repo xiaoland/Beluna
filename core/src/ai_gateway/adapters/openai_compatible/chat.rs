@@ -20,8 +20,8 @@ use crate::ai_gateway::{
         wire,
     },
     chat::types::{
-        AdapterInvocation, BackendCompleteResponse, BackendIdentity, BackendRawEvent,
-        FinishReason, OutputMode, ToolCallResult, ToolCallStatus, TurnPayload, UsageStats,
+        AdapterInvocation, BackendCompleteResponse, BackendIdentity, BackendRawEvent, FinishReason,
+        OutputMode, ToolCallResult, ToolCallStatus, TurnPayload, UsageStats,
     },
     error::{GatewayError, GatewayErrorKind},
     types::{AdapterContext, BackendCapabilities, BackendDialect},
@@ -287,7 +287,16 @@ fn build_body(model: &str, payload: &TurnPayload, stream: bool) -> Value {
             "type": "enabled",
             "budget_tokens": payload.limits.max_output_tokens.unwrap_or(10000)
         });
+        body["extra_body"] = json!({
+            "enable_thinking": "enabled",
+            "thinking_budget": "payload.limits.max_output_tokens.unwrap_or(10000)"
+        });
         body["enable_thinking"] = json!(true);
+    } else {
+        body["thinking"] = json!({
+            "type": "disabled",
+        });
+        body["enable_thinking"] = json!(false);
     }
 
     body
@@ -326,9 +335,8 @@ fn parse_complete_response(
 
     let usage = payload.get("usage").map(parse_usage);
 
-    let finish_reason = wire::parse_finish_reason(
-        choice.get("finish_reason").and_then(Value::as_str),
-    );
+    let finish_reason =
+        wire::parse_finish_reason(choice.get("finish_reason").and_then(Value::as_str));
 
     Ok(BackendCompleteResponse {
         backend_identity: BackendIdentity {

@@ -20,13 +20,8 @@ use tokio_util::sync::CancellationToken;
 use tracing::Instrument;
 
 use crate::{
-    afferent_pathway::SenseAfferentPathway,
-    spine::{EndpointBinding, runtime::Spine, types::NeuralSignalDescriptor},
-    types::{
-        Act, NeuralSignalDescriptorDropPatch, NeuralSignalDescriptorPatch,
-        ProprioceptionDropPatch, ProprioceptionPatch, Sense, SenseDatum,
-        default_neural_signal_metadata, is_uuid_v4, is_uuid_v7,
-    },
+    spine::{EndpointBinding, SpineControlPort, runtime::Spine, types::NeuralSignalDescriptor},
+    types::{Act, Sense, default_sense_weight, is_uuid_v4, is_uuid_v7},
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -46,7 +41,7 @@ struct OutboundActBody {
 enum InboundBodyMessage {
     Auth {
         endpoint_name: String,
-        capabilities: Vec<NeuralSignalDescriptor>,
+        ns_descriptors: Vec<NeuralSignalDescriptor>,
         proprioceptions: BTreeMap<String, String>,
     },
     Sense(InboundSenseFrame),
@@ -66,8 +61,9 @@ enum InboundBodyMessage {
 struct InboundSenseFrame {
     sense_instance_id: String,
     neural_signal_descriptor_id: String,
-    payload: serde_json::Value,
-    metadata: serde_json::Value,
+    payload: String,
+    weight: f64,
+    act_instance_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -75,7 +71,7 @@ struct InboundSenseFrame {
 struct InboundAuthBody {
     endpoint_name: String,
     #[serde(default)]
-    capabilities: Vec<NeuralSignalDescriptor>,
+    ns_descriptors: Vec<NeuralSignalDescriptor>,
     #[serde(default)]
     proprioceptions: BTreeMap<String, String>,
 }
@@ -99,9 +95,11 @@ struct InboundDropProprioceptionsBody {
 struct InboundSenseBody {
     sense_instance_id: String,
     neural_signal_descriptor_id: String,
-    payload: serde_json::Value,
-    #[serde(default = "default_neural_signal_metadata")]
-    metadata: serde_json::Value,
+    payload: String,
+    #[serde(default = "default_sense_weight")]
+    weight: f64,
+    #[serde(default)]
+    act_instance_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -128,7 +126,7 @@ fn parse_body_afferent_message(line: &str) -> Result<InboundBodyMessage, serde_j
             let body: InboundAuthBody = decode_envelope_body(wire.body)?;
             InboundBodyMessage::Auth {
                 endpoint_name: body.endpoint_name,
-                capabilities: body.capabilities,
+                ns_descriptors: body.ns_descriptors,
                 proprioceptions: body.proprioceptions,
             }
         }
@@ -144,8 +142,6 @@ fn parse_body_afferent_message(line: &str) -> Result<InboundBodyMessage, serde_j
         }
         "sense" => {
             let body: InboundSenseBody = decode_envelope_body(wire.body)?;
-            validate_neural_signal_metadata(&body.metadata)?;
-            validate_correlated_sense_metadata(&body.metadata)?;
             if !is_uuid_v4(&body.sense_instance_id) {
                 return Err(invalid_correlated_sense_error(
                     "sense_instance_id must be a valid uuid-v4 string",
@@ -156,11 +152,29 @@ fn parse_body_afferent_message(line: &str) -> Result<InboundBodyMessage, serde_j
                     "neural_signal_descriptor_id must be a non-empty string",
                 ));
             }
+            if body.payload.trim().is_empty() {
+                return Err(invalid_correlated_sense_error(
+                    "payload must be a non-empty string",
+                ));
+            }
+            if !(0.0..=1.0).contains(&body.weight) {
+                return Err(invalid_correlated_sense_error(
+                    "weight must be within [0, 1]",
+                ));
+            }
+            if let Some(act_instance_id) = body.act_instance_id.as_deref()
+                && !is_uuid_v7(act_instance_id)
+            {
+                return Err(invalid_correlated_sense_error(
+                    "act_instance_id must be a valid uuid-v7 string",
+                ));
+            }
             InboundBodyMessage::Sense(InboundSenseFrame {
                 sense_instance_id: body.sense_instance_id,
                 neural_signal_descriptor_id: body.neural_signal_descriptor_id,
                 payload: body.payload,
-                metadata: body.metadata,
+                weight: body.weight,
+                act_instance_id: body.act_instance_id,
             })
         }
         "act_ack" => {
@@ -193,35 +207,6 @@ fn decode_envelope_body<T: DeserializeOwned>(
     body: serde_json::Value,
 ) -> Result<T, serde_json::Error> {
     serde_json::from_value(body)
-}
-
-fn validate_neural_signal_metadata(metadata: &serde_json::Value) -> Result<(), serde_json::Error> {
-    if metadata.is_object() {
-        return Ok(());
-    }
-    Err(invalid_correlated_sense_error(
-        "metadata must be an object",
-    ))
-}
-
-fn validate_correlated_sense_metadata(
-    metadata: &serde_json::Value,
-) -> Result<(), serde_json::Error> {
-    let Some(object) = metadata.as_object() else {
-        return Ok(());
-    };
-
-    let Some(act_instance_id) = object.get("act_instance_id") else {
-        return Ok(());
-    };
-
-    if !act_instance_id.as_str().map(is_uuid_v7).unwrap_or(false) {
-        return Err(invalid_correlated_sense_error(
-            "act_instance_id must be a valid uuid-v7 string",
-        ));
-    }
-
-    Ok(())
 }
 
 fn invalid_correlated_sense_error(message: &str) -> serde_json::Error {
@@ -289,7 +274,7 @@ fn namespaced_body_proprioception_drop_keys(
 }
 
 async fn emit_proprioception_patch(
-    afferent_pathway: &SenseAfferentPathway,
+    spine: &Arc<Spine>,
     entries: BTreeMap<String, String>,
     reason: &'static str,
 ) {
@@ -297,53 +282,29 @@ async fn emit_proprioception_patch(
         return;
     }
 
-    if let Err(err) = afferent_pathway
-        .send(Sense::NewProprioceptions(ProprioceptionPatch { entries }))
-        .await
-    {
-        tracing::warn!(
-            target: "spine.unix_socket",
-            error = %err,
-            reason = reason,
-            "dropping_proprioception_patch"
-        );
-    }
+    tracing::debug!(
+        target: "spine.unix_socket",
+        reason = reason,
+        "apply_proprioception_patch"
+    );
+    spine.apply_proprioception_patch(entries).await;
 }
 
-async fn emit_proprioception_drop(
-    afferent_pathway: &SenseAfferentPathway,
-    keys: Vec<String>,
-    reason: &'static str,
-) {
+async fn emit_proprioception_drop(spine: &Arc<Spine>, keys: Vec<String>, reason: &'static str) {
     if keys.is_empty() {
         return;
     }
 
-    if let Err(err) = afferent_pathway
-        .send(Sense::DropProprioceptions(ProprioceptionDropPatch { keys }))
-        .await
-    {
-        tracing::warn!(
-            target: "spine.unix_socket",
-            error = %err,
-            reason = reason,
-            "dropping_proprioception_drop"
-        );
-    }
+    tracing::debug!(
+        target: "spine.unix_socket",
+        reason = reason,
+        "apply_proprioception_drop"
+    );
+    spine.apply_proprioception_drop(keys).await;
 }
 
-async fn emit_spine_topology_proprioception(
-    afferent_pathway: &SenseAfferentPathway,
-    spine: &Arc<Spine>,
-) {
-    let endpoint_ids = spine.body_endpoint_ids_snapshot();
-    let mut entries = BTreeMap::new();
-    entries.insert(
-        "spine.body_endpoint_count".to_string(),
-        endpoint_ids.len().to_string(),
-    );
-    entries.insert("spine.body_endpoints".to_string(), endpoint_ids.join(","));
-    emit_proprioception_patch(afferent_pathway, entries, "topology_refresh").await;
+async fn emit_spine_topology_proprioception(spine: &Arc<Spine>) {
+    spine.refresh_topology_proprioception().await;
 }
 
 pub struct UnixSocketAdapter {
@@ -359,12 +320,7 @@ impl UnixSocketAdapter {
         }
     }
 
-    pub async fn run(
-        &self,
-        afferent_pathway: SenseAfferentPathway,
-        spine: Arc<Spine>,
-        shutdown: CancellationToken,
-    ) -> Result<()> {
+    pub async fn run(&self, spine: Arc<Spine>, shutdown: CancellationToken) -> Result<()> {
         Self::prepare_socket_path(&self.socket_path)?;
         let listener = UnixListener::bind(&self.socket_path)
             .with_context(|| format!("unable to bind socket {}", self.socket_path.display()))?;
@@ -377,7 +333,6 @@ impl UnixSocketAdapter {
                 accept_result = listener.accept() => {
                     match accept_result {
                         Ok((stream, _)) => {
-                            let afferent_pathway = afferent_pathway.clone();
                             let spine = Arc::clone(&spine);
                             let adapter_id = self.adapter_id;
                             let session_span = tracing::info_span!(
@@ -387,7 +342,7 @@ impl UnixSocketAdapter {
                             );
                             tokio::spawn(async move {
                                 if let Err(err) =
-                                    handle_body_endpoint(stream, afferent_pathway, spine, adapter_id)
+                                    handle_body_endpoint(stream, spine, adapter_id)
                                         .await
                                 {
                                     tracing::warn!(
@@ -482,12 +437,11 @@ async fn wait_for_act_ack(
 #[tracing::instrument(
     name = "handle_body_endpoint",
     target = "spine.unix_socket",
-    skip(stream, afferent_pathway, spine),
+    skip(stream, spine),
     fields(adapter_id = adapter_id)
 )]
 async fn handle_body_endpoint(
     stream: UnixStream,
-    afferent_pathway: SenseAfferentPathway,
     spine: Arc<Spine>,
     adapter_id: u64,
 ) -> Result<()> {
@@ -579,7 +533,7 @@ async fn handle_body_endpoint(
             Ok(message) => match message {
                 InboundBodyMessage::Auth {
                     endpoint_name,
-                    capabilities,
+                    ns_descriptors,
                     proprioceptions,
                 } => {
                     if auth_endpoint_id.is_some() {
@@ -615,47 +569,36 @@ async fn handle_body_endpoint(
                     auth_endpoint_id = Some(handle.body_endpoint_id.clone());
 
                     let registered_entries =
-                        match spine.add_capabilities(&handle.body_endpoint_id, capabilities) {
+                        match spine.add_ns_descriptors(&handle.body_endpoint_id, ns_descriptors) {
                             Ok(entries) => entries,
                             Err(err) => {
                                 tracing::warn!(
                                     target: "spine.unix_socket",
                                     error = ?err,
-                                    "body_endpoint_capability_registration_failed_during_auth"
+                                    "body_endpoint_ns_descriptor_registration_failed_during_auth"
                                 );
                                 Vec::new()
                             }
                         };
 
-                    if !registered_entries.is_empty()
-                        && let Err(err) = afferent_pathway
-                            .send(Sense::NewNeuralSignalDescriptors(
-                                NeuralSignalDescriptorPatch {
-                                    entries: registered_entries,
-                                },
-                            ))
-                            .await
-                    {
-                        tracing::warn!(
-                            target: "spine.unix_socket",
-                            error = %err,
-                            "dropping_capability_patch_after_auth"
-                        );
+                    if !registered_entries.is_empty() {
+                        spine
+                            .apply_neural_signal_descriptor_patch(registered_entries)
+                            .await;
                     }
 
                     let namespaced_entries = namespaced_body_proprioception_entries(
                         &handle.body_endpoint_id,
                         &proprioceptions,
                     );
-                    endpoint_proprioception_keys
-                        .extend(namespaced_entries.keys().cloned());
+                    endpoint_proprioception_keys.extend(namespaced_entries.keys().cloned());
                     emit_proprioception_patch(
-                        &afferent_pathway,
+                        &spine,
                         namespaced_entries,
                         "auth_proprioception_patch",
                     )
                     .await;
-                    emit_spine_topology_proprioception(&afferent_pathway, &spine).await;
+                    emit_spine_topology_proprioception(&spine).await;
                 }
                 InboundBodyMessage::ActAck { act_instance_id } => {
                     tracing::debug!(
@@ -674,31 +617,15 @@ async fn handle_body_endpoint(
                 InboundBodyMessage::Unplug => {
                     if let Some(body_endpoint_id) = auth_endpoint_id.as_deref() {
                         let routes = spine.remove_endpoint(body_endpoint_id);
-                        if !routes.is_empty()
-                            && let Err(err) = afferent_pathway
-                                .send(Sense::DropNeuralSignalDescriptors(
-                                    NeuralSignalDescriptorDropPatch { routes },
-                                ))
-                                .await
-                        {
-                            tracing::warn!(
-                                target: "spine.unix_socket",
-                                error = %err,
-                                "dropping_capability_drop_after_unplug"
-                            );
-                        }
+                        spine.apply_neural_signal_descriptor_drop(routes).await;
                         let drop_keys = endpoint_proprioception_keys
                             .iter()
                             .cloned()
                             .collect::<Vec<_>>();
                         endpoint_proprioception_keys.clear();
-                        emit_proprioception_drop(
-                            &afferent_pathway,
-                            drop_keys,
-                            "unplug_proprioception_drop",
-                        )
-                        .await;
-                        emit_spine_topology_proprioception(&afferent_pathway, &spine).await;
+                        emit_proprioception_drop(&spine, drop_keys, "unplug_proprioception_drop")
+                            .await;
+                        emit_spine_topology_proprioception(&spine).await;
                     }
                     break;
                 }
@@ -712,20 +639,15 @@ async fn handle_body_endpoint(
                     };
 
                     // Adapter injects endpoint_id from authenticated endpoint binding.
-                    let sense = SenseDatum {
+                    let sense = Sense {
                         sense_instance_id: sense.sense_instance_id,
                         endpoint_id: body_endpoint_id.to_string(),
                         neural_signal_descriptor_id: sense.neural_signal_descriptor_id,
                         payload: sense.payload,
-                        metadata: sense.metadata,
+                        weight: sense.weight.clamp(0.0, 1.0),
+                        act_instance_id: sense.act_instance_id,
                     };
-                    if let Err(err) = afferent_pathway.send(Sense::Domain(sense)).await {
-                        tracing::warn!(
-                            target: "spine.unix_socket",
-                            error = %err,
-                            "dropping_sense_due_to_closed_afferent_pathway"
-                        );
-                    }
+                    spine.publish_sense(sense).await;
                 }
                 InboundBodyMessage::NewProprioceptions { entries } => {
                     let Some(body_endpoint_id) = auth_endpoint_id.as_deref() else {
@@ -738,10 +660,9 @@ async fn handle_body_endpoint(
 
                     let namespaced_entries =
                         namespaced_body_proprioception_entries(body_endpoint_id, &entries);
-                    endpoint_proprioception_keys
-                        .extend(namespaced_entries.keys().cloned());
+                    endpoint_proprioception_keys.extend(namespaced_entries.keys().cloned());
                     emit_proprioception_patch(
-                        &afferent_pathway,
+                        &spine,
                         namespaced_entries,
                         "runtime_proprioception_patch",
                     )
@@ -762,7 +683,7 @@ async fn handle_body_endpoint(
                         endpoint_proprioception_keys.remove(key);
                     }
                     emit_proprioception_drop(
-                        &afferent_pathway,
+                        &spine,
                         namespaced_keys,
                         "runtime_proprioception_drop",
                     )
@@ -780,24 +701,13 @@ async fn handle_body_endpoint(
     }
 
     let routes = spine.on_adapter_channel_closed(channel_id);
-    if !routes.is_empty() {
-        let _ = afferent_pathway
-            .send(Sense::DropNeuralSignalDescriptors(
-                NeuralSignalDescriptorDropPatch { routes },
-            ))
-            .await;
-    }
+    spine.apply_neural_signal_descriptor_drop(routes).await;
 
     if !endpoint_proprioception_keys.is_empty() {
         let drop_keys = endpoint_proprioception_keys.into_iter().collect::<Vec<_>>();
-        emit_proprioception_drop(
-            &afferent_pathway,
-            drop_keys,
-            "disconnect_proprioception_drop",
-        )
-        .await;
+        emit_proprioception_drop(&spine, drop_keys, "disconnect_proprioception_drop").await;
     }
-    emit_spine_topology_proprioception(&afferent_pathway, &spine).await;
+    emit_spine_topology_proprioception(&spine).await;
 
     writer_task.await??;
 
@@ -911,7 +821,7 @@ mod tests {
     }
 
     #[test]
-    fn accepts_auth_message_with_capabilities() {
+    fn accepts_auth_message_with_ns_descriptors() {
         let descriptor: NeuralSignalDescriptor = serde_json::from_value(serde_json::json!({
             "type": "act",
             "endpoint_id": "macos-app.01",
@@ -927,7 +837,7 @@ mod tests {
             "timestamp": 1739500000000_u64,
             "body": {
                 "endpoint_name": "macos-app",
-                "capabilities": [descriptor]
+                "ns_descriptors": [descriptor]
             }
         });
 
@@ -936,7 +846,7 @@ mod tests {
     }
 
     #[test]
-    fn accepts_auth_message_without_capabilities() {
+    fn accepts_auth_message_without_ns_descriptors() {
         let wire = serde_json::json!({
             "method": "auth",
             "id": "2f8daebf-f529-4ea4-b322-7df109e86d66",
@@ -950,11 +860,11 @@ mod tests {
         match parsed {
             InboundBodyMessage::Auth {
                 endpoint_name,
-                capabilities,
+                ns_descriptors,
                 proprioceptions,
             } => {
                 assert_eq!(endpoint_name, "cli");
-                assert!(capabilities.is_empty());
+                assert!(ns_descriptors.is_empty());
                 assert!(proprioceptions.is_empty());
             }
             _ => panic!("expected auth message"),
@@ -975,8 +885,8 @@ mod tests {
             }
         });
 
-        let parsed =
-            parse_body_afferent_message(&wire.to_string()).expect("new_proprioceptions should parse");
+        let parsed = parse_body_afferent_message(&wire.to_string())
+            .expect("new_proprioceptions should parse");
         assert!(matches!(
             parsed,
             InboundBodyMessage::NewProprioceptions { .. }
@@ -994,8 +904,8 @@ mod tests {
             }
         });
 
-        let parsed =
-            parse_body_afferent_message(&wire.to_string()).expect("drop_proprioceptions should parse");
+        let parsed = parse_body_afferent_message(&wire.to_string())
+            .expect("drop_proprioceptions should parse");
         assert!(matches!(
             parsed,
             InboundBodyMessage::DropProprioceptions { .. }
@@ -1004,7 +914,7 @@ mod tests {
 
     #[test]
     fn rejects_non_ws6_methods() {
-        for method in ["new_capabilities", "drop_capabilities"] {
+        for method in ["new_ns_descriptors", "drop_ns_descriptors"] {
             let wire = serde_json::json!({
                 "method": method,
                 "id": "2f8daebf-f529-4ea4-b322-7df109e86d66",

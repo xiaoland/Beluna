@@ -2,232 +2,118 @@
 
 ## Topography
 
-Cortex 是无状态认知边界，纯函数签名：
+Cortex is a stateless cognition boundary executed by `CortexRuntime`.
 
-```
-cortex(senses, physical_state, cognition_state) -> (acts, new_cognition_state, wait_for_sense)
-```
+Runtime boundary:
 
-### 组件拓扑
-
-```
-                              ┌──────────────────────────────────────────┐
-                              │              Cortex Runtime              │
-                              │            (runtime.rs: Cortex)          │
-                              │                                          │
-  senses ──────────────────►  │  ┌─ Input Helpers (parallel) ──────────┐ │
-  physical_state ──────────►  │  │  sense_input_helper                 │ │
-  cognition_state ─────────►  │  │  proprioception_input_helper        │ │
-                              │  │  act_descriptor_input_helper        │ │
-                              │  │  goal_tree_input_helper             │ │
-                              │  │  l1_memory_input_helper             │ │
-                              │  └──────────────┬──────────────────────┘ │
-                              │                 │ IR sections            │
-                              │                 ▼                        │
-                              │  ┌─ IR Assembly (ir.rs) ───────────────┐ │
-                              │  │  build_input_ir()                   │ │
-                              │  │  build_primary_input_payload()      │ │
-                              │  └──────────────┬──────────────────────┘ │
-                              │                 │ primary_input_payload  │
-                              │                 ▼                        │
-                              │  ┌─ Primary Engine ────────────────────┐ │
-                              │  │  Cognitive Micro-loop               │ │
-                              │  │  (max_internal_steps iterations)    │ │
-                              │  │  ┌────────────────────────────┐     │ │
-                              │  │  │ LLM turn ──► tool calls?   │     │ │
-                              │  │  │   yes: expand-sense-raw /  │     │ │
-                              │  │  │         expand-sense-with- │     │ │
-                              │  │  │         sub-agent          │     │ │
-                              │  │  │   no:  emit final output   │     │ │
-                              │  │  └─────────────┬──────────────┘     │ │
-                              │  └────────────────┼────────────────────┘ │
-                              │                   │ primary_output text  │
-                              │                   ▼                      │
-                              │  ┌─ Output IR Parse (ir.rs) ───────────┐ │
-                              │  │  parse_output_ir()                  │ │
-                              │  │  -> OutputIrSections                │ │
-                              │  └──────────────┬──────────────────────┘ │
-                              │                 │ sections               │
-                              │                 ▼                        │
-                              │  ┌─ Output Helpers (parallel) ─────────┐ │
-                              │  │  acts_output_helper                 │ │
-                              │  │  goal_tree_patch_output_helper      │ │
-                              │  │  l1_memory_flush_output_helper      │ │
-                              │  └──────────────┬──────────────────────┘ │
-                              │                 │ structured outputs     │
-                              │                 ▼                        │
-                              │  ┌─ Cognition Patch (cognition_patch.rs)│ │
-                              │  │  apply_cognition_patches()          │ │
-                              │  └──────────────┬──────────────────────┘ │
-                              │                 │                        │
-                              └─────────────────┼────────────────────────┘
-                                                │
-                                                ▼
-                              CortexOutput { acts, new_cognition_state, wait_for_sense }
+```text
+cortex(senses, physical_state, cognition_state) -> CortexOutput
 ```
 
-### 文件拓扑
+`CortexOutput`:
+1. `emitted_acts: Vec<EmittedAct>`
+2. `new_cognition_state: CognitionState`
+3. `control: CortexControlDirective`
 
+`EmittedAct`:
+1. `act`
+2. `wait_for_sense_seconds` (`0` means no wait)
+3. `expected_fq_sense_ids`
+
+## Component Topography
+
+```text
+CortexRuntime (core/src/cortex/runtime.rs)
+  ├─ reads physical snapshot via PhysicalStateReadPort
+  ├─ drains afferent consumer + tick grants
+  ├─ calls Cortex::cortex(...)
+  ├─ persists cognition via Cortex->Continuity
+  ├─ enqueues emitted acts into Stem efferent pathway
+  └─ applies wait gate via afferent rule-control port while waiting for sense
+
+Cortex Primary (core/src/cortex/primary.rs)
+  ├─ deterministic input section assembly
+  ├─ AI Gateway thread turn loop (streaming/tool-calling)
+  ├─ structured internal tools
+  ├─ dynamic per-act tool aliases -> fq act id mapping
+  └─ returns emitted acts + control directives
 ```
-cortex/
-├── mod.rs                  公共导出
-├── runtime.rs              运行时编排（Cortex struct + HelperRuntime impl）
-├── cognition.rs            CognitionState, GoalTree, GoalNode, GoalTreePatchOp
-├── cognition_patch.rs      apply_cognition_patches()
-├── ir.rs                   Input/Output IR 构建与解析
-├── prompts.rs              System/User prompt 模板
-├── clamp.rs                act_instance_id 生成（UUIDv7）
-├── error.rs                CortexError / CortexErrorKind
-├── types.rs                CortexOutput, ReactionLimits, InputIr, OutputIr
-├── testing.rs              TestHooks
-├── AGENTS.md
+
+## Primary Tools
+
+1. Dynamic dedicated act tools (one tool per act descriptor).
+2. `expand-senses`:
+- `mode: raw | sub-agent`
+- `senses_to_expand[].sense_id` format: `"<monotonic-id>. <fq-sense-id>"`.
+3. `patch-goal-forest` (`reset_context` supported).
+4. `overwrite-sense-deferral-rule`.
+5. `reset-sense-deferral-rules`.
+6. `sleep` (`ignore_all_trigger_for_seconds`).
+
+## Input/Render Contracts
+
+Senses delivered to Primary use deterministic lines:
+
+```text
+- [monotonic internal sense id]. [fq-sense-id]: [key=value,key=value,...]; [payload-truncated-if-needed]
+```
+
+Notes:
+1. Payload is text.
+2. Metadata fragment is deterministic key=value list.
+3. Sense helper fallback may emit Postman envelope text for oversized payloads.
+
+## Runtime Sequence
+
+```mermaid
+sequenceDiagram
+    participant AR as Afferent Consumer
+    participant TK as Tick Grants
+    participant CR as CortexRuntime
+    participant CX as Cortex
+    participant CT as Continuity
+    participant EP as Efferent Producer
+
+    alt tick or sense trigger
+        TK-->>CR: TickGrant
+        AR-->>CR: Sense
+    end
+
+    CR->>CR: cycle_id += 1
+    CR->>CR: physical_state snapshot(cycle_id)
+    CR->>CX: cortex(senses, physical_state, cognition_state)
+    CX-->>CR: CortexOutput
+
+    CR->>CT: persist_cognition_state(new_cognition_state)
+
+    loop emitted acts in order
+        CR->>EP: enqueue(EfferentActEnvelope { cycle_id, act_seq_no, act })
+        alt wait_for_sense_seconds > 0
+            CR->>CR: overwrite wait-gate deferral rule
+            CR->>AR: wait for matching sense (bounded timeout)
+            CR->>CR: clear wait-gate rule
+        end
+    end
+
+    alt control.ignore_all_trigger_for_seconds set
+        CR->>CR: ignore triggers until deadline
+    end
+```
+
+## File Map
+
+```text
+core/src/cortex/
+├── mod.rs
+├── runtime.rs
+├── primary.rs
+├── cognition.rs
+├── cognition_patch.rs
+├── ir.rs
+├── prompts.rs
+├── clamp.rs
+├── error.rs
+├── testing.rs
+├── types.rs
 └── helpers/
-    ├── mod.rs                      CognitionOrgan enum, HelperRuntime trait, CortexHelper
-    ├── sense_input_helper.rs       Sense → <somatic-senses> + SenseToolContext
-    ├── proprioception_input_helper.rs  Proprioception → <proprioception>
-    ├── act_descriptor_input_helper.rs  Descriptors → <somatic-act-descriptor-catalog>
-    ├── goal_tree_input_helper.rs   GoalTree → <instincts> + <willpower-matrix>
-    ├── l1_memory_input_helper.rs   L1Memory → <focal-awareness>
-    ├── acts_output_helper.rs       <somatic-acts> → Act[]
-    ├── goal_tree_patch_output_helper.rs  <willpower-matrix-patch> → GoalTreePatchOp[]
-    └── l1_memory_flush_output_helper.rs  <new-focal-awareness> → L1Memory
-```
-
-### 依赖关系
-
-```
-Cortex ─────► AI Gateway (chat sessions/threads/turns)
-Cortex ─────► Observability (metrics recording)
-```
-
-Cortex 不持有 Spine、Stem、Continuity 引用。它是纯函数调用，由 Stem 驱动。
-
----
-
-## Sequence Diagram
-
-### 正常认知周期
-
-```mermaid
-sequenceDiagram
-    participant Stem
-    participant Cortex as Cortex Runtime
-    participant IH as Input Helpers (×5)
-    participant IR as IR Assembly
-    participant Primary as Primary Engine (LLM)
-    participant OH as Output Helpers (×3)
-    participant Patch as Cognition Patch
-
-    Stem->>Cortex: cortex(senses, physical_state, cognition_state)
-    activate Cortex
-
-    Note over Cortex: emit ReactionStarted telemetry
-
-    par 并行输入处理
-        Cortex->>IH: sense_helper.to_input_ir_section()
-        Cortex->>IH: proprioception_helper.to_input_ir_section()
-        Cortex->>IH: act_descriptor_helper.to_input_ir_section()
-        Cortex->>IH: goal_tree_helper.to_input_ir_sections()
-        Cortex->>IH: l1_memory_helper.to_input_ir_section()
-    end
-    IH-->>Cortex: 6 IR sections (instincts + willpower split from goal_tree)
-
-    Cortex->>IR: build_input_ir() + build_primary_input_payload()
-    IR-->>Cortex: InputIr + primary_input_payload
-
-    Cortex->>Primary: run_primary_engine(primary_input_payload)
-    activate Primary
-    loop max_internal_steps (default 4)
-        Primary->>Primary: LLM turn
-        alt tool calls present
-            Primary->>Primary: expand-sense-raw / expand-sense-with-sub-agent
-            Primary->>Primary: feed tool results → next turn
-        else no tool calls
-            Primary-->>Cortex: output text (contains Output IR tags)
-        end
-    end
-    deactivate Primary
-
-    Cortex->>IR: parse_output_ir(output_text)
-    IR-->>Cortex: OutputIrSections
-
-    par 并行输出处理
-        Cortex->>OH: acts_helper.to_structured_output()
-        Cortex->>OH: goal_tree_patch_helper.to_structured_output()
-        Cortex->>OH: l1_memory_flush_helper.to_structured_output()
-    end
-    OH-->>Cortex: Act[], GoalTreePatchOp[], L1Memory
-
-    Cortex->>Patch: apply_cognition_patches(ops, l1_flush)
-    Patch-->>Cortex: new CognitionState (revision+1)
-
-    Note over Cortex: emit ReactionCompleted telemetry
-
-    Cortex-->>Stem: CortexOutput { acts, new_cognition_state, wait_for_sense }
-    deactivate Cortex
-```
-
-### 失败降级序列
-
-```mermaid
-sequenceDiagram
-    participant Stem
-    participant Cortex
-    participant IH as Input Helpers
-    participant Primary
-    participant OH as Output Helpers
-
-    Stem->>Cortex: cortex(senses, physical_state, cognition_state)
-
-    par Input helper failures → fallback
-        IH--xCortex: sense_helper failed → deterministic empty section
-        IH-->>Cortex: other helpers succeed
-    end
-
-    alt Primary timeout / failure
-        Cortex-->>Stem: noop CortexOutput (original cognition_state, no acts)
-    else Primary success, output helper partial failure
-        OH--xCortex: acts_helper failed → empty acts
-        OH-->>Cortex: goal_tree_patch + l1_memory succeed
-        Cortex-->>Stem: CortexOutput (partial: no acts, updated cognition)
-    end
-```
-
-### Primary 认知微循环详细序列
-
-```mermaid
-sequenceDiagram
-    participant Runtime as Cortex Runtime
-    participant GW as AI Gateway
-    participant LLM as LLM Provider
-
-    Runtime->>GW: open_session(cortex-primary-session-{cycle_id})
-    GW-->>Runtime: session handle
-    Runtime->>GW: open_thread(system_prompt)
-    GW-->>Runtime: thread handle
-
-    loop step = 0..max_internal_steps
-        Runtime->>GW: thread.turn_once(user_prompt + tools)
-        GW->>LLM: chat request
-        LLM-->>GW: response (text + tool_calls?)
-        GW-->>Runtime: ChatResponse
-
-        alt tool_calls is empty
-            Note over Runtime: final output obtained
-            Runtime->>GW: session.close()
-            Runtime-->>Runtime: return output text
-        else tool_calls present
-            loop for each tool_call
-                alt expand-sense-raw
-                    Runtime->>Runtime: lookup sense by sense_instance_id
-                else expand-sense-with-sub-agent
-                    Runtime->>GW: sub-agent LLM call per task
-                    GW-->>Runtime: summarized sense data
-                end
-            end
-            Note over Runtime: feed tool results as next turn input
-        end
-    end
-
-    Note over Runtime: exceeded max_internal_steps → error
 ```

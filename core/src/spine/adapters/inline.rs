@@ -13,20 +13,21 @@ use tokio_util::sync::CancellationToken;
 use tracing::Instrument;
 
 use crate::{
-    afferent_pathway::SenseAfferentPathway,
     config::InlineAdapterConfig,
-    spine::{ActDispatchResult, Endpoint, EndpointBinding, NeuralSignalDescriptor, runtime::Spine},
-    types::{
-        Act, NeuralSignalDescriptorDropPatch, NeuralSignalDescriptorPatch,
-        ProprioceptionPatch, Sense, SenseDatum,
+    spine::{
+        ActDispatchResult, Endpoint, EndpointBinding, NeuralSignalDescriptor, SpineControlPort,
+        runtime::Spine,
     },
+    types::{Act, Sense},
 };
 
 #[derive(Debug, Clone)]
 pub struct InlineSenseDatum {
     pub sense_instance_id: String,
     pub neural_signal_descriptor_id: String,
-    pub payload: serde_json::Value,
+    pub payload: String,
+    pub weight: f64,
+    pub act_instance_id: Option<String>,
 }
 
 struct RegisteredInlineEndpoint {
@@ -43,7 +44,6 @@ pub struct InlineEndpointRuntimeHandles {
 pub struct SpineInlineAdapter {
     adapter_id: u64,
     spine: Weak<Spine>,
-    afferent_pathway: SenseAfferentPathway,
     shutdown: CancellationToken,
     act_queue_capacity: usize,
     sense_queue_capacity: usize,
@@ -55,13 +55,11 @@ impl SpineInlineAdapter {
         adapter_id: u64,
         config: InlineAdapterConfig,
         spine: Arc<Spine>,
-        afferent_pathway: SenseAfferentPathway,
         shutdown: CancellationToken,
     ) -> Self {
         Self {
             adapter_id,
             spine: Arc::downgrade(&spine),
-            afferent_pathway,
             shutdown,
             act_queue_capacity: config.act_queue_capacity.max(1),
             sense_queue_capacity: config.sense_queue_capacity.max(1),
@@ -76,7 +74,7 @@ impl SpineInlineAdapter {
     pub async fn attach_inline_endpoint(
         self: &Arc<Self>,
         endpoint_name: String,
-        capabilities: Vec<NeuralSignalDescriptor>,
+        ns_descriptors: Vec<NeuralSignalDescriptor>,
     ) -> Result<InlineEndpointRuntimeHandles> {
         let endpoint_name = endpoint_name.trim().to_string();
         if endpoint_name.is_empty() {
@@ -102,7 +100,8 @@ impl SpineInlineAdapter {
             .map_err(|err| anyhow!(err.to_string()))?;
 
         let body_endpoint_id = handle.body_endpoint_id.clone();
-        let registered_entries = match spine.add_capabilities(&body_endpoint_id, capabilities) {
+        let registered_entries = match spine.add_ns_descriptors(&body_endpoint_id, ns_descriptors)
+        {
             Ok(entries) => entries,
             Err(err) => {
                 spine.remove_endpoint(&body_endpoint_id);
@@ -139,20 +138,16 @@ impl SpineInlineAdapter {
                                 break;
                             };
                             // Inline endpoints do not carry endpoint_id; adapter injects the bound endpoint id.
-                            let sense = SenseDatum {
+                            let sense = Sense {
                                 sense_instance_id: sense.sense_instance_id.clone(),
                                 endpoint_id: body_endpoint_id_for_task.clone(),
                                 neural_signal_descriptor_id: sense.neural_signal_descriptor_id.clone(),
                                 payload: sense.payload.clone(),
-                                metadata: serde_json::json!({}),
+                                weight: sense.weight.clamp(0.0, 1.0),
+                                act_instance_id: sense.act_instance_id.clone(),
                             };
-                            if let Err(err) = adapter.afferent_pathway.send(Sense::Domain(sense)).await {
-                                tracing::warn!(
-                                    target: "spine.inline_adapter",
-                                    endpoint_name = endpoint_name_for_task,
-                                    error = %err,
-                                    "dropped_sense_from_inline_endpoint"
-                                );
+                            if let Some(spine) = adapter.spine.upgrade() {
+                                spine.publish_sense(sense).await;
                             }
                         }
                     }
@@ -185,23 +180,12 @@ impl SpineInlineAdapter {
             );
         }
 
-        if !registered_entries.is_empty()
-            && let Err(err) = self
-                .afferent_pathway
-                .send(Sense::NewNeuralSignalDescriptors(
-                    NeuralSignalDescriptorPatch {
-                        entries: registered_entries,
-                    },
-                ))
-                .await
-        {
-            tracing::warn!(
-                target: "spine.inline_adapter",
-                error = %err,
-                "dropped_neural_signal_descriptor_patch_after_attach"
-            );
+        if !registered_entries.is_empty() {
+            spine
+                .apply_neural_signal_descriptor_patch(registered_entries)
+                .await;
         }
-        emit_spine_topology_proprioception(&self.afferent_pathway, &spine).await;
+        spine.refresh_topology_proprioception().await;
 
         Ok(InlineEndpointRuntimeHandles { act_rx, sense_tx })
     }
@@ -292,42 +276,9 @@ impl SpineInlineAdapter {
 
         if let Some(spine) = self.spine.upgrade() {
             let routes = spine.remove_endpoint(&removed.body_endpoint_id);
-            if !routes.is_empty()
-                && let Err(err) = self
-                    .afferent_pathway
-                    .send(Sense::DropNeuralSignalDescriptors(
-                        NeuralSignalDescriptorDropPatch { routes },
-                    ))
-                    .await
-            {
-                tracing::warn!(
-                    target: "spine.inline_adapter",
-                    error = %err,
-                    "dropped_neural_signal_descriptor_drop_during_detach"
-                );
-            }
-            emit_spine_topology_proprioception(&self.afferent_pathway, &spine).await;
+            spine.apply_neural_signal_descriptor_drop(routes).await;
+            spine.refresh_topology_proprioception().await;
         }
-    }
-}
-
-async fn emit_spine_topology_proprioception(afferent_pathway: &SenseAfferentPathway, spine: &Spine) {
-    let endpoint_ids = spine.body_endpoint_ids_snapshot();
-    let mut entries = BTreeMap::new();
-    entries.insert(
-        "spine.body_endpoint_count".to_string(),
-        endpoint_ids.len().to_string(),
-    );
-    entries.insert("spine.body_endpoints".to_string(), endpoint_ids.join(","));
-    if let Err(err) = afferent_pathway
-        .send(Sense::NewProprioceptions(ProprioceptionPatch { entries }))
-        .await
-    {
-        tracing::warn!(
-            target: "spine.inline_adapter",
-            error = %err,
-            "dropped_spine_topology_proprioception_patch"
-        );
     }
 }
 

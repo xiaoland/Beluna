@@ -12,7 +12,6 @@
 
 - [ ] IR 改进 <https://gemini.google.com/u/1/app/e9c1e8ff7b2377bf>
 - [ ] 增加对 sense 消费的控制力
-- [ ] 除了 cognition-state，其它都不可以给 input-helper 主动"解释"
 - [x] 重构 goal tree
   - [x] weight 是基于一棵树的，而不是整个森林的
   - [x] 移除本能（加入到 Primary Prompt 中）
@@ -22,10 +21,18 @@
   - [x] 解决方案尝试：将 goal-forest-patch 变为 natural-language based；
         结论：还是不太稳定，但至少可以了，随着后面 Dual Loop 的修复，删掉对 focal-awareness, somatic-acts 输出的要求等，使 content 就是纯粹的思考
 - [ ] Cortex / Stem Dual loop
+  - [ ] 除了 cognition-state，其它都不可以给 input-helper 主动"解释"
   - [ ] 移除 l1-memory：goal-forest, 对话历史承担了这个角色
   - [ ] goal-forest helper 是全局单例，实现为一个 trait
   - [ ] 将 act 的输出也变为工具调用，但是立即返回；如果开启 wait，则等待响应的 sense (act-descriptor 配置 sense-matcher)
   - [ ] goal-forest patch helper 应该自动生成 numbering 啊，numbering 是 required 的现在/
+  - [ ] goal-forest patch with reset
+  - [ ] efferent-pathway
+  - [ ] 驱动 primary turn: sense / tick / proprioception.
+  - [ ] Add rule tool 没有捏？就最直接的 add / remove 吧，也不要什么 overwrite / reset 了。
+  - [ ] Sense internal monotonic id 需要基于进程声明周期而不是 cycle 周期
+  - [ ] Act dispatch failure as a sesnse
+  - [ ] cognition-patch 这个模块很奇怪，应该删除
 
 ### Continuity
 
