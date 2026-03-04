@@ -15,16 +15,19 @@ Stem is Beluna's tick-driven runtime orchestrator.
 - Capability control senses:
   - `new_neural_signal_descriptors`: apply before same-cycle Cortex call
   - `drop_neural_signal_descriptors`: apply before same-cycle Cortex call
+- Stem validates descriptor identifiers before committing to catalog:
+  - `endpoint_id` and `neural_signal_descriptor_id` must match `[A-Za-z0-9]+(\\.[A-Za-z0-9]+)*`
+  - invalid descriptor patch/drop routes are rejected from catalog updates
 - Proprioception control senses:
   - `new_proprioceptions`: apply map upsert before same-cycle Cortex call
   - `drop_proprioceptions`: apply key drop before same-cycle Cortex call
 - Stem publishes a built-in sleep act descriptor:
   - endpoint: `core.control`
   - act id: `sleep`
-  - payload: `{ "seconds": integer >= 1 }`
+  - payload: `{ "ticks": integer >= 1 }`
 - Sleep act semantics:
-  - enters sleeping mode until deadline
-  - new sense arrival wakes early and triggers immediate cycle
+  - suppresses admitted Cortex turns for the requested number of ticks
+  - senses keep buffering while suppressed
 - Dispatch path is per act middleware:
   - `Continuity.on_act -> Spine.on_act_final`
   - final status is `ACK | REJECTED | LOST`

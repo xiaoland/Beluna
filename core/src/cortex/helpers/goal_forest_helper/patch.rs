@@ -315,7 +315,11 @@ fn is_valid_numbering(numbering: &str) -> bool {
     true
 }
 
-fn next_child_numbering(nodes: &[GoalNode], parent_id: &str, parent_numbering: Option<&str>) -> String {
+fn next_child_numbering(
+    nodes: &[GoalNode],
+    parent_id: &str,
+    parent_numbering: Option<&str>,
+) -> String {
     let mut max_child_index = 0_u64;
     for node in nodes {
         if node.parent_id.as_deref() != Some(parent_id) {

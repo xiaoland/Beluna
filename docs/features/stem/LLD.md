@@ -15,20 +15,17 @@
 - Missed tick behavior configured by `loop.tick_missed_behavior` (`skip`).
 - Tick can execute Cortex with empty domain senses.
 - Default tick interval is `10000ms` (10s), configurable via `loop.tick_interval_ms`.
-- If Primary output includes `<is-wait-for-sense>true</is-wait-for-sense>`, the next Active tick must wait until at least one sense arrives before invoking Cortex.
-- If `<is-wait-for-sense>` is absent or false, Stem keeps normal tick-driven invocation.
-- After a non-tick-triggered cycle (`wait_for_sense` wake, sleep deadline wake, or sleep-time sense wake), Stem resets the interval schedule so Active mode does not run an immediate catch-up empty cycle.
+- Cortex runtime is tick-driven only; sense arrivals are buffered and do not trigger immediate cycles.
+- `wait_for_sense` uses tick-count suppression with correlated-sense matching in Cortex runtime.
 
 ## Sleep Act Rules
 
 - Sleep act detection:
   - `endpoint_id == "core.control"`
   - `neural_signal_descriptor_id == "sleep"`
-  - payload requires `seconds >= 1`
-- On sleep act, Stem sets sleep deadline and stops dispatching remaining acts of current cycle.
-- While sleeping:
-  - new senses wake early and run cycle immediately
-  - deadline expiry also triggers a cycle
+  - payload requires `ticks >= 1`
+- Sleep suppresses admitted Cortex turns by tick count.
+- While sleeping, senses continue buffering in afferent pathway/runtime queues.
 
 ## Dispatch Middleware Rules
 
@@ -46,6 +43,9 @@
   - Spine snapshot
   - Continuity overlay snapshot
   - Stem control descriptors
+- Identifier validation at Stem catalog boundary:
+  - `endpoint_id` and `neural_signal_descriptor_id` must use dot-delimited ASCII alnum segments (`[A-Za-z0-9]+(\\.[A-Za-z0-9]+)*`)
+  - invalid patch/drop identifier entries are skipped with warning logs
 - Merge key: `(type, endpoint_id, neural_signal_descriptor_id)`.
 - Final entries are sorted deterministically.
 

@@ -2,11 +2,10 @@
 
 ## Core
 
-- [ ] 文档化拓扑结构
+- [x] 文档化拓扑结构
 - [ ] descriptor 缺少 description 字段 😆
 - [ ] config.rs 过耦合了其它业务，我认为就根据 json schema 来检查就可以了 <https://gemini.google.com/u/1/app/19d2716163455423>
-- [ ] 有 legder/ledger.rs，那为什么没有 cortex/cortex.rs 和 spine/spine.rs 呢
-- [ ] 可不可以在 Spine, Cortex runtime 内实现 singleton 而不是 module 级别呢？
+- [ ] 文档模式再重构
 
 ### Cortex
 
@@ -28,11 +27,16 @@
   - [x] goal-forest patch with reset
   - [x] efferent-pathway
   - [x] 驱动 primary turn: sense / tick.
-  - [ ] Add rule tool 没有捏？就最直接的 add / remove 吧，也不要什么 overwrite / reset 了。
-  - [ ] Sense internal monotonic id 需要基于进程声明周期而不是 cycle 周期
-  - [ ] Act dispatch failure as a tool result
-  - [ ] cognition-patch 这个模块很奇怪，应该删除；cognition 又是啥 ?
-- [ ] cortex runtime 和 cortex 太割裂了 ... 但目前来看也没有必要 coupling
+  - [x] Add rule tool 没有捏？就最直接的 add / remove 吧，也不要什么 overwrite / reset 了。
+  - [x] Sense internal monotonic id 需要基于进程声明周期而不是 cycle 周期
+  - [x] Act dispatch failure as a tool result
+  - [x] cognition-patch 这个模块很奇怪，应该删除；cognition 又是啥 ?
+  - [x] cortex runtime 和 cortex 太割裂了 ... 但目前来看也没有必要 coupling
+- [ ] expand-sense 不成功
+- [ ] act tools 每次都被重建，导致了 tool-name 和 act 的对应关系因为正则化而不稳定；我建议继续维护 map，但是不要用 `act_000x` ，而是将 `/`, `.` 分别替换为 `_`, `-`；且对 Endpoint Id, NS Id 做约束。
+- [ ] only driven by tick
+  - "Each admitted tick executes exactly one Cortex::cortex(...) " 不可接受
+  - Continuation 似乎不是一个好的设计
 
 ### Continuity
 

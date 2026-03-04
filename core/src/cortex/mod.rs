@@ -17,4 +17,6 @@ pub use runtime::{
     Cortex, CortexDeps, CortexRuntime, CortexTelemetryEvent, CortexTelemetryHook,
     PhysicalStateReadPort,
 };
-pub use types::{CortexControlDirective, CortexOutput, ReactionLimits};
+pub use types::{
+    CortexControlDirective, CortexOutput, ReactionLimits, WaitForSenseControlDirective,
+};

@@ -1,8 +1,4 @@
-use std::{
-    collections::BTreeMap,
-    sync::Arc,
-    time::Duration,
-};
+use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use tokio::{
@@ -11,12 +7,12 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::{
-    types::{
-        NeuralSignalDescriptor, NeuralSignalDescriptorCatalog, NeuralSignalDescriptorDropPatch,
-        NeuralSignalDescriptorPatch, NeuralSignalDescriptorRouteKey, PhysicalLedgerSnapshot,
-        PhysicalState, ProprioceptionDropPatch, ProprioceptionPatch,
-    },
+use crate::types::{
+    NeuralSignalDescriptor, NeuralSignalDescriptorCatalog, NeuralSignalDescriptorDropCommit,
+    NeuralSignalDescriptorDropPatch, NeuralSignalDescriptorDropRejection,
+    NeuralSignalDescriptorPatch, NeuralSignalDescriptorPatchCommit,
+    NeuralSignalDescriptorPatchRejection, NeuralSignalDescriptorRouteKey, PhysicalLedgerSnapshot,
+    PhysicalState, ProprioceptionDropPatch, ProprioceptionPatch, is_valid_neural_signal_identifier,
 };
 
 #[derive(Clone)]
@@ -58,36 +54,98 @@ impl StemPhysicalStateStore {
         self.inner.read().await.proprioception.clone()
     }
 
-    async fn apply_neural_signal_descriptor_patch_inner(&self, patch: NeuralSignalDescriptorPatch) {
+    async fn apply_neural_signal_descriptor_patch_inner(
+        &self,
+        patch: NeuralSignalDescriptorPatch,
+    ) -> NeuralSignalDescriptorPatchCommit {
         if patch.entries.is_empty() {
-            return;
+            return NeuralSignalDescriptorPatchCommit::default();
         }
         let mut state = self.inner.write().await;
         let entries = &mut state.ns_descriptor.entries;
+        let mut changed = false;
+        let mut accepted_entries = Vec::new();
+        let mut rejected_entries = Vec::new();
         for descriptor in patch.entries {
+            if !is_valid_neural_signal_identifier(&descriptor.endpoint_id)
+                || !is_valid_neural_signal_identifier(&descriptor.neural_signal_descriptor_id)
+            {
+                tracing::warn!(
+                    target = "stem",
+                    endpoint_id = %descriptor.endpoint_id,
+                    neural_signal_descriptor_id = %descriptor.neural_signal_descriptor_id,
+                    "drop_invalid_ns_descriptor_identifier"
+                );
+                rejected_entries.push(NeuralSignalDescriptorPatchRejection {
+                    entry: route_key_from_descriptor(&descriptor),
+                    reason_code: "invalid_identifier".to_string(),
+                });
+                continue;
+            }
             let route = route_key_from_descriptor(&descriptor);
+            let committed = descriptor.clone();
             if let Some(existing) = entries
                 .iter_mut()
                 .find(|item| route_key_from_descriptor(item) == route)
             {
-                *existing = descriptor;
+                if *existing != descriptor {
+                    *existing = descriptor;
+                    changed = true;
+                }
             } else {
                 entries.push(descriptor);
+                changed = true;
             }
+            accepted_entries.push(committed);
         }
-        sort_ns_descriptor_entries(entries);
-        state.ns_descriptor.version = next_stem_ns_descriptor_version(&state.ns_descriptor.version);
+        if changed {
+            sort_ns_descriptor_entries(entries);
+            state.ns_descriptor.version =
+                next_stem_ns_descriptor_version(&state.ns_descriptor.version);
+        }
+        NeuralSignalDescriptorPatchCommit {
+            accepted_entries,
+            rejected_entries,
+        }
     }
 
     async fn apply_neural_signal_descriptor_drop_inner(
         &self,
         patch: NeuralSignalDescriptorDropPatch,
-    ) {
+    ) -> NeuralSignalDescriptorDropCommit {
         if patch.routes.is_empty() {
-            return;
+            return NeuralSignalDescriptorDropCommit::default();
+        }
+        let mut rejected_routes = Vec::new();
+        let routes = patch
+            .routes
+            .into_iter()
+            .filter_map(|route| {
+                if !is_valid_neural_signal_identifier(&route.endpoint_id)
+                    || !is_valid_neural_signal_identifier(&route.neural_signal_descriptor_id)
+                {
+                    tracing::warn!(
+                        target = "stem",
+                        endpoint_id = %route.endpoint_id,
+                        neural_signal_descriptor_id = %route.neural_signal_descriptor_id,
+                        "drop_invalid_ns_descriptor_route_identifier"
+                    );
+                    rejected_routes.push(NeuralSignalDescriptorDropRejection {
+                        route,
+                        reason_code: "invalid_identifier".to_string(),
+                    });
+                    return None;
+                }
+                Some(route)
+            })
+            .collect::<std::collections::BTreeSet<_>>();
+        if routes.is_empty() {
+            return NeuralSignalDescriptorDropCommit {
+                accepted_routes: Vec::new(),
+                rejected_routes,
+            };
         }
         let mut state = self.inner.write().await;
-        let routes = patch.routes.into_iter().collect::<std::collections::BTreeSet<_>>();
         let original_len = state.ns_descriptor.entries.len();
         state
             .ns_descriptor
@@ -97,6 +155,10 @@ impl StemPhysicalStateStore {
         if changed {
             state.ns_descriptor.version =
                 next_stem_ns_descriptor_version(&state.ns_descriptor.version);
+        }
+        NeuralSignalDescriptorDropCommit {
+            accepted_routes: routes.into_iter().collect(),
+            rejected_routes,
         }
     }
 
@@ -154,20 +216,32 @@ fn next_stem_ns_descriptor_version(current: &str) -> String {
 
 #[async_trait]
 pub trait StemControlPort: Send + Sync {
-    async fn apply_neural_signal_descriptor_patch(&self, patch: NeuralSignalDescriptorPatch);
-    async fn apply_neural_signal_descriptor_drop(&self, patch: NeuralSignalDescriptorDropPatch);
+    async fn apply_neural_signal_descriptor_patch(
+        &self,
+        patch: NeuralSignalDescriptorPatch,
+    ) -> NeuralSignalDescriptorPatchCommit;
+    async fn apply_neural_signal_descriptor_drop(
+        &self,
+        patch: NeuralSignalDescriptorDropPatch,
+    ) -> NeuralSignalDescriptorDropCommit;
     async fn apply_proprioception_patch(&self, patch: ProprioceptionPatch);
     async fn apply_proprioception_drop(&self, patch: ProprioceptionDropPatch);
 }
 
 #[async_trait]
 impl StemControlPort for StemPhysicalStateStore {
-    async fn apply_neural_signal_descriptor_patch(&self, patch: NeuralSignalDescriptorPatch) {
-        self.apply_neural_signal_descriptor_patch_inner(patch).await;
+    async fn apply_neural_signal_descriptor_patch(
+        &self,
+        patch: NeuralSignalDescriptorPatch,
+    ) -> NeuralSignalDescriptorPatchCommit {
+        self.apply_neural_signal_descriptor_patch_inner(patch).await
     }
 
-    async fn apply_neural_signal_descriptor_drop(&self, patch: NeuralSignalDescriptorDropPatch) {
-        self.apply_neural_signal_descriptor_drop_inner(patch).await;
+    async fn apply_neural_signal_descriptor_drop(
+        &self,
+        patch: NeuralSignalDescriptorDropPatch,
+    ) -> NeuralSignalDescriptorDropCommit {
+        self.apply_neural_signal_descriptor_drop_inner(patch).await
     }
 
     async fn apply_proprioception_patch(&self, patch: ProprioceptionPatch) {

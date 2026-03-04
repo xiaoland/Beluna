@@ -47,7 +47,7 @@ sequenceDiagram
     Main->>EF: spawn
 
     ST-->>CR: TickGrant
-    CR->>CR: execute cycle on tick/sense
+    CR->>CR: execute cycle on admitted tick (senses buffered between ticks)
     CR->>EF: enqueue EfferentActEnvelope
 
     loop FIFO serial acts

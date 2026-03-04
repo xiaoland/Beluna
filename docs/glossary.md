@@ -2,7 +2,7 @@
 
 - Cortex: Stateless cognition boundary `cortex(senses, physical_state, cognition_state) -> CortexOutput`.
 - CortexOutput: `{ emitted_acts, new_cognition_state, control }`.
-- EmittedAct: `{ act, wait_for_sense_seconds, expected_fq_sense_ids }`.
+- EmittedAct: `{ act, wait_for_sense, expected_fq_sense_ids }`.
 - Stem: Runtime subsystem that owns tick grants, physical state mutation, and pathway construction.
 - Continuity: Operational cognition persistence and act-gating owner.
 - Spine: Transport-agnostic execution substrate that routes acts and emits dispatch-failure senses.
@@ -15,7 +15,7 @@
 - Sense Queue: Bounded Rust MPSC ingress queue wrapped by afferent pathway.
 - Afferent Deferral Rule: Pathway rule that defers senses by `min_weight` and/or fq-sense-id regex.
 - Efferent Pathway: Stem-owned FIFO act queue consumed serially by `Continuity -> Spine`.
-- wait_for_sense_seconds: Per-act bounded wait directive (`0` means no wait).
+- wait_for_sense: Per-act bounded wait directive in ticks (`0` means no wait).
 - expected_fq_sense_ids: Optional emitted-sense ids declared by act descriptor, used to correlate wait completion.
 - expand-senses: Primary tool for sense expansion with `mode: raw|sub-agent` and `senses_to_expand[].sense_id`.
 - Physical State: Ledger snapshot + `ns_descriptor` catalog + proprioception visible to Cortex.

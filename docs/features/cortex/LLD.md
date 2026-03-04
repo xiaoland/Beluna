@@ -31,11 +31,8 @@ Patch ops:
    - `expand-sense-with-sub-agent(tasks)`
    - `patch-goal-forest(ops[])`
 6. `patch-goal-forest` applies deterministic ops to cycle-local GoalForest and returns updated ASCII-art.
-7. If turn returns tool-calls, runtime continues in the next cycle with tool-result messages until final text `<output-ir>` is produced.
-8. Parse optional output sections:
-   - `<somatic-acts>` (missing => no acts)
-   - `<new-focal-awareness>` (missing => keep current l1-memory)
-   - `<is-wait-for-sense>` (missing => false)
+7. If tick `N` turn returns tool-calls, runtime buffers tool-result messages and injects them into tick `N+1` turn, along with tick `N+1` input payload, until final text `<output-ir>` is produced.
+8. Parse final `<output-ir>` only when no tool-calls remain.
 9. Run output helpers in parallel:
    - `acts_helper` -> `Act[]`
    - `l1_memory_flush_helper` -> `L1Memory`
@@ -51,11 +48,7 @@ Patch ops:
   - `<somatic-act-descriptor-catalog>`
   - `<goal-forest>`
   - `<focal-awareness>`
-- Output sections:
-  - `<somatic-acts>`
-  - `<new-focal-awareness>`
-  - `<is-wait-for-sense>`
-- There is no output goal-forest patch section.
+- Output is parsed only as `<output-ir>` envelope text for contract validation.
 
 ## Helper JSON Contracts
 

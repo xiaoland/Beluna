@@ -153,10 +153,8 @@ pub trait AfferentSidecarPort {
 
 #[async_trait]
 pub trait AfferentRuleControlPort: Send + Sync {
-    async fn add_rule(
-        &self,
-        input: DeferralRuleAddInput,
-    ) -> Result<RuleRevision, RuleControlError>;
+    async fn add_rule(&self, input: DeferralRuleAddInput)
+    -> Result<RuleRevision, RuleControlError>;
 
     async fn remove_rule(&self, rule_id: String) -> Result<RuleRevision, RuleControlError>;
 

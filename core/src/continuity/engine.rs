@@ -18,10 +18,7 @@ pub struct ContinuityEngine {
 }
 
 impl ContinuityEngine {
-    pub fn new(
-        state: ContinuityState,
-        persistence: ContinuityPersistence,
-    ) -> Self {
+    pub fn new(state: ContinuityState, persistence: ContinuityPersistence) -> Self {
         Self { state, persistence }
     }
 

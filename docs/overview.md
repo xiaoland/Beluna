@@ -9,7 +9,7 @@ Beluna is a survival-oriented digital life runtime, not a chatbot.
 3. Cortex emits non-binding `EmittedAct[]` in `CortexOutput`.
 4. Continuity persists cognition state (`goal-forest`) with deterministic guardrails.
 5. Spine executes acts and can emit dispatch-failure senses.
-6. Stem emits tick grants; Cortex runtime owns hybrid loop execution (tick + sense + act).
+6. Stem emits tick grants; Cortex runtime executes on ticks only and buffers senses between ticks.
 7. Body endpoints are Beluna's world interfaces.
 8. Neural signal identity is descriptor-based (`sense_id` / `act_id`), while runtime envelopes use `sense_instance_id` / `act_instance_id`.
 9. Proprioception is continuous internal state and is passed to Cortex as `<proprioception>` in Input IR.
@@ -35,7 +35,7 @@ Stem:
   emits tick grants
   applies runtime control updates for ns_descriptor/proprioception
 Cortex Runtime:
-  drains afferent senses + tick grants -> Cortex Primary turn
+  buffers afferent senses between ticks and drains them on each admitted tick -> Cortex Primary turn
   new_cognition_state -> Continuity persist
   emitted_acts -> Efferent Pathway (FIFO) -> serial dispatch worker: Continuity -> Spine
 ```

@@ -15,11 +15,8 @@ pub(crate) fn build_input_ir(
     proprioception_section: &str,
     goal_forest_section: &str,
 ) -> InputIr {
-    let primary_payload = build_primary_input_payload(
-        senses_section,
-        proprioception_section,
-        goal_forest_section,
-    );
+    let primary_payload =
+        build_primary_input_payload(senses_section, proprioception_section, goal_forest_section);
     InputIr {
         text: format!(
             "<{root}>\n{payload}\n</{root}>",

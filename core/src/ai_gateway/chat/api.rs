@@ -18,8 +18,9 @@ use super::{
     store::{ThreadStore, TurnCommitOutcome},
     tool::{ChatToolDefinition, ToolOverride, resolve_tools},
     types::{
-        ChatEventStream, ChatMessage, ChatRole, ContentPart, OutputMode, ThreadMessageMutationOutcome,
-        ThreadMessageMutationRequest, TurnLimits, TurnPayload, TurnResponse,
+        ChatEventStream, ChatMessage, ChatRole, ContentPart, OutputMode,
+        ThreadMessageMutationOutcome, ThreadMessageMutationRequest, TurnLimits, TurnPayload,
+        TurnResponse,
     },
 };
 

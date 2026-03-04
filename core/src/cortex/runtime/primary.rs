@@ -33,7 +33,9 @@ use crate::{
         },
         ir, prompts,
         testing::{PrimaryRequest as TestPrimaryRequest, TestHooks},
-        types::{CortexControlDirective, CortexOutput, ReactionLimits},
+        types::{
+            CortexControlDirective, CortexOutput, ReactionLimits, WaitForSenseControlDirective,
+        },
     },
     observability::metrics as observability_metrics,
     spine::ActDispatchResult,
@@ -54,6 +56,7 @@ pub type CortexTelemetryHook = Arc<dyn Fn(CortexTelemetryEvent) + Send + Sync>;
 #[derive(Clone)]
 pub struct Cortex {
     chat_factory: Option<Arc<ChatFactory>>,
+    tick_interval_ms: u64,
     helper_routes: CortexHelperRoutesConfig,
     hooks: Option<TestHooks>,
     helper: CortexHelper,
@@ -94,7 +97,7 @@ struct ActToolArgs {
 
 #[derive(Debug, Deserialize)]
 struct SleepArgs {
-    seconds: u64,
+    ticks: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -128,7 +131,8 @@ struct ActToolBinding {
 struct PrimaryTurnState {
     next_act_seq_no: u64,
     dispatched_act_count: usize,
-    ignore_all_trigger_for_seconds: Option<u64>,
+    ignore_all_trigger_for_ticks: Option<u64>,
+    wait_for_sense: Option<WaitForSenseControlDirective>,
 }
 
 #[derive(Debug, Clone)]
@@ -159,7 +163,7 @@ struct PrimaryToolCallBatchResult {
 
 #[derive(Debug, Clone)]
 struct PrimaryContinuationState {
-    turn_messages: Vec<ChatMessage>,
+    pending_tool_messages: Vec<ChatMessage>,
     sense_tool_context: sense_input_helper::SenseToolContext,
     act_binding_map: HashMap<String, ActToolBinding>,
     dynamic_act_tool_overrides: Vec<ToolOverride>,
@@ -171,6 +175,7 @@ struct PrimaryContinuationState {
 impl Cortex {
     pub fn from_config(
         config: &crate::config::CortexRuntimeConfig,
+        tick_interval_ms: u64,
         chat_factory: Arc<ChatFactory>,
         telemetry_hook: Option<CortexTelemetryHook>,
         continuity: Option<Arc<Mutex<ContinuityEngine>>>,
@@ -181,6 +186,7 @@ impl Cortex {
         log_output_token_limits_paused(&limits);
         Self {
             chat_factory: Some(chat_factory),
+            tick_interval_ms: tick_interval_ms.max(1),
             helper_routes: config.helper_routes.clone(),
             hooks: None,
             helper: CortexHelper::default(),
@@ -198,6 +204,7 @@ impl Cortex {
         log_output_token_limits_paused(&limits);
         Self {
             chat_factory: None,
+            tick_interval_ms: 1_000,
             helper_routes: CortexHelperRoutesConfig::default(),
             hooks: Some(hooks),
             helper: CortexHelper::default(),
@@ -438,9 +445,9 @@ impl Cortex {
                             "payload": binding.descriptor.payload_schema.clone(),
                             "wait_for_sense": {
                                 "type": "integer",
-                                "description": "Number of seconds to wait for the specified senses after dispatching the act.",
+                                "description": "Number of ticks to wait for the specified senses after dispatching the act.",
                                 "minimum": 0,
-                                "maximum": self.limits.max_waiting_seconds,
+                                "maximum": self.limits.max_waiting_ticks,
                             }
                         },
                         "required": ["payload", "wait_for_sense"],
@@ -481,16 +488,23 @@ impl Cortex {
             step,
             mode,
         ) = match prior_continuation {
-            Some(state) => (
-                state.turn_messages,
-                state.sense_tool_context,
-                state.act_binding_map,
-                state.dynamic_act_tool_overrides,
-                state.working_goal_forest_nodes,
-                state.turn_state,
-                state.next_step,
-                "continuation",
-            ),
+            Some(state) => {
+                let mut input_messages = state.pending_tool_messages;
+                input_messages.push(build_primary_user_message(&primary_input));
+                (
+                    input_messages,
+                    sense_input_helper::SenseToolContext::merged(
+                        &state.sense_tool_context,
+                        &sense_tool_context,
+                    ),
+                    state.act_binding_map,
+                    state.dynamic_act_tool_overrides,
+                    state.working_goal_forest_nodes,
+                    state.turn_state,
+                    state.next_step,
+                    "continuation",
+                )
+            }
             None => (
                 vec![build_primary_user_message(&primary_input)],
                 sense_tool_context,
@@ -502,6 +516,11 @@ impl Cortex {
                 "new_turn",
             ),
         };
+        let mut act_tool_aliases = effective_act_binding_map
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        act_tool_aliases.sort();
 
         let stage = CognitionOrgan::Primary.stage();
         let input_payload = helpers::pretty_json(&serde_json::json!({
@@ -515,10 +534,7 @@ impl Cortex {
                 .iter()
                 .map(|entry| entry.sense_ref_id.clone())
                 .collect::<Vec<_>>(),
-            "act_tool_aliases": act_bindings
-                .iter()
-                .map(|binding| binding.alias.clone())
-                .collect::<Vec<_>>(),
+            "act_tool_aliases": act_tool_aliases,
         }));
         helpers::log_organ_input(cycle_id, stage, &input_payload);
 
@@ -558,7 +574,8 @@ impl Cortex {
                 output_text: assistant_text,
                 dispatched_act_count: turn_state.dispatched_act_count,
                 control: CortexControlDirective {
-                    ignore_all_trigger_for_seconds: turn_state.ignore_all_trigger_for_seconds,
+                    ignore_all_trigger_for_ticks: turn_state.ignore_all_trigger_for_ticks,
+                    wait_for_sense: turn_state.wait_for_sense.clone(),
                 },
                 pending_continuation: false,
             });
@@ -577,15 +594,15 @@ impl Cortex {
             )
             .await;
 
-        let next_turn_messages = if batch.reset_messages_applied {
-            vec![build_primary_user_message(&primary_input)]
+        let next_pending_tool_messages = if batch.reset_messages_applied {
+            Vec::new()
         } else {
             batch.tool_messages
         };
 
         let mut continuation_state_guard = self.primary_continuation_state.lock().await;
         *continuation_state_guard = Some(PrimaryContinuationState {
-            turn_messages: next_turn_messages,
+            pending_tool_messages: next_pending_tool_messages,
             sense_tool_context: effective_sense_tool_context,
             act_binding_map: effective_act_binding_map,
             dynamic_act_tool_overrides,
@@ -599,7 +616,8 @@ impl Cortex {
             output_text: String::new(),
             dispatched_act_count: turn_state.dispatched_act_count,
             control: CortexControlDirective {
-                ignore_all_trigger_for_seconds: turn_state.ignore_all_trigger_for_seconds,
+                ignore_all_trigger_for_ticks: turn_state.ignore_all_trigger_for_ticks,
+                wait_for_sense: turn_state.wait_for_sense,
             },
             pending_continuation: true,
         })
@@ -758,11 +776,18 @@ impl Cortex {
                 .map_err(|err| err.to_string());
             match parsed {
                 Ok(args) => {
-                    if args.wait_for_sense > self.limits.max_waiting_seconds {
+                    if args.wait_for_sense > self.limits.max_waiting_ticks {
                         Err(format!(
                             "wait_for_sense must be <= {}",
-                            self.limits.max_waiting_seconds
+                            self.limits.max_waiting_ticks
                         ))
+                    } else if args.wait_for_sense > 0
+                        && binding.descriptor.emitted_sense_ids.is_empty()
+                    {
+                        Err(
+                            "wait_for_sense requires descriptor.emitted_sense_ids to be non-empty"
+                                .to_string(),
+                        )
                     } else if !payload_matches_schema(
                         &args.payload,
                         &binding.descriptor.payload_schema,
@@ -784,6 +809,7 @@ impl Cortex {
                                 .clone(),
                             payload: args.payload,
                         };
+                        let act_instance_id = act.act_instance_id.clone();
                         let act_seq_no = turn_state.next_act_seq_no.saturating_add(1);
                         turn_state.next_act_seq_no = act_seq_no;
                         match self
@@ -799,6 +825,23 @@ impl Cortex {
                             Ok(dispatch_result) => {
                                 turn_state.dispatched_act_count =
                                     turn_state.dispatched_act_count.saturating_add(1);
+                                if args.wait_for_sense > 0
+                                    && matches!(
+                                        dispatch_result,
+                                        ActDispatchResult::Acknowledged { .. }
+                                    )
+                                {
+                                    let mut expected_fq_sense_ids =
+                                        binding.descriptor.emitted_sense_ids.clone();
+                                    expected_fq_sense_ids.sort();
+                                    expected_fq_sense_ids.dedup();
+                                    turn_state.wait_for_sense =
+                                        Some(WaitForSenseControlDirective {
+                                            act_instance_id,
+                                            expected_fq_sense_ids,
+                                            wait_ticks: args.wait_for_sense,
+                                        });
+                                }
                                 Ok((
                                     serde_json::json!({
                                         "act_tool_alias": binding.alias,
@@ -950,23 +993,23 @@ impl Cortex {
                         .map_err(|err| err.to_string());
                     match parsed {
                         Ok(args) => {
-                            if args.seconds == 0 {
-                                Err("seconds must be >= 1".to_string())
-                            } else if args.seconds > self.limits.max_waiting_seconds {
+                            if args.ticks == 0 {
+                                Err("ticks must be >= 1".to_string())
+                            } else if args.ticks > self.limits.max_waiting_ticks {
                                 Err(format!(
-                                    "seconds must be <= {}",
-                                    self.limits.max_waiting_seconds
+                                    "ticks must be <= {}",
+                                    self.limits.max_waiting_ticks
                                 ))
                             } else {
-                                turn_state.ignore_all_trigger_for_seconds = Some(
+                                turn_state.ignore_all_trigger_for_ticks = Some(
                                     turn_state
-                                        .ignore_all_trigger_for_seconds
+                                        .ignore_all_trigger_for_ticks
                                         .unwrap_or(0)
-                                        .max(args.seconds),
+                                        .max(args.ticks),
                                 );
                                 Ok((
                                     serde_json::json!({
-                                        "ignore_all_trigger_for_seconds": turn_state.ignore_all_trigger_for_seconds
+                                        "ignore_all_trigger_for_ticks": turn_state.ignore_all_trigger_for_ticks
                                     }),
                                     false,
                                 ))
@@ -1265,17 +1308,18 @@ impl Cortex {
         cycle_id: u64,
         act_seq_no: u64,
         act: Act,
-        wait_for_sense_seconds: u64,
+        wait_for_sense_ticks: u64,
         _expected_fq_sense_ids: &[String],
     ) -> Result<ActDispatchResult, String> {
         let Some(producer) = self.efferent_producer.as_ref() else {
             return Err("efferent producer is not configured".to_string());
         };
 
-        let timeout_duration = if wait_for_sense_seconds == 0 {
+        let timeout_duration = if wait_for_sense_ticks == 0 {
             Duration::from_millis(1)
         } else {
-            Duration::from_secs(wait_for_sense_seconds.min(self.limits.max_waiting_seconds))
+            let capped_ticks = wait_for_sense_ticks.min(self.limits.max_waiting_ticks);
+            Duration::from_millis(self.tick_interval_ms.saturating_mul(capped_ticks).max(1))
         };
         Ok(producer
             .dispatch_and_wait(
@@ -1446,16 +1490,28 @@ fn log_output_token_limits_paused(limits: &ReactionLimits) {
 fn build_act_tool_bindings(act_descriptors: &[NeuralSignalDescriptor]) -> Vec<ActToolBinding> {
     act_descriptors
         .iter()
-        .enumerate()
-        .map(|(idx, descriptor)| ActToolBinding {
-            alias: transport_safe_act_tool_alias(idx + 1),
+        .map(|descriptor| ActToolBinding {
+            alias: transport_safe_act_tool_alias(
+                &descriptor.endpoint_id,
+                &descriptor.neural_signal_descriptor_id,
+            ),
             descriptor: descriptor.clone(),
         })
         .collect()
 }
 
-fn transport_safe_act_tool_alias(index: usize) -> String {
-    format!("act_{index:04}")
+fn transport_safe_act_tool_alias(endpoint_id: &str, neural_signal_descriptor_id: &str) -> String {
+    let fq_act_id = build_fq_neural_signal_id(endpoint_id, neural_signal_descriptor_id);
+    let mut normalized = String::with_capacity(fq_act_id.len());
+    for ch in fq_act_id.chars() {
+        match ch {
+            '.' => normalized.push('-'),
+            '/' => normalized.push('_'),
+            c if c.is_ascii_alphanumeric() => normalized.push(c),
+            _ => normalized.push('_'),
+        }
+    }
+    format!("act_{normalized}")
 }
 
 fn payload_matches_schema(payload: &serde_json::Value, schema: &serde_json::Value) -> bool {
@@ -1525,16 +1581,16 @@ fn primary_internal_tools() -> Vec<ChatToolDefinition> {
         },
         ChatToolDefinition {
             name: PRIMARY_TOOL_SLEEP.to_string(),
-            description: Some("Ignore all triggers for N seconds.".to_string()),
+            description: Some("Ignore all triggers for N ticks.".to_string()),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "seconds": {
+                    "ticks": {
                         "type": "integer",
                         "minimum": 1
                     }
                 },
-                "required": ["seconds"],
+                "required": ["ticks"],
                 "additionalProperties": false
             }),
         },

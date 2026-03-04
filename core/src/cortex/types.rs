@@ -4,7 +4,7 @@ fn default_sense_passthrough_max_bytes() -> usize {
     2_048
 }
 
-fn default_max_waiting_seconds() -> u64 {
+fn default_max_waiting_ticks() -> u64 {
     30
 }
 
@@ -23,8 +23,8 @@ pub struct ReactionLimits {
     pub max_sub_output_tokens: u64,
     #[serde(default = "default_sense_passthrough_max_bytes")]
     pub sense_passthrough_max_bytes: usize,
-    #[serde(default = "default_max_waiting_seconds")]
-    pub max_waiting_seconds: u64,
+    #[serde(default = "default_max_waiting_ticks")]
+    pub max_waiting_ticks: u64,
 }
 
 impl Default for ReactionLimits {
@@ -39,7 +39,7 @@ impl Default for ReactionLimits {
             max_primary_output_tokens: 1_024,
             max_sub_output_tokens: 768,
             sense_passthrough_max_bytes: default_sense_passthrough_max_bytes(),
-            max_waiting_seconds: default_max_waiting_seconds(),
+            max_waiting_ticks: default_max_waiting_ticks(),
         }
     }
 }
@@ -47,7 +47,17 @@ impl Default for ReactionLimits {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct CortexControlDirective {
     #[serde(default)]
-    pub ignore_all_trigger_for_seconds: Option<u64>,
+    pub ignore_all_trigger_for_ticks: Option<u64>,
+    #[serde(default)]
+    pub wait_for_sense: Option<WaitForSenseControlDirective>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WaitForSenseControlDirective {
+    pub act_instance_id: String,
+    #[serde(default)]
+    pub expected_fq_sense_ids: Vec<String>,
+    pub wait_ticks: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -149,7 +149,7 @@ pub fn classify_sleep_act(act: &crate::types::Act) -> Option<u64> {
     if act.endpoint_id != "core.control" || act.neural_signal_descriptor_id != "sleep" {
         return None;
     }
-    act.payload.get("seconds")?.as_u64()
+    act.payload.get("ticks")?.as_u64()
 }
 
 pub fn references_sleep_descriptor(act_descriptors: &[NeuralSignalDescriptor]) -> bool {

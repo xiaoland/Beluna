@@ -59,6 +59,20 @@ impl SenseToolContext {
         &self.entries
     }
 
+    pub(crate) fn merged(prior: &Self, incoming: &Self) -> Self {
+        if prior.entries.is_empty() {
+            return incoming.clone();
+        }
+        if incoming.entries.is_empty() {
+            return prior.clone();
+        }
+
+        let mut merged = Vec::with_capacity(prior.entries.len() + incoming.entries.len());
+        merged.extend(prior.entries.iter().cloned());
+        merged.extend(incoming.entries.iter().cloned());
+        Self { entries: merged }
+    }
+
     fn entry_by_ref_id(&self, sense_ref_id: &str) -> Option<&SenseToolContextEntry> {
         self.entries
             .iter()

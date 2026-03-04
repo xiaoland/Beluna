@@ -1,8 +1,4 @@
-use std::{
-    collections::VecDeque,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{collections::VecDeque, sync::Arc};
 
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
@@ -10,8 +6,9 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
+    cortex::types::WaitForSenseControlDirective,
     stem::{SenseConsumerHandle, TickGrant},
-    types::PhysicalState,
+    types::{PhysicalState, Sense, build_fq_neural_signal_id},
 };
 
 mod primary;
@@ -34,9 +31,16 @@ pub struct CortexRuntime {
     deps: CortexDeps,
     shutdown: CancellationToken,
     cycle_id: u64,
-    pending_senses: VecDeque<crate::types::Sense>,
-    ignore_all_trigger_until: Option<Instant>,
-    pending_primary_continuation: bool,
+    pending_senses: VecDeque<Sense>,
+    ignore_all_triggers_for_ticks_remaining: u64,
+    wait_for_sense_gate: Option<WaitForSenseGate>,
+}
+
+#[derive(Debug, Clone)]
+struct WaitForSenseGate {
+    act_instance_id: String,
+    expected_fq_sense_ids: Vec<String>,
+    ticks_remaining: u64,
 }
 
 impl CortexRuntime {
@@ -46,37 +50,26 @@ impl CortexRuntime {
             deps,
             shutdown,
             pending_senses: VecDeque::new(),
-            ignore_all_trigger_until: None,
-            pending_primary_continuation: false,
+            ignore_all_triggers_for_ticks_remaining: 0,
+            wait_for_sense_gate: None,
         }
     }
 
     #[tracing::instrument(name = "cortex_runtime", target = "cortex", skip(self))]
     pub async fn run(mut self) {
         loop {
-            if self.pending_primary_continuation {
-                if let Err(err) = self.try_execute_cycle(false).await {
-                    tracing::warn!(
-                        target = "cortex",
-                        error = %err,
-                        "cycle_failed_on_primary_continuation"
-                    );
-                    self.pending_primary_continuation = false;
-                }
-                continue;
-            }
-
             tokio::select! {
+                biased;
                 _ = self.shutdown.cancelled() => {
                     tracing::info!(target = "cortex", "runtime_shutdown");
                     break;
                 }
                 maybe_tick = self.deps.tick_grant_rx.recv() => {
-                    let Some(_tick) = maybe_tick else {
+                    let Some(tick) = maybe_tick else {
                         tracing::info!(target = "cortex", "tick_channel_closed");
                         break;
                     };
-                    if let Err(err) = self.try_execute_cycle(true).await {
+                    if let Err(err) = self.on_tick(tick).await {
                         tracing::warn!(target = "cortex", error = %err, "cycle_failed_on_tick");
                     }
                 }
@@ -86,35 +79,62 @@ impl CortexRuntime {
                         break;
                     };
                     self.pending_senses.push_back(sense);
-                    if let Err(err) = self.try_execute_cycle(false).await {
-                        tracing::warn!(target = "cortex", error = %err, "cycle_failed_on_sense");
-                    }
                 }
             }
         }
     }
 
-    async fn try_execute_cycle(&mut self, tick_triggered: bool) -> Result<()> {
-        if !self.pending_primary_continuation
-            && let Some(deadline) = self.ignore_all_trigger_until
-            && Instant::now() < deadline
-        {
-            tracing::debug!(target = "cortex", "trigger_ignored_by_sleep_gate");
+    async fn on_tick(&mut self, tick: TickGrant) -> Result<()> {
+        self.drain_pending_senses_nonblocking();
+
+        if self.ignore_all_triggers_for_ticks_remaining > 0 {
+            self.ignore_all_triggers_for_ticks_remaining = self
+                .ignore_all_triggers_for_ticks_remaining
+                .saturating_sub(1);
+            tracing::debug!(
+                target = "cortex",
+                tick_seq = tick.tick_seq,
+                remaining_ticks = self.ignore_all_triggers_for_ticks_remaining,
+                "tick_ignored_by_sleep_gate"
+            );
             return Ok(());
         }
-        if !self.pending_primary_continuation {
-            self.ignore_all_trigger_until = None;
-            self.drain_pending_senses_nonblocking();
-            if !tick_triggered && self.pending_senses.is_empty() {
+
+        let mut clear_wait_gate = false;
+        if let Some(wait_gate) = self.wait_for_sense_gate.as_mut() {
+            if wait_for_sense_gate_satisfied(wait_gate, &self.pending_senses) {
+                tracing::debug!(
+                    target = "cortex",
+                    tick_seq = tick.tick_seq,
+                    act_instance_id = %wait_gate.act_instance_id,
+                    "wait_for_sense_satisfied_on_tick"
+                );
+                clear_wait_gate = true;
+            } else if wait_gate.ticks_remaining > 0 {
+                wait_gate.ticks_remaining = wait_gate.ticks_remaining.saturating_sub(1);
+                tracing::debug!(
+                    target = "cortex",
+                    tick_seq = tick.tick_seq,
+                    act_instance_id = %wait_gate.act_instance_id,
+                    remaining_ticks = wait_gate.ticks_remaining,
+                    "tick_skipped_waiting_for_sense"
+                );
                 return Ok(());
+            } else {
+                tracing::debug!(
+                    target = "cortex",
+                    tick_seq = tick.tick_seq,
+                    act_instance_id = %wait_gate.act_instance_id,
+                    "wait_for_sense_expired_on_tick"
+                );
+                clear_wait_gate = true;
             }
         }
+        if clear_wait_gate {
+            self.wait_for_sense_gate = None;
+        }
 
-        let senses = if self.pending_primary_continuation {
-            Vec::new()
-        } else {
-            self.pending_senses.drain(..).collect::<Vec<_>>()
-        };
+        let senses = self.pending_senses.drain(..).collect::<Vec<_>>();
 
         self.cycle_id = self.cycle_id.saturating_add(1);
         let physical_state = self
@@ -131,12 +151,14 @@ impl CortexRuntime {
             .await
             .map_err(|err| anyhow!("cortex_primary_failed: {err}"))?;
 
-        self.pending_primary_continuation = output.pending_primary_continuation;
-
-        if let Some(seconds) = output.control.ignore_all_trigger_for_seconds {
-            self.ignore_all_trigger_until =
-                Some(Instant::now() + Duration::from_secs(seconds.max(1)));
+        if let Some(ticks) = output.control.ignore_all_trigger_for_ticks {
+            self.ignore_all_triggers_for_ticks_remaining = ticks.max(1);
         }
+
+        self.wait_for_sense_gate = output
+            .control
+            .wait_for_sense
+            .and_then(wait_for_sense_gate_from_control);
 
         Ok(())
     }
@@ -146,8 +168,49 @@ impl CortexRuntime {
             self.pending_senses.push_back(sense);
         }
     }
+}
 
-    pub fn set_ignore_all_trigger_until(&mut self, deadline: Option<Instant>) {
-        self.ignore_all_trigger_until = deadline;
+fn wait_for_sense_gate_from_control(
+    control: WaitForSenseControlDirective,
+) -> Option<WaitForSenseGate> {
+    let mut expected_fq_sense_ids = control
+        .expected_fq_sense_ids
+        .into_iter()
+        .map(|id| id.trim().to_string())
+        .filter(|id| !id.is_empty())
+        .collect::<Vec<_>>();
+    expected_fq_sense_ids.sort();
+    expected_fq_sense_ids.dedup();
+    if control.act_instance_id.trim().is_empty()
+        || control.wait_ticks == 0
+        || expected_fq_sense_ids.is_empty()
+    {
+        return None;
     }
+
+    Some(WaitForSenseGate {
+        act_instance_id: control.act_instance_id,
+        expected_fq_sense_ids,
+        ticks_remaining: control.wait_ticks,
+    })
+}
+
+fn wait_for_sense_gate_satisfied(
+    wait_gate: &WaitForSenseGate,
+    pending_senses: &VecDeque<Sense>,
+) -> bool {
+    pending_senses.iter().any(|sense| {
+        let Some(act_instance_id) = sense.act_instance_id.as_deref() else {
+            return false;
+        };
+        if act_instance_id != wait_gate.act_instance_id {
+            return false;
+        }
+        let fq_sense_id =
+            build_fq_neural_signal_id(&sense.endpoint_id, &sense.neural_signal_descriptor_id);
+        wait_gate
+            .expected_fq_sense_ids
+            .iter()
+            .any(|expected| expected == &fq_sense_id)
+    })
 }

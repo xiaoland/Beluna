@@ -345,37 +345,37 @@ impl ThreadStore {
 
         let mut removed_messages = 0usize;
         if let Some(range) = request.trim_message_range.as_ref() {
-            let start_idx = resolve_message_boundary(&thread.messages, &range.start).ok_or_else(|| {
-                GatewayError::new(
-                    GatewayErrorKind::InvalidRequest,
-                    format!(
-                        "cannot resolve start message boundary '{:?}' for thread '{}'",
-                        range.start, thread_id
-                    ),
-                )
-                .with_retryable(false)
-            })?;
-            let end_idx = resolve_message_boundary(&thread.messages, &range.end).ok_or_else(|| {
-                GatewayError::new(
-                    GatewayErrorKind::InvalidRequest,
-                    format!(
-                        "cannot resolve end message boundary '{:?}' for thread '{}'",
-                        range.end, thread_id
-                    ),
-                )
-                .with_retryable(false)
-            })?;
-            if start_idx > end_idx {
-                return Err(
+            let start_idx =
+                resolve_message_boundary(&thread.messages, &range.start).ok_or_else(|| {
                     GatewayError::new(
                         GatewayErrorKind::InvalidRequest,
                         format!(
-                            "invalid message range: start={} is after end={} for thread '{}'",
-                            start_idx, end_idx, thread_id
+                            "cannot resolve start message boundary '{:?}' for thread '{}'",
+                            range.start, thread_id
                         ),
                     )
-                    .with_retryable(false),
-                );
+                    .with_retryable(false)
+                })?;
+            let end_idx =
+                resolve_message_boundary(&thread.messages, &range.end).ok_or_else(|| {
+                    GatewayError::new(
+                        GatewayErrorKind::InvalidRequest,
+                        format!(
+                            "cannot resolve end message boundary '{:?}' for thread '{}'",
+                            range.end, thread_id
+                        ),
+                    )
+                    .with_retryable(false)
+                })?;
+            if start_idx > end_idx {
+                return Err(GatewayError::new(
+                    GatewayErrorKind::InvalidRequest,
+                    format!(
+                        "invalid message range: start={} is after end={} for thread '{}'",
+                        start_idx, end_idx, thread_id
+                    ),
+                )
+                .with_retryable(false));
             }
 
             removed_messages = end_idx - start_idx + 1;
@@ -449,13 +449,11 @@ impl ThreadSystemPromptMode {
             SystemPromptUpdate::Replace(prompt) => {
                 let trimmed = prompt.trim();
                 if trimmed.is_empty() {
-                    return Err(
-                        GatewayError::new(
-                            GatewayErrorKind::InvalidRequest,
-                            "system_prompt_update.replace must not be empty",
-                        )
-                        .with_retryable(false),
-                    );
+                    return Err(GatewayError::new(
+                        GatewayErrorKind::InvalidRequest,
+                        "system_prompt_update.replace must not be empty",
+                    )
+                    .with_retryable(false));
                 }
                 let next = ThreadSystemPromptMode::Override(trimmed.to_string());
                 let changed = match self {
@@ -485,18 +483,20 @@ fn resolve_message_boundary(
             .iter()
             .position(|message| matches!(message.role, ChatRole::User)),
         MessageBoundarySelector::LatestAssistantToolBatchEnd => {
-            let assistant_idx = messages
-                .iter()
-                .enumerate()
-                .rev()
-                .find_map(|(index, message)| {
-                    if matches!(message.role, ChatRole::Assistant) && !message.tool_calls.is_empty()
-                    {
-                        Some(index)
-                    } else {
-                        None
-                    }
-                })?;
+            let assistant_idx =
+                messages
+                    .iter()
+                    .enumerate()
+                    .rev()
+                    .find_map(|(index, message)| {
+                        if matches!(message.role, ChatRole::Assistant)
+                            && !message.tool_calls.is_empty()
+                        {
+                            Some(index)
+                        } else {
+                            None
+                        }
+                    })?;
             let call_ids = messages[assistant_idx]
                 .tool_calls
                 .iter()

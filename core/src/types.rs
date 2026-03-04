@@ -47,6 +47,28 @@ pub fn build_fq_neural_signal_id(endpoint_id: &str, neural_signal_descriptor_id:
     format!("{endpoint_id}/{neural_signal_descriptor_id}")
 }
 
+pub fn is_valid_neural_signal_identifier(value: &str) -> bool {
+    if value.is_empty() {
+        return false;
+    }
+
+    let mut in_segment = false;
+    for ch in value.chars() {
+        if ch == '.' {
+            if !in_segment {
+                return false;
+            }
+            in_segment = false;
+            continue;
+        }
+        if !ch.is_ascii_alphanumeric() {
+            return false;
+        }
+        in_segment = true;
+    }
+    in_segment
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NeuralSignalDescriptor {
     #[serde(rename = "type")]
@@ -71,10 +93,38 @@ pub struct NeuralSignalDescriptorPatch {
     pub entries: Vec<NeuralSignalDescriptor>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NeuralSignalDescriptorPatchRejection {
+    pub entry: NeuralSignalDescriptorRouteKey,
+    pub reason_code: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct NeuralSignalDescriptorPatchCommit {
+    #[serde(default)]
+    pub accepted_entries: Vec<NeuralSignalDescriptor>,
+    #[serde(default)]
+    pub rejected_entries: Vec<NeuralSignalDescriptorPatchRejection>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct NeuralSignalDescriptorDropPatch {
     #[serde(default)]
     pub routes: Vec<NeuralSignalDescriptorRouteKey>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NeuralSignalDescriptorDropRejection {
+    pub route: NeuralSignalDescriptorRouteKey,
+    pub reason_code: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct NeuralSignalDescriptorDropCommit {
+    #[serde(default)]
+    pub accepted_routes: Vec<NeuralSignalDescriptorRouteKey>,
+    #[serde(default)]
+    pub rejected_routes: Vec<NeuralSignalDescriptorDropRejection>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

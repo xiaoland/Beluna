@@ -202,7 +202,7 @@ async fn main() -> Result<()> {
 
     let continuity = Arc::new(Mutex::new(
         ContinuityEngine::with_defaults_at(config.continuity.state_path.clone())
-        .context("failed to initialize continuity engine")?,
+            .context("failed to initialize continuity engine")?,
     ));
     let afferent_rule_control: Arc<dyn AfferentRuleControlPort> =
         Arc::new(afferent_control.clone());
@@ -211,6 +211,7 @@ async fn main() -> Result<()> {
 
     let cortex = Arc::new(Cortex::from_config(
         &config.cortex,
+        config.r#loop.tick_interval_ms,
         Arc::clone(&chat_factory),
         None,
         Some(continuity.clone()),

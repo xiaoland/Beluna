@@ -338,7 +338,7 @@
               "type": "integer",
               "minimum": 1
             },
-            "max_waiting_seconds": {
+            "max_waiting_ticks": {
               "type": "integer",
               "minimum": 1
             }

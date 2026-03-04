@@ -4,7 +4,7 @@
 
 `cortex-primary-thread` is a long-lived AI Gateway thread (session/process scope).
 
-A Cortex cycle is a runtime trigger unit (tick/sense/continuation). It is not equal to thread lifetime.
+A Cortex cycle is an admitted tick unit. It is not equal to thread lifetime.
 
 ## Normal Turn + Continuation
 
@@ -18,10 +18,11 @@ sequenceDiagram
     participant Tools as "Primary Tools"
 
     Tick->>Runtime: tick grant
-    Afferent->>Runtime: sense event
-    Runtime->>Primary: run cycle (new turn or continuation)
+    Afferent->>Runtime: sense event (buffer only)
+    Runtime->>Runtime: drain buffered senses for current tick
+    Runtime->>Primary: run cycle for admitted tick
 
-    Primary->>Thread: complete(user message on new turn)
+    Primary->>Thread: complete(user message with current tick senses)
     Thread-->>Primary: assistant (tool_calls)
 
     Primary->>Tools: execute each tool call
@@ -29,8 +30,8 @@ sequenceDiagram
     Primary->>Primary: store continuation state (tool-role messages)
     Primary-->>Runtime: pending_primary_continuation=true
 
-    Runtime->>Primary: next cycle as continuation
-    Primary->>Thread: complete(tool-role messages)
+    Runtime->>Primary: next admitted tick cycle
+    Primary->>Thread: complete(tool-role messages + current tick user message)
     Thread-->>Primary: assistant (next tool_calls or final text)
 ```
 

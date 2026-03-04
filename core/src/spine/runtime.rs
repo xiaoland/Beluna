@@ -23,8 +23,8 @@ use crate::{
     },
     stem::{SenseAfferentPathway, StemControlPort},
     types::{
-        Act, NeuralSignalDescriptorCatalog, NeuralSignalDescriptorDropPatch,
-        NeuralSignalDescriptorPatch, ProprioceptionDropPatch, ProprioceptionPatch, Sense,
+        Act, NeuralSignalDescriptorDropPatch, NeuralSignalDescriptorPatch, ProprioceptionDropPatch,
+        ProprioceptionPatch, Sense,
     },
 };
 
@@ -96,12 +96,11 @@ struct EndpointState {
 
 struct RegisteredEndpointRoutes {
     dispatch: EndpointDispatch,
-    descriptors: BTreeMap<NeuralSignalDescriptorRouteKey, NeuralSignalDescriptor>,
+    route_keys: BTreeSet<NeuralSignalDescriptorRouteKey>,
 }
 
 #[derive(Default)]
 struct RoutingState {
-    version: u64,
     by_endpoint: BTreeMap<String, RegisteredEndpointRoutes>,
     adapter_channels: BTreeMap<u64, tokio::sync::mpsc::UnboundedSender<Act>>,
 }
@@ -123,11 +122,6 @@ pub struct Spine {
 #[async_trait]
 pub trait SpineControlPort: Send + Sync {
     async fn publish_sense(&self, sense: Sense);
-    async fn apply_neural_signal_descriptor_patch(&self, entries: Vec<NeuralSignalDescriptor>);
-    async fn apply_neural_signal_descriptor_drop(
-        &self,
-        routes: Vec<NeuralSignalDescriptorRouteKey>,
-    );
     async fn apply_proprioception_patch(&self, entries: BTreeMap<String, String>);
     async fn apply_proprioception_drop(&self, keys: Vec<String>);
     async fn refresh_topology_proprioception(&self);
@@ -224,10 +218,6 @@ impl Spine {
 
     pub fn mode(&self) -> SpineExecutionMode {
         self.mode
-    }
-
-    pub fn neural_signal_descriptor_catalog_snapshot(&self) -> NeuralSignalDescriptorCatalog {
-        self.catalog_snapshot()
     }
 
     pub fn body_endpoint_ids_snapshot(&self) -> Vec<String> {
@@ -413,7 +403,6 @@ impl Spine {
         &self,
         endpoint_name: &str,
         binding: EndpointBinding,
-        descriptors: Vec<NeuralSignalDescriptor>,
     ) -> Result<BodyEndpointHandle> {
         let endpoint_name = endpoint_name.trim();
         if endpoint_name.is_empty() {
@@ -435,23 +424,11 @@ impl Spine {
             .fetch_add(1, Ordering::Relaxed)
             .saturating_add(1);
         let body_endpoint_id = format!("{}.{}", endpoint_name, suffix);
-        let mut route_keys = BTreeSet::new();
-
-        for mut descriptor in descriptors {
-            descriptor.endpoint_id = body_endpoint_id.clone();
-            self.upsert_route(descriptor.clone(), dispatch.clone())
-                .map_err(|err| anyhow::anyhow!(err.to_string()))?;
-            route_keys.insert(NeuralSignalDescriptorRouteKey {
-                r#type: descriptor.r#type,
-                endpoint_id: descriptor.endpoint_id.clone(),
-                neural_signal_descriptor_id: descriptor.neural_signal_descriptor_id.clone(),
-            });
-        }
 
         let registered = RegisteredBodyEndpoint {
             body_endpoint_id: body_endpoint_id.clone(),
             dispatch: dispatch.clone(),
-            route_keys,
+            route_keys: BTreeSet::new(),
         };
         let mut state = self.endpoint_state.lock().expect("lock poisoned");
         if let Some(channel_id) = dispatch.channel_id() {
@@ -466,55 +443,182 @@ impl Spine {
         Ok(BodyEndpointHandle { body_endpoint_id })
     }
 
-    pub fn add_ns_descriptors(
+    pub async fn add_ns_descriptors(
         &self,
         body_endpoint_id: &str,
         descriptors: Vec<NeuralSignalDescriptor>,
     ) -> Result<Vec<NeuralSignalDescriptor>> {
-        let mut state = self.endpoint_state.lock().expect("lock poisoned");
-        let endpoint = state
-            .by_id
-            .get_mut(body_endpoint_id)
-            .ok_or_else(|| anyhow::anyhow!("body endpoint is not registered"))?;
-
-        let mut registered = Vec::new();
-        for mut descriptor in descriptors {
-            descriptor.endpoint_id = endpoint.body_endpoint_id.clone();
-            self.upsert_route(descriptor.clone(), endpoint.dispatch.clone())
-                .map_err(|err| anyhow::anyhow!(err.to_string()))?;
-            endpoint.route_keys.insert(NeuralSignalDescriptorRouteKey {
-                r#type: descriptor.r#type,
-                endpoint_id: descriptor.endpoint_id.clone(),
-                neural_signal_descriptor_id: descriptor.neural_signal_descriptor_id.clone(),
-            });
-            registered.push(descriptor);
+        if descriptors.is_empty() {
+            return Ok(Vec::new());
         }
 
-        Ok(registered)
-    }
-
-    pub fn remove_endpoint(&self, body_endpoint_id: &str) -> Vec<NeuralSignalDescriptorRouteKey> {
-        let mut state = self.endpoint_state.lock().expect("lock poisoned");
-        let Some(endpoint) = state.by_id.remove(body_endpoint_id) else {
-            return Vec::new();
+        let normalized_entries = {
+            let state = self.endpoint_state.lock().expect("lock poisoned");
+            let endpoint = state
+                .by_id
+                .get(body_endpoint_id)
+                .ok_or_else(|| anyhow::anyhow!("body endpoint is not registered"))?;
+            descriptors
+                .into_iter()
+                .map(|mut descriptor| {
+                    descriptor.endpoint_id = endpoint.body_endpoint_id.clone();
+                    descriptor
+                })
+                .collect::<Vec<_>>()
         };
 
-        if let Some(channel_id) = endpoint.dispatch.channel_id()
-            && let Some(ids) = state.by_channel.get_mut(&channel_id)
-        {
-            ids.remove(body_endpoint_id);
-            if ids.is_empty() {
-                state.by_channel.remove(&channel_id);
-            }
+        let patch_commit = self
+            .stem_control
+            .apply_neural_signal_descriptor_patch(NeuralSignalDescriptorPatch {
+                entries: normalized_entries,
+            })
+            .await;
+
+        for rejected in &patch_commit.rejected_entries {
+            tracing::warn!(
+                target = "spine",
+                endpoint_id = %rejected.entry.endpoint_id,
+                neural_signal_descriptor_id = %rejected.entry.neural_signal_descriptor_id,
+                reason_code = %rejected.reason_code,
+                "stem_rejected_ns_descriptor_patch_entry"
+            );
         }
 
-        let mut dropped = Vec::new();
-        for route in endpoint.route_keys {
-            if self.remove_route(&route).is_some() {
-                dropped.push(route);
-            }
+        if patch_commit.accepted_entries.is_empty() {
+            return Ok(Vec::new());
         }
-        dropped
+
+        let accepted_entries = patch_commit
+            .accepted_entries
+            .into_iter()
+            .filter(|entry| {
+                if entry.endpoint_id == body_endpoint_id {
+                    return true;
+                }
+                tracing::warn!(
+                    target = "spine",
+                    requested_body_endpoint_id = body_endpoint_id,
+                    committed_endpoint_id = %entry.endpoint_id,
+                    neural_signal_descriptor_id = %entry.neural_signal_descriptor_id,
+                    "stem_committed_unexpected_endpoint_ns_descriptor"
+                );
+                false
+            })
+            .collect::<Vec<_>>();
+
+        if accepted_entries.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let accepted_routes = accepted_entries
+            .iter()
+            .map(route_key_from_descriptor)
+            .collect::<Vec<_>>();
+
+        let dispatch = {
+            let mut state = self.endpoint_state.lock().expect("lock poisoned");
+            if let Some(endpoint) = state.by_id.get_mut(body_endpoint_id) {
+                for route in &accepted_routes {
+                    endpoint.route_keys.insert(route.clone());
+                }
+                Some(endpoint.dispatch.clone())
+            } else {
+                None
+            }
+        };
+        let Some(dispatch) = dispatch else {
+            self.rollback_ns_routes(accepted_routes).await;
+            return Ok(Vec::new());
+        };
+
+        if let Err(err) = accepted_routes
+            .iter()
+            .cloned()
+            .try_for_each(|route| self.upsert_route(route, dispatch.clone()))
+        {
+            {
+                let mut state = self.endpoint_state.lock().expect("lock poisoned");
+                if let Some(endpoint) = state.by_id.get_mut(body_endpoint_id) {
+                    for route in &accepted_routes {
+                        endpoint.route_keys.remove(route);
+                    }
+                }
+            }
+            self.rollback_ns_routes(accepted_routes).await;
+            return Err(anyhow::anyhow!(err.to_string()));
+        }
+
+        Ok(accepted_entries)
+    }
+
+    pub async fn remove_endpoint(&self, body_endpoint_id: &str) {
+        let endpoint = {
+            let mut state = self.endpoint_state.lock().expect("lock poisoned");
+            let Some(endpoint) = state.by_id.remove(body_endpoint_id) else {
+                return;
+            };
+
+            if let Some(channel_id) = endpoint.dispatch.channel_id()
+                && let Some(ids) = state.by_channel.get_mut(&channel_id)
+            {
+                ids.remove(body_endpoint_id);
+                if ids.is_empty() {
+                    state.by_channel.remove(&channel_id);
+                }
+            }
+
+            endpoint
+        };
+        let endpoint_routes = endpoint.route_keys.into_iter().collect::<Vec<_>>();
+
+        let drop_commit = self
+            .stem_control
+            .apply_neural_signal_descriptor_drop(NeuralSignalDescriptorDropPatch {
+                routes: endpoint_routes.clone(),
+            })
+            .await;
+
+        for rejected in &drop_commit.rejected_routes {
+            tracing::warn!(
+                target = "spine",
+                endpoint_id = %rejected.route.endpoint_id,
+                neural_signal_descriptor_id = %rejected.route.neural_signal_descriptor_id,
+                reason_code = %rejected.reason_code,
+                "stem_rejected_ns_descriptor_drop_route"
+            );
+        }
+        if drop_commit.accepted_routes.len() != endpoint_routes.len() {
+            tracing::warn!(
+                target = "spine",
+                endpoint_id = %body_endpoint_id,
+                expected_route_count = endpoint_routes.len(),
+                accepted_route_count = drop_commit.accepted_routes.len(),
+                "stem_drop_commit_partial_accept_for_endpoint"
+            );
+        }
+
+        for route in &drop_commit.accepted_routes {
+            self.remove_route(route);
+        }
+    }
+
+    async fn rollback_ns_routes(&self, routes: Vec<NeuralSignalDescriptorRouteKey>) {
+        if routes.is_empty() {
+            return;
+        }
+        let drop_commit = self
+            .stem_control
+            .apply_neural_signal_descriptor_drop(NeuralSignalDescriptorDropPatch { routes })
+            .await;
+        for rejected in &drop_commit.rejected_routes {
+            tracing::warn!(
+                target = "spine",
+                endpoint_id = %rejected.route.endpoint_id,
+                neural_signal_descriptor_id = %rejected.route.neural_signal_descriptor_id,
+                reason_code = %rejected.reason_code,
+                "stem_rejected_ns_descriptor_rollback_route"
+            );
+        }
     }
 
     pub(crate) fn on_adapter_channel_open(
@@ -528,10 +632,7 @@ impl Spine {
         channel_id
     }
 
-    pub(crate) fn on_adapter_channel_closed(
-        &self,
-        channel_id: u64,
-    ) -> Vec<NeuralSignalDescriptorRouteKey> {
+    pub(crate) async fn on_adapter_channel_closed(&self, channel_id: u64) {
         {
             let mut routing = self.routing.write().expect("lock poisoned");
             routing.adapter_channels.remove(&channel_id);
@@ -542,11 +643,9 @@ impl Spine {
             state.by_channel.remove(&channel_id).unwrap_or_default()
         };
 
-        let mut dropped = Vec::new();
         for endpoint_id in endpoint_ids {
-            dropped.extend(self.remove_endpoint(&endpoint_id));
+            self.remove_endpoint(&endpoint_id).await;
         }
-        dropped
     }
 
     pub async fn shutdown(&self) {
@@ -591,29 +690,6 @@ impl Spine {
             .by_endpoint
             .get(endpoint_id)
             .map(|entry| entry.dispatch.clone())
-    }
-
-    fn catalog_snapshot(&self) -> NeuralSignalDescriptorCatalog {
-        let routing = self.routing.read().expect("lock poisoned");
-        let mut entries: Vec<_> = routing
-            .by_endpoint
-            .values()
-            .flat_map(|item| item.descriptors.values().cloned())
-            .collect();
-        entries.sort_by(|lhs, rhs| {
-            lhs.r#type
-                .cmp(&rhs.r#type)
-                .then_with(|| lhs.endpoint_id.cmp(&rhs.endpoint_id))
-                .then_with(|| {
-                    lhs.neural_signal_descriptor_id
-                        .cmp(&rhs.neural_signal_descriptor_id)
-                })
-        });
-
-        NeuralSignalDescriptorCatalog {
-            version: format!("spine:v{}", routing.version),
-            entries,
-        }
     }
 
     fn invoke_adapter_endpoint(
@@ -767,22 +843,16 @@ impl Spine {
 
     fn upsert_route(
         &self,
-        descriptor: NeuralSignalDescriptor,
+        route: NeuralSignalDescriptorRouteKey,
         dispatch: EndpointDispatch,
     ) -> Result<(), SpineError> {
-        if descriptor.endpoint_id.trim().is_empty()
-            || descriptor.neural_signal_descriptor_id.trim().is_empty()
+        if route.endpoint_id.trim().is_empty()
+            || route.neural_signal_descriptor_id.trim().is_empty()
         {
             return Err(registration_invalid(
                 "route endpoint_id/neural_signal_descriptor_id cannot be empty",
             ));
         }
-
-        let route = NeuralSignalDescriptorRouteKey {
-            r#type: descriptor.r#type,
-            endpoint_id: descriptor.endpoint_id.clone(),
-            neural_signal_descriptor_id: descriptor.neural_signal_descriptor_id.clone(),
-        };
 
         let mut routing = self.routing.write().expect("lock poisoned");
         let entry = routing
@@ -790,7 +860,7 @@ impl Spine {
             .entry(route.endpoint_id.clone())
             .or_insert_with(|| RegisteredEndpointRoutes {
                 dispatch: dispatch.clone(),
-                descriptors: BTreeMap::new(),
+                route_keys: BTreeSet::new(),
             });
 
         if !entry.dispatch.is_compatible_with(&dispatch) {
@@ -802,33 +872,32 @@ impl Spine {
         }
 
         entry.dispatch = dispatch;
-        entry.descriptors.insert(route, descriptor);
-        routing.version = routing.version.saturating_add(1);
+        entry.route_keys.insert(route);
         Ok(())
     }
 
-    fn remove_route(
-        &self,
-        route: &NeuralSignalDescriptorRouteKey,
-    ) -> Option<NeuralSignalDescriptor> {
+    fn remove_route(&self, route: &NeuralSignalDescriptorRouteKey) {
         let mut routing = self.routing.write().expect("lock poisoned");
-        let mut removed = None;
         let mut remove_endpoint = false;
 
         if let Some(entry) = routing.by_endpoint.get_mut(&route.endpoint_id) {
-            removed = entry.descriptors.remove(route);
-            remove_endpoint = entry.descriptors.is_empty();
+            entry.route_keys.remove(route);
+            remove_endpoint = entry.route_keys.is_empty();
         }
 
         if remove_endpoint {
             routing.by_endpoint.remove(&route.endpoint_id);
         }
+    }
+}
 
-        if removed.is_some() {
-            routing.version = routing.version.saturating_add(1);
-        }
-
-        removed
+fn route_key_from_descriptor(
+    descriptor: &NeuralSignalDescriptor,
+) -> NeuralSignalDescriptorRouteKey {
+    NeuralSignalDescriptorRouteKey {
+        r#type: descriptor.r#type,
+        endpoint_id: descriptor.endpoint_id.clone(),
+        neural_signal_descriptor_id: descriptor.neural_signal_descriptor_id.clone(),
     }
 }
 
@@ -842,27 +911,6 @@ impl SpineControlPort for Spine {
                 "dropping_sense_due_to_closed_afferent_pathway"
             );
         }
-    }
-
-    async fn apply_neural_signal_descriptor_patch(&self, entries: Vec<NeuralSignalDescriptor>) {
-        if entries.is_empty() {
-            return;
-        }
-        self.stem_control
-            .apply_neural_signal_descriptor_patch(NeuralSignalDescriptorPatch { entries })
-            .await;
-    }
-
-    async fn apply_neural_signal_descriptor_drop(
-        &self,
-        routes: Vec<NeuralSignalDescriptorRouteKey>,
-    ) {
-        if routes.is_empty() {
-            return;
-        }
-        self.stem_control
-            .apply_neural_signal_descriptor_drop(NeuralSignalDescriptorDropPatch { routes })
-            .await;
     }
 
     async fn apply_proprioception_patch(&self, entries: BTreeMap<String, String>) {

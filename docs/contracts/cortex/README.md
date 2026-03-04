@@ -11,8 +11,10 @@ Related:
 ## Contract Details
 
 1. Cortex does not return emitted acts at runtime boundary; act emission is executed inside Primary tool handlers via efferent pathway.
-2. `CortexOutput.control` supports `ignore_all_trigger_for_seconds`.
-3. `CortexOutput.pending_primary_continuation=true` means the last assistant turn ended with `tool_calls`; runtime must continue with tool-result messages before dispatching a new user input turn.
+2. `CortexOutput.control` supports:
+   - `ignore_all_trigger_for_ticks`
+   - `wait_for_sense` (act correlation + expected fq-sense ids + wait ticks)
+3. `CortexOutput.pending_primary_continuation=true` means the last assistant turn ended with `tool_calls`; runtime must inject those tool-result messages into the next admitted tick turn, together with that tick's user input.
 4. Primary executes one AI Gateway thread turn per cortex cycle (no internal micro-loop).
 5. Primary tool-call surface includes:
    - dedicated per-act tools (transport-safe alias mapped to fq act id),

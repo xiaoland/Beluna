@@ -9,9 +9,8 @@ Inputs:
 
 Outputs:
 - `CortexOutput`
-  - `acts: Act[]`
-  - `new_cognition_state: CognitionState`
-  - `wait_for_sense: bool`
+  - `control: CortexControlDirective`
+  - `pending_primary_continuation: bool`
 
 Primary Output IR is internal protocol only and is not `CortexOutput`.
 

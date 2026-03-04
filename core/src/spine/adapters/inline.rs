@@ -92,22 +92,17 @@ impl SpineInlineAdapter {
             .ok_or_else(|| anyhow!("spine runtime is unavailable"))?;
 
         let handle = spine
-            .add_endpoint(
-                &endpoint_name,
-                EndpointBinding::Inline(endpoint_proxy),
-                Vec::new(),
-            )
+            .add_endpoint(&endpoint_name, EndpointBinding::Inline(endpoint_proxy))
             .map_err(|err| anyhow!(err.to_string()))?;
 
         let body_endpoint_id = handle.body_endpoint_id.clone();
-        let registered_entries = match spine.add_ns_descriptors(&body_endpoint_id, ns_descriptors)
+        if let Err(err) = spine
+            .add_ns_descriptors(&body_endpoint_id, ns_descriptors)
+            .await
         {
-            Ok(entries) => entries,
-            Err(err) => {
-                spine.remove_endpoint(&body_endpoint_id);
-                return Err(anyhow!(err.to_string()));
-            }
-        };
+            spine.remove_endpoint(&body_endpoint_id).await;
+            return Err(anyhow!(err.to_string()));
+        }
 
         let (act_tx, act_rx) = mpsc::channel::<Arc<Act>>(self.act_queue_capacity);
         let (sense_tx, mut sense_rx) =
@@ -180,11 +175,6 @@ impl SpineInlineAdapter {
             );
         }
 
-        if !registered_entries.is_empty() {
-            spine
-                .apply_neural_signal_descriptor_patch(registered_entries)
-                .await;
-        }
         spine.refresh_topology_proprioception().await;
 
         Ok(InlineEndpointRuntimeHandles { act_rx, sense_tx })
@@ -275,8 +265,7 @@ impl SpineInlineAdapter {
         }
 
         if let Some(spine) = self.spine.upgrade() {
-            let routes = spine.remove_endpoint(&removed.body_endpoint_id);
-            spine.apply_neural_signal_descriptor_drop(routes).await;
+            spine.remove_endpoint(&removed.body_endpoint_id).await;
             spine.refresh_topology_proprioception().await;
         }
     }

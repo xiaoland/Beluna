@@ -21,8 +21,8 @@ pub mod payloads;
 pub mod shell;
 pub mod web;
 
-pub const SHELL_ENDPOINT_NAME: &str = "std-shell";
-pub const WEB_ENDPOINT_NAME: &str = "std-web";
+pub const SHELL_ENDPOINT_NAME: &str = "std.shell";
+pub const WEB_ENDPOINT_NAME: &str = "std.web";
 pub const SHELL_NS_DESCRIPTOR_ID: &str = "tool.shell.exec";
 pub const WEB_NS_DESCRIPTOR_ID: &str = "tool.web.fetch";
 

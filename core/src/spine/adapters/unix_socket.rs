@@ -551,11 +551,9 @@ async fn handle_body_endpoint(
                         continue;
                     }
 
-                    let handle = match spine.add_endpoint(
-                        &endpoint_name,
-                        EndpointBinding::AdapterChannel(channel_id),
-                        vec![],
-                    ) {
+                    let handle = match spine
+                        .add_endpoint(&endpoint_name, EndpointBinding::AdapterChannel(channel_id))
+                    {
                         Ok(handle) => handle,
                         Err(err) => {
                             tracing::warn!(
@@ -568,23 +566,15 @@ async fn handle_body_endpoint(
                     };
                     auth_endpoint_id = Some(handle.body_endpoint_id.clone());
 
-                    let registered_entries =
-                        match spine.add_ns_descriptors(&handle.body_endpoint_id, ns_descriptors) {
-                            Ok(entries) => entries,
-                            Err(err) => {
-                                tracing::warn!(
-                                    target: "spine.unix_socket",
-                                    error = ?err,
-                                    "body_endpoint_ns_descriptor_registration_failed_during_auth"
-                                );
-                                Vec::new()
-                            }
-                        };
-
-                    if !registered_entries.is_empty() {
-                        spine
-                            .apply_neural_signal_descriptor_patch(registered_entries)
-                            .await;
+                    if let Err(err) = spine
+                        .add_ns_descriptors(&handle.body_endpoint_id, ns_descriptors)
+                        .await
+                    {
+                        tracing::warn!(
+                            target: "spine.unix_socket",
+                            error = ?err,
+                            "body_endpoint_ns_descriptor_registration_failed_during_auth"
+                        );
                     }
 
                     let namespaced_entries = namespaced_body_proprioception_entries(
@@ -616,8 +606,7 @@ async fn handle_body_endpoint(
                 }
                 InboundBodyMessage::Unplug => {
                     if let Some(body_endpoint_id) = auth_endpoint_id.as_deref() {
-                        let routes = spine.remove_endpoint(body_endpoint_id);
-                        spine.apply_neural_signal_descriptor_drop(routes).await;
+                        spine.remove_endpoint(body_endpoint_id).await;
                         let drop_keys = endpoint_proprioception_keys
                             .iter()
                             .cloned()
@@ -700,8 +689,7 @@ async fn handle_body_endpoint(
         }
     }
 
-    let routes = spine.on_adapter_channel_closed(channel_id);
-    spine.apply_neural_signal_descriptor_drop(routes).await;
+    spine.on_adapter_channel_closed(channel_id).await;
 
     if !endpoint_proprioception_keys.is_empty() {
         let drop_keys = endpoint_proprioception_keys.into_iter().collect::<Vec<_>>();

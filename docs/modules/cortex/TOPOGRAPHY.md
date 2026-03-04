@@ -15,16 +15,18 @@ cortex(senses, physical_state) -> CortexOutput
 
 ```text
 CortexRuntime (core/src/cortex/runtime/mod.rs)
-  ├─ owns cycle execution (tick + sense hybrid triggers)
-  ├─ keeps local pending sense queue
-  ├─ prioritizes pending primary continuation over new sense delivery
+  ├─ owns cycle execution (tick-triggered only)
+  ├─ keeps local pending sense queue between ticks
+  ├─ buffers sense arrivals only; senses do not trigger immediate cycle execution
+  ├─ applies sleep gate as tick-count suppression
   ├─ snapshots physical state via PhysicalStateReadPort
   ├─ calls Cortex::cortex(...)
-  └─ applies control gate (ignore_all_trigger_until)
+  └─ drains buffered senses into each admitted tick cycle
 
 Cortex Primary (core/src/cortex/runtime/primary.rs)
   ├─ assembles input IR sections (sense/proprioception/goal-forest)
   ├─ runs exactly one AI Gateway thread turn per cortex cycle
+  ├─ injects previous tick tool-result messages into the next tick turn
   ├─ handles tool calls (act tools + internal cognitive tools)
   ├─ emits acts through efferent producer and returns ActDispatchResult in tool data
   ├─ persists cognition state through Continuity (direct call)

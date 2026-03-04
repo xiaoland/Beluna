@@ -23,9 +23,10 @@ Dispatch path:
       -> (on failure) emit dispatch.failed sense to afferent pathway
 
 Control path:
-  adapters -> SpineControlPort
-    -> publish_sense to afferent pathway
-    -> apply ns_descriptor/proprioception mutations via StemControlPort
+  adapters -> Spine runtime control surface
+    -> publish_sense/proprioception via SpineControlPort
+    -> register/drop ns_descriptor via Spine runtime APIs
+    -> for ns_descriptor: commit mutation in Stem first, then update Spine route index from accepted result
 ```
 
 ## External Wire Contract (UnixSocket NDJSON)

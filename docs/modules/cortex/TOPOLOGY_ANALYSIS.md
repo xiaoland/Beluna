@@ -9,7 +9,7 @@ Cortex is responsible for cognition-only decisions. It does not own physical-sta
 1. Stateless runtime boundary:
 - same input contract -> same deterministic post-processing path.
 2. Emitted acts are non-binding proposals.
-3. Per-act wait semantics are bounded integer seconds, not cycle-level bool.
+3. Per-act wait semantics are bounded integer ticks, not cycle-level bool.
 4. Primary and helper failures degrade safely (noop/empty fallback paths).
 5. Goal-forest patching uses tool flow (`patch-goal-forest`), not output-tag parsing.
 
@@ -34,12 +34,13 @@ Cortex is responsible for cognition-only decisions. It does not own physical-sta
 
 ## Wait-for-Sense Model
 
-1. For each emitted act, Primary may set `wait_for_sense_seconds`.
-2. Runtime uses afferent deferral rule overwrite/reset to gate non-target senses.
-3. Wait completion matches by:
-- `act_instance_id`, or
-- descriptor-declared `expected_fq_sense_ids`.
-4. Wait always has bounded timeout.
+1. For each emitted act, Primary may set `wait_for_sense` (ticks).
+2. `wait_for_sense > 0` is accepted only when the act descriptor declares non-empty `emitted_sense_ids`.
+3. Runtime does not mutate afferent deferral rules for wait behavior.
+4. Runtime skips admitted ticks until one buffered sense matches:
+- `sense.act_instance_id == dispatched act_instance_id`
+- `fq-sense-id` is in descriptor-declared `emitted_sense_ids`
+5. If no match appears before wait ticks are exhausted, wait gate expires and normal tick execution resumes.
 
 ## Maintainability Hotspots
 

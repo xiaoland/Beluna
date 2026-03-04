@@ -116,7 +116,9 @@ impl ActProducerHandle {
 pub fn new_efferent_pathway(
     queue_capacity: Option<usize>,
 ) -> (ActProducerHandle, mpsc::Receiver<EfferentActEnvelope>) {
-    let cap = queue_capacity.unwrap_or(DEFAULT_EFFERENT_QUEUE_CAPACITY).max(1);
+    let cap = queue_capacity
+        .unwrap_or(DEFAULT_EFFERENT_QUEUE_CAPACITY)
+        .max(1);
     let (tx, rx) = mpsc::channel(cap);
     (ActProducerHandle { tx }, rx)
 }
