@@ -91,7 +91,7 @@ impl std::error::Error for RuleControlError {}
 pub type RuleRevision = u64;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct DeferralRuleOverwriteInput {
+pub struct DeferralRuleAddInput {
     pub rule_id: String,
     pub min_weight: Option<f64>,
     pub fq_sense_id_pattern: Option<String>,
@@ -112,13 +112,14 @@ pub struct DeferralRuleSetSnapshot {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AfferentSidecarEvent {
-    RuleOverwritten {
+    RuleAdded {
         revision: RuleRevision,
         rule_id: String,
     },
-    RulesReset {
+    RuleRemoved {
         revision: RuleRevision,
-        removed_count: usize,
+        rule_id: String,
+        removed: bool,
     },
     SenseDeferred {
         sense_instance_id: String,
@@ -152,12 +153,12 @@ pub trait AfferentSidecarPort {
 
 #[async_trait]
 pub trait AfferentRuleControlPort: Send + Sync {
-    async fn overwrite_rule(
+    async fn add_rule(
         &self,
-        input: DeferralRuleOverwriteInput,
+        input: DeferralRuleAddInput,
     ) -> Result<RuleRevision, RuleControlError>;
 
-    async fn reset_rules(&self) -> RuleRevision;
+    async fn remove_rule(&self, rule_id: String) -> Result<RuleRevision, RuleControlError>;
 
     async fn snapshot_rules(&self) -> DeferralRuleSetSnapshot;
 }
@@ -189,7 +190,7 @@ struct DeferralRuleRuntime {
 }
 
 impl DeferralRuleRuntime {
-    fn from_input(input: DeferralRuleOverwriteInput) -> Result<Self, RuleControlError> {
+    fn from_input(input: DeferralRuleAddInput) -> Result<Self, RuleControlError> {
         let rule_id = input.rule_id.trim().to_string();
         if rule_id.is_empty() {
             return Err(RuleControlError::invalid_input("rule_id cannot be empty"));
@@ -261,12 +262,13 @@ struct DeferralState {
 }
 
 enum RuleCommand {
-    OverwriteOne {
-        input: DeferralRuleOverwriteInput,
+    AddOne {
+        input: DeferralRuleAddInput,
         reply_tx: oneshot::Sender<Result<RuleRevision, RuleControlError>>,
     },
-    ResetAll {
-        reply_tx: oneshot::Sender<RuleRevision>,
+    RemoveOne {
+        rule_id: String,
+        reply_tx: oneshot::Sender<Result<RuleRevision, RuleControlError>>,
     },
     Snapshot {
         reply_tx: oneshot::Sender<DeferralRuleSetSnapshot>,
@@ -362,33 +364,31 @@ impl AfferentSidecarPort for SenseAfferentPathway {
 
 #[async_trait]
 impl AfferentRuleControlPort for SenseAfferentPathway {
-    async fn overwrite_rule(
+    async fn add_rule(
         &self,
-        input: DeferralRuleOverwriteInput,
+        input: DeferralRuleAddInput,
     ) -> Result<RuleRevision, RuleControlError> {
         let (reply_tx, reply_rx) = oneshot::channel();
         self.command_tx
-            .send(RuleCommand::OverwriteOne { input, reply_tx })
+            .send(RuleCommand::AddOne { input, reply_tx })
             .await
             .map_err(|_| RuleControlError::internal("rule command channel is closed"))?;
 
         reply_rx
             .await
-            .map_err(|_| RuleControlError::internal("rule overwrite response dropped"))?
+            .map_err(|_| RuleControlError::internal("rule add response dropped"))?
     }
 
-    async fn reset_rules(&self) -> RuleRevision {
+    async fn remove_rule(&self, rule_id: String) -> Result<RuleRevision, RuleControlError> {
         let (reply_tx, reply_rx) = oneshot::channel();
-        if self
-            .command_tx
-            .send(RuleCommand::ResetAll { reply_tx })
+        self.command_tx
+            .send(RuleCommand::RemoveOne { rule_id, reply_tx })
             .await
-            .is_err()
-        {
-            return 0;
-        }
+            .map_err(|_| RuleControlError::internal("rule command channel is closed"))?;
 
-        reply_rx.await.unwrap_or(0)
+        reply_rx
+            .await
+            .map_err(|_| RuleControlError::internal("rule remove response dropped"))?
     }
 
     async fn snapshot_rules(&self) -> DeferralRuleSetSnapshot {
@@ -505,35 +505,46 @@ async fn handle_command(
     sidecar_tx: &broadcast::Sender<AfferentSidecarEvent>,
 ) {
     match cmd {
-        RuleCommand::OverwriteOne { input, reply_tx } => {
-            let result = DeferralRuleRuntime::from_input(input).map(|runtime_rule| {
+        RuleCommand::AddOne { input, reply_tx } => {
+            let result = DeferralRuleRuntime::from_input(input).and_then(|runtime_rule| {
                 let rule_id = runtime_rule.rule_id.clone();
+                if state.rules_by_id.contains_key(rule_id.as_str()) {
+                    return Err(RuleControlError::invalid_input(format!(
+                        "rule_id '{rule_id}' already exists"
+                    )));
+                }
                 state.rules_by_id.insert(rule_id.clone(), runtime_rule);
                 state.revision = state.revision.saturating_add(1);
                 emit_sidecar(
                     sidecar_tx,
-                    AfferentSidecarEvent::RuleOverwritten {
+                    AfferentSidecarEvent::RuleAdded {
                         revision: state.revision,
                         rule_id,
                     },
                 );
-                state.revision
+                Ok(state.revision)
             });
             let _ = reply_tx.send(result);
             release_unblocked_front_fifo(state, egress_tx, sidecar_tx).await;
         }
-        RuleCommand::ResetAll { reply_tx } => {
-            let removed_count = state.rules_by_id.len();
-            state.rules_by_id.clear();
-            state.revision = state.revision.saturating_add(1);
-            emit_sidecar(
-                sidecar_tx,
-                AfferentSidecarEvent::RulesReset {
-                    revision: state.revision,
-                    removed_count,
-                },
-            );
-            let _ = reply_tx.send(state.revision);
+        RuleCommand::RemoveOne { rule_id, reply_tx } => {
+            let rule_id = rule_id.trim().to_string();
+            let result = if rule_id.is_empty() {
+                Err(RuleControlError::invalid_input("rule_id cannot be empty"))
+            } else {
+                let removed = state.rules_by_id.remove(rule_id.as_str()).is_some();
+                state.revision = state.revision.saturating_add(1);
+                emit_sidecar(
+                    sidecar_tx,
+                    AfferentSidecarEvent::RuleRemoved {
+                        revision: state.revision,
+                        rule_id,
+                        removed,
+                    },
+                );
+                Ok(state.revision)
+            };
+            let _ = reply_tx.send(result);
             release_unblocked_front_fifo(state, egress_tx, sidecar_tx).await;
         }
         RuleCommand::Snapshot { reply_tx } => {
@@ -608,7 +619,7 @@ fn emit_sidecar(sidecar_tx: &broadcast::Sender<AfferentSidecarEvent>, event: Aff
 
 #[cfg(test)]
 mod tests {
-    use super::{AfferentRuleControlPort, DeferralRuleOverwriteInput, SenseAfferentPathway};
+    use super::{AfferentRuleControlPort, DeferralRuleAddInput, SenseAfferentPathway};
     use crate::types::Sense;
 
     fn test_sense(id: &str, descriptor: &str, weight: f64) -> Sense {
@@ -626,13 +637,13 @@ mod tests {
     async fn defers_when_weight_is_less_than_min_weight() {
         let (pathway, mut consumer, _control) = SenseAfferentPathway::new_handles(8, 8, 8);
         pathway
-            .overwrite_rule(DeferralRuleOverwriteInput {
+            .add_rule(DeferralRuleAddInput {
                 rule_id: "r1".to_string(),
                 min_weight: Some(0.5),
                 fq_sense_id_pattern: None,
             })
             .await
-            .expect("rule overwrite should succeed");
+            .expect("rule add should succeed");
 
         pathway
             .send(test_sense("s1", "x", 0.2))
@@ -648,16 +659,16 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn reset_releases_deferred_in_fifo_order() {
+    async fn remove_rule_releases_deferred_in_fifo_order() {
         let (pathway, mut consumer, _control) = SenseAfferentPathway::new_handles(8, 8, 8);
         pathway
-            .overwrite_rule(DeferralRuleOverwriteInput {
+            .add_rule(DeferralRuleAddInput {
                 rule_id: "r1".to_string(),
                 min_weight: Some(1.0),
                 fq_sense_id_pattern: None,
             })
             .await
-            .expect("rule overwrite should succeed");
+            .expect("rule add should succeed");
 
         pathway
             .send(test_sense("s1", "x", 0.1))
@@ -668,7 +679,10 @@ mod tests {
             .await
             .expect("send should succeed");
 
-        let _ = pathway.reset_rules().await;
+        pathway
+            .remove_rule("r1".to_string())
+            .await
+            .expect("rule remove should succeed");
 
         let first = consumer.recv().await.expect("first released sense");
         let second = consumer.recv().await.expect("second released sense");

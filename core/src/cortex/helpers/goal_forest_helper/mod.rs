@@ -2,11 +2,17 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use tokio::time::Duration;
 
+mod model;
+mod patch;
+
+pub use model::{
+    CognitionState, GoalForest, GoalForestPatchOp, GoalNode, new_default_cognition_state,
+};
+pub(crate) use patch::apply_goal_forest_op;
+
 use crate::{
     ai_gateway::chat::OutputMode,
     cortex::{
-        cognition::{GoalForest, GoalForestPatchOp, GoalNode},
-        cognition_patch::apply_goal_forest_op,
         error::{CortexError, extractor_failed},
         helpers::{self, CognitionOrgan, HelperRuntime},
         prompts,
@@ -187,11 +193,16 @@ fn append_goal_node_lines(
     } else {
         format!("{}|-- ", "    ".repeat(depth))
     };
-    let numbering = node.numbering.as_deref().unwrap_or("null");
-    lines.push(format!(
-        "{prefix}{} [{}] (w={:.2}) id={} :: {}",
-        numbering, node.status, node.weight, node.id, node.summary
-    ));
+    match node.numbering.as_deref() {
+        Some(numbering) => lines.push(format!(
+            "{prefix}{} [{}] (w={:.2}) id={} :: {}",
+            numbering, node.status, node.weight, node.id, node.summary
+        )),
+        None => lines.push(format!(
+            "{prefix}[{}] (w={:.2}) id={} :: {}",
+            node.status, node.weight, node.id, node.summary
+        )),
+    }
 
     if let Some(children) = children_by_parent.get(&Some(node.id.as_str())) {
         for child in children {

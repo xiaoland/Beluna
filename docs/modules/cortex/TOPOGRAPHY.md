@@ -1,103 +1,53 @@
-# Cortex Topography & Sequence
+# Cortex Topography
 
-## Topography
-
-Cortex is a stateless cognition boundary executed by `CortexRuntime`.
-
-Runtime boundary:
+## Runtime Boundary
 
 ```text
-cortex(senses, physical_state, cognition_state) -> CortexOutput
+cortex(senses, physical_state) -> CortexOutput
 ```
 
 `CortexOutput`:
-1. `emitted_acts: Vec<EmittedAct>`
-2. `new_cognition_state: CognitionState`
-3. `control: CortexControlDirective`
 
-`EmittedAct`:
-1. `act`
-2. `wait_for_sense_seconds` (`0` means no wait)
-3. `expected_fq_sense_ids`
+1. `control: CortexControlDirective`
+2. `pending_primary_continuation: bool`
 
 ## Component Topography
 
 ```text
-CortexRuntime (core/src/cortex/runtime.rs)
-  ├─ reads physical snapshot via PhysicalStateReadPort
-  ├─ drains afferent consumer + tick grants
+CortexRuntime (core/src/cortex/runtime/mod.rs)
+  ├─ owns cycle execution (tick + sense hybrid triggers)
+  ├─ keeps local pending sense queue
+  ├─ prioritizes pending primary continuation over new sense delivery
+  ├─ snapshots physical state via PhysicalStateReadPort
   ├─ calls Cortex::cortex(...)
-  ├─ persists cognition via Cortex->Continuity
-  ├─ enqueues emitted acts into Stem efferent pathway
-  └─ applies wait gate via afferent rule-control port while waiting for sense
+  └─ applies control gate (ignore_all_trigger_until)
 
-Cortex Primary (core/src/cortex/primary.rs)
-  ├─ deterministic input section assembly
-  ├─ AI Gateway thread turn loop (streaming/tool-calling)
-  ├─ structured internal tools
-  ├─ dynamic per-act tool aliases -> fq act id mapping
-  └─ returns emitted acts + control directives
+Cortex Primary (core/src/cortex/runtime/primary.rs)
+  ├─ assembles input IR sections (sense/proprioception/goal-forest)
+  ├─ runs exactly one AI Gateway thread turn per cortex cycle
+  ├─ handles tool calls (act tools + internal cognitive tools)
+  ├─ emits acts through efferent producer and returns ActDispatchResult in tool data
+  ├─ persists cognition state through Continuity (direct call)
+  └─ stores continuation batch when assistant returns tool_calls
 ```
 
 ## Primary Tools
 
-1. Dynamic dedicated act tools (one tool per act descriptor).
+1. Dynamic dedicated act tools (transport-safe alias -> fq act id mapping).
 2. `expand-senses`:
-- `mode: raw | sub-agent`
-- `senses_to_expand[].sense_id` format: `"<monotonic-id>. <fq-sense-id>"`.
+   - `mode: raw | sub-agent`
+   - `senses_to_expand[].sense_id` format: `"<monotonic-id>. <fq-sense-id>"`.
 3. `patch-goal-forest` (`reset_context` supported).
-4. `overwrite-sense-deferral-rule`.
-5. `reset-sense-deferral-rules`.
-6. `sleep` (`ignore_all_trigger_for_seconds`).
+4. `add-sense-deferral-rule`.
+5. `remove-sense-deferral-rule`.
+6. `sleep`.
 
-## Input/Render Contracts
+## Sense Render Contract
 
-Senses delivered to Primary use deterministic lines:
+Senses delivered to Primary:
 
 ```text
 - [monotonic internal sense id]. [fq-sense-id]: [key=value,key=value,...]; [payload-truncated-if-needed]
-```
-
-Notes:
-1. Payload is text.
-2. Metadata fragment is deterministic key=value list.
-3. Sense helper fallback may emit Postman envelope text for oversized payloads.
-
-## Runtime Sequence
-
-```mermaid
-sequenceDiagram
-    participant AR as Afferent Consumer
-    participant TK as Tick Grants
-    participant CR as CortexRuntime
-    participant CX as Cortex
-    participant CT as Continuity
-    participant EP as Efferent Producer
-
-    alt tick or sense trigger
-        TK-->>CR: TickGrant
-        AR-->>CR: Sense
-    end
-
-    CR->>CR: cycle_id += 1
-    CR->>CR: physical_state snapshot(cycle_id)
-    CR->>CX: cortex(senses, physical_state, cognition_state)
-    CX-->>CR: CortexOutput
-
-    CR->>CT: persist_cognition_state(new_cognition_state)
-
-    loop emitted acts in order
-        CR->>EP: enqueue(EfferentActEnvelope { cycle_id, act_seq_no, act })
-        alt wait_for_sense_seconds > 0
-            CR->>CR: overwrite wait-gate deferral rule
-            CR->>AR: wait for matching sense (bounded timeout)
-            CR->>CR: clear wait-gate rule
-        end
-    end
-
-    alt control.ignore_all_trigger_for_seconds set
-        CR->>CR: ignore triggers until deadline
-    end
 ```
 
 ## File Map
@@ -105,10 +55,9 @@ sequenceDiagram
 ```text
 core/src/cortex/
 ├── mod.rs
-├── runtime.rs
-├── primary.rs
-├── cognition.rs
-├── cognition_patch.rs
+├── runtime/
+│   ├── mod.rs
+│   └── primary.rs
 ├── ir.rs
 ├── prompts.rs
 ├── clamp.rs

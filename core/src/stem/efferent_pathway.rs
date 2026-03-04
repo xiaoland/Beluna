@@ -6,9 +6,9 @@ use std::{
 };
 
 use tokio::{
-    sync::{Mutex, mpsc},
+    sync::{Mutex, mpsc, oneshot},
     task::JoinHandle,
-    time::{Instant, sleep_until},
+    time::{Instant, sleep_until, timeout},
 };
 use tokio_util::sync::CancellationToken;
 
@@ -22,11 +22,27 @@ use crate::{
 const DEFAULT_EFFERENT_QUEUE_CAPACITY: usize = 128;
 const DISPATCH_TERMINAL_RETENTION_LIMIT: usize = 128;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct EfferentActEnvelope {
     pub cycle_id: u64,
     pub act_seq_no: u64,
     pub act: Act,
+    pub response_tx: Option<oneshot::Sender<ActDispatchResult>>,
+}
+
+impl EfferentActEnvelope {
+    pub fn new(cycle_id: u64, act_seq_no: u64, act: Act) -> Self {
+        Self {
+            cycle_id,
+            act_seq_no,
+            act,
+            response_tx: None,
+        }
+    }
+
+    pub fn with_response(cycle_id: u64, act_seq_no: u64, act: Act) -> Self {
+        Self::new(cycle_id, act_seq_no, act)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -50,10 +66,7 @@ pub struct ActProducerHandle {
 }
 
 impl ActProducerHandle {
-    pub async fn enqueue(
-        &self,
-        envelope: EfferentActEnvelope,
-    ) -> Result<(), EfferentEnqueueError> {
+    pub async fn enqueue(&self, envelope: EfferentActEnvelope) -> Result<(), EfferentEnqueueError> {
         match self.tx.send(envelope).await {
             Ok(()) => Ok(()),
             Err(err) => {
@@ -69,14 +82,41 @@ impl ActProducerHandle {
             }
         }
     }
+
+    pub async fn dispatch_and_wait(
+        &self,
+        mut envelope: EfferentActEnvelope,
+        wait_timeout: Duration,
+    ) -> ActDispatchResult {
+        let (tx, rx) = oneshot::channel();
+        let reference_id = envelope.act.act_instance_id.clone();
+        envelope.response_tx = Some(tx);
+
+        if self.enqueue(envelope).await.is_err() {
+            return ActDispatchResult::Lost {
+                reason_code: "efferent_queue_closed".to_string(),
+                reference_id,
+            };
+        }
+
+        match timeout(wait_timeout.max(Duration::from_millis(1)), rx).await {
+            Ok(Ok(result)) => result,
+            Ok(Err(_)) => ActDispatchResult::Lost {
+                reason_code: "efferent_response_dropped".to_string(),
+                reference_id,
+            },
+            Err(_) => ActDispatchResult::Lost {
+                reason_code: "efferent_dispatch_timeout".to_string(),
+                reference_id,
+            },
+        }
+    }
 }
 
 pub fn new_efferent_pathway(
     queue_capacity: Option<usize>,
 ) -> (ActProducerHandle, mpsc::Receiver<EfferentActEnvelope>) {
-    let cap = queue_capacity
-        .unwrap_or(DEFAULT_EFFERENT_QUEUE_CAPACITY)
-        .max(1);
+    let cap = queue_capacity.unwrap_or(DEFAULT_EFFERENT_QUEUE_CAPACITY).max(1);
     let (tx, rx) = mpsc::channel(cap);
     (ActProducerHandle { tx }, rx)
 }
@@ -170,53 +210,72 @@ async fn process_efferent_dispatch(
     stem_control: &dyn StemControlPort,
     terminal_status_keys: &mut VecDeque<String>,
 ) {
-    let status_key = dispatch_status_key(&task.act.act_instance_id);
+    let EfferentActEnvelope {
+        cycle_id,
+        act_seq_no,
+        act,
+        response_tx,
+    } = task;
+
+    let status_key = dispatch_status_key(&act.act_instance_id);
     emit_status_patch(stem_control, &status_key, "DISPATCHING").await;
 
     let continuity_status = match continuity.lock().await.on_act(
-        &task.act,
+        &act,
         &ContinuityDispatchContext {
-            cycle_id: task.cycle_id,
-            act_seq_no: task.act_seq_no,
+            cycle_id,
+            act_seq_no,
         },
     ) {
         Ok(DispatchDecision::Continue) => None,
-        Ok(DispatchDecision::Break) => Some("REJECTED"),
+        Ok(DispatchDecision::Break) => Some(ActDispatchResult::Rejected {
+            reason_code: "continuity_break".to_string(),
+            reference_id: act.act_instance_id.clone(),
+        }),
         Err(err) => {
             tracing::warn!(
-                target: "stem.efferent",
-                cycle_id = task.cycle_id,
-                act_seq_no = task.act_seq_no,
-                act_instance_id = %task.act.act_instance_id,
+                target = "stem.efferent",
+                cycle_id = cycle_id,
+                act_seq_no = act_seq_no,
+                act_instance_id = %act.act_instance_id,
                 error = %err,
                 "continuity_dispatch_failed_mark_lost"
             );
-            Some("LOST")
+            Some(ActDispatchResult::Lost {
+                reason_code: "continuity_dispatch_failed".to_string(),
+                reference_id: act.act_instance_id.clone(),
+            })
         }
     };
 
-    let terminal_status = if let Some(status) = continuity_status {
+    let dispatch_result = if let Some(status) = continuity_status {
         status
     } else {
-        match spine.on_act_final(task.act.clone()).await {
-            Ok(ActDispatchResult::Acknowledged { .. }) => "ACK",
-            Ok(ActDispatchResult::Rejected { .. }) => "REJECTED",
-            Ok(ActDispatchResult::Lost { .. }) => "LOST",
+        match spine.on_act_final(act.clone()).await {
+            Ok(result) => result,
             Err(err) => {
                 tracing::warn!(
-                    target: "stem.efferent",
-                    cycle_id = task.cycle_id,
-                    act_seq_no = task.act_seq_no,
-                    act_instance_id = %task.act.act_instance_id,
+                    target = "stem.efferent",
+                    cycle_id = cycle_id,
+                    act_seq_no = act_seq_no,
+                    act_instance_id = %act.act_instance_id,
                     error = %err,
                     "spine_dispatch_failed_mark_lost"
                 );
-                "LOST"
+                ActDispatchResult::Lost {
+                    reason_code: "spine_dispatch_failed".to_string(),
+                    reference_id: act.act_instance_id.clone(),
+                }
             }
         }
     };
 
+    let terminal_status = dispatch_terminal_status(&dispatch_result);
     emit_status_patch(stem_control, &status_key, terminal_status).await;
+
+    if let Some(tx) = response_tx {
+        let _ = tx.send(dispatch_result);
+    }
 
     terminal_status_keys.push_back(status_key.clone());
     if terminal_status_keys.len() > DISPATCH_TERMINAL_RETENTION_LIMIT
@@ -228,6 +287,14 @@ async fn process_efferent_dispatch(
 
 fn dispatch_status_key(act_instance_id: &str) -> String {
     format!("stem.dispatch.{act_instance_id}.status")
+}
+
+fn dispatch_terminal_status(dispatch_result: &ActDispatchResult) -> &'static str {
+    match dispatch_result {
+        ActDispatchResult::Acknowledged { .. } => "ACK",
+        ActDispatchResult::Rejected { .. } => "REJECTED",
+        ActDispatchResult::Lost { .. } => "LOST",
+    }
 }
 
 async fn emit_status_patch(stem_control: &dyn StemControlPort, key: &str, value: &str) {

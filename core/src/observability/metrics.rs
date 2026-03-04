@@ -4,8 +4,6 @@ use metrics::{Unit, counter, describe_counter, describe_gauge, gauge};
 use metrics_exporter_prometheus::{BuildError, PrometheusBuilder};
 
 pub const CORTEX_CYCLE_ID_METRIC: &str = "beluna_cortex_cycle_id";
-pub const CORTEX_INPUT_IR_ACT_DESCRIPTOR_CATALOG_COUNT_METRIC: &str =
-    "beluna_cortex_input_ir_act_descriptor_catalog_count";
 pub const CHAT_TASK_LATENCY_MS_METRIC: &str = "beluna_chat_task_latency_ms";
 pub const CHAT_TASK_FAILURES_TOTAL_METRIC: &str = "beluna_chat_task_failures_total";
 pub const CHAT_TASK_RETRIES_TOTAL_METRIC: &str = "beluna_chat_task_retries_total";
@@ -34,11 +32,6 @@ pub fn start_prometheus_exporter(listen_addr: SocketAddr) -> Result<MetricsRunti
         CORTEX_CYCLE_ID_METRIC,
         Unit::Count,
         "Latest cortex cycle id processed by stem."
-    );
-    describe_gauge!(
-        CORTEX_INPUT_IR_ACT_DESCRIPTOR_CATALOG_COUNT_METRIC,
-        Unit::Count,
-        "Count of act descriptors included in cortex input IR catalog."
     );
     describe_gauge!(
         CHAT_TASK_LATENCY_MS_METRIC,
@@ -95,10 +88,6 @@ pub fn start_prometheus_exporter(listen_addr: SocketAddr) -> Result<MetricsRunti
 
 pub fn record_cortex_cycle_id(cycle_id: u64) {
     gauge!(CORTEX_CYCLE_ID_METRIC).set(cycle_id as f64);
-}
-
-pub fn record_cortex_input_ir_act_descriptor_catalog_count(count: usize) {
-    gauge!(CORTEX_INPUT_IR_ACT_DESCRIPTOR_CATALOG_COUNT_METRIC).set(count as f64);
 }
 
 pub fn record_chat_task_latency_ms(task_type: &str, backend: &str, model: &str, latency_ms: u64) {

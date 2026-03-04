@@ -1,3 +1,5 @@
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use serde::{Deserialize, Serialize};
 use tokio::time::Duration;
 
@@ -13,6 +15,8 @@ use crate::{
 
 #[derive(Clone, Default)]
 pub(crate) struct SenseInputHelper;
+
+static NEXT_INTERNAL_SENSE_ID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct SenseToolContext {
@@ -309,22 +313,21 @@ struct SenseDescriptorInput {
 }
 
 fn project_domain_sense_events(senses: &[Sense]) -> Vec<SenseInputEvent> {
-    let mut next_sense_instance_id = 1_u64;
     let mut events = Vec::new();
     for sense in senses {
+        let sense_instance_id = NEXT_INTERNAL_SENSE_ID.fetch_add(1, Ordering::Relaxed);
         let payload_bytes = sense.payload.as_bytes().len();
         let fq_sense_id =
             build_fq_neural_signal_id(&sense.endpoint_id, &sense.neural_signal_descriptor_id);
         events.push(SenseInputEvent {
-            sense_instance_id: next_sense_instance_id,
-            sense_ref_id: format!("{}. {}", next_sense_instance_id, fq_sense_id),
+            sense_instance_id,
+            sense_ref_id: format!("{}. {}", sense_instance_id, fq_sense_id),
             fq_sense_id,
             payload: sense.payload.clone(),
             original_size_in_bytes: payload_bytes,
             weight: sense.weight,
             act_instance_id: sense.act_instance_id.clone(),
         });
-        next_sense_instance_id += 1;
     }
     events
 }

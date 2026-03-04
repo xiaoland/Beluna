@@ -6,7 +6,6 @@ use crate::cortex::{
 
 pub(crate) const INPUT_IR_ROOT: &str = "input-ir";
 pub(crate) const OUTPUT_IR_ROOT: &str = "output-ir";
-const ACT_DESCRIPTOR_CATALOG_TAG: &str = "somatic-act-descriptor-catalog";
 const PRIMARY_GOAL_FOREST_TAG: &str = "goal-forest";
 const SENSES_TAG: &str = "somatic-senses";
 const PROPRIOCEPTION_TAG: &str = "proprioception";
@@ -14,13 +13,11 @@ const PROPRIOCEPTION_TAG: &str = "proprioception";
 pub(crate) fn build_input_ir(
     senses_section: &str,
     proprioception_section: &str,
-    act_descriptor_catalog_section: &str,
     goal_forest_section: &str,
 ) -> InputIr {
     let primary_payload = build_primary_input_payload(
         senses_section,
         proprioception_section,
-        act_descriptor_catalog_section,
         goal_forest_section,
     );
     InputIr {
@@ -35,18 +32,15 @@ pub(crate) fn build_input_ir(
 pub(crate) fn build_primary_input_payload(
     senses_section: &str,
     proprioception_section: &str,
-    act_descriptor_catalog_section: &str,
     goal_forest_section: &str,
 ) -> String {
     format!(
-        "<{senses}>\n{a}\n</{senses}>\n<{proprioception}>\n{b}\n</{proprioception}>\n<{act_catalog}>\n{c}\n</{act_catalog}>\n<{goal_forest}>\n{d}\n</{goal_forest}>",
+        "<{senses}>\n{a}\n</{senses}>\n<{proprioception}>\n{b}\n</{proprioception}>\n<{goal_forest}>\n{d}\n</{goal_forest}>",
         senses = SENSES_TAG,
         proprioception = PROPRIOCEPTION_TAG,
-        act_catalog = ACT_DESCRIPTOR_CATALOG_TAG,
         goal_forest = PRIMARY_GOAL_FOREST_TAG,
         a = senses_section.trim(),
         b = proprioception_section.trim(),
-        c = act_descriptor_catalog_section.trim(),
         d = goal_forest_section.trim(),
     )
 }

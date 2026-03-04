@@ -188,10 +188,11 @@ Rules:
 - Root line prefix: `+-- `
 - Child line prefix per depth: `"    " * depth + "|-- "`
 - Display numbering:
-  - Root node: `null`
+  - Root node: omitted from rendered line
   - Non-root node: actual numbering string
 - Line format:
-  - `{prefix}{numbering_or_null} [{status}] (w={weight:.2}) id={id} :: {summary}`
+  - Root: `{prefix}[{status}] (w={weight:.2}) id={id} :: {summary}`
+  - Non-root: `{prefix}{numbering} [{status}] (w={weight:.2}) id={id} :: {summary}`
 
 Ordering:
 
@@ -278,5 +279,5 @@ Use `patch-goal-forest` tool with JSON array arguments.
 - Expect: continuity invariant violation
 
 12. Render check
-- Verify `<goal-forest>` lines show roots with numbering `null`
+- Verify `<goal-forest>` root lines do not render literal `null` numbering
 - Verify prefixes and ordering are deterministic

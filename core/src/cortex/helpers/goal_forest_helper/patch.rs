@@ -1,31 +1,6 @@
 use std::collections::BTreeSet;
 
-use crate::cortex::cognition::{CognitionState, GoalForestPatchOp, GoalNode};
-
-pub(crate) struct CognitionPatchApplyResult {
-    pub new_cognition_state: CognitionState,
-}
-
-pub(crate) fn apply_cognition_patches(
-    previous: &CognitionState,
-    goal_forest_ops: &[GoalForestPatchOp],
-) -> CognitionPatchApplyResult {
-    let mut next = previous.clone();
-    let mut changed = false;
-
-    for op in goal_forest_ops {
-        if apply_goal_forest_op(&mut next.goal_forest.nodes, op) {
-            changed = true;
-        }
-    }
-
-    if changed {
-        next.revision = next.revision.saturating_add(1);
-    }
-    CognitionPatchApplyResult {
-        new_cognition_state: next,
-    }
-}
+use super::model::{GoalForestPatchOp, GoalNode};
 
 pub(crate) fn apply_goal_forest_op(nodes: &mut Vec<GoalNode>, op: &GoalForestPatchOp) -> bool {
     match op {
@@ -259,17 +234,17 @@ fn unique_index_by_numbering(nodes: &[GoalNode], numbering: &str) -> Option<usiz
     if needle.is_empty() {
         return None;
     }
-    let mut matched: Option<usize> = None;
+
+    let mut found = None;
     for (index, node) in nodes.iter().enumerate() {
-        if node.numbering.as_deref() != Some(needle) {
-            continue;
+        if node.numbering.as_deref() == Some(needle) {
+            if found.is_some() {
+                return None;
+            }
+            found = Some(index);
         }
-        if matched.is_some() {
-            return None;
-        }
-        matched = Some(index);
     }
-    matched
+    found
 }
 
 fn unique_index_by_id(nodes: &[GoalNode], id: &str) -> Option<usize> {
@@ -277,45 +252,17 @@ fn unique_index_by_id(nodes: &[GoalNode], id: &str) -> Option<usize> {
     if needle.is_empty() {
         return None;
     }
-    let mut matched: Option<usize> = None;
+
+    let mut found = None;
     for (index, node) in nodes.iter().enumerate() {
-        if node.id != needle {
-            continue;
-        }
-        if matched.is_some() {
-            return None;
-        }
-        matched = Some(index);
-    }
-    matched
-}
-
-fn next_child_numbering(
-    nodes: &[GoalNode],
-    parent_id: &str,
-    parent_numbering: Option<&str>,
-) -> String {
-    let mut max_child = 0_u64;
-    for node in nodes {
-        if node.parent_id.as_deref() != Some(parent_id) {
-            continue;
-        }
-        let Some(numbering) = node.numbering.as_deref() else {
-            continue;
-        };
-        let Some(value) = direct_child_index(numbering, parent_numbering) else {
-            continue;
-        };
-        if value > max_child {
-            max_child = value;
+        if node.id == needle {
+            if found.is_some() {
+                return None;
+            }
+            found = Some(index);
         }
     }
-
-    let next = max_child + 1;
-    match parent_numbering {
-        Some(parent) => format!("{parent}.{next}"),
-        None => next.to_string(),
-    }
+    found
 }
 
 fn is_direct_child_numbering(numbering: &str, parent_numbering: Option<&str>) -> bool {
@@ -357,10 +304,10 @@ fn is_valid_numbering(numbering: &str) -> bool {
         if !segment.chars().all(|ch| ch.is_ascii_digit()) {
             return false;
         }
-        if segment.starts_with('0') && segment.len() > 1 {
+        if segment == "0" {
             return false;
         }
-        if segment == "0" {
+        if segment.starts_with('0') && segment.len() > 1 {
             return false;
         }
     }
@@ -368,11 +315,30 @@ fn is_valid_numbering(numbering: &str) -> bool {
     true
 }
 
+fn next_child_numbering(nodes: &[GoalNode], parent_id: &str, parent_numbering: Option<&str>) -> String {
+    let mut max_child_index = 0_u64;
+    for node in nodes {
+        if node.parent_id.as_deref() != Some(parent_id) {
+            continue;
+        }
+        let Some(numbering) = node.numbering.as_deref() else {
+            continue;
+        };
+        if let Some(index) = direct_child_index(numbering, parent_numbering) {
+            max_child_index = max_child_index.max(index);
+        }
+    }
+
+    let next = max_child_index.saturating_add(1);
+    match parent_numbering {
+        None => next.to_string(),
+        Some(parent) => format!("{parent}.{next}"),
+    }
+}
+
 fn sort_goal_nodes(nodes: &mut [GoalNode]) {
     nodes.sort_by(|lhs, rhs| {
-        lhs.parent_id
-            .cmp(&rhs.parent_id)
-            .then_with(|| compare_numbering(lhs.numbering.as_deref(), rhs.numbering.as_deref()))
+        compare_numbering(lhs.numbering.as_deref(), rhs.numbering.as_deref())
             .then_with(|| lhs.id.cmp(&rhs.id))
     });
 }

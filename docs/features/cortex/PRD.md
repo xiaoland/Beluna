@@ -14,9 +14,8 @@ Boundary shape:
 - Cortex accepts empty `senses` on interval ticks.
 - Pipeline is fixed:
   - `raw-input -> input-helpers -> <input-ir> -> primary -> <output-ir> -> output-helpers -> real-output`
-- Primary runs a Cognitive Micro-loop (multi-turn) and may use internal tool calls before finalizing `<output-ir>`.
+- Primary runs one AI Gateway thread turn per Cortex cycle; when tool-calls are returned, runtime schedules continuation cycles with tool-result messages.
 - Internal tool calls are Internal Cognitive Actions and are distinct from Somatic Act outputs.
-- Cognitive Micro-loop hard stop is `max_internal_steps`.
 - Input IR first-level XML sections:
   - `<somatic-senses>`
   - `<proprioception>`
@@ -40,7 +39,7 @@ Boundary shape:
 - Goal instincts are consolidated in Primary system prompt (not persisted as root partition field).
 - `<goal-forest>` input section is deterministic ASCII-art (`+--`, `|--`) text.
 - Goal updates are performed via internal tool `patch-goal-forest`; Output IR has no goal patch section.
-- `patch-goal-forest` tool argument contract is hard-coded in `/Users/lanzhijiang/Development/Beluna/core/src/cortex/runtime.rs` and mirrored in `/Users/lanzhijiang/Development/Beluna/core/src/constant/patch-goal-forest.json`.
+- `patch-goal-forest` tool argument contract is hard-coded in `/Users/lanzhijiang/Development/Beluna/core/src/cortex/runtime/primary.rs` and mirrored in `/Users/lanzhijiang/Development/Beluna/core/src/constant/patch-goal-forest.json`.
 - Goal weight normalization is removed; incoming weight must already be in `[0,1]`.
 - L1 memory model is ordered `string[]`.
 - `<somatic-senses>` section entries include `sense-instance-id` (tick-local monotonic int) and `fq-somatic-sense-id`.

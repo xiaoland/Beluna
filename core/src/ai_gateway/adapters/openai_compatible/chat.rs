@@ -287,9 +287,9 @@ fn build_body(model: &str, payload: &TurnPayload, stream: bool) -> Value {
             "type": "enabled",
             "budget_tokens": payload.limits.max_output_tokens.unwrap_or(10000)
         });
-        body["extra_body"] = json!({
+        body["extras"] = json!({
             "enable_thinking": "enabled",
-            "thinking_budget": "payload.limits.max_output_tokens.unwrap_or(10000)"
+            "thinking_budget": payload.limits.max_output_tokens.unwrap_or(10000)
         });
         body["enable_thinking"] = json!(true);
     } else {

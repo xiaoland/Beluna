@@ -13,12 +13,6 @@ pub struct SenseHelperRequest {
 }
 
 #[derive(Debug, Clone)]
-pub struct ActDescriptorHelperRequest {
-    pub cycle_id: u64,
-    pub act_descriptors: Vec<NeuralSignalDescriptor>,
-}
-
-#[derive(Debug, Clone)]
 pub struct GoalForestHelperRequest {
     pub cycle_id: u64,
     pub goal_forest_json: String,
@@ -47,15 +41,12 @@ pub struct TestActDraft {
 pub type TestActsHelperOutput = Vec<TestActDraft>;
 
 type SenseHelperFuture = Pin<Box<dyn Future<Output = Result<String, CortexError>> + Send>>;
-type ActDescriptorHelperFuture = Pin<Box<dyn Future<Output = Result<String, CortexError>> + Send>>;
 type GoalForestHelperFuture = Pin<Box<dyn Future<Output = Result<String, CortexError>> + Send>>;
 type PrimaryFuture = Pin<Box<dyn Future<Output = Result<String, CortexError>> + Send>>;
 type ActsHelperFuture =
     Pin<Box<dyn Future<Output = Result<TestActsHelperOutput, CortexError>> + Send>>;
 
 pub type SenseHelperHook = Arc<dyn Fn(SenseHelperRequest) -> SenseHelperFuture + Send + Sync>;
-pub type ActDescriptorHelperHook =
-    Arc<dyn Fn(ActDescriptorHelperRequest) -> ActDescriptorHelperFuture + Send + Sync>;
 pub type GoalForestHelperHook =
     Arc<dyn Fn(GoalForestHelperRequest) -> GoalForestHelperFuture + Send + Sync>;
 pub type PrimaryHook = Arc<dyn Fn(PrimaryRequest) -> PrimaryFuture + Send + Sync>;
@@ -73,7 +64,6 @@ where
 #[derive(Clone)]
 pub struct TestHooks {
     pub sense_helper: SenseHelperHook,
-    pub act_descriptor_helper: ActDescriptorHelperHook,
     pub goal_forest_helper: GoalForestHelperHook,
     pub primary: PrimaryHook,
     pub acts_helper: ActsHelperHook,
@@ -82,14 +72,12 @@ pub struct TestHooks {
 impl TestHooks {
     pub fn new(
         sense_helper: SenseHelperHook,
-        act_descriptor_helper: ActDescriptorHelperHook,
         goal_forest_helper: GoalForestHelperHook,
         primary: PrimaryHook,
         acts_helper: ActsHelperHook,
     ) -> Self {
         Self {
             sense_helper,
-            act_descriptor_helper,
             goal_forest_helper,
             primary,
             acts_helper,

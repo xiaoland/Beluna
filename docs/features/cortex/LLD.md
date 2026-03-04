@@ -25,13 +25,13 @@ Patch ops:
 1. Run input helper instances (`sense`, `proprioception`, `act-descriptor`, `goal-forest`, `l1-memory`).
 2. `goal_forest_input_helper` renders GoalForest as deterministic ASCII-art (`+--`, `|--`).
 3. Build `<input-ir>` with first-level sections.
-4. Run Primary Cognitive Micro-loop.
-5. During micro-loop, Primary may issue internal tools:
+4. Run one Primary thread turn.
+5. During a turn, Primary may issue internal tools:
    - `expand-sense-raw(sense_ids)`
    - `expand-sense-with-sub-agent(tasks)`
    - `patch-goal-forest(ops[])`
 6. `patch-goal-forest` applies deterministic ops to cycle-local GoalForest and returns updated ASCII-art.
-7. Stop micro-loop when final text `<output-ir>` is produced or `max_internal_steps` is reached.
+7. If turn returns tool-calls, runtime continues in the next cycle with tool-result messages until final text `<output-ir>` is produced.
 8. Parse optional output sections:
    - `<somatic-acts>` (missing => no acts)
    - `<new-focal-awareness>` (missing => keep current l1-memory)

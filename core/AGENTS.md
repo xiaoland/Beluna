@@ -52,15 +52,17 @@ Beluna Core is the runnable runtime and domain agent implementation.
 - Shutdown closes ingress gate and cancels runtime tasks (no `hibernate` control sense).
 - Runtime logging is `tracing`-only: JSON file logs named `core.log.<YYYY-MM-DD>.<awake_sequence>` with retention cleanup and optional stderr warn/error mirroring via `logging.*` config.
 - Stem is tick-driven (`loop.tick_interval_ms`, default 10s) and only emits tick grants.
-- Cortex owns cycle execution (hybrid tick + sense trigger), persists cognition state through Continuity, and enqueues acts to the efferent pathway.
+- Cortex owns cycle execution (hybrid tick + sense trigger) and consumes the afferent receive handle in its own runtime task.
+- Cortex Primary persists cognition state through Continuity directly from cognition tools.
+- Cortex Primary act tools dispatch directly into the efferent FIFO and receive `ActDispatchResult` (bounded wait; timeout -> `lost`).
 - Cortex Primary act tools emit per-act `wait_for_sense` integer seconds (`0` means no wait) and use unified `expand-senses`.
 - Stem owns physical state mutation for `ns_descriptor`/proprioception through `StemControlPort` + shared store.
 - Control senses were removed from afferent flow; descriptor/proprioception updates are direct runtime control calls.
 - Continuity persists cognition state (`goal-forest`) to JSON and enforces deterministic guardrails.
 - Afferent queue carries domain senses only and runs a deferral scheduler before Cortex consumption.
 - Deferral rules are managed by pathway-owned control API:
-  - `overwrite_rule` upserts one rule by `rule_id`.
-  - `reset_rules` clears all rules.
+  - `add_rule` inserts one rule by `rule_id` (duplicate id is rejected).
+  - `remove_rule` removes one rule by `rule_id`.
   - `min_weight` selector defers when `sense.weight < min_weight`.
   - `fq-sense-id` selector defers when regex matches `endpoint_id/neural_signal_descriptor_id`.
 - Deferred senses are buffered FIFO with `loop.max_deferring_nums` cap; overflow evicts oldest deferred entries with warnings.

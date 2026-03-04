@@ -14,9 +14,10 @@ Key properties:
 6. Sense expansion uses unified `expand-senses` tool (`mode: raw | sub-agent`).
 7. Sense delivery to Primary uses deterministic rendered lines:
 - `- [monotonic-id]. [fq-sense-id]: [key=value,...]; [payload-truncated-if-needed]`.
-8. Runtime wait path uses afferent deferral rule overwrite/reset during bounded wait windows.
+8. Runtime wait path uses afferent deferral rule add/remove during bounded wait windows.
 9. `sleep` control is tool-driven (`ignore_all_trigger_for_seconds`) rather than Stem sleep act dispatch.
 
 See:
 - [Topography](./TOPOGRAPHY.md)
 - [Topology Analysis](./TOPOLOGY_ANALYSIS.md)
+- [Sequence](./SEQUENCE.md)

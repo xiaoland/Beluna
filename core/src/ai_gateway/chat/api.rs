@@ -1,4 +1,8 @@
-use std::{collections::BTreeMap, sync::Arc, time::Instant};
+use std::{
+    collections::{BTreeMap, HashSet},
+    sync::Arc,
+    time::Instant,
+};
 
 use crate::{
     ai_gateway::{
@@ -239,6 +243,7 @@ impl Thread {
         } else {
             prepared.messages
         };
+        validate_tool_message_chain(messages.as_ref())?;
 
         let mut metadata = input.metadata;
         metadata
@@ -519,4 +524,65 @@ fn record_turn_metrics(
             .unwrap_or(0),
     );
     observability_metrics::set_chat_thread_last_turn_latency_ms(chat_id, thread_id, latency_ms);
+}
+
+fn validate_tool_message_chain(messages: &[ChatMessage]) -> Result<(), GatewayError> {
+    let mut active_tool_call_ids: Option<HashSet<&str>> = None;
+    for (index, message) in messages.iter().enumerate() {
+        match message.role {
+            ChatRole::Assistant => {
+                if message.tool_calls.is_empty() {
+                    active_tool_call_ids = None;
+                } else {
+                    let ids = message
+                        .tool_calls
+                        .iter()
+                        .map(|call| call.id.as_str())
+                        .collect::<HashSet<_>>();
+                    active_tool_call_ids = Some(ids);
+                }
+            }
+            ChatRole::Tool => {
+                let tool_call_id = message.tool_call_id.as_deref().ok_or_else(|| {
+                    GatewayError::new(
+                        GatewayErrorKind::InvalidRequest,
+                        format!(
+                            "messages with role \"tool\" must be a response to a preceeding message with \"tool_calls\" (index={}, missing tool_call_id)",
+                            index
+                        ),
+                    )
+                    .with_retryable(false)
+                })?;
+                let Some(active) = active_tool_call_ids.as_mut() else {
+                    return Err(
+                        GatewayError::new(
+                            GatewayErrorKind::InvalidRequest,
+                            format!(
+                                "messages with role \"tool\" must be a response to a preceeding message with \"tool_calls\" (index={}, tool_call_id={})",
+                                index, tool_call_id
+                            ),
+                        )
+                        .with_retryable(false),
+                    );
+                };
+                if !active.contains(tool_call_id) {
+                    return Err(
+                        GatewayError::new(
+                            GatewayErrorKind::InvalidRequest,
+                            format!(
+                                "messages with role \"tool\" must be a response to a preceeding message with \"tool_calls\" (index={}, tool_call_id={})",
+                                index, tool_call_id
+                            ),
+                        )
+                        .with_retryable(false),
+                    );
+                }
+                active.remove(tool_call_id);
+            }
+            ChatRole::System | ChatRole::User => {
+                active_tool_call_ids = None;
+            }
+        }
+    }
+    Ok(())
 }

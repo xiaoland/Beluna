@@ -163,8 +163,6 @@ pub struct CortexHelperRoutesConfig {
     #[serde(default)]
     pub sense_helper: Option<String>,
     #[serde(default)]
-    pub act_descriptor_helper: Option<String>,
-    #[serde(default)]
     pub acts_helper: Option<String>,
     #[serde(default)]
     pub goal_forest_helper: Option<String>,
@@ -176,7 +174,6 @@ impl Default for CortexHelperRoutesConfig {
             default: None,
             primary: None,
             sense_helper: None,
-            act_descriptor_helper: None,
             acts_helper: None,
             goal_forest_helper: None,
         }
@@ -557,7 +554,6 @@ mod tests {
             240
         );
         assert_eq!(config.cortex.default_limits.max_attempts, 4);
-        assert_eq!(config.cortex.default_limits.max_internal_steps, 4);
         assert_eq!(
             config.cortex.helper_routes.primary.as_deref(),
             Some("cortex_primary")

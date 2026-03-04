@@ -334,10 +334,6 @@
               "type": "integer",
               "minimum": 1
             },
-            "max_internal_steps": {
-              "type": "integer",
-              "minimum": 1
-            },
             "sense_passthrough_max_bytes": {
               "type": "integer",
               "minimum": 1
@@ -365,12 +361,6 @@
               ]
             },
             "sense_helper": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "act_descriptor_helper": {
               "type": [
                 "string",
                 "null"

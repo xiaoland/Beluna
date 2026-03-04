@@ -21,18 +21,18 @@
   - [x] 解决方案尝试：将 goal-forest-patch 变为 natural-language based；
         结论：还是不太稳定，但至少可以了，随着后面 Dual Loop 的修复，删掉对 focal-awareness, somatic-acts 输出的要求等，使 content 就是纯粹的思考
 - [ ] Cortex / Stem Dual loop
-  - [ ] 除了 cognition-state，其它都不可以给 input-helper 主动"解释"
-  - [ ] 移除 l1-memory：goal-forest, 对话历史承担了这个角色
-  - [ ] goal-forest helper 是全局单例，实现为一个 trait
-  - [ ] 将 act 的输出也变为工具调用，但是立即返回；如果开启 wait，则等待响应的 sense (act-descriptor 配置 sense-matcher)
-  - [ ] goal-forest patch helper 应该自动生成 numbering 啊，numbering 是 required 的现在/
-  - [ ] goal-forest patch with reset
-  - [ ] efferent-pathway
-  - [ ] 驱动 primary turn: sense / tick / proprioception.
+  - [x] 除了 cognition-state，其它都不可以给 input-helper 主动"解释"
+  - [x] 移除 l1-memory：goal-forest, 对话历史承担了这个角色
+  - [x] 将 act 的输出也变为工具调用，但是立即返回；如果开启 wait，则等待响应的 sense (act-descriptor 配置 sense-matcher)
+  - [x] goal-forest patch helper 应该自动生成 numbering 啊，numbering 是 required 的现在/
+  - [x] goal-forest patch with reset
+  - [x] efferent-pathway
+  - [x] 驱动 primary turn: sense / tick.
   - [ ] Add rule tool 没有捏？就最直接的 add / remove 吧，也不要什么 overwrite / reset 了。
   - [ ] Sense internal monotonic id 需要基于进程声明周期而不是 cycle 周期
-  - [ ] Act dispatch failure as a sesnse
-  - [ ] cognition-patch 这个模块很奇怪，应该删除
+  - [ ] Act dispatch failure as a tool result
+  - [ ] cognition-patch 这个模块很奇怪，应该删除；cognition 又是啥 ?
+- [ ] cortex runtime 和 cortex 太割裂了 ... 但目前来看也没有必要 coupling
 
 ### Continuity
 

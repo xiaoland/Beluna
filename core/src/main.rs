@@ -206,6 +206,8 @@ async fn main() -> Result<()> {
     ));
     let afferent_rule_control: Arc<dyn AfferentRuleControlPort> =
         Arc::new(afferent_control.clone());
+    let (efferent_producer, efferent_rx) =
+        new_efferent_pathway(Some(config.cortex.outbox_capacity.max(1)));
 
     let cortex = Arc::new(Cortex::from_config(
         &config.cortex,
@@ -213,11 +215,10 @@ async fn main() -> Result<()> {
         None,
         Some(continuity.clone()),
         Some(afferent_rule_control.clone()),
+        Some(efferent_producer.clone()),
     ));
 
     let (tick_grant_tx, tick_grant_rx) = mpsc::channel(config.cortex.inbox_capacity.max(1));
-    let (efferent_producer, efferent_rx) =
-        new_efferent_pathway(Some(config.cortex.outbox_capacity.max(1)));
 
     let app_context = AppContext {
         lifecycle,
@@ -229,11 +230,6 @@ async fn main() -> Result<()> {
 
     let physical_state_reader: Arc<dyn PhysicalStateReadPort> =
         Arc::new(MainPhysicalStateReader { stem_state });
-
-    let init_cognition_state = cortex
-        .cognition_state_snapshot()
-        .await
-        .context("failed to read initial cognition state")?;
 
     let stem_tick_runtime = StemTickRuntime::new(
         StemDeps {
@@ -260,9 +256,6 @@ async fn main() -> Result<()> {
         CortexDeps {
             tick_grant_rx,
             afferent_consumer,
-            afferent_rule_control,
-            efferent_producer,
-            init_cognition_state,
             physical_state_reader,
             cortex_core: cortex,
         },

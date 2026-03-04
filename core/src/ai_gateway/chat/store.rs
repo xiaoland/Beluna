@@ -380,6 +380,15 @@ impl ThreadStore {
 
             removed_messages = end_idx - start_idx + 1;
             thread.messages.drain(start_idx..=end_idx);
+            let dropped_orphans = drop_leading_orphan_tool_messages(&mut thread.messages);
+            if dropped_orphans > 0 {
+                removed_messages = removed_messages.saturating_add(dropped_orphans);
+                tracing::warn!(
+                    target: "ai_gateway",
+                    dropped_orphan_tool_messages = dropped_orphans,
+                    "thread_mutation_dropped_leading_orphan_tool_messages"
+                );
+            }
         }
 
         let effective_system_prompt_changed = thread
@@ -407,6 +416,14 @@ impl ThreadStore {
         }
         let remove_count = thread.messages.len() - self.max_turn_context_messages;
         thread.messages.drain(0..remove_count);
+        let dropped_orphans = drop_leading_orphan_tool_messages(&mut thread.messages);
+        if dropped_orphans > 0 {
+            tracing::warn!(
+                target: "ai_gateway",
+                dropped_orphan_tool_messages = dropped_orphans,
+                "trim_context_dropped_leading_orphan_tool_messages"
+            );
+        }
     }
 
     fn next_thread_id(&self) -> String {
@@ -505,4 +522,15 @@ fn resolve_message_boundary(
             Some(boundary)
         }
     }
+}
+
+fn drop_leading_orphan_tool_messages(messages: &mut Vec<ChatMessage>) -> usize {
+    let dropped = messages
+        .iter()
+        .take_while(|message| matches!(message.role, ChatRole::Tool))
+        .count();
+    if dropped > 0 {
+        messages.drain(0..dropped);
+    }
+    dropped
 }
