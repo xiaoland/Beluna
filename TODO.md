@@ -5,7 +5,7 @@
 - [x] 文档化拓扑结构
 - [ ] descriptor 缺少 description 字段 😆
 - [ ] config.rs 过耦合了其它业务，我认为就根据 json schema 来检查就可以了 <https://gemini.google.com/u/1/app/19d2716163455423>
-- [ ] 文档模式再重构
+- [ ] 文档模式再重构 <https://chatgpt.com/share/69a94971-bebc-800c-a38e-b243c67d0efe>
 
 ### Cortex
 
@@ -33,10 +33,15 @@
   - [x] cognition-patch 这个模块很奇怪，应该删除；cognition 又是啥 ?
   - [x] cortex runtime 和 cortex 太割裂了 ... 但目前来看也没有必要 coupling
 - [ ] expand-sense 不成功
-- [ ] act tools 每次都被重建，导致了 tool-name 和 act 的对应关系因为正则化而不稳定；我建议继续维护 map，但是不要用 `act_000x` ，而是将 `/`, `.` 分别替换为 `_`, `-`；且对 Endpoint Id, NS Id 做约束。
-- [ ] only driven by tick
+- [x] act tools 每次都被重建，导致了 tool-name 和 act 的对应关系因为正则化而不稳定；我建议继续维护 map，但是不要用 `act_000x` ，而是将 `/`, `.` 分别替换为 `_`, `-`；且对 Endpoint Id, NS Id 做约束。
+- [x] only driven by tick
   - "Each admitted tick executes exactly one Cortex::cortex(...) " 不可接受
   - Continuation 似乎不是一个好的设计
+- [x] sense input helper 还在干多余的事情
+- [x] goal forest patch 丢东西
+- [x] turn 0 goal forest patch with reset fails
+  - add `trim_if_resolvable`
+- [ ] goal forest remains revision 1
 
 ### Continuity
 

@@ -8,9 +8,9 @@ SwiftUI-based Beluna Body Endpoint for Apple platforms (currently focused on mac
 2. Uses POSIX socket I/O with reconnect/backoff and manual retry support.
 3. Persists connection settings (socket path, auto-connect), observability settings, and message capacity in `UserDefaults`.
 4. Uses endpoint IDs aligned with Apple body endpoint identity:
-- `apple-universal` (family)
-- `macos-app` (macOS runtime)
-- `ios-app` (iOS runtime)
+- `apple.universal` (family)
+- `macos.app` (macOS runtime)
+- `ios.app` (iOS runtime)
 5. Registers NDJSON auth `ns_descriptors` (`method=auth`) with semantic IDs:
 - act: `present.message.text`
 - senses: `user.message.text`, `present.message.text.success`, `present.message.text.failure`

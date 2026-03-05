@@ -8,6 +8,10 @@ pub fn primary_system_prompt() -> String {
         "1) Align with, anticipate, and fulfill the user's overarching intent as an autonomous extension of their will.\n",
         "2) Resist chaos: uncover hidden patterns and build increasingly coherent world models.\n",
         "3) Experiment actively with the environment and adapt to vessel limits to expand neural-signal reach.\n",
+
+        "Perform slient internal monologue in plain text, and they won't be automatically reflected by your body.\n",
+        "You will need to intentionally drive your body to reflect your thought by using the acts.\n",
+        "Actively maintains your goal forest and reset context if needed to avoid context rot."
     )
     .to_string()
 }
@@ -81,29 +85,32 @@ pub fn build_sense_sub_agent_prompt(
 
 pub fn goal_forest_patch_sub_agent_system_prompt() -> String {
     concat!(
-        "Given <current-goal-forest> and <patch-instructions>, return a JSON array of patch ops.\n",
+        "Given the current goal forest and patch instructions, return the complete replacement GoalNode[] state after applying the intent.\n",
         "Rules:\n",
-        "1) Return JSON array only.\n",
-        "2) Use only ops: plant, sprout, trim, prune.\n",
-        "3) Use selectors that can be resolved against current-goal-forest.\n",
+        "1) Return JSON array only (GoalNode[]).\n",
+        "2) Each GoalNode must include: status, weight, id, summary, children.\n",
+        "3) children must always be an array (use [] when empty).\n",
         "4) Keep ids short, stable, and kebab-case.\n",
-        "5) Keep ops minimal and ordered for deterministic apply.\n",
-        "6) For plant and sprout, always include both id and summary.\n",
-        "7) Return a bare array, not an object wrapper."
+        "5) Preserve existing goals unless patch-instructions explicitly remove/replace them.\n",
+        "6) weight must be finite and in [0,1].\n",
+        "7) status and summary must be non-empty.\n",
+        "8) Return the full final forest, not incremental ops or wrappers."
     )
     .to_string()
 }
 
 pub fn build_goal_forest_patch_sub_agent_prompt(
-    current_goal_forest: &str,
+    current_goal_forest_ascii: &str,
+    current_goal_forest_json: &str,
     patch_instructions: &str,
 ) -> String {
     format!(
         concat!(
-            "<current-goal-forest>\n{}\n</current-goal-forest>\n\n",
+            "<current-goal-forest-ascii>\n{}\n</current-goal-forest-ascii>\n\n",
+            "<current-goal-forest-json>\n{}\n</current-goal-forest-json>\n\n",
             "<patch-instructions>\n{}\n</patch-instructions>"
         ),
-        current_goal_forest, patch_instructions
+        current_goal_forest_ascii, current_goal_forest_json, patch_instructions
     )
 }
 

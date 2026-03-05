@@ -16,7 +16,7 @@ Stem is Beluna's tick-driven runtime orchestrator.
   - `new_neural_signal_descriptors`: apply before same-cycle Cortex call
   - `drop_neural_signal_descriptors`: apply before same-cycle Cortex call
 - Stem validates descriptor identifiers before committing to catalog:
-  - `endpoint_id` and `neural_signal_descriptor_id` must match `[A-Za-z0-9]+(\\.[A-Za-z0-9]+)*`
+  - `endpoint_id` and `neural_signal_descriptor_id` must match `[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*`
   - invalid descriptor patch/drop routes are rejected from catalog updates
 - Proprioception control senses:
   - `new_proprioceptions`: apply map upsert before same-cycle Cortex call

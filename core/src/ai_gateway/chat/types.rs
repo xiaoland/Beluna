@@ -88,6 +88,8 @@ pub struct ThreadMessageMutationRequest {
     #[serde(default)]
     pub trim_message_range: Option<MessageRangeSelector>,
     #[serde(default)]
+    pub trim_if_resolvable: bool,
+    #[serde(default)]
     pub system_prompt_update: SystemPromptUpdate,
 }
 
@@ -197,6 +199,7 @@ pub(crate) struct TurnPayload {
 pub struct TurnResponse {
     pub output_text: String,
     pub tool_calls: Vec<ToolCallResult>,
+    pub pending_tool_call_continuation: bool,
     pub usage: Option<UsageStats>,
     pub finish_reason: FinishReason,
     pub backend_metadata: BTreeMap<String, serde_json::Value>,

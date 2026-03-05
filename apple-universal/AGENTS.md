@@ -46,7 +46,7 @@ Beluna Apple Universal App is the app that bridges human interaction with Beluna
 - Chat view keeps a bounded in-memory message ring buffer and incrementally loads older/newer pages on scroll.
 - Beluna lifecycle state uses `Hibernate` (instead of `Sleeping`) when Core is unavailable after connection history exists.
 - Auth `ns_descriptors` follow Apple endpoint identity and semantic IDs:
-- endpoint IDs: `apple-universal` / `macos-app` / `ios-app`
+- endpoint IDs: `apple.universal` / `macos.app` / `ios.app`
 - act: `present.message.text`
 - senses: `user.message.text`, `present.message.text.success`, `present.message.text.failure`
 - sense payload schemas are intentionally simple and text-only.

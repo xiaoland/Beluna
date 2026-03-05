@@ -21,13 +21,15 @@ pub mod payloads;
 pub mod shell;
 pub mod web;
 
-pub const SHELL_ENDPOINT_NAME: &str = "std.shell";
-pub const WEB_ENDPOINT_NAME: &str = "std.web";
-pub const SHELL_NS_DESCRIPTOR_ID: &str = "tool.shell.exec";
-pub const WEB_NS_DESCRIPTOR_ID: &str = "tool.web.fetch";
+pub const SHELL_ENDPOINT_NAME: &str = "shell";
+pub const WEB_ENDPOINT_NAME: &str = "web";
+pub const SHELL_ACT_EXEC_ID: &str = "shell.exec";
+pub const WEB_ACT_FETCH_ID: &str = "web.fetch";
+pub const SHELL_SENSE_EXEC_RESULT_ID: &str = "shell.exec.result";
+pub const WEB_SENSE_FETCH_RESULT_ID: &str = "web.fetch.result";
 
 /// Inline Body Endpoints are built into Core, started by `main`, and attached through Spine inline adapter.
-pub fn register_inline_body_endpoints(
+pub fn start_inline_body_endpoints(
     inline_adapter: Arc<SpineInlineAdapter>,
     shell_enabled: bool,
     shell_limits: ShellLimits,
@@ -69,7 +71,10 @@ fn start_std_shell_inline_endpoint(
                     let handles = inline_adapter
                         .attach_inline_endpoint(
                             SHELL_ENDPOINT_NAME.to_string(),
-                            vec![shell_registration_descriptor()],
+                            vec![
+                                shell_registration_descriptor(),
+                                shell_result_registration_descriptor(),
+                            ],
                         )
                         .await;
 
@@ -127,7 +132,10 @@ fn start_std_web_inline_endpoint(
                     let handles = inline_adapter
                         .attach_inline_endpoint(
                             WEB_ENDPOINT_NAME.to_string(),
-                            vec![web_registration_descriptor()],
+                            vec![
+                                web_registration_descriptor(),
+                                web_result_registration_descriptor(),
+                            ],
                         )
                         .await;
 
@@ -196,7 +204,7 @@ fn shell_registration_descriptor() -> NeuralSignalDescriptor {
     NeuralSignalDescriptor {
         r#type: NeuralSignalType::Act,
         endpoint_id: SHELL_ENDPOINT_NAME.to_string(),
-        neural_signal_descriptor_id: SHELL_NS_DESCRIPTOR_ID.to_string(),
+        neural_signal_descriptor_id: SHELL_ACT_EXEC_ID.to_string(),
         payload_schema: serde_json::json!({
             "type": "object",
             "required": ["argv"],
@@ -209,7 +217,16 @@ fn shell_registration_descriptor() -> NeuralSignalDescriptor {
                 "stderr_max_bytes": {"type": "integer", "minimum": 1}
             }
         }),
-        emitted_sense_ids: Vec::new(),
+    }
+}
+
+#[cfg(feature = "std-shell")]
+fn shell_result_registration_descriptor() -> NeuralSignalDescriptor {
+    NeuralSignalDescriptor {
+        r#type: NeuralSignalType::Sense,
+        endpoint_id: SHELL_ENDPOINT_NAME.to_string(),
+        neural_signal_descriptor_id: SHELL_SENSE_EXEC_RESULT_ID.to_string(),
+        payload_schema: serde_json::json!({ "type": "string" }),
     }
 }
 
@@ -218,7 +235,7 @@ fn web_registration_descriptor() -> NeuralSignalDescriptor {
     NeuralSignalDescriptor {
         r#type: NeuralSignalType::Act,
         endpoint_id: WEB_ENDPOINT_NAME.to_string(),
-        neural_signal_descriptor_id: WEB_NS_DESCRIPTOR_ID.to_string(),
+        neural_signal_descriptor_id: WEB_ACT_FETCH_ID.to_string(),
         payload_schema: serde_json::json!({
             "type": "object",
             "required": ["url"],
@@ -231,6 +248,15 @@ fn web_registration_descriptor() -> NeuralSignalDescriptor {
                 "response_max_bytes": {"type": "integer", "minimum": 1}
             }
         }),
-        emitted_sense_ids: Vec::new(),
+    }
+}
+
+#[cfg(feature = "std-web")]
+fn web_result_registration_descriptor() -> NeuralSignalDescriptor {
+    NeuralSignalDescriptor {
+        r#type: NeuralSignalType::Sense,
+        endpoint_id: WEB_ENDPOINT_NAME.to_string(),
+        neural_signal_descriptor_id: WEB_SENSE_FETCH_RESULT_ID.to_string(),
+        payload_schema: serde_json::json!({ "type": "string" }),
     }
 }

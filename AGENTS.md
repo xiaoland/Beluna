@@ -39,6 +39,7 @@ Read following documents if needed, and keep them current:
 ## Coding Guidelines
 
 - Prefer abstraction only when duplication or patterns become clear.
+- Source file should be shorter than 300 lines.
 
 ### Naming Conventions
 

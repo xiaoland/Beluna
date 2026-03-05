@@ -35,6 +35,7 @@ pub(crate) struct PreparedTurn {
     pub turn_id: u64,
     pub messages: Arc<Vec<ChatMessage>>,
     pub system_prompt: Option<String>,
+    pub consumed_pending_tool_messages: bool,
 }
 
 pub(crate) struct TurnCommitOutcome {
@@ -52,6 +53,7 @@ pub(crate) struct TurnCommitOutcome {
 
 struct ThreadData {
     messages: Vec<ChatMessage>,
+    pending_tool_messages: Vec<ChatMessage>,
     system_prompt_mode: ThreadSystemPromptMode,
     next_turn_id: u64,
     metrics: ThreadMetrics,
@@ -146,6 +148,7 @@ impl ThreadStore {
             .entry(thread_id.clone())
             .or_insert_with(|| ThreadData {
                 messages: Vec::new(),
+                pending_tool_messages: Vec::new(),
                 system_prompt_mode: ThreadSystemPromptMode::UseChatDefault,
                 next_turn_id: 0,
                 metrics: ThreadMetrics::default(),
@@ -186,12 +189,17 @@ impl ThreadStore {
         })?;
 
         let mut messages = thread.messages.clone();
+        let consumed_pending_tool_messages = !thread.pending_tool_messages.is_empty();
+        if consumed_pending_tool_messages {
+            messages.extend(thread.pending_tool_messages.iter().cloned());
+        }
         messages.extend_from_slice(input_messages);
         let system_prompt = thread.system_prompt_mode.resolve(chat_system_prompt);
         Ok(PreparedTurn {
             turn_id: thread.next_turn_id,
             messages: Arc::new(messages),
             system_prompt,
+            consumed_pending_tool_messages,
         })
     }
 
@@ -199,8 +207,9 @@ impl ThreadStore {
         &self,
         chat_id: &str,
         thread_id: &str,
-        input_messages: Vec<ChatMessage>,
-        assistant_message: ChatMessage,
+        consumed_pending_tool_messages: bool,
+        mut new_messages: Vec<ChatMessage>,
+        new_pending_tool_messages: Option<Vec<ChatMessage>>,
         usage: Option<UsageStats>,
         tool_call_count: usize,
         latency_ms: u64,
@@ -223,8 +232,16 @@ impl ThreadStore {
             .with_retryable(false)
         })?;
 
-        thread.messages.extend(input_messages);
-        thread.messages.push(assistant_message);
+        if consumed_pending_tool_messages {
+            thread
+                .messages
+                .extend(thread.pending_tool_messages.drain(..));
+        }
+        thread.messages.append(&mut new_messages);
+        if let Some(mut pending) = new_pending_tool_messages {
+            thread.pending_tool_messages.clear();
+            thread.pending_tool_messages.append(&mut pending);
+        }
         self.trim_context(thread);
 
         thread.next_turn_id += 1;
@@ -345,49 +362,45 @@ impl ThreadStore {
 
         let mut removed_messages = 0usize;
         if let Some(range) = request.trim_message_range.as_ref() {
-            let start_idx =
-                resolve_message_boundary(&thread.messages, &range.start).ok_or_else(|| {
-                    GatewayError::new(
-                        GatewayErrorKind::InvalidRequest,
-                        format!(
-                            "cannot resolve start message boundary '{:?}' for thread '{}'",
-                            range.start, thread_id
-                        ),
-                    )
-                    .with_retryable(false)
-                })?;
-            let end_idx =
-                resolve_message_boundary(&thread.messages, &range.end).ok_or_else(|| {
-                    GatewayError::new(
-                        GatewayErrorKind::InvalidRequest,
-                        format!(
-                            "cannot resolve end message boundary '{:?}' for thread '{}'",
-                            range.end, thread_id
-                        ),
-                    )
-                    .with_retryable(false)
-                })?;
-            if start_idx > end_idx {
-                return Err(GatewayError::new(
-                    GatewayErrorKind::InvalidRequest,
-                    format!(
-                        "invalid message range: start={} is after end={} for thread '{}'",
-                        start_idx, end_idx, thread_id
-                    ),
-                )
-                .with_retryable(false));
-            }
+            let start_idx = resolve_message_boundary(&thread.messages, &range.start);
+            let end_idx = resolve_message_boundary(&thread.messages, &range.end);
+            match (start_idx, end_idx) {
+                (Some(start_idx), Some(end_idx)) => {
+                    if start_idx > end_idx {
+                        return Err(GatewayError::new(
+                            GatewayErrorKind::InvalidRequest,
+                            format!(
+                                "invalid message range: start={} is after end={} for thread '{}'",
+                                start_idx, end_idx, thread_id
+                            ),
+                        )
+                        .with_retryable(false));
+                    }
 
-            removed_messages = end_idx - start_idx + 1;
-            thread.messages.drain(start_idx..=end_idx);
-            let dropped_orphans = drop_leading_orphan_tool_messages(&mut thread.messages);
-            if dropped_orphans > 0 {
-                removed_messages = removed_messages.saturating_add(dropped_orphans);
-                tracing::warn!(
-                    target: "ai_gateway",
-                    dropped_orphan_tool_messages = dropped_orphans,
-                    "thread_mutation_dropped_leading_orphan_tool_messages"
-                );
+                    removed_messages = end_idx - start_idx + 1;
+                    thread.messages.drain(start_idx..=end_idx);
+                    let dropped_orphans = drop_leading_orphan_tool_messages(&mut thread.messages);
+                    if dropped_orphans > 0 {
+                        removed_messages = removed_messages.saturating_add(dropped_orphans);
+                        tracing::warn!(
+                            target: "ai_gateway",
+                            dropped_orphan_tool_messages = dropped_orphans,
+                            "thread_mutation_dropped_leading_orphan_tool_messages"
+                        );
+                    }
+                }
+                (None, _) | (_, None) => {
+                    if !request.trim_if_resolvable {
+                        return Err(GatewayError::new(
+                            GatewayErrorKind::InvalidRequest,
+                            format!(
+                                "cannot resolve message boundaries '{:?}' -> '{:?}' for thread '{}'",
+                                range.start, range.end, thread_id
+                            ),
+                        )
+                        .with_retryable(false));
+                    }
+                }
             }
         }
 

@@ -108,6 +108,7 @@ fn spine_events_are_recorded() {
         act_instance_id: "act:1".to_string(),
         endpoint_id: "ep.demo".to_string(),
         neural_signal_descriptor_id: "cap.demo".to_string(),
+        might_emit_sense_ids: vec![],
         payload: serde_json::json!({}),
     };
 

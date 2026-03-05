@@ -17,6 +17,8 @@ Each backend profile includes:
 - optional `capabilities`
 - optional `copilot` (for `github_copilot_sdk`)
 
+Capability fields are backend-specific toggles (for example: `tool_calls`, `parallel_tool_calls`, `json_mode`, `json_schema_mode`, `vision`, `resumable_streaming`).
+
 `route_aliases` maps an alias name to one concrete target:
 
 - `alias -> { backend_id, model_id }`

@@ -6,6 +6,7 @@
 |---|:---:|:---:|:---:|
 | **Streaming** | Yes | Yes | Yes |
 | **Tool Calls** | Yes | No | No |
+| **Parallel Tool Calls Hint** (`parallel_tool_calls`) | Yes | No | No |
 | **JSON Mode** (`json_object`) | Yes | No | No |
 | **JSON Schema Mode** (`json_schema`) | Yes | No | No |
 | **Vision** (image_url parts) | No | No | No |
@@ -13,6 +14,7 @@
 | **Tool Retry Safe** | No | No | No |
 
 > These are the *static* defaults from `static_capabilities()`. Per-backend config can override via `BackendProfile.capabilities`.
+> `parallel_tool_calls` is an adapter request hint toggle (OpenAI-compatible body fields), not a `CapabilityGuard` rejection gate.
 
 ## Adapter Protocol Details
 

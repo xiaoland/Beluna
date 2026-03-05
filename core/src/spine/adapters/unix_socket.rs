@@ -784,6 +784,7 @@ mod tests {
             act_instance_id: "0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a".to_string(),
             endpoint_id: "macos-app.01".to_string(),
             neural_signal_descriptor_id: "present.message".to_string(),
+            might_emit_sense_ids: vec![],
             payload: serde_json::json!({"ok": true}),
         };
 

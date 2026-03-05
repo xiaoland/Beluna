@@ -16,7 +16,7 @@ use tokio::{
     sync::{Mutex, mpsc},
 };
 
-const PRESENT_PLAIN_TEXT_NEURAL_SIGNAL_DESCRIPTOR_ID: &str = "present.plain_text";
+const PRESENT_PLAIN_TEXT_NEURAL_SIGNAL_DESCRIPTOR_ID: &str = "present.plain.text";
 const USER_MESSAGE_NEURAL_SIGNAL_DESCRIPTOR_ID: &str = "user.message";
 
 #[derive(Debug, Clone, PartialEq, Eq)]

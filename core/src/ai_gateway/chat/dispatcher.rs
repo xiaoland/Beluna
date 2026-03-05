@@ -190,6 +190,7 @@ impl ChatDispatcher {
                     let response = TurnResponse {
                         output_text: complete_response.output_text,
                         tool_calls: complete_response.tool_calls,
+                        pending_tool_call_continuation: false,
                         usage: complete_response.usage,
                         finish_reason: complete_response.finish_reason,
                         backend_metadata,

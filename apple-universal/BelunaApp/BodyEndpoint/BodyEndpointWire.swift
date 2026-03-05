@@ -1,8 +1,8 @@
 import Foundation
 
-let appleUniversalBodyEndpointID = "apple-universal"
-let macOSBodyEndpointID = "macos-app"
-let iOSBodyEndpointID = "ios-app"
+let appleUniversalBodyEndpointID = "app.appleuniversal"
+let macOSBodyEndpointID = "app.macos"
+let iOSBodyEndpointID = "app.ios"
 
 let bodyEndpointActPresentMessageTextDescriptorID = "present.message.text"
 let bodyEndpointSenseUserMessageTextDescriptorID = "user.message.text"

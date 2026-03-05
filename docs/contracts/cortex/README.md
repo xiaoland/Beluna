@@ -24,7 +24,9 @@ Related:
    - `remove-sense-deferral-rule`,
    - `sleep`.
 6. Sense expansion tool contract:
-   - `mode: raw | sub-agent`
-   - `senses_to_expand[].sense_id` uses `"<monotonic-id>. <fq-sense-id>"`.
+   - tool arguments are direct `tasks[]` (`type: array`, `minItems: 1`)
+   - each task requires `sense_id` using rendered monotonic sense id (`"<monotonic-id>"`)
+   - optional `use_subagent_and_instruction_is` enables sub-agent expansion for that task
+   - one call may mix raw and sub-agent tasks
 7. Goal-forest mutations are applied through `patch-goal-forest` tool calls, and cognition persistence is done by direct Continuity calls from Cortex.
 8. Proprioception must be refreshed from physical state before every Primary turn dispatch.

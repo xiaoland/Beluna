@@ -55,6 +55,7 @@ impl BackendAdapter for OllamaAdapter {
         BackendCapabilities {
             streaming: true,
             tool_calls: false,
+            parallel_tool_calls: false,
             json_mode: false,
             json_schema_mode: false,
             vision: false,

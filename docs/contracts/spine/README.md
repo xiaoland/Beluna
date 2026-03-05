@@ -14,6 +14,8 @@ Must hold:
 - `auth.body = { endpoint_name, ns_descriptors, proprioceptions? }`
 - `sense.body = { sense_instance_id, neural_signal_descriptor_id, payload, weight, act_instance_id? }`
 - `act_ack.body = { act_instance_id }`.
+  - identifier charset for endpoint/ns ids is `[A-Za-z0-9.-]` with valid dot segmentation (no empty segment)
+  - do not mix dashed/dotted NS variants such as `aa-bb` and `aa.bb` in one endpoint namespace, because act-tool normalization may produce duplicate tool names
 7. Adapter-authenticated endpoint id is canonicalized by Spine to generated `body_endpoint_id`.
 
 Neural signal design guidelines:

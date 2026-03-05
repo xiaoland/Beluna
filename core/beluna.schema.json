@@ -211,6 +211,9 @@
                   "tool_calls": {
                     "type": "boolean"
                   },
+                  "parallel_tool_calls": {
+                    "type": "boolean"
+                  },
                   "json_mode": {
                     "type": "boolean"
                   },

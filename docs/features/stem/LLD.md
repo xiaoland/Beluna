@@ -44,7 +44,7 @@
   - Continuity overlay snapshot
   - Stem control descriptors
 - Identifier validation at Stem catalog boundary:
-  - `endpoint_id` and `neural_signal_descriptor_id` must use dot-delimited ASCII alnum segments (`[A-Za-z0-9]+(\\.[A-Za-z0-9]+)*`)
+  - `endpoint_id` and `neural_signal_descriptor_id` must use dot-delimited ASCII alnum/dash segments (`[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*`)
   - invalid patch/drop identifier entries are skipped with warning logs
 - Merge key: `(type, endpoint_id, neural_signal_descriptor_id)`.
 - Final entries are sorted deterministically.

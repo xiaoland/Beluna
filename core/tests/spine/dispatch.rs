@@ -12,6 +12,7 @@ fn request(endpoint_id: &str, neural_signal_descriptor_id: &str, seq_no: u64) ->
         act_instance_id: format!("act:{seq_no}"),
         endpoint_id: endpoint_id.to_string(),
         neural_signal_descriptor_id: neural_signal_descriptor_id.to_string(),
+        might_emit_sense_ids: vec![],
         payload: serde_json::json!({"ok": true}),
     }
 }

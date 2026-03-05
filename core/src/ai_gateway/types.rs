@@ -24,6 +24,8 @@ pub struct BackendCapabilities {
     #[serde(default)]
     pub tool_calls: bool,
     #[serde(default)]
+    pub parallel_tool_calls: bool,
+    #[serde(default)]
     pub json_mode: bool,
     #[serde(default)]
     pub json_schema_mode: bool,
@@ -38,6 +40,7 @@ impl Default for BackendCapabilities {
         Self {
             streaming: true,
             tool_calls: false,
+            parallel_tool_calls: false,
             json_mode: false,
             json_schema_mode: false,
             vision: false,

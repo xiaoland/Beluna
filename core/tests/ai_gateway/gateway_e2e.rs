@@ -57,6 +57,7 @@ impl BackendAdapter for RetryOnceMockAdapter {
         BackendCapabilities {
             streaming: true,
             tool_calls: false,
+            parallel_tool_calls: false,
             json_mode: false,
             json_schema_mode: false,
             vision: false,
@@ -140,6 +141,7 @@ impl BackendAdapter for OutputThenFailAdapter {
         BackendCapabilities {
             streaming: true,
             tool_calls: false,
+            parallel_tool_calls: false,
             json_mode: false,
             json_schema_mode: false,
             vision: false,
@@ -197,6 +199,7 @@ impl BackendAdapter for UsageOverBudgetThenCompleteAdapter {
         BackendCapabilities {
             streaming: true,
             tool_calls: false,
+            parallel_tool_calls: false,
             json_mode: false,
             json_schema_mode: false,
             vision: false,
@@ -274,6 +277,7 @@ impl BackendAdapter for CancelAwarePendingAdapter {
         BackendCapabilities {
             streaming: true,
             tool_calls: false,
+            parallel_tool_calls: false,
             json_mode: false,
             json_schema_mode: false,
             vision: false,
@@ -333,6 +337,7 @@ fn gateway_config_with_budget(budget: BudgetConfig) -> AIGatewayConfig {
             capabilities: Some(BackendCapabilities {
                 streaming: true,
                 tool_calls: false,
+                parallel_tool_calls: false,
                 json_mode: false,
                 json_schema_mode: false,
                 vision: false,

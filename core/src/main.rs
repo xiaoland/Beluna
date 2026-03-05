@@ -12,7 +12,7 @@ use tracing::Instrument;
 
 use beluna::{
     ai_gateway::{chat::ChatFactory, credentials::EnvCredentialProvider},
-    body::register_inline_body_endpoints,
+    body::start_inline_body_endpoints,
     cli::config_path_from_args,
     config::{Config, TickMissedBehavior},
     continuity::ContinuityEngine,
@@ -192,7 +192,7 @@ async fn main() -> Result<()> {
     let inline_adapter = spine_runtime
         .inline_adapter()
         .context("inline body endpoints require spine.adapters entry with type=inline")?;
-    register_inline_body_endpoints(
+    start_inline_body_endpoints(
         inline_adapter,
         config.body.std_shell.enabled,
         config.body.std_shell.limits.clone(),

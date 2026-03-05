@@ -16,7 +16,8 @@ use crate::{
     ai_gateway::chat::{
         Chat, ChatFactory, ChatMessage, ChatOptions, ChatRole, ChatToolDefinition, ContentPart,
         MessageBoundarySelector, MessageRangeSelector, OutputMode, SystemPromptUpdate, Thread,
-        ThreadMessageMutationRequest, ThreadOptions, ToolCallResult, ToolOverride, TurnInput,
+        ThreadMessageMutationRequest, ThreadOptions, ToolCallContinuationMode, ToolCallResult,
+        ToolExecutionRequest, ToolExecutionResult, ToolExecutor, ToolOverride, TurnInput,
         TurnLimits, TurnResponse,
     },
     config::CortexHelperRoutesConfig,
@@ -26,15 +27,14 @@ use crate::{
         error::{CortexError, extractor_failed, primary_failed},
         helpers::{
             self, CognitionOrgan, CortexHelper, HelperRuntime,
-            goal_forest_helper::{
-                CognitionState, GoalNode, goal_forest_ascii, goal_forest_empty_one_shot,
-            },
+            goal_forest_helper::{GoalNode, goal_forest_ascii, goal_forest_empty_one_shot},
             sense_input_helper,
         },
         ir, prompts,
         testing::{PrimaryRequest as TestPrimaryRequest, TestHooks},
         types::{
-            CortexControlDirective, CortexOutput, ReactionLimits, WaitForSenseControlDirective,
+            CognitionState, CortexControlDirective, CortexOutput, ReactionLimits,
+            WaitForSenseControlDirective,
         },
     },
     observability::metrics as observability_metrics,
@@ -76,16 +76,10 @@ const PRIMARY_TOOL_REMOVE_SENSE_DEFERRAL_RULE: &str = "remove-sense-deferral-rul
 const PRIMARY_TOOL_SLEEP: &str = "sleep";
 
 #[derive(Debug, Deserialize)]
-struct ExpandSenseItem {
+struct ExpandSenseTask {
     sense_id: String,
     #[serde(default)]
-    instruction: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ExpandSensesArgs {
-    mode: String,
-    senses_to_expand: Vec<ExpandSenseItem>,
+    use_subagent_and_instruction_is: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -125,6 +119,7 @@ struct PatchGoalForestArgs {
 struct ActToolBinding {
     alias: String,
     descriptor: NeuralSignalDescriptor,
+    might_emit_sense_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -155,21 +150,532 @@ struct PrimaryToolCallResult {
     reset_messages_applied: bool,
 }
 
-#[derive(Debug, Clone, Default)]
-struct PrimaryToolCallBatchResult {
-    tool_messages: Vec<ChatMessage>,
-    reset_messages_applied: bool,
-}
-
 #[derive(Debug, Clone)]
 struct PrimaryContinuationState {
-    pending_tool_messages: Vec<ChatMessage>,
     sense_tool_context: sense_input_helper::SenseToolContext,
     act_binding_map: HashMap<String, ActToolBinding>,
     dynamic_act_tool_overrides: Vec<ToolOverride>,
     working_goal_forest_nodes: Vec<GoalNode>,
     turn_state: PrimaryTurnState,
     next_step: u64,
+}
+
+#[derive(Clone)]
+struct PrimaryToolExecutor {
+    cortex: Cortex,
+    cycle_id: u64,
+    step: u64,
+    thread: Thread,
+    sense_tool_context: sense_input_helper::SenseToolContext,
+    act_binding_map: HashMap<String, ActToolBinding>,
+    goal_forest_nodes: Arc<Mutex<Vec<GoalNode>>>,
+    turn_state: Arc<Mutex<PrimaryTurnState>>,
+}
+
+impl PrimaryToolExecutor {
+    fn new(
+        cortex: Cortex,
+        cycle_id: u64,
+        step: u64,
+        thread: Thread,
+        sense_tool_context: sense_input_helper::SenseToolContext,
+        act_binding_map: HashMap<String, ActToolBinding>,
+        goal_forest_nodes: Vec<GoalNode>,
+        turn_state: PrimaryTurnState,
+    ) -> Self {
+        Self {
+            cortex,
+            cycle_id,
+            step,
+            thread,
+            sense_tool_context,
+            act_binding_map,
+            goal_forest_nodes: Arc::new(Mutex::new(goal_forest_nodes)),
+            turn_state: Arc::new(Mutex::new(turn_state)),
+        }
+    }
+
+    async fn turn_state(&self) -> PrimaryTurnState {
+        self.turn_state.lock().await.clone()
+    }
+
+    async fn goal_forest_nodes(&self) -> Vec<GoalNode> {
+        self.goal_forest_nodes.lock().await.clone()
+    }
+
+    async fn execute_internal_tool_call(&self, call: &ToolCallResult) -> PrimaryToolCallResult {
+        let cycle_id = self.cycle_id;
+        let step = self.step;
+        let tool_result = if let Some(binding) = self.act_binding_map.get(call.name.as_str()) {
+            let parsed = serde_json::from_str::<ActToolArgs>(&call.arguments_json)
+                .map_err(|err| err.to_string());
+            match parsed {
+                Ok(args) => {
+                    if args.wait_for_sense > self.cortex.limits.max_waiting_ticks {
+                        Err(format!(
+                            "wait_for_sense must be <= {}",
+                            self.cortex.limits.max_waiting_ticks
+                        ))
+                    } else if args.wait_for_sense > 0 && binding.might_emit_sense_ids.is_empty() {
+                        Err(
+                            "wait_for_sense requires act.might_emit_sense_ids to be non-empty"
+                                .to_string(),
+                        )
+                    } else if !payload_matches_schema(
+                        &args.payload,
+                        &binding.descriptor.payload_schema,
+                    ) {
+                        Err("payload does not match act descriptor schema".to_string())
+                    } else {
+                        let act = Act {
+                            act_instance_id: derive_act_instance_id(
+                                cycle_id,
+                                &[],
+                                &binding.descriptor.endpoint_id,
+                                &binding.descriptor.neural_signal_descriptor_id,
+                                &args.payload,
+                            ),
+                            endpoint_id: binding.descriptor.endpoint_id.clone(),
+                            neural_signal_descriptor_id: binding
+                                .descriptor
+                                .neural_signal_descriptor_id
+                                .clone(),
+                            might_emit_sense_ids: binding.might_emit_sense_ids.clone(),
+                            payload: args.payload,
+                        };
+                        let act_instance_id = act.act_instance_id.clone();
+                        let act_seq_no = {
+                            let mut state = self.turn_state.lock().await;
+                            let next = state.next_act_seq_no.saturating_add(1);
+                            state.next_act_seq_no = next;
+                            next
+                        };
+                        match self
+                            .cortex
+                            .dispatch_act_and_wait(
+                                cycle_id,
+                                act_seq_no,
+                                act.clone(),
+                                args.wait_for_sense,
+                                &act.might_emit_sense_ids,
+                            )
+                            .await
+                        {
+                            Ok(dispatch_result) => {
+                                let mut state = self.turn_state.lock().await;
+                                state.dispatched_act_count =
+                                    state.dispatched_act_count.saturating_add(1);
+                                if args.wait_for_sense > 0
+                                    && matches!(
+                                        dispatch_result,
+                                        ActDispatchResult::Acknowledged { .. }
+                                    )
+                                {
+                                    let mut expected_fq_sense_ids =
+                                        act.might_emit_sense_ids.clone();
+                                    expected_fq_sense_ids.sort();
+                                    expected_fq_sense_ids.dedup();
+                                    state.wait_for_sense = Some(WaitForSenseControlDirective {
+                                        act_instance_id,
+                                        expected_fq_sense_ids,
+                                        wait_ticks: args.wait_for_sense,
+                                    });
+                                }
+                                Ok((
+                                    serde_json::json!({
+                                        "act_tool_alias": binding.alias,
+                                        "act_fq_id": build_fq_neural_signal_id(
+                                            &binding.descriptor.endpoint_id,
+                                            &binding.descriptor.neural_signal_descriptor_id,
+                                        ),
+                                        "wait_for_sense": args.wait_for_sense,
+                                        "dispatch_result": dispatch_result,
+                                    }),
+                                    false,
+                                ))
+                            }
+                            Err(err) => Err(err),
+                        }
+                    }
+                }
+                Err(err) => Err(err),
+            }
+        } else {
+            match call.name.as_str() {
+                PRIMARY_TOOL_EXPAND_SENSES => {
+                    let parsed = serde_json::from_str::<Vec<ExpandSenseTask>>(&call.arguments_json)
+                        .map_err(|err| err.to_string());
+                    match parsed {
+                        Ok(tasks) => {
+                            if tasks.is_empty() {
+                                return PrimaryToolCallResult {
+                                    payload: serde_json::json!({
+                                        "ok": false,
+                                        "tool": call.name,
+                                        "error": "tasks cannot be empty",
+                                    }),
+                                    reset_messages_applied: false,
+                                };
+                            }
+
+                            let mut raw_sense_ids = Vec::new();
+                            let mut sub_agent_tasks = Vec::new();
+
+                            for task in tasks {
+                                if let Some(raw_instruction) = task.use_subagent_and_instruction_is
+                                {
+                                    let instruction = raw_instruction.trim().to_string();
+                                    if instruction.is_empty() {
+                                        return PrimaryToolCallResult {
+                                            payload: serde_json::json!({
+                                                "ok": false,
+                                                "tool": call.name,
+                                                "error": "use_subagent_and_instruction_is cannot be blank",
+                                            }),
+                                            reset_messages_applied: false,
+                                        };
+                                    }
+                                    sub_agent_tasks.push(sense_input_helper::SenseSubAgentTask {
+                                        sense_id: task.sense_id,
+                                        instruction: Some(instruction),
+                                    });
+                                } else {
+                                    raw_sense_ids.push(task.sense_id);
+                                }
+                            }
+
+                            let mut raw_items = Vec::new();
+                            let mut not_found_sense_ids = Vec::new();
+
+                            if !raw_sense_ids.is_empty() {
+                                let raw_response = sense_input_helper::expand_sense_raw(
+                                    &self.sense_tool_context,
+                                    &raw_sense_ids,
+                                );
+                                raw_items = value_array_field(&raw_response, "items");
+                                not_found_sense_ids.extend(string_array_field(
+                                    &raw_response,
+                                    "not_found_sense_ids",
+                                ));
+                            }
+
+                            let sub_response = if sub_agent_tasks.is_empty() {
+                                Ok(serde_json::json!({
+                                    "results": [],
+                                    "not_found_sense_ids": [],
+                                }))
+                            } else {
+                                sense_input_helper::expand_sense_with_sub_agent(
+                                    &self.cortex,
+                                    cycle_id,
+                                    &self.sense_tool_context,
+                                    &sub_agent_tasks,
+                                )
+                                .await
+                                .map_err(|err| err.to_string())
+                            };
+
+                            match sub_response {
+                                Ok(sub_response) => {
+                                    let sub_agent_results =
+                                        value_array_field(&sub_response, "results");
+                                    not_found_sense_ids.extend(string_array_field(
+                                        &sub_response,
+                                        "not_found_sense_ids",
+                                    ));
+                                    not_found_sense_ids.sort();
+                                    not_found_sense_ids.dedup();
+
+                                    Ok(serde_json::json!({
+                                        "raw_items": raw_items,
+                                        "sub_agent_results": sub_agent_results,
+                                        "not_found_sense_ids": not_found_sense_ids,
+                                    }))
+                                    .map(|value| (value, false))
+                                }
+                                Err(err) => Err(err),
+                            }
+                        }
+                        Err(err) => Err(err),
+                    }
+                }
+                PRIMARY_TOOL_ADD_SENSE_DEFERRAL_RULE => {
+                    let parsed =
+                        serde_json::from_str::<AddSenseDeferralRuleArgs>(&call.arguments_json)
+                            .map_err(|err| err.to_string());
+                    match parsed {
+                        Ok(args) => {
+                            let Some(port) = self.cortex.afferent_rule_control.as_ref() else {
+                                return PrimaryToolCallResult {
+                                    payload: serde_json::json!({
+                                        "ok": false,
+                                        "tool": call.name,
+                                        "error": "afferent rule-control port is not configured",
+                                    }),
+                                    reset_messages_applied: false,
+                                };
+                            };
+                            port.add_rule(DeferralRuleAddInput {
+                                rule_id: args.rule_id,
+                                min_weight: args.min_weight,
+                                fq_sense_id_pattern: args.fq_sense_id_pattern,
+                            })
+                            .await
+                            .map(|revision| serde_json::json!({ "revision": revision }))
+                            .map_err(|err| err.to_string())
+                            .map(|value| (value, false))
+                        }
+                        Err(err) => Err(err),
+                    }
+                }
+                PRIMARY_TOOL_REMOVE_SENSE_DEFERRAL_RULE => {
+                    let args = match serde_json::from_str::<RemoveSenseDeferralRuleArgs>(
+                        &call.arguments_json,
+                    ) {
+                        Ok(args) => args,
+                        Err(err) => {
+                            return PrimaryToolCallResult {
+                                payload: serde_json::json!({
+                                    "ok": false,
+                                    "tool": call.name,
+                                    "error": err.to_string(),
+                                }),
+                                reset_messages_applied: false,
+                            };
+                        }
+                    };
+                    let Some(port) = self.cortex.afferent_rule_control.as_ref() else {
+                        return PrimaryToolCallResult {
+                            payload: serde_json::json!({
+                                "ok": false,
+                                "tool": call.name,
+                                "error": "afferent rule-control port is not configured",
+                            }),
+                            reset_messages_applied: false,
+                        };
+                    };
+                    port.remove_rule(args.rule_id)
+                        .await
+                        .map(|revision| serde_json::json!({ "revision": revision }))
+                        .map_err(|err| err.to_string())
+                        .map(|value| (value, false))
+                }
+                PRIMARY_TOOL_SLEEP => {
+                    let parsed = serde_json::from_str::<SleepArgs>(&call.arguments_json)
+                        .map_err(|err| err.to_string());
+                    match parsed {
+                        Ok(args) => {
+                            if args.ticks == 0 {
+                                Err("ticks must be >= 1".to_string())
+                            } else if args.ticks > self.cortex.limits.max_waiting_ticks {
+                                Err(format!(
+                                    "ticks must be <= {}",
+                                    self.cortex.limits.max_waiting_ticks
+                                ))
+                            } else {
+                                let mut state = self.turn_state.lock().await;
+                                state.ignore_all_trigger_for_ticks = Some(
+                                    state
+                                        .ignore_all_trigger_for_ticks
+                                        .unwrap_or(0)
+                                        .max(args.ticks),
+                                );
+                                Ok((
+                                    serde_json::json!({
+                                        "ignore_all_trigger_for_ticks": state.ignore_all_trigger_for_ticks
+                                    }),
+                                    false,
+                                ))
+                            }
+                        }
+                        Err(err) => Err(err),
+                    }
+                }
+                PRIMARY_TOOL_PATCH_GOAL_FOREST => {
+                    let parsed = parse_patch_goal_forest_args(&call.arguments_json);
+                    match parsed {
+                        Ok(args) => {
+                            let patch_instructions = args.patch_instructions.trim().to_string();
+                            if patch_instructions.trim().is_empty() {
+                                Err("patch_instructions cannot be empty".to_string())
+                            } else {
+                                let mut goal_forest_nodes = self.goal_forest_nodes.lock().await;
+                                match self
+                                    .cortex
+                                    .helper
+                                    .input
+                                    .goal_forest
+                                    .patch_goal_forest_with_sub_agent(
+                                        &self.cortex,
+                                        cycle_id,
+                                        &mut goal_forest_nodes,
+                                        &patch_instructions,
+                                    )
+                                    .await
+                                {
+                                    Ok(patch_output) => {
+                                        let mut data = match patch_output {
+                                            serde_json::Value::Object(map) => map,
+                                            other => {
+                                                let mut map = serde_json::Map::new();
+                                                map.insert("patch_result".to_string(), other);
+                                                map
+                                            }
+                                        };
+
+                                        data.insert(
+                                            "reset_context_applied".to_string(),
+                                            serde_json::json!(false),
+                                        );
+                                        let persisted_revision = match self
+                                            .cortex
+                                            .persist_goal_forest_nodes(&goal_forest_nodes)
+                                            .await
+                                        {
+                                            Ok(revision) => revision,
+                                            Err(err) => {
+                                                return PrimaryToolCallResult {
+                                                    payload: serde_json::json!({
+                                                        "ok": false,
+                                                        "tool": call.name,
+                                                        "error": format!("persist_goal_forest_failed: {err}"),
+                                                    }),
+                                                    reset_messages_applied: false,
+                                                };
+                                            }
+                                        };
+                                        data.insert(
+                                            "cognition_persisted_revision".to_string(),
+                                            serde_json::json!(persisted_revision),
+                                        );
+
+                                        if args.reset_context {
+                                            let goal_forest_section =
+                                                render_goal_forest_section(&goal_forest_nodes);
+                                            let updated_system_prompt =
+                                                prompts::primary_system_prompt_with_goal_forest(
+                                                    &goal_forest_section,
+                                                );
+                                            match self
+                                                .thread
+                                                .mutate_messages_atomically(
+                                                    ThreadMessageMutationRequest {
+                                                        trim_message_range: Some(
+                                                            MessageRangeSelector {
+                                                                start: MessageBoundarySelector::FirstUserMessage,
+                                                                end: MessageBoundarySelector::LatestAssistantToolBatchEnd,
+                                                            },
+                                                        ),
+                                                        trim_if_resolvable: true,
+                                                        system_prompt_update:
+                                                            SystemPromptUpdate::Replace(
+                                                                updated_system_prompt,
+                                                            ),
+                                                    },
+                                                )
+                                                .await
+                                            {
+                                                Ok(mutation_outcome) => {
+                                                    data.insert(
+                                                        "reset_context_applied".to_string(),
+                                                        serde_json::json!(true),
+                                                    );
+                                                    data.insert(
+                                                        "thread_message_mutation".to_string(),
+                                                        serde_json::json!({
+                                                            "removed_messages": mutation_outcome.removed_messages,
+                                                            "remaining_messages": mutation_outcome.remaining_messages,
+                                                            "effective_system_prompt_changed": mutation_outcome.effective_system_prompt_changed,
+                                                        }),
+                                                    );
+                                                    Ok((serde_json::Value::Object(data), true))
+                                                }
+                                                Err(err) => Err(err.to_string()),
+                                            }
+                                        } else {
+                                            Ok((serde_json::Value::Object(data), false))
+                                        }
+                                    }
+                                    Err(err) => Err(err.to_string()),
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            tracing::warn!(
+                                target: "cortex",
+                                cycle_id = cycle_id,
+                                step = step,
+                                tool_name = %call.name,
+                                tool_call_id = %call.id,
+                                error = %err,
+                                arguments_json = %call.arguments_json,
+                                "primary_patch_goal_forest_args_parse_failed"
+                            );
+                            Err(err)
+                        }
+                    }
+                }
+                _ => Err(format!(
+                    "unknown internal cognitive action tool '{}'",
+                    call.name
+                )),
+            }
+        };
+
+        match tool_result {
+            Ok((value, reset_messages_applied)) => {
+                tracing::debug!(
+                    target: "cortex",
+                    cycle_id = cycle_id,
+                    step = step,
+                    tool_name = %call.name,
+                    tool_call_id = %call.id,
+                    "primary_internal_cognitive_action_completed"
+                );
+                PrimaryToolCallResult {
+                    payload: serde_json::json!({
+                        "ok": true,
+                        "tool": call.name,
+                        "data": value,
+                    }),
+                    reset_messages_applied,
+                }
+            }
+            Err(error) => {
+                tracing::warn!(
+                    target: "cortex",
+                    cycle_id = cycle_id,
+                    step = step,
+                    tool_name = %call.name,
+                    tool_call_id = %call.id,
+                    error = %error,
+                    "primary_internal_cognitive_action_failed"
+                );
+                PrimaryToolCallResult {
+                    payload: serde_json::json!({
+                        "ok": false,
+                        "tool": call.name,
+                        "error": error,
+                    }),
+                    reset_messages_applied: false,
+                }
+            }
+        }
+    }
+}
+
+#[async_trait]
+impl ToolExecutor for PrimaryToolExecutor {
+    async fn execute_call(
+        &self,
+        request: ToolExecutionRequest,
+    ) -> Result<ToolExecutionResult, crate::ai_gateway::error::GatewayError> {
+        let result = self.execute_internal_tool_call(&request.call).await;
+        Ok(ToolExecutionResult {
+            payload: result.payload,
+            reset_messages_applied: result.reset_messages_applied,
+        })
+    }
 }
 
 impl Cortex {
@@ -281,16 +787,13 @@ impl Cortex {
         let senses_owned = senses.to_vec();
         let sense_tool_context =
             sense_input_helper::SenseToolContext::from_inputs(&senses_owned, &sense_descriptors);
-        let sense_descriptors_for_helper = sense_descriptors.clone();
         let goal_forest = cognition_state.goal_forest.clone();
 
         let (senses_section, proprioception_section, goal_forest_section) = tokio::join!(
-            self.helper.input.sense.to_input_ir_section(
-                self,
+            self.helper.input.sense.to_input_ir_section_from_context(
                 physical_state.cycle_id,
-                deadline,
-                &senses_owned,
-                &sense_descriptors_for_helper,
+                &sense_tool_context,
+                self.limits.sense_passthrough_max_bytes,
             ),
             async {
                 self.helper
@@ -343,6 +846,7 @@ impl Cortex {
                 input_ir.text.clone(),
                 sense_tool_context,
                 act_descriptors.clone(),
+                sense_descriptors.clone(),
                 goal_forest.nodes.clone(),
             ),
         )
@@ -420,9 +924,10 @@ impl Cortex {
         input_ir_internal: String,
         sense_tool_context: sense_input_helper::SenseToolContext,
         act_descriptors: Vec<NeuralSignalDescriptor>,
+        sense_descriptors: Vec<NeuralSignalDescriptor>,
         initial_goal_forest_nodes: Vec<GoalNode>,
     ) -> Result<PrimaryEngineResult, CortexError> {
-        let act_bindings = build_act_tool_bindings(&act_descriptors);
+        let act_bindings = build_act_tool_bindings(&act_descriptors, &sense_descriptors);
         let fresh_act_binding_map = act_bindings
             .iter()
             .map(|binding| (binding.alias.clone(), binding.clone()))
@@ -432,6 +937,7 @@ impl Cortex {
             .map(|binding| {
                 ToolOverride::Set(ChatToolDefinition {
                     name: binding.alias.clone(),
+                    // TODO: replace with NSDescriptor.description
                     description: Some(format!(
                         "Emit {}",
                         build_fq_neural_signal_id(
@@ -479,32 +985,28 @@ impl Cortex {
         let prior_continuation_backup = prior_continuation.clone();
 
         let (
-            turn_messages,
+            input_messages,
             effective_sense_tool_context,
             effective_act_binding_map,
             dynamic_act_tool_overrides,
-            mut working_goal_forest_nodes,
-            mut turn_state,
+            working_goal_forest_nodes,
+            turn_state,
             step,
             mode,
         ) = match prior_continuation {
-            Some(state) => {
-                let mut input_messages = state.pending_tool_messages;
-                input_messages.push(build_primary_user_message(&primary_input));
-                (
-                    input_messages,
-                    sense_input_helper::SenseToolContext::merged(
-                        &state.sense_tool_context,
-                        &sense_tool_context,
-                    ),
-                    state.act_binding_map,
-                    state.dynamic_act_tool_overrides,
-                    state.working_goal_forest_nodes,
-                    state.turn_state,
-                    state.next_step,
-                    "continuation",
-                )
-            }
+            Some(state) => (
+                vec![build_primary_user_message(&primary_input)],
+                sense_input_helper::SenseToolContext::merged(
+                    &state.sense_tool_context,
+                    &sense_tool_context,
+                ),
+                state.act_binding_map,
+                state.dynamic_act_tool_overrides,
+                state.working_goal_forest_nodes,
+                state.turn_state,
+                state.next_step,
+                "continuation",
+            ),
             None => (
                 vec![build_primary_user_message(&primary_input)],
                 sense_tool_context,
@@ -539,13 +1041,25 @@ impl Cortex {
         helpers::log_organ_input(cycle_id, stage, &input_payload);
 
         let thread = self.ensure_primary_thread().await?;
+        let tool_executor = Arc::new(PrimaryToolExecutor::new(
+            self.clone(),
+            cycle_id,
+            step,
+            thread.clone(),
+            effective_sense_tool_context.clone(),
+            effective_act_binding_map.clone(),
+            working_goal_forest_nodes,
+            turn_state,
+        ));
         let response = match self
             .run_primary_turn(
                 cycle_id,
                 step,
                 &thread,
-                turn_messages.clone(),
+                input_messages.clone(),
                 dynamic_act_tool_overrides.clone(),
+                Some(tool_executor.clone()),
+                Some(ToolCallContinuationMode::NextTurn),
             )
             .await
         {
@@ -561,9 +1075,11 @@ impl Cortex {
                 return Err(err);
             }
         };
+        let working_goal_forest_nodes = tool_executor.goal_forest_nodes().await;
+        let turn_state = tool_executor.turn_state().await;
         let assistant_text = response.output_text.trim().to_string();
 
-        if response.tool_calls.is_empty() {
+        if !response.pending_tool_call_continuation {
             if assistant_text.is_empty() {
                 return Err(primary_failed(
                     "primary produced empty output without internal tool actions",
@@ -581,28 +1097,8 @@ impl Cortex {
             });
         }
 
-        let batch = self
-            .run_primary_internal_tool_calls(
-                cycle_id,
-                step,
-                &thread,
-                &response.tool_calls,
-                &effective_sense_tool_context,
-                &mut working_goal_forest_nodes,
-                &effective_act_binding_map,
-                &mut turn_state,
-            )
-            .await;
-
-        let next_pending_tool_messages = if batch.reset_messages_applied {
-            Vec::new()
-        } else {
-            batch.tool_messages
-        };
-
         let mut continuation_state_guard = self.primary_continuation_state.lock().await;
         *continuation_state_guard = Some(PrimaryContinuationState {
-            pending_tool_messages: next_pending_tool_messages,
             sense_tool_context: effective_sense_tool_context,
             act_binding_map: effective_act_binding_map,
             dynamic_act_tool_overrides,
@@ -648,6 +1144,7 @@ impl Cortex {
         let thread = chat
             .open_thread(ThreadOptions {
                 thread_id: Some("cortex-primary-thread".to_string()),
+                tool_call_mode: Some(ToolCallContinuationMode::NextTurn),
                 ..ThreadOptions::default()
             })
             .await
@@ -684,11 +1181,13 @@ impl Cortex {
         thread: &Thread,
         input_messages: Vec<ChatMessage>,
         tool_overrides: Vec<ToolOverride>,
+        tool_executor: Option<Arc<dyn ToolExecutor>>,
+        tool_call_mode_override: Option<ToolCallContinuationMode>,
     ) -> Result<TurnResponse, CortexError> {
         let stage = CognitionOrgan::Primary.stage();
         let request_id = format!("cortex-{stage}-{cycle_id}-turn-{step}");
         let started_at = Instant::now();
-        let input = build_turn_input(
+        let mut input = build_turn_input(
             request_id.clone(),
             self.limits.max_primary_output_tokens,
             self.limits.max_cycle_time_ms,
@@ -697,6 +1196,8 @@ impl Cortex {
             stage,
             OutputMode::Text,
         );
+        input.tool_executor = tool_executor;
+        input.tool_call_mode_override = tool_call_mode_override;
         let output = thread.complete(input).await.map_err(|err| {
             tracing::debug!(
                 target: "cortex",
@@ -713,476 +1214,6 @@ impl Cortex {
         })?;
 
         Ok(output.response)
-    }
-
-    async fn run_primary_internal_tool_calls(
-        &self,
-        cycle_id: u64,
-        step: u64,
-        thread: &Thread,
-        tool_calls: &[ToolCallResult],
-        sense_tool_context: &sense_input_helper::SenseToolContext,
-        goal_forest_nodes: &mut Vec<GoalNode>,
-        act_binding_map: &HashMap<String, ActToolBinding>,
-        turn_state: &mut PrimaryTurnState,
-    ) -> PrimaryToolCallBatchResult {
-        let mut tool_messages = Vec::with_capacity(tool_calls.len());
-        let mut reset_messages_applied = false;
-        for call in tool_calls {
-            let result = self
-                .run_primary_internal_tool_call(
-                    cycle_id,
-                    step,
-                    thread,
-                    call,
-                    sense_tool_context,
-                    goal_forest_nodes,
-                    act_binding_map,
-                    turn_state,
-                )
-                .await;
-            if result.reset_messages_applied {
-                reset_messages_applied = true;
-            }
-            tool_messages.push(ChatMessage {
-                role: ChatRole::Tool,
-                parts: vec![ContentPart::Json {
-                    value: result.payload,
-                }],
-                tool_call_id: Some(call.id.clone()),
-                tool_name: Some(call.name.clone()),
-                tool_calls: vec![],
-            });
-        }
-        PrimaryToolCallBatchResult {
-            tool_messages,
-            reset_messages_applied,
-        }
-    }
-
-    async fn run_primary_internal_tool_call(
-        &self,
-        cycle_id: u64,
-        step: u64,
-        thread: &Thread,
-        call: &ToolCallResult,
-        sense_tool_context: &sense_input_helper::SenseToolContext,
-        goal_forest_nodes: &mut Vec<GoalNode>,
-        act_binding_map: &HashMap<String, ActToolBinding>,
-        turn_state: &mut PrimaryTurnState,
-    ) -> PrimaryToolCallResult {
-        let tool_result = if let Some(binding) = act_binding_map.get(call.name.as_str()) {
-            let parsed = serde_json::from_str::<ActToolArgs>(&call.arguments_json)
-                .map_err(|err| err.to_string());
-            match parsed {
-                Ok(args) => {
-                    if args.wait_for_sense > self.limits.max_waiting_ticks {
-                        Err(format!(
-                            "wait_for_sense must be <= {}",
-                            self.limits.max_waiting_ticks
-                        ))
-                    } else if args.wait_for_sense > 0
-                        && binding.descriptor.emitted_sense_ids.is_empty()
-                    {
-                        Err(
-                            "wait_for_sense requires descriptor.emitted_sense_ids to be non-empty"
-                                .to_string(),
-                        )
-                    } else if !payload_matches_schema(
-                        &args.payload,
-                        &binding.descriptor.payload_schema,
-                    ) {
-                        Err("payload does not match act descriptor schema".to_string())
-                    } else {
-                        let act = Act {
-                            act_instance_id: derive_act_instance_id(
-                                cycle_id,
-                                &[],
-                                &binding.descriptor.endpoint_id,
-                                &binding.descriptor.neural_signal_descriptor_id,
-                                &args.payload,
-                            ),
-                            endpoint_id: binding.descriptor.endpoint_id.clone(),
-                            neural_signal_descriptor_id: binding
-                                .descriptor
-                                .neural_signal_descriptor_id
-                                .clone(),
-                            payload: args.payload,
-                        };
-                        let act_instance_id = act.act_instance_id.clone();
-                        let act_seq_no = turn_state.next_act_seq_no.saturating_add(1);
-                        turn_state.next_act_seq_no = act_seq_no;
-                        match self
-                            .dispatch_act_and_wait(
-                                cycle_id,
-                                act_seq_no,
-                                act,
-                                args.wait_for_sense,
-                                &binding.descriptor.emitted_sense_ids,
-                            )
-                            .await
-                        {
-                            Ok(dispatch_result) => {
-                                turn_state.dispatched_act_count =
-                                    turn_state.dispatched_act_count.saturating_add(1);
-                                if args.wait_for_sense > 0
-                                    && matches!(
-                                        dispatch_result,
-                                        ActDispatchResult::Acknowledged { .. }
-                                    )
-                                {
-                                    let mut expected_fq_sense_ids =
-                                        binding.descriptor.emitted_sense_ids.clone();
-                                    expected_fq_sense_ids.sort();
-                                    expected_fq_sense_ids.dedup();
-                                    turn_state.wait_for_sense =
-                                        Some(WaitForSenseControlDirective {
-                                            act_instance_id,
-                                            expected_fq_sense_ids,
-                                            wait_ticks: args.wait_for_sense,
-                                        });
-                                }
-                                Ok((
-                                    serde_json::json!({
-                                        "act_tool_alias": binding.alias,
-                                        "act_fq_id": build_fq_neural_signal_id(
-                                            &binding.descriptor.endpoint_id,
-                                            &binding.descriptor.neural_signal_descriptor_id,
-                                        ),
-                                        "wait_for_sense": args.wait_for_sense,
-                                        "dispatch_result": dispatch_result,
-                                    }),
-                                    false,
-                                ))
-                            }
-                            Err(err) => Err(err),
-                        }
-                    }
-                }
-                Err(err) => Err(err),
-            }
-        } else {
-            match call.name.as_str() {
-                PRIMARY_TOOL_EXPAND_SENSES => {
-                    let parsed = serde_json::from_str::<ExpandSensesArgs>(&call.arguments_json)
-                        .map_err(|err| err.to_string());
-                    match parsed {
-                        Ok(args) => {
-                            if args.senses_to_expand.is_empty() {
-                                return PrimaryToolCallResult {
-                                    payload: serde_json::json!({
-                                        "ok": false,
-                                        "tool": call.name,
-                                        "error": "senses_to_expand cannot be empty",
-                                    }),
-                                    reset_messages_applied: false,
-                                };
-                            }
-                            match args.mode.as_str() {
-                                "raw" => {
-                                    let sense_ids = args
-                                        .senses_to_expand
-                                        .iter()
-                                        .map(|item| item.sense_id.clone())
-                                        .collect::<Vec<_>>();
-                                    Ok(sense_input_helper::expand_sense_raw(
-                                        sense_tool_context,
-                                        &sense_ids,
-                                    ))
-                                    .map(|value| (value, false))
-                                }
-                                "sub-agent" => {
-                                    let mut tasks = Vec::with_capacity(args.senses_to_expand.len());
-                                    for item in args.senses_to_expand {
-                                        let instruction =
-                                            item.instruction.unwrap_or_default().trim().to_string();
-                                        if instruction.is_empty() {
-                                            return PrimaryToolCallResult {
-                                                payload: serde_json::json!({
-                                                    "ok": false,
-                                                    "tool": call.name,
-                                                    "error": "instruction is required for sub-agent mode",
-                                                }),
-                                                reset_messages_applied: false,
-                                            };
-                                        }
-                                        tasks.push(sense_input_helper::SenseSubAgentTask {
-                                            sense_id: item.sense_id,
-                                            instruction: Some(instruction),
-                                        });
-                                    }
-                                    sense_input_helper::expand_sense_with_sub_agent(
-                                        self,
-                                        cycle_id,
-                                        sense_tool_context,
-                                        &tasks,
-                                    )
-                                    .await
-                                    .map_err(|err| err.to_string())
-                                    .map(|value| (value, false))
-                                }
-                                _ => Err("mode must be one of: raw | sub-agent".to_string()),
-                            }
-                        }
-                        Err(err) => Err(err),
-                    }
-                }
-                PRIMARY_TOOL_ADD_SENSE_DEFERRAL_RULE => {
-                    let parsed =
-                        serde_json::from_str::<AddSenseDeferralRuleArgs>(&call.arguments_json)
-                            .map_err(|err| err.to_string());
-                    match parsed {
-                        Ok(args) => {
-                            let Some(port) = self.afferent_rule_control.as_ref() else {
-                                return PrimaryToolCallResult {
-                                    payload: serde_json::json!({
-                                        "ok": false,
-                                        "tool": call.name,
-                                        "error": "afferent rule-control port is not configured",
-                                    }),
-                                    reset_messages_applied: false,
-                                };
-                            };
-                            port.add_rule(DeferralRuleAddInput {
-                                rule_id: args.rule_id,
-                                min_weight: args.min_weight,
-                                fq_sense_id_pattern: args.fq_sense_id_pattern,
-                            })
-                            .await
-                            .map(|revision| serde_json::json!({ "revision": revision }))
-                            .map_err(|err| err.to_string())
-                            .map(|value| (value, false))
-                        }
-                        Err(err) => Err(err),
-                    }
-                }
-                PRIMARY_TOOL_REMOVE_SENSE_DEFERRAL_RULE => {
-                    let args = match serde_json::from_str::<RemoveSenseDeferralRuleArgs>(
-                        &call.arguments_json,
-                    ) {
-                        Ok(args) => args,
-                        Err(err) => {
-                            return PrimaryToolCallResult {
-                                payload: serde_json::json!({
-                                    "ok": false,
-                                    "tool": call.name,
-                                    "error": err.to_string(),
-                                }),
-                                reset_messages_applied: false,
-                            };
-                        }
-                    };
-                    let Some(port) = self.afferent_rule_control.as_ref() else {
-                        return PrimaryToolCallResult {
-                            payload: serde_json::json!({
-                                "ok": false,
-                                "tool": call.name,
-                                "error": "afferent rule-control port is not configured",
-                            }),
-                            reset_messages_applied: false,
-                        };
-                    };
-                    port.remove_rule(args.rule_id)
-                        .await
-                        .map(|revision| serde_json::json!({ "revision": revision }))
-                        .map_err(|err| err.to_string())
-                        .map(|value| (value, false))
-                }
-                PRIMARY_TOOL_SLEEP => {
-                    let parsed = serde_json::from_str::<SleepArgs>(&call.arguments_json)
-                        .map_err(|err| err.to_string());
-                    match parsed {
-                        Ok(args) => {
-                            if args.ticks == 0 {
-                                Err("ticks must be >= 1".to_string())
-                            } else if args.ticks > self.limits.max_waiting_ticks {
-                                Err(format!(
-                                    "ticks must be <= {}",
-                                    self.limits.max_waiting_ticks
-                                ))
-                            } else {
-                                turn_state.ignore_all_trigger_for_ticks = Some(
-                                    turn_state
-                                        .ignore_all_trigger_for_ticks
-                                        .unwrap_or(0)
-                                        .max(args.ticks),
-                                );
-                                Ok((
-                                    serde_json::json!({
-                                        "ignore_all_trigger_for_ticks": turn_state.ignore_all_trigger_for_ticks
-                                    }),
-                                    false,
-                                ))
-                            }
-                        }
-                        Err(err) => Err(err),
-                    }
-                }
-                PRIMARY_TOOL_PATCH_GOAL_FOREST => {
-                    let parsed = parse_patch_goal_forest_args(&call.arguments_json);
-                    match parsed {
-                        Ok(args) => {
-                            let patch_instructions = args.patch_instructions.trim().to_string();
-                            if patch_instructions.trim().is_empty() {
-                                Err("patch_instructions cannot be empty".to_string())
-                            } else {
-                                match self
-                                    .helper
-                                    .input
-                                    .goal_forest
-                                    .patch_goal_forest_with_sub_agent(
-                                        self,
-                                        cycle_id,
-                                        goal_forest_nodes,
-                                        &patch_instructions,
-                                    )
-                                    .await
-                                {
-                                    Ok(patch_output) => {
-                                        let mut data = match patch_output {
-                                            serde_json::Value::Object(map) => map,
-                                            other => {
-                                                let mut map = serde_json::Map::new();
-                                                map.insert("patch_result".to_string(), other);
-                                                map
-                                            }
-                                        };
-
-                                        data.insert(
-                                            "reset_context_applied".to_string(),
-                                            serde_json::json!(false),
-                                        );
-                                        let persisted_revision = match self
-                                            .persist_goal_forest_nodes(goal_forest_nodes)
-                                            .await
-                                        {
-                                            Ok(revision) => revision,
-                                            Err(err) => {
-                                                return PrimaryToolCallResult {
-                                                    payload: serde_json::json!({
-                                                        "ok": false,
-                                                        "tool": call.name,
-                                                        "error": format!("persist_goal_forest_failed: {err}"),
-                                                    }),
-                                                    reset_messages_applied: false,
-                                                };
-                                            }
-                                        };
-                                        data.insert(
-                                            "cognition_persisted_revision".to_string(),
-                                            serde_json::json!(persisted_revision),
-                                        );
-
-                                        if args.reset_context {
-                                            let goal_forest_section =
-                                                render_goal_forest_section(goal_forest_nodes);
-                                            let updated_system_prompt =
-                                                prompts::primary_system_prompt_with_goal_forest(
-                                                    &goal_forest_section,
-                                                );
-                                            match thread
-                                                .mutate_messages_atomically(
-                                                    ThreadMessageMutationRequest {
-                                                        trim_message_range: Some(
-                                                            MessageRangeSelector {
-                                                                start: MessageBoundarySelector::FirstUserMessage,
-                                                                end: MessageBoundarySelector::LatestAssistantToolBatchEnd,
-                                                            },
-                                                        ),
-                                                        system_prompt_update:
-                                                            SystemPromptUpdate::Replace(
-                                                                updated_system_prompt,
-                                                            ),
-                                                    },
-                                                )
-                                                .await
-                                            {
-                                                Ok(mutation_outcome) => {
-                                                    data.insert(
-                                                        "reset_context_applied".to_string(),
-                                                        serde_json::json!(true),
-                                                    );
-                                                    data.insert(
-                                                        "thread_message_mutation".to_string(),
-                                                        serde_json::json!({
-                                                            "removed_messages": mutation_outcome.removed_messages,
-                                                            "remaining_messages": mutation_outcome.remaining_messages,
-                                                            "effective_system_prompt_changed": mutation_outcome.effective_system_prompt_changed,
-                                                        }),
-                                                    );
-                                                    Ok((serde_json::Value::Object(data), true))
-                                                }
-                                                Err(err) => Err(err.to_string()),
-                                            }
-                                        } else {
-                                            Ok((serde_json::Value::Object(data), false))
-                                        }
-                                    }
-                                    Err(err) => Err(err.to_string()),
-                                }
-                            }
-                        }
-                        Err(err) => {
-                            tracing::warn!(
-                                target: "cortex",
-                                cycle_id = cycle_id,
-                                step = step,
-                                tool_name = %call.name,
-                                tool_call_id = %call.id,
-                                error = %err,
-                                arguments_json = %call.arguments_json,
-                                "primary_patch_goal_forest_args_parse_failed"
-                            );
-                            Err(err)
-                        }
-                    }
-                }
-                _ => Err(format!(
-                    "unknown internal cognitive action tool '{}'",
-                    call.name
-                )),
-            }
-        };
-
-        match tool_result {
-            Ok((value, reset_messages_applied)) => {
-                tracing::debug!(
-                    target: "cortex",
-                    cycle_id = cycle_id,
-                    step = step,
-                    tool_name = %call.name,
-                    tool_call_id = %call.id,
-                    "primary_internal_cognitive_action_completed"
-                );
-                PrimaryToolCallResult {
-                    payload: serde_json::json!({
-                        "ok": true,
-                        "tool": call.name,
-                        "data": value,
-                    }),
-                    reset_messages_applied,
-                }
-            }
-            Err(error) => {
-                tracing::warn!(
-                    target: "cortex",
-                    cycle_id = cycle_id,
-                    step = step,
-                    tool_name = %call.name,
-                    tool_call_id = %call.id,
-                    error = %error,
-                    "primary_internal_cognitive_action_failed"
-                );
-                PrimaryToolCallResult {
-                    payload: serde_json::json!({
-                        "ok": false,
-                        "tool": call.name,
-                        "error": error,
-                    }),
-                    reset_messages_applied: false,
-                }
-            }
-        }
     }
 
     async fn run_text_organ_with_system(
@@ -1487,15 +1518,41 @@ fn log_output_token_limits_paused(limits: &ReactionLimits) {
     );
 }
 
-fn build_act_tool_bindings(act_descriptors: &[NeuralSignalDescriptor]) -> Vec<ActToolBinding> {
+fn build_act_tool_bindings(
+    act_descriptors: &[NeuralSignalDescriptor],
+    sense_descriptors: &[NeuralSignalDescriptor],
+) -> Vec<ActToolBinding> {
+    let mut endpoint_emitted_sense_catalog: HashMap<String, Vec<String>> = HashMap::new();
+    for descriptor in sense_descriptors {
+        let fq_sense_id = build_fq_neural_signal_id(
+            &descriptor.endpoint_id,
+            &descriptor.neural_signal_descriptor_id,
+        );
+        endpoint_emitted_sense_catalog
+            .entry(descriptor.endpoint_id.clone())
+            .or_default()
+            .push(fq_sense_id);
+    }
+    for might_emit_sense_ids in endpoint_emitted_sense_catalog.values_mut() {
+        might_emit_sense_ids.sort();
+        might_emit_sense_ids.dedup();
+    }
+
     act_descriptors
         .iter()
-        .map(|descriptor| ActToolBinding {
-            alias: transport_safe_act_tool_alias(
-                &descriptor.endpoint_id,
-                &descriptor.neural_signal_descriptor_id,
-            ),
-            descriptor: descriptor.clone(),
+        .map(|descriptor| {
+            let might_emit_sense_ids = endpoint_emitted_sense_catalog
+                .get(&descriptor.endpoint_id)
+                .cloned()
+                .unwrap_or_default();
+            ActToolBinding {
+                alias: transport_safe_act_tool_alias(
+                    &descriptor.endpoint_id,
+                    &descriptor.neural_signal_descriptor_id,
+                ),
+                descriptor: descriptor.clone(),
+                might_emit_sense_ids,
+            }
         })
         .collect()
 }
@@ -1521,67 +1578,80 @@ fn payload_matches_schema(payload: &serde_json::Value, schema: &serde_json::Valu
     compiled.validate(payload).is_ok()
 }
 
+fn value_array_field(object: &serde_json::Value, key: &str) -> Vec<serde_json::Value> {
+    object
+        .get(key)
+        .and_then(|value| value.as_array())
+        .cloned()
+        .unwrap_or_default()
+}
+
+fn string_array_field(object: &serde_json::Value, key: &str) -> Vec<String> {
+    object
+        .get(key)
+        .and_then(|value| value.as_array())
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.as_str().map(|value| value.to_string()))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
+}
+
 fn primary_internal_tools() -> Vec<ChatToolDefinition> {
     vec![
         ChatToolDefinition {
             name: PRIMARY_TOOL_EXPAND_SENSES.to_string(),
             description: Some(
-                "Expand selected senses in raw mode or using sub-agent instructions.".to_string(),
+                "Expand senses with raw payload or per-task sub-agent instruction.".to_string(),
             ),
             input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "mode": {
-                        "type": "string",
-                        "enum": ["raw", "sub-agent"]
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "sense_id": { "type": "string", "minLength": 1 },
+                        "use_subagent_and_instruction_is": { "type": "string", "minLength": 1 }
                     },
-                    "senses_to_expand": {
-                        "type": "array",
-                        "minItems": 1,
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "sense_id": { "type": "string", "minLength": 1 },
-                                "instruction": { "type": "string", "minLength": 1 }
-                            },
-                            "required": ["sense_id"],
-                            "additionalProperties": false
-                        }
-                    }
-                },
-                "required": ["mode", "senses_to_expand"],
-                "additionalProperties": false
+                    "required": ["sense_id"]
+                }
             }),
         },
         ChatToolDefinition {
             name: PRIMARY_TOOL_ADD_SENSE_DEFERRAL_RULE.to_string(),
-            description: Some("Add one afferent deferral rule.".to_string()),
+            description: Some("Add one sense deferral rule.".to_string()),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "rule_id": { "type": "string", "minLength": 1 },
-                    "min_weight": { "type": "number", "minimum": 0, "maximum": 1 },
-                    "fq_sense_id_pattern": { "type": "string", "minLength": 1 }
+                    "min_weight": {
+                        "type": "number", "minimum": 0, "maximum": 1,
+                        "description": "Senses with a weight < this value will be deferred"
+                    },
+                    "fq_sense_id_pattern": {
+                        "type": "string", "minLength": 1,
+                        "description": "The senses matching this pattern will be deferred."
+                    }
                 },
-                "required": ["rule_id"],
-                "additionalProperties": false
+                "required": ["rule_id"]
             }),
         },
         ChatToolDefinition {
             name: PRIMARY_TOOL_REMOVE_SENSE_DEFERRAL_RULE.to_string(),
-            description: Some("Remove one afferent deferral rule by rule_id.".to_string()),
+            description: Some("Remove one sense deferral rule by rule_id.".to_string()),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "rule_id": { "type": "string", "minLength": 1 }
                 },
                 "required": ["rule_id"],
-                "additionalProperties": false
             }),
         },
         ChatToolDefinition {
             name: PRIMARY_TOOL_SLEEP.to_string(),
-            description: Some("Ignore all triggers for N ticks.".to_string()),
+            description: Some("Sleep for N ticks.".to_string()),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -1590,13 +1660,12 @@ fn primary_internal_tools() -> Vec<ChatToolDefinition> {
                         "minimum": 1
                     }
                 },
-                "required": ["ticks"],
-                "additionalProperties": false
+                "required": ["ticks"]
             }),
         },
         ChatToolDefinition {
             name: PRIMARY_TOOL_PATCH_GOAL_FOREST.to_string(),
-            description: Some("Patch the goal-forest with natural-language.".to_string()),
+            description: Some("Patch the goal-forest as your will.".to_string()),
             input_schema: patch_goal_forest_tool_input_schema(),
         },
     ]
@@ -1612,7 +1681,8 @@ fn patch_goal_forest_tool_input_schema() -> serde_json::Value {
             },
             "reset_context": {
                 "type": "boolean",
-                "default": false
+                "default": false,
+                "description": "Reset to avoid context rot, the goal forest will maintains your cognition continuity"
             }
         },
         "required": ["patch_instructions"],

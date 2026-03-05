@@ -35,11 +35,11 @@ Cortex is responsible for cognition-only decisions. It does not own physical-sta
 ## Wait-for-Sense Model
 
 1. For each emitted act, Primary may set `wait_for_sense` (ticks).
-2. `wait_for_sense > 0` is accepted only when the act descriptor declares non-empty `emitted_sense_ids`.
+2. `wait_for_sense > 0` is accepted only when the emitted act carries non-empty `might_emit_sense_ids`.
 3. Runtime does not mutate afferent deferral rules for wait behavior.
 4. Runtime skips admitted ticks until one buffered sense matches:
 - `sense.act_instance_id == dispatched act_instance_id`
-- `fq-sense-id` is in descriptor-declared `emitted_sense_ids`
+- `fq-sense-id` is in `act.might_emit_sense_ids`
 5. If no match appears before wait ticks are exhausted, wait gate expires and normal tick execution resumes.
 
 ## Maintainability Hotspots

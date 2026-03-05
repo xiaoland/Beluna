@@ -37,8 +37,9 @@ Cortex Primary (core/src/cortex/runtime/primary.rs)
 
 1. Dynamic dedicated act tools (transport-safe alias -> fq act id mapping).
 2. `expand-senses`:
-   - `mode: raw | sub-agent`
-   - `senses_to_expand[].sense_id` format: `"<monotonic-id>. <fq-sense-id>"`.
+   - tool arguments are direct `tasks[]` (`type: array`, `minItems: 1`)
+   - task format: `{"sense_id":"<monotonic-id>", "use_subagent_and_instruction_is":"<instruction optional>"}`.
+   - one call may mix raw tasks (without instruction) and sub-agent tasks (with instruction).
 3. `patch-goal-forest` (`reset_context` supported).
 4. `add-sense-deferral-rule`.
 5. `remove-sense-deferral-rule`.
@@ -49,7 +50,7 @@ Cortex Primary (core/src/cortex/runtime/primary.rs)
 Senses delivered to Primary:
 
 ```text
-- [monotonic internal sense id]. [fq-sense-id]: [key=value,key=value,...]; [payload-truncated-if-needed]
+- [monotonic internal sense id]. endpoint_id=[endpoint_id], sense_id=[sense_id], weight=[weight][, truncated_ratio=[0..1 if truncated]]; payload="[payload-truncated-if-needed]"
 ```
 
 ## File Map

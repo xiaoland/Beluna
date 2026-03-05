@@ -49,6 +49,24 @@ impl Default for OpenAiCompatibleAdapter {
     }
 }
 
+fn default_openai_capabilities() -> BackendCapabilities {
+    BackendCapabilities {
+        streaming: true,
+        tool_calls: true,
+        parallel_tool_calls: true,
+        json_mode: true,
+        json_schema_mode: true,
+        vision: false,
+        resumable_streaming: false,
+    }
+}
+
+fn parallel_tool_calls_enabled(profile_capabilities: Option<&BackendCapabilities>) -> bool {
+    profile_capabilities
+        .map(|capabilities| capabilities.parallel_tool_calls)
+        .unwrap_or_else(|| default_openai_capabilities().parallel_tool_calls)
+}
+
 #[async_trait]
 impl BackendAdapter for OpenAiCompatibleAdapter {
     fn dialect(&self) -> BackendDialect {
@@ -56,14 +74,7 @@ impl BackendAdapter for OpenAiCompatibleAdapter {
     }
 
     fn static_capabilities(&self) -> BackendCapabilities {
-        BackendCapabilities {
-            streaming: true,
-            tool_calls: true,
-            json_mode: true,
-            json_schema_mode: true,
-            vision: false,
-            resumable_streaming: false,
-        }
+        default_openai_capabilities()
     }
 
     async fn complete(
@@ -73,8 +84,10 @@ impl BackendAdapter for OpenAiCompatibleAdapter {
     ) -> Result<BackendCompleteResponse, GatewayError> {
         let url = validated_url(&ctx)?;
         let backend_id = ctx.backend_id.clone();
+        let allow_parallel_tool_calls =
+            parallel_tool_calls_enabled(ctx.profile.capabilities.as_ref());
 
-        let body = build_body(&ctx.model, payload, false);
+        let body = build_body(&ctx.model, payload, false, allow_parallel_tool_calls);
         let json_response = http_stream::post_json(&HttpRequestConfig {
             client: self.client.clone(),
             url,
@@ -97,6 +110,8 @@ impl BackendAdapter for OpenAiCompatibleAdapter {
         let url = validated_url(&ctx)?;
         let cancel_flag = Arc::new(AtomicBool::new(false));
         let cancel_flag_task = cancel_flag.clone();
+        let allow_parallel_tool_calls =
+            parallel_tool_calls_enabled(ctx.profile.capabilities.as_ref());
 
         let (tx, rx) = mpsc::channel::<Result<BackendRawEvent, GatewayError>>(64);
         let backend_id = ctx.backend_id.clone();
@@ -110,7 +125,7 @@ impl BackendAdapter for OpenAiCompatibleAdapter {
             model = %model,
         );
 
-        let body = build_body(&model, payload, true);
+        let body = build_body(&model, payload, true, allow_parallel_tool_calls);
         let http_config = HttpRequestConfig {
             client: self.client.clone(),
             url,
@@ -245,7 +260,12 @@ fn validated_url(ctx: &AdapterContext) -> Result<String, GatewayError> {
     ))
 }
 
-fn build_body(model: &str, payload: &TurnPayload, stream: bool) -> Value {
+fn build_body(
+    model: &str,
+    payload: &TurnPayload,
+    stream: bool,
+    allow_parallel_tool_calls: bool,
+) -> Value {
     let mut body = json!({
         "model": model,
         "messages": openai_wire::messages_to_openai(&payload.messages),
@@ -255,6 +275,10 @@ fn build_body(model: &str, payload: &TurnPayload, stream: bool) -> Value {
     if !payload.tools.is_empty() {
         body["tools"] = Value::Array(openai_wire::tools_to_openai(&payload.tools));
         body["tool_choice"] = Value::String("auto".to_string());
+        if allow_parallel_tool_calls {
+            body["parallel_tool_calls"] = json!(true);
+            set_body_extra(&mut body, "parallel_tool_calls", json!(true));
+        }
     }
 
     match &payload.output_mode {
@@ -287,10 +311,12 @@ fn build_body(model: &str, payload: &TurnPayload, stream: bool) -> Value {
             "type": "enabled",
             "budget_tokens": payload.limits.max_output_tokens.unwrap_or(10000)
         });
-        body["extras"] = json!({
-            "enable_thinking": "enabled",
-            "thinking_budget": payload.limits.max_output_tokens.unwrap_or(10000)
-        });
+        set_body_extra(&mut body, "enable_thinking", json!("enabled"));
+        set_body_extra(
+            &mut body,
+            "thinking_budget",
+            json!(payload.limits.max_output_tokens.unwrap_or(10000)),
+        );
         body["enable_thinking"] = json!(true);
     } else {
         body["thinking"] = json!({
@@ -300,6 +326,15 @@ fn build_body(model: &str, payload: &TurnPayload, stream: bool) -> Value {
     }
 
     body
+}
+
+fn set_body_extra(body: &mut Value, key: &str, value: Value) {
+    if !body["extras"].is_object() {
+        body["extras"] = json!({});
+    }
+    if let Some(extras) = body["extras"].as_object_mut() {
+        extras.insert(key.to_string(), value);
+    }
 }
 
 // ---------------------------------------------------------------------------

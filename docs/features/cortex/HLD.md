@@ -35,8 +35,7 @@ Input helper stage (parallel):
 Primary stage:
 - `primary-micro-loop(<input-ir>, internal-tool-calls) -> <output-ir>`
 - Internal tools:
-  - `expand-sense-raw`
-  - `expand-sense-with-sub-agent`
+  - `expand-senses(tasks[])` (one call can mix raw tasks and sub-agent tasks via optional `use_subagent_and_instruction_is`)
   - `patch-goal-forest`
 - `patch-goal-forest` updates cycle-local goal-forest state and returns updated ASCII-art.
 

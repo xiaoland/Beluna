@@ -16,8 +16,8 @@
 - Afferent Deferral Rule: Pathway rule that defers senses by `min_weight` and/or fq-sense-id regex.
 - Efferent Pathway: Stem-owned FIFO act queue consumed serially by `Continuity -> Spine`.
 - wait_for_sense: Per-act bounded wait directive in ticks (`0` means no wait).
-- expected_fq_sense_ids: Optional emitted-sense ids declared by act descriptor, used to correlate wait completion.
-- expand-senses: Primary tool for sense expansion with `mode: raw|sub-agent` and `senses_to_expand[].sense_id`.
+- expected_fq_sense_ids: Optional emitted-sense ids declared on the emitted act, used to correlate wait completion.
+- expand-senses: Primary tool for sense expansion with direct `tasks[]` arguments; each task uses `sense_id` and optional `use_subagent_and_instruction_is` to request sub-agent expansion (`<monotonic internal sense id>`).
 - Physical State: Ledger snapshot + `ns_descriptor` catalog + proprioception visible to Cortex.
 - Cognition State: Persisted goal-forest state.
 - Dispatch Decision: Pipeline control signal (`Continue` or `Break`) for current act only.

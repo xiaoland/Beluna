@@ -5,7 +5,10 @@ use reqwest::{
 use tokio::time::{Duration, timeout};
 
 use crate::{
-    body::payloads::{WebFetchRequest, WebLimits},
+    body::{
+        WEB_SENSE_FETCH_RESULT_ID,
+        payloads::{WebFetchRequest, WebLimits},
+    },
     spine::adapters::inline::InlineSenseDatum,
     spine::types::EndpointExecutionOutcome,
     types::Act,
@@ -164,7 +167,7 @@ pub async fn handle_web_invoke(
         },
         sense: Some(InlineSenseDatum {
             sense_instance_id: uuid::Uuid::new_v4().to_string(),
-            neural_signal_descriptor_id: "body.std.web.result".to_string(),
+            neural_signal_descriptor_id: WEB_SENSE_FETCH_RESULT_ID.to_string(),
             payload: format!(
                 concat!(
                     "web_fetch_result act_instance_id={}; neural_signal_descriptor_id={}; ",
@@ -221,6 +224,7 @@ mod tests {
             act_instance_id: act_instance_id.to_string(),
             endpoint_id: "ep:body:std:web".to_string(),
             neural_signal_descriptor_id: "tool.web.fetch".to_string(),
+            might_emit_sense_ids: vec![],
             payload: payload,
         }
     }
@@ -291,7 +295,7 @@ mod tests {
         let sense = output.sense.expect("sense should be emitted");
         assert_eq!(
             sense.neural_signal_descriptor_id,
-            "body.std.web.result".to_string()
+            WEB_RESULT_NS_DESCRIPTOR_ID.to_string()
         );
         assert_eq!(sense.payload["status_code"], serde_json::json!(200));
         assert_eq!(sense.payload["body_text"], serde_json::json!("hello"));

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 use tokio::time::{Duration, timeout};
 
@@ -34,16 +36,18 @@ impl ActsOutputHelper {
         deadline: Duration,
         acts_section: &str,
         act_descriptors: &[NeuralSignalDescriptor],
+        sense_descriptors: &[NeuralSignalDescriptor],
     ) -> Vec<Act> {
         let stage = CognitionOrgan::Acts.stage();
         let input_payload = helpers::pretty_json(&serde_json::json!({
             "acts_section": acts_section,
             "act_descriptor_catalog": act_descriptors,
+            "sense_descriptor_catalog": sense_descriptors,
         }));
         helpers::log_organ_input(cycle_id, stage, &input_payload);
 
         if let Some(drafts) = parse_direct_json_acts_if_valid(acts_section, act_descriptors) {
-            let acts = materialize_acts(cycle_id, drafts, act_descriptors);
+            let acts = materialize_acts(cycle_id, drafts, act_descriptors, sense_descriptors);
             helpers::log_organ_output(cycle_id, stage, &helpers::pretty_json(&acts));
             return acts;
         }
@@ -88,7 +92,8 @@ impl ActsOutputHelper {
 
         match act_drafts_result {
             Ok(Ok(act_drafts)) => {
-                let acts = materialize_acts(cycle_id, act_drafts, act_descriptors);
+                let acts =
+                    materialize_acts(cycle_id, act_drafts, act_descriptors, sense_descriptors);
                 helpers::log_organ_output(cycle_id, stage, &helpers::pretty_json(&acts));
                 acts
             }
@@ -178,7 +183,9 @@ fn materialize_acts(
     cycle_id: u64,
     drafts: ActsHelperOutput,
     act_descriptors: &[NeuralSignalDescriptor],
+    sense_descriptors: &[NeuralSignalDescriptor],
 ) -> Vec<Act> {
+    let endpoint_emitted_sense_catalog = build_endpoint_emitted_sense_catalog(sense_descriptors);
     let mut acts = Vec::with_capacity(drafts.len());
     for draft in drafts {
         let Some(matched_descriptor) = act_descriptors.iter().find(|descriptor| {
@@ -193,6 +200,10 @@ fn materialize_acts(
         }
 
         let payload = draft.payload;
+        let might_emit_sense_ids = endpoint_emitted_sense_catalog
+            .get(&draft.endpoint_id)
+            .cloned()
+            .unwrap_or_default();
         acts.push(Act {
             act_instance_id: derive_act_instance_id(
                 cycle_id,
@@ -203,10 +214,32 @@ fn materialize_acts(
             ),
             endpoint_id: draft.endpoint_id,
             neural_signal_descriptor_id: matched_descriptor.neural_signal_descriptor_id.clone(),
+            might_emit_sense_ids,
             payload,
         });
     }
     acts
+}
+
+fn build_endpoint_emitted_sense_catalog(
+    sense_descriptors: &[NeuralSignalDescriptor],
+) -> HashMap<String, Vec<String>> {
+    let mut catalog: HashMap<String, Vec<String>> = HashMap::new();
+    for descriptor in sense_descriptors {
+        let fq_sense_id = build_fq_neural_signal_id(
+            &descriptor.endpoint_id,
+            &descriptor.neural_signal_descriptor_id,
+        );
+        catalog
+            .entry(descriptor.endpoint_id.clone())
+            .or_default()
+            .push(fq_sense_id);
+    }
+    for might_emit_sense_ids in catalog.values_mut() {
+        might_emit_sense_ids.sort();
+        might_emit_sense_ids.dedup();
+    }
+    catalog
 }
 
 fn descriptor_fq_act_id(descriptor: &NeuralSignalDescriptor) -> String {

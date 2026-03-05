@@ -10,13 +10,12 @@ pub mod testing;
 mod types;
 
 pub use error::{CortexError, CortexErrorKind};
-pub use helpers::goal_forest_helper::{
-    CognitionState, GoalForest, GoalForestPatchOp, GoalNode, new_default_cognition_state,
-};
+pub use helpers::goal_forest_helper::{GoalForest, GoalNode};
 pub use runtime::{
     Cortex, CortexDeps, CortexRuntime, CortexTelemetryEvent, CortexTelemetryHook,
     PhysicalStateReadPort,
 };
 pub use types::{
-    CortexControlDirective, CortexOutput, ReactionLimits, WaitForSenseControlDirective,
+    CognitionState, CortexControlDirective, CortexOutput, ReactionLimits,
+    WaitForSenseControlDirective, new_default_cognition_state,
 };

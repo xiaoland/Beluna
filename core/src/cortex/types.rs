@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use super::helpers::goal_forest_helper::GoalForest;
+
 fn default_sense_passthrough_max_bytes() -> usize {
     2_048
 }
@@ -66,6 +68,27 @@ pub struct CortexOutput {
     pub control: CortexControlDirective,
     #[serde(default)]
     pub pending_primary_continuation: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CognitionState {
+    #[serde(default)]
+    pub revision: u64,
+    #[serde(default, alias = "goal_tree")]
+    pub goal_forest: GoalForest,
+}
+
+pub fn new_default_cognition_state() -> CognitionState {
+    CognitionState::default()
+}
+
+impl Default for CognitionState {
+    fn default() -> Self {
+        Self {
+            revision: 0,
+            goal_forest: GoalForest::default(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

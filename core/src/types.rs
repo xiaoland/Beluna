@@ -61,12 +61,31 @@ pub fn is_valid_neural_signal_identifier(value: &str) -> bool {
             in_segment = false;
             continue;
         }
-        if !ch.is_ascii_alphanumeric() {
+        if !ch.is_ascii_alphanumeric() && ch != '-' {
             return false;
         }
         in_segment = true;
     }
     in_segment
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_valid_neural_signal_identifier;
+
+    #[test]
+    fn accepts_ascii_alnum_dot_and_dash() {
+        for value in ["abc", "a1.b2", "aa-bb", "aa.bb-cc", "aa-bb.cc-dd"] {
+            assert!(is_valid_neural_signal_identifier(value), "{value}");
+        }
+    }
+
+    #[test]
+    fn rejects_empty_invalid_or_malformed_identifier() {
+        for value in ["", ".aa", "aa.", "aa..bb", "aa_bb", "aa/bb"] {
+            assert!(!is_valid_neural_signal_identifier(value), "{value}");
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -76,8 +95,6 @@ pub struct NeuralSignalDescriptor {
     pub endpoint_id: String,
     pub neural_signal_descriptor_id: String,
     pub payload_schema: serde_json::Value,
-    #[serde(default)]
-    pub emitted_sense_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -156,6 +173,8 @@ pub struct Act {
     pub act_instance_id: ActInstanceId,
     pub endpoint_id: String,
     pub neural_signal_descriptor_id: String,
+    #[serde(default)]
+    pub might_emit_sense_ids: Vec<String>,
     pub payload: serde_json::Value,
 }
 

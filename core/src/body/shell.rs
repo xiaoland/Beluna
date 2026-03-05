@@ -6,7 +6,10 @@ use tokio::{
 };
 
 use crate::{
-    body::payloads::{ShellExecRequest, ShellLimits},
+    body::{
+        SHELL_SENSE_EXEC_RESULT_ID,
+        payloads::{ShellExecRequest, ShellLimits},
+    },
     spine::adapters::inline::InlineSenseDatum,
     spine::types::EndpointExecutionOutcome,
     types::Act,
@@ -118,7 +121,7 @@ pub async fn handle_shell_invoke(
             },
             sense: Some(InlineSenseDatum {
                 sense_instance_id: uuid::Uuid::new_v4().to_string(),
-                neural_signal_descriptor_id: "body.std.shell.result".to_string(),
+                neural_signal_descriptor_id: SHELL_SENSE_EXEC_RESULT_ID.to_string(),
                 payload: build_shell_result_payload(
                     act,
                     exit_code,
@@ -141,7 +144,7 @@ pub async fn handle_shell_invoke(
         },
         sense: Some(InlineSenseDatum {
             sense_instance_id: uuid::Uuid::new_v4().to_string(),
-            neural_signal_descriptor_id: "body.std.shell.result".to_string(),
+            neural_signal_descriptor_id: SHELL_SENSE_EXEC_RESULT_ID.to_string(),
             payload: build_shell_result_payload(
                 act,
                 exit_code,
@@ -203,6 +206,7 @@ mod tests {
             act_instance_id: act_instance_id.to_string(),
             endpoint_id: "ep:body:std:shell".to_string(),
             neural_signal_descriptor_id: "tool.shell.exec".to_string(),
+            might_emit_sense_ids: vec![],
             payload: payload,
         }
     }
@@ -246,7 +250,7 @@ mod tests {
         let sense = output.sense.expect("sense should be emitted");
         assert_eq!(
             sense.neural_signal_descriptor_id,
-            "body.std.shell.result".to_string()
+            SHELL_RESULT_NS_DESCRIPTOR_ID.to_string()
         );
         assert_eq!(sense.payload["success"], serde_json::json!(true));
         assert_eq!(sense.payload["stdout_text"], serde_json::json!("hello"));
