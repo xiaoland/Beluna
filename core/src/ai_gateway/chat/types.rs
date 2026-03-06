@@ -58,49 +58,6 @@ pub struct MessageToolCall {
 }
 
 // ---------------------------------------------------------------------------
-// Thread message mutation
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum MessageBoundarySelector {
-    FirstUserMessage,
-    LatestAssistantToolBatchEnd,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct MessageRangeSelector {
-    pub start: MessageBoundarySelector,
-    pub end: MessageBoundarySelector,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-#[serde(tag = "action", content = "value", rename_all = "snake_case")]
-pub enum SystemPromptUpdate {
-    #[default]
-    Keep,
-    Replace(String),
-    Clear,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-pub struct ThreadMessageMutationRequest {
-    #[serde(default)]
-    pub trim_message_range: Option<MessageRangeSelector>,
-    #[serde(default)]
-    pub trim_if_resolvable: bool,
-    #[serde(default)]
-    pub system_prompt_update: SystemPromptUpdate,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
-pub struct ThreadMessageMutationOutcome {
-    pub removed_messages: usize,
-    pub remaining_messages: usize,
-    pub effective_system_prompt_changed: bool,
-}
-
-// ---------------------------------------------------------------------------
 // Output mode
 // ---------------------------------------------------------------------------
 

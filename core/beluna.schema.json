@@ -37,9 +37,13 @@
           },
           "additionalProperties": false
         },
-        "reliability": {
+        "resilience": {
           "type": "object",
           "properties": {
+            "max_request_time_ms": {
+              "type": "integer",
+              "minimum": 1
+            },
             "request_timeout_ms": {
               "type": "integer",
               "minimum": 1
@@ -69,23 +73,6 @@
             },
             "breaker_open_ms": {
               "type": "integer",
-              "minimum": 1
-            }
-          },
-          "additionalProperties": false
-        },
-        "budget": {
-          "type": "object",
-          "properties": {
-            "max_request_time_ms": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "max_usage_tokens_per_request": {
-              "type": [
-                "integer",
-                "null"
-              ],
               "minimum": 1
             },
             "max_concurrency_per_backend": {

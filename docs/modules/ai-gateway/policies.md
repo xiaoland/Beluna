@@ -1,4 +1,4 @@
-# Reliability and Budget Policies
+# Resilience and Usage Policies
 
 ## Retry Policy
 
@@ -14,17 +14,20 @@ Default policy: retry only before first output/tool event.
 - Opens after configured counted transient failures.
 - `CircuitOpen` returned while open window is active.
 
-## Budget Policy
+## Resilience Admission Policy
 
 - Timeout bound (effective per request)
 - Per-backend concurrency limit
 - Per-backend rate smoothing
-- Usage token post-check is best-effort accounting only
-  - may influence future admission/telemetry
-  - does not terminate in-flight stream
+
+## Usage Policy
+
+- Gateway does not enforce token budget rejection.
+- Gateway returns usage stats as output metadata.
+- Caller-owned policy may consume usage for accounting/admission decisions.
 
 ## Cancellation Semantics
 
 - Consumer stream drop triggers adapter cancellation.
-- Cancellation releases budget/concurrency resources.
+- Cancellation releases resilience lease resources.
 - Consumer cancellation does not count as backend failure for breaker accounting.

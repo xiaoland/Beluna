@@ -8,7 +8,7 @@ This module documentation answers: what AI Gateway is, what boundaries it owns, 
 - [Architecture](./architecture.md)
 - [Execution Flow](./execution-flow.md)
 - [Data Model](./data-model.md)
-- [Reliability and Budget](./policies.md)
+- [Resilience and Usage](./policies.md)
 - [Adapter Matrix](./adapters.md)
 - [Configuration](./configuration.md)
 - [Testing and Contracts](./testing-and-contracts.md)

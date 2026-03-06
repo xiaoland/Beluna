@@ -11,7 +11,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::Instrument;
 
 use beluna::{
-    ai_gateway::{chat::ChatFactory, credentials::EnvCredentialProvider},
+    ai_gateway::{chat::Chat, credentials::EnvCredentialProvider},
     body::start_inline_body_endpoints,
     cli::config_path_from_args,
     config::{Config, TickMissedBehavior},
@@ -179,9 +179,9 @@ async fn main() -> Result<()> {
     ));
     let stem_control: Arc<dyn StemControlPort> = stem_state.clone();
 
-    let chat_factory = Arc::new(
-        ChatFactory::new(&config.ai_gateway, Arc::new(EnvCredentialProvider))
-            .context("failed to construct chat factory for cortex")?,
+    let chat = Arc::new(
+        Chat::new(&config.ai_gateway, Arc::new(EnvCredentialProvider))
+            .context("failed to construct chat runtime for cortex")?,
     );
 
     let spine_runtime = Spine::new(
@@ -212,7 +212,7 @@ async fn main() -> Result<()> {
     let cortex = Arc::new(Cortex::from_config(
         &config.cortex,
         config.r#loop.tick_interval_ms,
-        Arc::clone(&chat_factory),
+        Arc::clone(&chat),
         None,
         Some(continuity.clone()),
         Some(afferent_rule_control.clone()),

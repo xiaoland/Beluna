@@ -21,7 +21,7 @@ It standardizes how Beluna runtime sends inference requests and consumes results
 - As Beluna runtime, I need deterministic backend selection so I can avoid hidden fallback behavior.
 - As Beluna runtime, I need strict request normalization so invalid tool/message linkage fails early and consistently.
 - As Beluna runtime, I need canonical streaming events so upper layers can consume one stable event protocol.
-- As Beluna runtime, I need retry/circuit/budget policies so backend failures do not destabilize the system.
+- As Beluna runtime, I need retry/circuit/concurrency/rate policies so backend failures do not destabilize the system.
 
 ## Functional Requirements
 
@@ -48,12 +48,10 @@ It standardizes how Beluna runtime sends inference requests and consumes results
 3. `BackendRouter` selects one backend profile deterministically.
 4. `CredentialProvider` resolves auth material for that backend.
 5. `CapabilityGuard` validates requested features against effective backend capabilities.
-6. `BudgetEnforcer` applies pre-dispatch checks and acquires backend concurrency/rate budget.
-7. `ReliabilityLayer` invokes `BackendAdapter` with retry/backoff and circuit-breaker logic.
-8. `BackendAdapter` (transport + dialect mapping) emits backend raw events.
-9. `ResponseNormalizer` converts backend raw events to canonical gateway events.
-10. Gateway emits canonical stream to caller and propagates cancellation on consumer drop.
-11. Budget and telemetry are updated; stream ends with one terminal event.
+6. `ResilienceEngine` applies timeout/concurrency/rate admission and retry/circuit controls.
+7. `BackendAdapter` (transport + dialect mapping) emits backend raw events.
+8. Gateway emits canonical output to caller and propagates cancellation on consumer drop.
+9. Telemetry and usage metadata are updated; stream ends with one terminal event.
 
 ## Acceptance Criteria
 
@@ -62,8 +60,8 @@ It standardizes how Beluna runtime sends inference requests and consumes results
 - Gateway canonical stream starts with `Started` and ends with exactly one terminal event (`Completed` or `Failed`).
 - Default retry policy retries only before first output/tool event.
 - Circuit breaker can open per backend after repeated transient failures.
-- Budget enforces timeout, per-backend concurrency, and rate smoothing.
-- Usage token post-check is best-effort accounting and does not terminate active streams.
+- Resilience enforces timeout, per-backend concurrency, and rate smoothing.
+- Gateway does not enforce token budget rejection; usage is returned for caller policy.
 - Adapters are available for:
   - `openai_compatible` (`chat/completions`-like)
   - `ollama` (`/api/chat`)
@@ -78,7 +76,6 @@ It standardizes how Beluna runtime sends inference requests and consumes results
 - RequestNormalizer: Validation and mapping layer that rejects invalid input states before backend dispatch.
 - BackendRouter: Deterministic backend selector (no multi-backend fallback in MVP).
 - CapabilityGuard: Validator for requested features (tool calls, vision, JSON mode, streaming) against backend capability flags.
-- BudgetEnforcer: Layer that applies timeout, concurrency, and rate-smoothing policy; usage token post-check is best-effort accounting.
-- ReliabilityLayer: Retry/backoff and circuit-breaker layer with safe retry boundaries for streaming/tool semantics.
+- ResilienceEngine: Layer that applies retry/backoff/circuit policy with timeout and per-backend concurrency/rate controls.
 - CredentialProvider: Secret resolution boundary used by gateway adapters.
 - Stream Drop Cancellation: Behavior where dropping consumer stream cancels in-flight backend work and releases resources.

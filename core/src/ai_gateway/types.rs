@@ -108,7 +108,9 @@ pub struct ModelTarget {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReliabilityConfig {
+pub struct ResilienceConfig {
+    #[serde(default = "default_max_request_time_ms")]
+    pub max_request_time_ms: u64,
     #[serde(default = "default_request_timeout_ms")]
     pub request_timeout_ms: u64,
     #[serde(default = "default_max_retries")]
@@ -123,11 +125,16 @@ pub struct ReliabilityConfig {
     pub breaker_failure_threshold: u32,
     #[serde(default = "default_breaker_open_ms")]
     pub breaker_open_ms: u64,
+    #[serde(default = "default_max_concurrency_per_backend")]
+    pub max_concurrency_per_backend: u32,
+    #[serde(default)]
+    pub rate_smoothing_per_second: Option<u32>,
 }
 
-impl Default for ReliabilityConfig {
+impl Default for ResilienceConfig {
     fn default() -> Self {
         Self {
+            max_request_time_ms: default_max_request_time_ms(),
             request_timeout_ms: default_request_timeout_ms(),
             max_retries: default_max_retries(),
             backoff_base_ms: default_backoff_base_ms(),
@@ -135,27 +142,6 @@ impl Default for ReliabilityConfig {
             retry_policy: RetryPolicy::BeforeFirstEventOnly,
             breaker_failure_threshold: default_breaker_failure_threshold(),
             breaker_open_ms: default_breaker_open_ms(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BudgetConfig {
-    #[serde(default = "default_max_request_time_ms")]
-    pub max_request_time_ms: u64,
-    #[serde(default)]
-    pub max_usage_tokens_per_request: Option<u64>,
-    #[serde(default = "default_max_concurrency_per_backend")]
-    pub max_concurrency_per_backend: u32,
-    #[serde(default)]
-    pub rate_smoothing_per_second: Option<u32>,
-}
-
-impl Default for BudgetConfig {
-    fn default() -> Self {
-        Self {
-            max_request_time_ms: default_max_request_time_ms(),
-            max_usage_tokens_per_request: None,
             max_concurrency_per_backend: default_max_concurrency_per_backend(),
             rate_smoothing_per_second: None,
         }
@@ -259,9 +245,7 @@ pub struct AIGatewayConfig {
     #[serde(default)]
     pub chat: ChatConfig,
     #[serde(default)]
-    pub reliability: ReliabilityConfig,
-    #[serde(default)]
-    pub budget: BudgetConfig,
+    pub resilience: ResilienceConfig,
 }
 
 #[derive(Debug, Clone)]

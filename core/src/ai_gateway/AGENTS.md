@@ -25,15 +25,10 @@ core/src/ai_gateway/
 ├── types.rs            # Non capability-specific types
 ├── types_chat.rs       # Chat capability types
 ├── error.rs
-├── capabilities.rs
 ├── credentials.rs
-├── request_normalizer.rs
-├── response_normalizer.rs
 ├── router.rs
-├── reliability.rs
-├── budget.rs
+├── resilience.rs
 ├── telemetry.rs
-├── gateway.rs
 └── adapters/
     ├── mod.rs
     ├── http_common.rs
@@ -45,4 +40,4 @@ core/src/ai_gateway/
 
 ## Last Updated
 
-> 2026-02-19
+> 2026-03-05

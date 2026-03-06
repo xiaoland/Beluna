@@ -1,33 +1,41 @@
 # Data Model
 
-## Key Types
+## Message Layer
 
-- `ChatRequest`: caller-facing chat capability input
-- `CanonicalRequest`: backend-neutral normalized input
-- `ChatEvent`: chat streaming event union
-- `ChatResponse`: non-stream aggregate output
-- `GatewayError`: canonical error taxonomy
+Concrete message structs:
 
-Code split:
+- `SystemMessage`
+- `UserMessage`
+- `AssistantMessage`
+- `ToolCallMessage`
+- `ToolCallResultMessage`
 
-- non capability-specific types are in `core/src/ai_gateway/types.rs`
-- chat capability types are in `core/src/ai_gateway/types_chat.rs`
+Wrapped by:
 
-## Event Lifecycle
+- `Message` enum
 
-Chat stream contract:
+## Turn
 
-- first event: `Started`
-- zero or more non-terminal events (`TextDelta`, `ToolCallDelta`, `ToolCallReady`, optional `Usage`)
-- exactly one terminal event: `Completed` or `Failed`
+`Turn` is the atomic unit and contains:
 
-## Tool Status Scope
+- `turn_id` (thread-local monotonic integer)
+- ordered `messages: Vec<Message>`
+- metadata/usage/finish information
 
-- Gateway emits tool-call statuses for inference-time assembly (`Partial`, `Ready`).
-- `Executed` and `Rejected` are runtime/tool-execution states and are not gateway stream emissions.
+Integrity rule:
 
-## Tool-Call Message Pairing
+- mandatory completeness only enforces tool-call/result linkage
 
-- Assistant messages may carry `tool_calls` as RPC request frames (`id`, `name`, `arguments_json`).
-- Tool role messages carry `tool_call_id + tool_name + content` as RPC response frames.
-- OpenAI-compatible transport mapping stringifies JSON tool payload parts to keep `content` wire-safe.
+## Thread
+
+`Thread` contains:
+
+- `thread_id`
+- bound backend adapter context
+- ordered `turns: Vec<Turn>`
+
+Thread edit pattern for Cortex reset:
+
+- do not mutate existing thread timeline in-place
+- pick turns
+- deep-copy turns/messages to a new thread

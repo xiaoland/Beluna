@@ -7,15 +7,16 @@ It is backend-dialect oriented and backend transport agnostic.
 
 ## Component Model
 
-- `AIGateway`: facade (`infer_stream`, `infer_once`)
-- `RequestNormalizer`: internal request validation + canonical mapping
+- `Chat`: public facade (`open_thread`, `clone_thread_with_turns`, `query_turns`)
+- `Thread`: backend-bound conversation aggregate (`complete`)
+- `Turn`: atomic unit with ordered `Message` array
+- `Message`: explicit concrete message layer
 - `BackendRouter`: deterministic backend profile selection
 - `CredentialProvider`: secret/token resolution boundary
 - `CapabilityGuard`: feature validation against backend capabilities
-- `BudgetEnforcer`: timeout, concurrency, and rate smoothing
-- `ReliabilityLayer`: exponential backoff retry + circuit breaker
+- `ResilienceEngine`: retry/backoff/circuit + timeout + concurrency/rate admission
 - `BackendAdapter`: owns both transport and dialect mapping
-- `ResponseNormalizer`: backend raw events -> canonical event stream
+- `ToolScheduler`: executes tool call and appends linked result message atomically
 - `tracing` structured telemetry: lifecycle/attempt/outcome/usage events emitted as logs
 
 ## Routing and Adapter Principles
@@ -26,7 +27,7 @@ It is backend-dialect oriented and backend transport agnostic.
 - Copilot adapter is also transport + dialect (SDK/LSP lifecycle included), not HTTP-only mapping.
 - OpenAI-compatible means `chat/completions`-like compatibility; exact parity is not assumed and missing fields degrade gracefully.
 
-## Reliability Semantics
+## Resilience Semantics
 
 - Retry policy uses exponential backoff.
 - Streaming retry is allowed only before first output/tool event by default.
@@ -34,14 +35,11 @@ It is backend-dialect oriented and backend transport agnostic.
 - Circuit breaker counts transient backend failures.
 - Caller-side cancellation (consumer drops stream) is not counted as backend failure.
 
-## Budget and Usage Semantics
+## Usage Semantics
 
-- Enforce timeout bound, per-backend concurrency limit, and rate smoothing.
-- Usage post-check is best-effort:
-  - usage may be missing
-  - usage may arrive late
-  - post-check must not terminate an active stream
-  - post-check may affect future-request accounting/policy only
+- Resilience enforces timeout bound, per-backend concurrency limit, and rate smoothing.
+- Gateway budget rejection is removed.
+- Usage remains best-effort output metadata for caller-owned policy.
 
 ## Security and Credentials
 
@@ -54,22 +52,23 @@ It is backend-dialect oriented and backend transport agnostic.
 - Canonical stream starts with `Started`.
 - Canonical stream ends with exactly one terminal event (`Completed` or `Failed`).
 - Gateway never emits `ToolCallStatus::Executed` or `ToolCallStatus::Rejected`.
-- Stream drop cancels in-flight backend work and releases budget/concurrency resources.
+- Stream drop cancels in-flight backend work and releases resilience lease resources.
 
 ## Involved Surfaces
 
-- `src/ai_gateway/gateway.rs`
-- `src/ai_gateway/request_normalizer.rs`
+- `src/ai_gateway/chat/api_chat.rs`
+- `src/ai_gateway/chat/thread.rs`
+- `src/ai_gateway/chat/turn.rs`
+- `src/ai_gateway/chat/message.rs`
+- `src/ai_gateway/chat/runtime.rs`
+- `src/ai_gateway/chat/tool_scheduler.rs`
 - `src/ai_gateway/router.rs`
 - `src/ai_gateway/capabilities.rs`
-- `src/ai_gateway/budget.rs`
-- `src/ai_gateway/reliability.rs`
-- `src/ai_gateway/response_normalizer.rs`
+- `src/ai_gateway/resilience.rs`
 - `src/ai_gateway/credentials.rs`
-- `src/ai_gateway/adapters/openai_compatible.rs`
-- `src/ai_gateway/adapters/ollama.rs`
-- `src/ai_gateway/adapters/github_copilot.rs`
-- `src/ai_gateway/adapters/copilot_rpc.rs`
+- `src/ai_gateway/adapters/openai_compatible/chat.rs`
+- `src/ai_gateway/adapters/ollama/chat.rs`
+- `src/ai_gateway/adapters/github_copilot/chat.rs`
 - `src/ai_gateway/types.rs`
 - `src/ai_gateway/error.rs`
 - `src/ai_gateway/telemetry.rs`

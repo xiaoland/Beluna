@@ -14,11 +14,9 @@ use tokio::time::{Duration, timeout};
 
 use crate::{
     ai_gateway::chat::{
-        Chat, ChatFactory, ChatMessage, ChatOptions, ChatRole, ChatToolDefinition, ContentPart,
-        MessageBoundarySelector, MessageRangeSelector, OutputMode, SystemPromptUpdate, Thread,
-        ThreadMessageMutationRequest, ThreadOptions, ToolCallContinuationMode, ToolCallResult,
-        ToolExecutionRequest, ToolExecutionResult, ToolExecutor, ToolOverride, TurnInput,
-        TurnLimits, TurnResponse,
+        Chat, ChatMessage, ChatRole, ChatToolDefinition, CloneThreadOptions, ContentPart,
+        OutputMode, Thread, ThreadOptions, ToolCallResult, ToolExecutionRequest, TurnQuery,
+        ToolExecutionResult, ToolExecutor, ToolOverride, TurnInput, TurnLimits, TurnResponse,
     },
     config::CortexHelperRoutesConfig,
     continuity::ContinuityEngine,
@@ -55,7 +53,7 @@ pub type CortexTelemetryHook = Arc<dyn Fn(CortexTelemetryEvent) + Send + Sync>;
 
 #[derive(Clone)]
 pub struct Cortex {
-    chat_factory: Option<Arc<ChatFactory>>,
+    chat: Option<Arc<Chat>>,
     tick_interval_ms: u64,
     helper_routes: CortexHelperRoutesConfig,
     hooks: Option<TestHooks>,
@@ -140,7 +138,6 @@ struct PrimaryEngineResult {
 
 #[derive(Clone)]
 struct PrimaryThreadState {
-    _chat: Chat,
     thread: Thread,
 }
 
@@ -556,37 +553,34 @@ impl PrimaryToolExecutor {
                                                 prompts::primary_system_prompt_with_goal_forest(
                                                     &goal_forest_section,
                                                 );
-                                            match self
+                                            let mut selected_turn_ids = self
                                                 .thread
-                                                .mutate_messages_atomically(
-                                                    ThreadMessageMutationRequest {
-                                                        trim_message_range: Some(
-                                                            MessageRangeSelector {
-                                                                start: MessageBoundarySelector::FirstUserMessage,
-                                                                end: MessageBoundarySelector::LatestAssistantToolBatchEnd,
-                                                            },
-                                                        ),
-                                                        trim_if_resolvable: true,
-                                                        system_prompt_update:
-                                                            SystemPromptUpdate::Replace(
-                                                                updated_system_prompt,
-                                                            ),
-                                                    },
+                                                .find_turns(TurnQuery::default())
+                                                .await
+                                                .into_iter()
+                                                .map(|turn_ref| turn_ref.turn_id)
+                                                .rev()
+                                                .take(2)
+                                                .collect::<Vec<_>>();
+                                            selected_turn_ids.reverse();
+
+                                            match self
+                                                .cortex
+                                                .replace_primary_thread_with_selected_turns(
+                                                    &self.thread,
+                                                    &selected_turn_ids,
+                                                    updated_system_prompt,
                                                 )
                                                 .await
                                             {
-                                                Ok(mutation_outcome) => {
+                                                Ok(()) => {
                                                     data.insert(
                                                         "reset_context_applied".to_string(),
                                                         serde_json::json!(true),
                                                     );
                                                     data.insert(
-                                                        "thread_message_mutation".to_string(),
-                                                        serde_json::json!({
-                                                            "removed_messages": mutation_outcome.removed_messages,
-                                                            "remaining_messages": mutation_outcome.remaining_messages,
-                                                            "effective_system_prompt_changed": mutation_outcome.effective_system_prompt_changed,
-                                                        }),
+                                                        "selected_turn_ids".to_string(),
+                                                        serde_json::json!(selected_turn_ids),
                                                     );
                                                     Ok((serde_json::Value::Object(data), true))
                                                 }
@@ -682,7 +676,7 @@ impl Cortex {
     pub fn from_config(
         config: &crate::config::CortexRuntimeConfig,
         tick_interval_ms: u64,
-        chat_factory: Arc<ChatFactory>,
+        chat: Arc<Chat>,
         telemetry_hook: Option<CortexTelemetryHook>,
         continuity: Option<Arc<Mutex<ContinuityEngine>>>,
         afferent_rule_control: Option<Arc<dyn AfferentRuleControlPort>>,
@@ -691,7 +685,7 @@ impl Cortex {
         let limits = config.default_limits.clone();
         log_output_token_limits_paused(&limits);
         Self {
-            chat_factory: Some(chat_factory),
+            chat: Some(chat),
             tick_interval_ms: tick_interval_ms.max(1),
             helper_routes: config.helper_routes.clone(),
             hooks: None,
@@ -709,7 +703,7 @@ impl Cortex {
     pub(crate) fn for_test_with_hooks(hooks: TestHooks, limits: ReactionLimits) -> Self {
         log_output_token_limits_paused(&limits);
         Self {
-            chat_factory: None,
+            chat: None,
             tick_interval_ms: 1_000,
             helper_routes: CortexHelperRoutesConfig::default(),
             hooks: Some(hooks),
@@ -1059,7 +1053,6 @@ impl Cortex {
                 input_messages.clone(),
                 dynamic_act_tool_overrides.clone(),
                 Some(tool_executor.clone()),
-                Some(ToolCallContinuationMode::NextTurn),
             )
             .await
         {
@@ -1125,34 +1118,27 @@ impl Cortex {
             return Ok(state.thread.clone());
         }
 
-        let gateway = self.chat_factory.as_ref().ok_or_else(|| {
+        let gateway = self.chat.as_ref().ok_or_else(|| {
             CortexError::new(
                 crate::cortex::error::CortexErrorKind::Internal,
                 "AI Gateway is not configured for this Cortex instance",
             )
         })?;
         let route = self.resolve_route(CognitionOrgan::Primary);
-        let chat = gateway
-            .create(ChatOptions {
-                chat_id: Some("cortex-primary".to_string()),
-                tools: primary_internal_tools(),
-                system_prompt: Some(prompts::primary_system_prompt()),
-                default_route: route,
-                ..ChatOptions::default()
-            })
-            .await;
-        let thread = chat
+        let mut options = ThreadOptions {
+            thread_id: Some("cortex-primary-thread".to_string()),
+            tools: primary_internal_tools(),
+            system_prompt: Some(prompts::primary_system_prompt()),
+            ..ThreadOptions::default()
+        };
+        options.route_or_alias = route;
+        let thread = gateway
             .open_thread(ThreadOptions {
-                thread_id: Some("cortex-primary-thread".to_string()),
-                tool_call_mode: Some(ToolCallContinuationMode::NextTurn),
-                ..ThreadOptions::default()
+                ..options
             })
             .await
             .map_err(|err| primary_failed(err.to_string()))?;
-        let state = PrimaryThreadState {
-            _chat: chat,
-            thread: thread.clone(),
-        };
+        let state = PrimaryThreadState { thread: thread.clone() };
         *guard = Some(state);
         Ok(thread)
     }
@@ -1167,11 +1153,46 @@ impl Cortex {
             let mut thread_guard = self.primary_thread_state.lock().await;
             thread_guard.take()
         };
-        if let Some(state) = prior_thread_state {
-            state._chat.close().await;
-        }
+        let _ = prior_thread_state;
 
         tracing::warn!(target: "cortex", reason = reason, "primary_thread_state_reset");
+    }
+
+    async fn replace_primary_thread_with_selected_turns(
+        &self,
+        source_thread: &Thread,
+        selected_turn_ids: &[u64],
+        system_prompt: String,
+    ) -> Result<(), CortexError> {
+        let chat = self.chat.as_ref().ok_or_else(|| {
+            CortexError::new(
+                crate::cortex::error::CortexErrorKind::Internal,
+                "AI Gateway is not configured for this Cortex instance",
+            )
+        })?;
+        let route_or_alias = self.resolve_route(CognitionOrgan::Primary);
+        let cloned = chat
+            .clone_thread_with_turns(
+                source_thread,
+                selected_turn_ids,
+                CloneThreadOptions {
+                    thread_id: Some("cortex-primary-thread".to_string()),
+                    route_or_alias,
+                    system_prompt: Some(system_prompt),
+                },
+            )
+            .await
+            .map_err(|err| primary_failed(err.to_string()))?;
+
+        {
+            let mut continuation_guard = self.primary_continuation_state.lock().await;
+            *continuation_guard = None;
+        }
+        {
+            let mut thread_guard = self.primary_thread_state.lock().await;
+            *thread_guard = Some(PrimaryThreadState { thread: cloned });
+        }
+        Ok(())
     }
 
     async fn run_primary_turn(
@@ -1182,7 +1203,6 @@ impl Cortex {
         input_messages: Vec<ChatMessage>,
         tool_overrides: Vec<ToolOverride>,
         tool_executor: Option<Arc<dyn ToolExecutor>>,
-        tool_call_mode_override: Option<ToolCallContinuationMode>,
     ) -> Result<TurnResponse, CortexError> {
         let stage = CognitionOrgan::Primary.stage();
         let request_id = format!("cortex-{stage}-{cycle_id}-turn-{step}");
@@ -1197,7 +1217,6 @@ impl Cortex {
             OutputMode::Text,
         );
         input.tool_executor = tool_executor;
-        input.tool_call_mode_override = tool_call_mode_override;
         let output = thread.complete(input).await.map_err(|err| {
             tracing::debug!(
                 target: "cortex",
@@ -1273,36 +1292,28 @@ impl Cortex {
             output_mode,
         );
 
-        let factory = self.chat_factory.as_ref().ok_or_else(|| {
+        let chat = self.chat.as_ref().ok_or_else(|| {
             CortexError::new(
                 crate::cortex::error::CortexErrorKind::Internal,
                 "AI Gateway is not configured for this Cortex instance",
             )
         })?;
-        let chat = factory
-            .create(ChatOptions {
-                chat_id: Some(format!("cortex-{stage}-{cycle_id}")),
-                system_prompt: Some(system_prompt),
-                default_route: route,
-                ..ChatOptions::default()
-            })
-            .await;
         let thread = match chat
             .open_thread(ThreadOptions {
                 thread_id: Some(format!("cortex-{stage}-{cycle_id}-thread")),
+                route_or_alias: route,
+                system_prompt: Some(system_prompt),
                 ..ThreadOptions::default()
             })
             .await
         {
             Ok(thread) => thread,
             Err(err) => {
-                chat.close().await;
                 return Err(map_organ_gateway_error(organ, err.to_string()));
             }
         };
 
         let result = thread.complete(input).await;
-        chat.close().await;
         let output = result.map_err(|err| {
             tracing::debug!(
                 target: "cortex",
