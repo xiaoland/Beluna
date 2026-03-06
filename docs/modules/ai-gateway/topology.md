@@ -4,12 +4,12 @@
 
 ```mermaid
 graph TD
-    subgraph Callers
+    subgraph Callers["Callers"]
         Cortex[Cortex]
         Other[Other Modules]
     end
 
-    subgraph "ai_gateway/chat"
+    subgraph AIGatewayChat["ai_gateway/chat"]
         Chat["Chat (Facade)"]
         Thread["Thread"]
         Turn["Turn"]
@@ -17,15 +17,15 @@ graph TD
         Scheduler["ToolScheduler"]
     end
 
-    subgraph "Runtime"
-        Runtime["ChatRuntime"]
+    subgraph RuntimeGroup["Runtime"]
+        ChatRuntime["ChatRuntime"]
         Router["BackendRouter"]
         Creds["CredentialProvider"]
         Resilience["ResilienceEngine"]
         CapGuard["CapabilityGuard"]
     end
 
-    subgraph Adapters
+    subgraph Adapters["Adapters"]
         OpenAI["OpenAI Compatible"]
         Ollama["Ollama"]
         Copilot["GitHub Copilot"]
@@ -38,15 +38,15 @@ graph TD
     Turn --> Message
     Turn --> Scheduler
 
-    Thread --> Runtime
-    Runtime --> Router
-    Runtime --> Creds
-    Runtime --> Resilience
-    Runtime --> CapGuard
+    Thread --> ChatRuntime
+    ChatRuntime --> Router
+    ChatRuntime --> Creds
+    ChatRuntime --> Resilience
+    ChatRuntime --> CapGuard
 
-    Runtime --> OpenAI
-    Runtime --> Ollama
-    Runtime --> Copilot
+    ChatRuntime --> OpenAI
+    ChatRuntime --> Ollama
+    ChatRuntime --> Copilot
 ```
 
 ## Notes

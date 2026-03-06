@@ -36,4 +36,5 @@
 - Given: a turn whose tail is `ToolCallMessage` + `ToolCallResultMessage`
 - When: `truncate_one` is called
 - Then: both messages are removed together
+- Then: the `ToolCallResultMessage` is not truncated without truncating its matching `ToolCallMessage`
 - Then: turn validation still succeeds

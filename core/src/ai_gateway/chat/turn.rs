@@ -70,6 +70,7 @@ impl Turn {
         let snapshot = self.messages.clone();
         let tail_is_tool_result = matches!(self.messages.last(), Some(Message::ToolCallResult(_)));
         if tail_is_tool_result {
+            // A tool result is never truncated alone; its matching call is the same logical unit.
             let Some(Message::ToolCallResult(ToolCallResultMessage { call_id, .. })) =
                 self.messages.pop()
             else {
