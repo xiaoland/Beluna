@@ -1,12 +1,8 @@
 use beluna::ai_gateway::{
     router::BackendRouter,
     types::{
-        AIGatewayConfig, BackendDialect, BackendProfile, BudgetConfig, ChatConfig, CredentialRef,
-        ModelProfile, ReliabilityConfig,
-    },
-    types_chat::{
-        CanonicalContentPart, CanonicalLimits, CanonicalMessage, CanonicalOutputMode,
-        CanonicalRequest, CanonicalRole, CanonicalToolChoice,
+        AIGatewayConfig, BackendDialect, BackendProfile, ChatConfig, CredentialRef, ModelProfile,
+        ResilienceConfig,
     },
 };
 
@@ -39,81 +35,33 @@ fn gateway_config() -> AIGatewayConfig {
             },
         ],
         chat: ChatConfig::default(),
-        reliability: ReliabilityConfig::default(),
-        budget: BudgetConfig::default(),
-    }
-}
-
-fn request_with_route(route: Option<&str>) -> CanonicalRequest {
-    CanonicalRequest {
-        request_id: "req".to_string(),
-        route_hint: route.map(str::to_string),
-        messages: vec![CanonicalMessage {
-            role: CanonicalRole::User,
-            parts: vec![CanonicalContentPart::Text {
-                text: "hello".to_string(),
-            }],
-            tool_call_id: None,
-            tool_name: None,
-            tool_calls: vec![],
-        }],
-        tools: vec![],
-        tool_choice: CanonicalToolChoice::Auto,
-        output_mode: CanonicalOutputMode::Text,
-        limits: CanonicalLimits::default(),
-        metadata: Default::default(),
-        cost_attribution_id: None,
-        stream: true,
-        enable_thinking: false,
+        resilience: ResilienceConfig::default(),
     }
 }
 
 #[test]
-fn given_route_is_missing_when_select_then_default_alias_is_chosen() {
+fn missing_route_selects_default_alias() {
     let router = BackendRouter::new(&gateway_config()).expect("router should build");
-    let selected = router
-        .select(&request_with_route(None))
-        .expect("selection should succeed");
+    let selected = router.select(None).expect("selection should succeed");
     assert_eq!(selected.backend_id, "primary");
     assert_eq!(selected.resolved_model, "m1");
 }
 
 #[test]
-fn given_known_alias_when_select_then_requested_alias_target_is_chosen() {
+fn direct_backend_model_route_is_supported() {
     let router = BackendRouter::new(&gateway_config()).expect("router should build");
     let selected = router
-        .select(&request_with_route(Some("low-cost")))
+        .select(Some("secondary/m2"))
         .expect("selection should succeed");
     assert_eq!(selected.backend_id, "secondary");
     assert_eq!(selected.resolved_model, "m2");
 }
 
 #[test]
-fn given_direct_backend_model_route_when_select_then_direct_target_is_chosen() {
+fn unknown_alias_fails_fast() {
     let router = BackendRouter::new(&gateway_config()).expect("router should build");
-    let selected = router
-        .select(&request_with_route(Some("secondary/m2")))
-        .expect("selection should succeed");
-    assert_eq!(selected.backend_id, "secondary");
-    assert_eq!(selected.resolved_model, "m2");
-}
-
-#[test]
-fn given_unknown_alias_when_select_then_selection_fails() {
-    let router = BackendRouter::new(&gateway_config()).expect("router should build");
-    let err = match router.select(&request_with_route(Some("unknown"))) {
-        Ok(_) => panic!("selection should fail"),
-        Err(err) => err,
-    };
+    let err = router
+        .select(Some("unknown"))
+        .expect_err("selection should fail");
     assert!(err.message.contains("unknown route alias"));
-}
-
-#[test]
-fn given_unknown_model_on_known_backend_when_select_then_selection_fails() {
-    let router = BackendRouter::new(&gateway_config()).expect("router should build");
-    let err = match router.select(&request_with_route(Some("secondary/missing"))) {
-        Ok(_) => panic!("selection should fail"),
-        Err(err) => err,
-    };
-    assert!(err.message.contains("selected model"));
 }

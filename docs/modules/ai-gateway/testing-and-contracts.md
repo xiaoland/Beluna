@@ -9,7 +9,7 @@
 
 Behavioral contracts:
 
-- `docs/contracts/ai-gateway/request-normalizer.md`
+- `docs/contracts/ai-gateway/chat-invariants.md`
 - `docs/contracts/ai-gateway/router.md`
 - `docs/contracts/ai-gateway/resilience.md`
 - `docs/contracts/ai-gateway/usage.md`

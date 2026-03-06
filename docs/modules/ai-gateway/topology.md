@@ -51,7 +51,6 @@ graph TD
 
 ## Notes
 
-- `ChatDispatcher` was removed.
-- `ThreadStore`/`TurnStore` were removed in this version; thread owns in-memory turns directly.
-- Budget enforcement was removed from gateway core.
-- Resilience now includes retry/circuit/concurrency/rate controls.
+- `Thread` owns in-memory turns directly.
+- Gateway budget rejection is removed; usage is returned to the caller.
+- `ResilienceEngine` owns retry/circuit/concurrency/rate controls.

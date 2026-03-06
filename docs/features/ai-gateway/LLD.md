@@ -1,23 +1,14 @@
 # AI Gateway LLD
 
-## Canonical Request Rules
+## Turn And Message Invariants
 
-RequestNormalizer must enforce deterministic validation before adapter dispatch.
+`Turn` and `Thread` enforce deterministic validation before adapter dispatch.
 
-- If `role == Tool`:
-  - `tool_call_id` must exist
-  - `tool_name` should exist (required for dialects that require it)
-  - `parts` should be text/json style payloads; image URL parts are invalid
-  - `tool_calls` must be empty
-- If `role == Assistant`:
-  - `tool_call_id` must be `None`
-  - `tool_name` must be `None`
-  - `tool_calls` is optional and represents RPC-style tool-call intents
-  - each assistant tool call requires non-empty `id`, `name`, `arguments_json`
-- If `role != Tool`:
-  - `tool_call_id` must be `None`
-  - `tool_name` must be `None`
-  - if `role != Assistant`, `tool_calls` must be empty
+- `Turn` is the atomic thread-history unit and owns an ordered `Vec<Message>`.
+- `ToolCallMessage` must be immediately followed by a matching `ToolCallResultMessage`.
+- `ToolCallResultMessage` cannot appear without a preceding matching `ToolCallMessage`.
+- `Turn.append_one(ToolCallMessage)` must schedule the tool and append both call and result in one logical operation.
+- `Turn.truncate_one()` must remove a whole tool-call bundle when the tail is a tool result.
 
 Invalid states must fail as canonical `InvalidRequest`, not provider-specific errors.
 
@@ -54,10 +45,10 @@ Invalid states must fail as canonical `InvalidRequest`, not provider-specific er
 ## Contracts and Test Mapping
 
 - Contracts:
-  - `docs/contracts/ai-gateway/request-normalizer.md`
-  - `docs/contracts/ai-gateway/router.md`
-  - `docs/contracts/ai-gateway/resilience.md`
-  - `docs/contracts/ai-gateway/usage.md`
+- `docs/contracts/ai-gateway/chat-invariants.md`
+- `docs/contracts/ai-gateway/router.md`
+- `docs/contracts/ai-gateway/resilience.md`
+- `docs/contracts/ai-gateway/usage.md`
   - `docs/contracts/ai-gateway/adapters.md`
   - `docs/contracts/ai-gateway/gateway-stream.md`
 - Tests:

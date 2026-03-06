@@ -27,36 +27,35 @@ sequenceDiagram
 
     Primary->>Tools: execute each tool call
     Tools-->>Primary: tool results
-    Primary->>Primary: store continuation state (tool-role messages)
+    Primary->>Thread: append tool results within the same turn
+    Primary->>Primary: store continuation state only for cycle control
     Primary-->>Runtime: pending_primary_continuation=true
 
     Runtime->>Primary: next admitted tick cycle
-    Primary->>Thread: complete(tool-role messages + current tick user message)
+    Primary->>Thread: complete(current tick user message)
     Thread-->>Primary: assistant (next tool_calls or final text)
 ```
 
-## Failure Path (Observed 2026-03-03)
+## Context Reset Path
 
 ```mermaid
 sequenceDiagram
     participant Primary as "Cortex Primary"
-    participant Store as "AI Gateway ThreadStore"
-    participant Backend as "LLM Backend"
+    participant Thread as "Source Thread"
+    participant Chat as "AI Gateway Chat"
+    participant Clone as "Cloned Thread"
 
-    Note over Store: "max_turn_context_messages reached"
-    Primary->>Store: commit turn N success (assistant has tool_calls)
-    Store->>Store: trim_context by count
-    Note over Store: "old prefix trimmed into orphan tool messages"
-
-    Primary->>Backend: turn N+1 with full history + tool messages
-    Backend-->>Primary: 400 InvalidRequest (tool must follow assistant.tool_calls)
-    Note over Primary: "continuation replay then loops on same turn_id"
+    Primary->>Thread: find_turns(query)
+    Thread-->>Primary: selected turn ids
+    Primary->>Chat: clone_thread_with_turns(source, ordered_turn_ids)
+    Chat-->>Primary: cloned thread with deep-copied turns/messages
+    Primary->>Primary: swap active thread reference
 ```
 
 ## Post-Fix Invariants
 
-1. ThreadStore trimming removes leading orphan `tool` messages after compaction/mutation.
-2. Thread preflight validates tool-message chain before backend dispatch.
-3. Cortex Primary self-heals this error class by resetting continuation + primary thread state.
+1. Tool-call/result linkage is preserved inside a single turn.
+2. Turn append/truncate operations keep the turn structurally complete at all times.
+3. Cortex resets context by picking turns and cloning a new thread instead of mutating old thread history in place.
 
 These keep cycle-driven execution while preserving a persistent chat thread.
