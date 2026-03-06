@@ -6,6 +6,7 @@
 - [ ] descriptor 缺少 description 字段 😆
 - [ ] config.rs 过耦合了其它业务，我认为就根据 json schema 来检查就可以了 <https://gemini.google.com/u/1/app/19d2716163455423>
 - [ ] 文档模式再重构 <https://chatgpt.com/share/69a94971-bebc-800c-a38e-b243c67d0efe>
+- [ ] 让 json schema 通过 cli 生成
 
 ### Cortex
 
