@@ -4,17 +4,23 @@ use std::{
     time::{Duration, Instant},
 };
 
-use tokio::sync::Mutex;
+use tokio::{
+    sync::{Mutex, OwnedSemaphorePermit, Semaphore},
+    time::sleep,
+};
 
 use crate::ai_gateway::{
+    chat::types::TurnLimits,
     error::{GatewayError, GatewayErrorKind},
-    types::{BackendCapabilities, BackendId, ReliabilityConfig, RetryPolicy},
+    types::{BackendCapabilities, BackendId, ResilienceConfig, RetryPolicy},
 };
 
 #[derive(Clone)]
-pub struct ReliabilityLayer {
-    config: ReliabilityConfig,
+pub struct ResilienceEngine {
+    config: ResilienceConfig,
     breakers: Arc<Mutex<HashMap<BackendId, BreakerState>>>,
+    permits: Arc<Mutex<HashMap<BackendId, Arc<Semaphore>>>>,
+    token_buckets: Arc<Mutex<HashMap<BackendId, TokenBucket>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -34,16 +40,75 @@ impl Default for BreakerState {
     }
 }
 
-impl ReliabilityLayer {
-    pub fn new(config: ReliabilityConfig) -> Self {
+#[derive(Debug, Clone)]
+struct TokenBucket {
+    tokens: f64,
+    last_refill: Instant,
+}
+
+#[derive(Debug)]
+pub struct ResilienceLease {
+    pub backend_id: BackendId,
+    pub effective_timeout: Duration,
+    permit: Option<OwnedSemaphorePermit>,
+}
+
+impl ResilienceEngine {
+    pub fn new(config: ResilienceConfig) -> Self {
         Self {
             config,
             breakers: Arc::new(Mutex::new(HashMap::new())),
+            permits: Arc::new(Mutex::new(HashMap::new())),
+            token_buckets: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
-    pub fn config(&self) -> &ReliabilityConfig {
+    pub fn config(&self) -> &ResilienceConfig {
         &self.config
+    }
+
+    pub async fn pre_dispatch(
+        &self,
+        limits: &TurnLimits,
+        backend_id: &BackendId,
+    ) -> Result<ResilienceLease, GatewayError> {
+        self.acquire_rate_token(backend_id).await;
+
+        let permit = {
+            let mut guard = self.permits.lock().await;
+            let semaphore = guard
+                .entry(backend_id.clone())
+                .or_insert_with(|| {
+                    Arc::new(Semaphore::new(
+                        self.config.max_concurrency_per_backend.max(1) as usize,
+                    ))
+                })
+                .clone();
+            semaphore.acquire_owned().await.map_err(|_| {
+                GatewayError::new(
+                    GatewayErrorKind::Internal,
+                    "failed to acquire backend concurrency permit",
+                )
+                .with_retryable(false)
+                .with_backend_id(backend_id.clone())
+            })?
+        };
+
+        let effective_timeout_ms = limits
+            .max_request_time_ms
+            .map(|requested| requested.min(self.config.max_request_time_ms))
+            .unwrap_or(self.config.request_timeout_ms)
+            .max(1);
+
+        Ok(ResilienceLease {
+            backend_id: backend_id.clone(),
+            effective_timeout: Duration::from_millis(effective_timeout_ms),
+            permit: Some(permit),
+        })
+    }
+
+    pub fn release(&self, mut lease: ResilienceLease) {
+        let _ = lease.permit.take();
     }
 
     pub async fn ensure_backend_allowed(&self, backend_id: &BackendId) -> Result<(), GatewayError> {
@@ -149,5 +214,50 @@ impl ReliabilityLayer {
                 | GatewayErrorKind::Timeout
                 | GatewayErrorKind::RateLimited
         )
+    }
+
+    async fn acquire_rate_token(&self, backend_id: &BackendId) {
+        let Some(rps) = self.config.rate_smoothing_per_second else {
+            return;
+        };
+
+        if rps == 0 {
+            return;
+        }
+
+        loop {
+            let mut should_sleep = None;
+            {
+                let mut guard = self.token_buckets.lock().await;
+                let bucket = guard
+                    .entry(backend_id.clone())
+                    .or_insert_with(|| TokenBucket {
+                        tokens: rps as f64,
+                        last_refill: Instant::now(),
+                    });
+
+                let now = Instant::now();
+                let elapsed = now.duration_since(bucket.last_refill).as_secs_f64();
+                if elapsed > 0.0 {
+                    bucket.tokens = (bucket.tokens + elapsed * rps as f64).min(rps as f64);
+                    bucket.last_refill = now;
+                }
+
+                if bucket.tokens >= 1.0 {
+                    bucket.tokens -= 1.0;
+                } else {
+                    let deficit = 1.0 - bucket.tokens;
+                    let seconds = deficit / rps as f64;
+                    should_sleep = Some(Duration::from_secs_f64(seconds.max(0.005)));
+                }
+            }
+
+            if let Some(duration) = should_sleep {
+                sleep(duration).await;
+                continue;
+            }
+
+            break;
+        }
     }
 }

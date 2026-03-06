@@ -5,7 +5,6 @@ Gateway config is nested under top-level `ai_gateway`.
 ## Required Fields
 
 - `backends[]`
-- `route_aliases`
 
 Each backend profile includes:
 
@@ -19,13 +18,14 @@ Each backend profile includes:
 
 Capability fields are backend-specific toggles (for example: `tool_calls`, `parallel_tool_calls`, `json_mode`, `json_schema_mode`, `vision`, `resumable_streaming`).
 
-`route_aliases` maps an alias name to one concrete target:
+Each model exposes route aliases through `models[].aliases`:
 
-- `alias -> { backend_id, model_id }`
+- `alias -> backend_id/model_id`
 
 Convention:
 
-- alias `default` must exist.
+- alias `default` must exist on at least one model.
+- callers may also route directly with `<backend-id>/<model-id>`.
 
 ## Credential Shapes
 
@@ -35,8 +35,8 @@ Convention:
 
 ## Policy Sections
 
-- `reliability`
-- `budget`
+- `chat`
+- `resilience`
 
 Schema source:
 

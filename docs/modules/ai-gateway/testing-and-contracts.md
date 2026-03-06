@@ -11,8 +11,8 @@ Behavioral contracts:
 
 - `docs/contracts/ai-gateway/request-normalizer.md`
 - `docs/contracts/ai-gateway/router.md`
-- `docs/contracts/ai-gateway/reliability.md`
-- `docs/contracts/ai-gateway/budget.md`
+- `docs/contracts/ai-gateway/resilience.md`
+- `docs/contracts/ai-gateway/usage.md`
 - `docs/contracts/ai-gateway/adapters.md`
 - `docs/contracts/ai-gateway/gateway-stream.md`
 

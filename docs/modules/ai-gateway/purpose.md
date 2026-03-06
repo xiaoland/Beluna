@@ -6,7 +6,8 @@ It exists to:
 
 - provide one internal inference API independent of backend dialect,
 - normalize request and streaming response shapes into canonical types,
-- enforce cross-cutting backend concerns (capabilities, reliability, budget, credentials, telemetry),
+- enforce cross-cutting backend concerns (capabilities, resilience, credentials, telemetry),
+- return usage data for caller-owned budget policy,
 - isolate transport/dialect complexity inside adapters.
 
 MVP supported dialects:

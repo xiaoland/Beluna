@@ -36,13 +36,13 @@ Invalid states must fail as canonical `InvalidRequest`, not provider-specific er
 - After output/tool events, retry is disabled unless explicit resumable/idempotent behavior exists.
 - Consumer drop cancels underlying backend request/session and releases acquired resources.
 
-## Usage and Budget Detail
+## Usage and Resilience Detail
 
-- Budget pre-checks enforce timeout/concurrency/rate limits before dispatch.
-- Usage-token post-check is best-effort:
+- Resilience pre-dispatch enforces timeout/concurrency/rate limits before dispatch.
+- Usage reporting is best-effort:
   - optional usage cannot be assumed
   - late usage cannot retroactively stop current stream
-  - post-check may only update future accounting/policy signals
+  - caller owns follow-up budget/accounting policy
 
 ## Adapter-Level Constraints
 
@@ -56,8 +56,8 @@ Invalid states must fail as canonical `InvalidRequest`, not provider-specific er
 - Contracts:
   - `docs/contracts/ai-gateway/request-normalizer.md`
   - `docs/contracts/ai-gateway/router.md`
-  - `docs/contracts/ai-gateway/reliability.md`
-  - `docs/contracts/ai-gateway/budget.md`
+  - `docs/contracts/ai-gateway/resilience.md`
+  - `docs/contracts/ai-gateway/usage.md`
   - `docs/contracts/ai-gateway/adapters.md`
   - `docs/contracts/ai-gateway/gateway-stream.md`
 - Tests:
@@ -65,9 +65,9 @@ Invalid states must fail as canonical `InvalidRequest`, not provider-specific er
 
 ## Implementation References
 
-- Core: `src/ai_gateway/gateway.rs`
-- Normalization: `src/ai_gateway/request_normalizer.rs`, `src/ai_gateway/response_normalizer.rs`
-- Routing/Capabilities: `src/ai_gateway/router.rs`, `src/ai_gateway/capabilities.rs`
-- Reliability/Budget: `src/ai_gateway/reliability.rs`, `src/ai_gateway/budget.rs`
+- Core: `src/ai_gateway/chat/api_chat.rs`, `src/ai_gateway/chat/thread.rs`, `src/ai_gateway/chat/runtime.rs`
+- Message/Turn model: `src/ai_gateway/chat/message.rs`, `src/ai_gateway/chat/turn.rs`
+- Routing/Capabilities: `src/ai_gateway/router.rs`, `src/ai_gateway/chat/capabilities.rs`
+- Resilience: `src/ai_gateway/resilience.rs`
 - Credentials/Tracing Telemetry: `src/ai_gateway/credentials.rs`, `src/ai_gateway/telemetry.rs`
 - Adapters: `src/ai_gateway/adapters/*`
