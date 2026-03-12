@@ -16,19 +16,6 @@ final class ChatViewModel: ObservableObject {
     @Published private(set) var socketPath: String
     @Published private(set) var isConnectionEnabled: Bool
 
-    @Published var metricsEndpointDraft: String
-    @Published private(set) var metricsEndpoint: String
-    @Published private(set) var metricsStatusText: String = "Metrics ready"
-    @Published private(set) var metricsLastRefreshedAt: Date?
-    @Published private(set) var metricsCycleID: Double?
-    @Published private(set) var metricsActDescriptorCatalogCount: Double?
-    @Published private(set) var isMetricsRefreshing: Bool = false
-
-    @Published var logDirectoryPathDraft: String
-    @Published private(set) var logDirectoryPath: String
-    @Published private(set) var logStatusText: String = "Logs ready"
-    @Published private(set) var logLastRefreshedAt: Date?
-
     @Published var messageCapacityDraft: String
     @Published private(set) var messageCapacity: Int
     @Published private(set) var persistedSenseActMessageCount: Int = 0
@@ -44,16 +31,6 @@ final class ChatViewModel: ObservableObject {
     var canApplySocketPath: Bool {
         let normalized = Self.normalizeSocketPath(socketPathDraft)
         return !normalized.isEmpty && normalized != socketPath
-    }
-
-    var canApplyMetricsEndpoint: Bool {
-        let normalized = Self.normalizeMetricsEndpoint(metricsEndpointDraft)
-        return !normalized.isEmpty && normalized != metricsEndpoint
-    }
-
-    var canApplyLogDirectoryPath: Bool {
-        let normalized = Self.normalizeDirectoryPath(logDirectoryPathDraft)
-        return !normalized.isEmpty && normalized != logDirectoryPath
     }
 
     var canApplyMessageCapacity: Bool {
@@ -101,21 +78,6 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
-    var metricsCycleIDText: String {
-        Self.formatMetricValue(metricsCycleID)
-    }
-
-    var metricsActDescriptorCatalogCountText: String {
-        Self.formatMetricValue(metricsActDescriptorCatalogCount)
-    }
-
-    var metricsLastUpdatedLabel: String? {
-        guard let metricsLastRefreshedAt else {
-            return nil
-        }
-        return "Updated \(Self.metricsTimeFormatter.string(from: metricsLastRefreshedAt))"
-    }
-
     private let bodyEndpointClient: UnixSocketBodyEndpointClient
     private let localSenseActHistoryStore: LocalSenseActHistoryStore
     private let hibernateNoticeText = "Beluna entered Hibernate."
@@ -126,26 +88,13 @@ final class ChatViewModel: ObservableObject {
     private var handledActionIDs = Set<String>()
     private var handledActionOrder: [String] = []
 
-    private var metricsPollingTask: Task<Void, Never>?
-    private var logWatcher: LogDirectoryWatcher?
-
     private var messageBuffer: [ChatMessage] = []
     private var visibleMessageRange: Range<Int> = 0..<0
     private var persistedSenseActMessagesCache: [ChatMessage] = []
 
-    private var cortexCycleMessageIDs: [String: UUID] = [:]
-    private var pendingOrganInputs: [String: [OrganLogEvent]] = [:]
-    private var pendingOrganOutputs: [String: [OrganLogEvent]] = [:]
-    private var seenOrganEventIDs = Set<String>()
-    private var seenOrganEventOrder: [String] = []
-
     private let handledActionLimit = 256
-    private let pendingOrganEventLimitPerKey = 32
-    private let seenOrganEventLimit = 8_192
 
     private static let defaultSocketPath = "/tmp/beluna.sock"
-    private static let defaultMetricsEndpoint = "http://127.0.0.1:9464/metrics"
-    private static let defaultLogDirectoryPath = "~/logs/core"
     private static let defaultMessageCapacity = 1000
     private static let minimumMessageCapacity = 100
     private static let maximumMessageCapacity = 20_000
@@ -153,18 +102,7 @@ final class ChatViewModel: ObservableObject {
 
     private static let socketPathDefaultsKey = "beluna.apple-universal.socket_path"
     private static let autoConnectDefaultsKey = "beluna.apple-universal.auto_connect"
-    private static let metricsEndpointDefaultsKey = "beluna.apple-universal.metrics_endpoint"
-    private static let logDirectoryPathDefaultsKey = "beluna.apple-universal.log_directory_path"
     private static let messageCapacityDefaultsKey = "beluna.apple-universal.message_capacity"
-
-
-
-    private static let metricsTimeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "HH:mm:ss"
-        return formatter
-    }()
 
     init(socketPath: String? = nil) {
         let persistedSocketPath = Self.normalizeSocketPath(
@@ -177,20 +115,6 @@ final class ChatViewModel: ObservableObject {
         let persistedAutoConnect = UserDefaults.standard.object(forKey: Self.autoConnectDefaultsKey) as? Bool
         let initialAutoConnect = persistedAutoConnect ?? !AppRuntimeEnvironment.isXcodeSession
 
-        let persistedMetricsEndpoint = Self.normalizeMetricsEndpoint(
-            UserDefaults.standard.string(forKey: Self.metricsEndpointDefaultsKey)
-        )
-        let initialMetricsEndpoint = persistedMetricsEndpoint.isEmpty
-            ? Self.defaultMetricsEndpoint
-            : persistedMetricsEndpoint
-
-        let persistedLogDirectory = Self.normalizeDirectoryPath(
-            UserDefaults.standard.string(forKey: Self.logDirectoryPathDefaultsKey)
-        )
-        let initialLogDirectory = persistedLogDirectory.isEmpty
-            ? Self.normalizeDirectoryPath(Self.defaultLogDirectoryPath)
-            : persistedLogDirectory
-
         let persistedMessageCapacity = Self.normalizeMessageCapacity(
             UserDefaults.standard.object(forKey: Self.messageCapacityDefaultsKey) as? Int
         )
@@ -202,12 +126,6 @@ final class ChatViewModel: ObservableObject {
         self.socketPath = initialSocketPath
         self.socketPathDraft = initialSocketPath
         self.isConnectionEnabled = initialAutoConnect
-
-        self.metricsEndpoint = initialMetricsEndpoint
-        self.metricsEndpointDraft = initialMetricsEndpoint
-
-        self.logDirectoryPath = initialLogDirectory
-        self.logDirectoryPathDraft = initialLogDirectory
 
         self.messageCapacity = initialMessageCapacity
         self.messageCapacityDraft = String(initialMessageCapacity)
@@ -227,10 +145,6 @@ final class ChatViewModel: ObservableObject {
     }
 
     deinit {
-        metricsPollingTask?.cancel()
-        logWatcher?.stop()
-        logWatcher = nil
-
         let bodyEndpoint = bodyEndpointClient
         Task {
             await bodyEndpoint.stop()
@@ -243,8 +157,6 @@ final class ChatViewModel: ObservableObject {
         }
 
         started = true
-        startMetricsPollingIfNeeded()
-        startLogWatcher()
 
         guard isConnectionEnabled else {
             log("startup with connection disabled")
@@ -267,42 +179,6 @@ final class ChatViewModel: ObservableObject {
         appendSystemMessage("Socket path set to \(normalized)")
         log("socket path updated to \(normalized)")
         reconnectForCurrentSettings(announce: true)
-    }
-
-    func applyMetricsEndpointDraft() {
-        let normalized = Self.normalizeMetricsEndpoint(metricsEndpointDraft)
-        guard !normalized.isEmpty else {
-            metricsStatusText = "Metrics endpoint cannot be empty."
-            return
-        }
-        guard normalized != metricsEndpoint else {
-            return
-        }
-
-        metricsEndpoint = normalized
-        metricsEndpointDraft = normalized
-        persistMetricsSettings()
-
-        Task {
-            await refreshMetricsNow()
-        }
-    }
-
-    func applyLogDirectoryPathDraft() {
-        let normalized = Self.normalizeDirectoryPath(logDirectoryPathDraft)
-        guard !normalized.isEmpty else {
-            logStatusText = "Log directory cannot be empty."
-            return
-        }
-        guard normalized != logDirectoryPath else {
-            return
-        }
-
-        logDirectoryPath = normalized
-        logDirectoryPathDraft = normalized
-        resetOrganLogTracking()
-        persistLogDirectorySettings()
-        restartLogWatcher()
     }
 
     func applyMessageCapacityDraft() {
@@ -333,19 +209,12 @@ final class ChatViewModel: ObservableObject {
         handledActionOrder.removeAll(keepingCapacity: false)
         messageBuffer.removeAll(keepingCapacity: false)
         visibleMessageRange = 0..<0
-        resetOrganLogTracking()
 
         persistedSenseActMessagesCache.removeAll(keepingCapacity: false)
         persistedSenseActMessageCount = 0
         publishVisibleMessages(autoScrollToLatest: false)
 
         appendSystemMessage("Local Sense/Act history was cleared.")
-    }
-
-    func refreshMetrics() {
-        Task {
-            await refreshMetricsNow()
-        }
     }
 
     func toggleConnection() {
@@ -558,9 +427,6 @@ final class ChatViewModel: ObservableObject {
             hasEverConnected = true
             belunaState = .awake
             appendSystemMessage("Beluna is awake.")
-            Task {
-                await refreshMetricsNow()
-            }
             return
         }
 
@@ -583,164 +449,6 @@ final class ChatViewModel: ObservableObject {
         if state == .disconnected {
             belunaState = hasEverConnected ? .hibernate : .unknown
         }
-    }
-
-    private func startMetricsPollingIfNeeded() {
-        guard metricsPollingTask == nil else {
-            return
-        }
-
-        metricsPollingTask = Task { [weak self] in
-            guard let self else {
-                return
-            }
-
-            while !Task.isCancelled {
-                if self.isMetricsAutoPollingEnabled {
-                    await self.refreshMetricsNow()
-                } else {
-                    self.setMetricsPollingPausedStatus()
-                }
-                try? await Task.sleep(nanoseconds: 5_000_000_000)
-                if Task.isCancelled {
-                    break
-                }
-            }
-        }
-    }
-
-    private func startLogWatcher() {
-        guard logWatcher == nil else {
-            return
-        }
-
-        let directoryPath = logDirectoryPath
-        logWatcher = LogDirectoryWatcher(directoryPath: directoryPath) { [weak self] events, statusText in
-            Task { @MainActor [weak self] in
-                self?.handleWatcherEvents(events, statusText: statusText)
-            }
-        }
-        logWatcher?.start()
-    }
-
-    private func restartLogWatcher() {
-        logWatcher?.stop()
-        logWatcher = nil
-        startLogWatcher()
-    }
-
-    private func handleWatcherEvents(_ events: [OrganLogEvent], statusText: String) {
-        logStatusText = statusText
-        logLastRefreshedAt = Date()
-
-        for event in events {
-            guard rememberSeenOrganEvent(event.eventID) else {
-                continue
-            }
-            handleOrganLogEvent(event)
-        }
-    }
-
-    private func refreshMetricsNow() async {
-        guard !isMetricsRefreshing else {
-            return
-        }
-
-        isMetricsRefreshing = true
-        metricsStatusText = "Refreshing metrics..."
-
-        let endpoint = metricsEndpoint
-        let snapshot = await Self.loadMetricsSnapshot(endpoint: endpoint)
-        if Task.isCancelled {
-            isMetricsRefreshing = false
-            return
-        }
-
-        isMetricsRefreshing = false
-        metricsLastRefreshedAt = Date()
-        metricsStatusText = snapshot.statusText
-        metricsCycleID = snapshot.cycleID
-        metricsActDescriptorCatalogCount = snapshot.actDescriptorCatalogCount
-    }
-
-    private var isMetricsAutoPollingEnabled: Bool {
-        isConnectionEnabled && connectionState == .connected
-    }
-
-    private func setMetricsPollingPausedStatus() {
-        if metricsStatusText != "Metrics polling paused (socket disconnected)." {
-            metricsStatusText = "Metrics polling paused (socket disconnected)."
-        }
-    }
-
-    private func handleOrganLogEvent(_ event: OrganLogEvent) {
-        let key = Self.organPairKey(
-            cycleID: event.cycleID,
-            awakeSequence: event.awakeSequence,
-            stage: event.stage
-        )
-
-        switch event.kind {
-        case .input:
-            if let output = popPendingEvent(from: &pendingOrganOutputs, key: key) {
-                appendOrganActivityMessage(input: event, output: output)
-            } else {
-                appendPendingEvent(event, to: &pendingOrganInputs, key: key)
-            }
-        case .output:
-            if let input = popPendingEvent(from: &pendingOrganInputs, key: key) {
-                appendOrganActivityMessage(input: input, output: event)
-            } else {
-                appendPendingEvent(event, to: &pendingOrganOutputs, key: key)
-            }
-        }
-    }
-
-    private func appendOrganActivityMessage(input: OrganLogEvent, output: OrganLogEvent) {
-        let timestamp = output.timestamp ?? input.timestamp ?? Date()
-        let organActivityMessage = OrganActivityMessagePayload(
-            stage: input.stage,
-            inputPayload: input.payload,
-            outputPayload: output.payload,
-            timestamp: timestamp
-        )
-
-        appendCortexCycleMessage(
-            cycleID: input.cycleID,
-            awakeSequence: input.awakeSequence,
-            organActivityMessage: organActivityMessage,
-            timestamp: timestamp
-        )
-    }
-
-    private func appendCortexCycleMessage(
-        cycleID: UInt64,
-        awakeSequence: UInt64?,
-        organActivityMessage: OrganActivityMessagePayload,
-        timestamp: Date
-    ) {
-        let cycleKey = Self.cortexCycleKey(cycleID: cycleID, awakeSequence: awakeSequence)
-        if let existingMessageID = cortexCycleMessageIDs[cycleKey],
-           let existingIndex = messageBuffer.firstIndex(where: { $0.id == existingMessageID }),
-           case var .cortexCycle(existingPayload) = messageBuffer[existingIndex].body {
-            existingPayload.organActivityMessages.append(organActivityMessage)
-            messageBuffer[existingIndex].body = .cortexCycle(existingPayload)
-            messageBuffer[existingIndex].timestamp = timestamp
-            publishVisibleMessages(autoScrollToLatest: false)
-            persistLocalSenseActHistoryIfNeeded()
-            return
-        }
-
-        cortexCycleMessageIDs.removeValue(forKey: cycleKey)
-
-        let payload = CortexCycleMessagePayload(
-            cycleID: cycleID,
-            awakeSequence: awakeSequence,
-            organActivityMessages: [organActivityMessage]
-        )
-        let cycleMessage = ChatMessage(cortexCycle: payload, timestamp: timestamp)
-        cortexCycleMessageIDs[cycleKey] = cycleMessage.id
-        appendBufferedMessage(cycleMessage)
     }
 
     private func appendBufferedMessage(_ message: ChatMessage, preferredAutoScroll: Bool? = nil) {
@@ -797,9 +505,7 @@ final class ChatViewModel: ObservableObject {
         }
 
         let overflow = messageBuffer.count - messageCapacity
-        let removedMessages = Array(messageBuffer.prefix(overflow))
         messageBuffer.removeFirst(overflow)
-        forgetCortexCycleMessages(removedMessages)
 
         let shiftedLowerBound = max(0, visibleMessageRange.lowerBound - overflow)
         let shiftedUpperBound = max(shiftedLowerBound, visibleMessageRange.upperBound - overflow)
@@ -855,79 +561,6 @@ final class ChatViewModel: ObservableObject {
         visibleMessageRange.upperBound == messageBuffer.count
     }
 
-    private func appendPendingEvent(
-        _ event: OrganLogEvent,
-        to storage: inout [String: [OrganLogEvent]],
-        key: String
-    ) {
-        var queue = storage[key] ?? []
-        queue.append(event)
-        if queue.count > pendingOrganEventLimitPerKey {
-            queue.removeFirst(queue.count - pendingOrganEventLimitPerKey)
-        }
-        storage[key] = queue
-    }
-
-    private func popPendingEvent(
-        from storage: inout [String: [OrganLogEvent]],
-        key: String
-    ) -> OrganLogEvent? {
-        guard var queue = storage[key], !queue.isEmpty else {
-            return nil
-        }
-        let event = queue.removeFirst()
-        if queue.isEmpty {
-            storage.removeValue(forKey: key)
-        } else {
-            storage[key] = queue
-        }
-        return event
-    }
-
-    private func rememberSeenOrganEvent(_ eventID: String) -> Bool {
-        if seenOrganEventIDs.contains(eventID) {
-            return false
-        }
-
-        seenOrganEventIDs.insert(eventID)
-        seenOrganEventOrder.append(eventID)
-
-        if seenOrganEventOrder.count > seenOrganEventLimit {
-            let removed = seenOrganEventOrder.removeFirst()
-            seenOrganEventIDs.remove(removed)
-        }
-
-        return true
-    }
-
-    private func resetOrganLogTracking() {
-        cortexCycleMessageIDs.removeAll(keepingCapacity: false)
-        pendingOrganInputs.removeAll(keepingCapacity: false)
-        pendingOrganOutputs.removeAll(keepingCapacity: false)
-        seenOrganEventIDs.removeAll(keepingCapacity: false)
-        seenOrganEventOrder.removeAll(keepingCapacity: false)
-    }
-
-    private func forgetCortexCycleMessages(_ messages: [ChatMessage]) {
-        guard !messages.isEmpty else {
-            return
-        }
-
-        for message in messages {
-            guard case let .cortexCycle(payload) = message.body else {
-                continue
-            }
-
-            let cycleKey = Self.cortexCycleKey(
-                cycleID: payload.cycleID,
-                awakeSequence: payload.awakeSequence
-            )
-            if cortexCycleMessageIDs[cycleKey] == message.id {
-                cortexCycleMessageIDs.removeValue(forKey: cycleKey)
-            }
-        }
-    }
-
     private func restoreMessageBuffer(from restoredMessages: [ChatMessage]) {
         guard !restoredMessages.isEmpty else {
             persistedSenseActMessagesCache = []
@@ -936,8 +569,6 @@ final class ChatViewModel: ObservableObject {
         }
 
         messageBuffer = restoredMessages
-        rebuildCortexCycleMessageIndex()
-
         let end = messageBuffer.count
         let start = max(0, end - Self.messagePageSize)
         visibleMessageRange = start..<end
@@ -945,18 +576,6 @@ final class ChatViewModel: ObservableObject {
 
         persistedSenseActMessagesCache = currentPersistedSenseActMessages()
         persistedSenseActMessageCount = persistedSenseActMessagesCache.count
-    }
-
-    private func rebuildCortexCycleMessageIndex() {
-        cortexCycleMessageIDs.removeAll(keepingCapacity: false)
-
-        for message in messageBuffer {
-            guard case let .cortexCycle(payload) = message.body else {
-                continue
-            }
-            let key = Self.cortexCycleKey(cycleID: payload.cycleID, awakeSequence: payload.awakeSequence)
-            cortexCycleMessageIDs[key] = message.id
-        }
     }
 
     private func persistLocalSenseActHistoryIfNeeded() {
@@ -980,34 +599,12 @@ final class ChatViewModel: ObservableObject {
         UserDefaults.standard.set(isConnectionEnabled, forKey: Self.autoConnectDefaultsKey)
     }
 
-    private func persistMetricsSettings() {
-        UserDefaults.standard.set(metricsEndpoint, forKey: Self.metricsEndpointDefaultsKey)
-    }
-
-    private func persistLogDirectorySettings() {
-        UserDefaults.standard.set(logDirectoryPath, forKey: Self.logDirectoryPathDefaultsKey)
-    }
-
     private func persistMessageBufferSettings() {
         UserDefaults.standard.set(messageCapacity, forKey: Self.messageCapacityDefaultsKey)
     }
 
     private nonisolated static func normalizeSocketPath(_ value: String?) -> String {
         (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private nonisolated static func normalizeMetricsEndpoint(_ value: String?) -> String {
-        (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private nonisolated static func normalizeDirectoryPath(_ value: String?) -> String {
-        let trimmed = (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            return ""
-        }
-
-        let expanded = (trimmed as NSString).expandingTildeInPath
-        return URL(fileURLWithPath: expanded).standardizedFileURL.path
     }
 
     private nonisolated static func normalizeMessageCapacity(_ value: String?) -> Int? {
@@ -1083,122 +680,4 @@ final class ChatViewModel: ObservableObject {
         }
         return error.localizedDescription
     }
-
-    private nonisolated static func formatMetricValue(_ value: Double?) -> String {
-        guard let value else {
-            return "-"
-        }
-
-        if value.rounded() == value {
-            return String(Int(value))
-        }
-
-        return String(format: "%.2f", value)
-    }
-
-    private nonisolated static func loadMetricsSnapshot(endpoint: String) async -> MetricsSnapshot {
-        guard let url = URL(string: endpoint) else {
-            return MetricsSnapshot(
-                cycleID: nil,
-                actDescriptorCatalogCount: nil,
-                statusText: "Invalid metrics endpoint URL: \(endpoint)"
-            )
-        }
-        guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
-            return MetricsSnapshot(
-                cycleID: nil,
-                actDescriptorCatalogCount: nil,
-                statusText: "Metrics endpoint must start with http:// or https://."
-            )
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.timeoutInterval = 5
-
-        do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-            guard (200..<300).contains(statusCode) else {
-                return MetricsSnapshot(
-                    cycleID: nil,
-                    actDescriptorCatalogCount: nil,
-                    statusText: "Metrics endpoint returned HTTP \(statusCode)."
-                )
-            }
-
-            let body = String(decoding: data, as: UTF8.self)
-            let cycleID = parsePrometheusGauge(named: "beluna_cortex_cycle_id", in: body)
-            let catalogCount = parsePrometheusGauge(
-                named: "beluna_cortex_input_ir_act_descriptor_catalog_count",
-                in: body
-            )
-
-            let status: String
-            if cycleID == nil && catalogCount == nil {
-                status = "Metrics fetched, but target gauges were not found."
-            } else {
-                status = "Metrics loaded from \(endpoint)."
-            }
-
-            return MetricsSnapshot(
-                cycleID: cycleID,
-                actDescriptorCatalogCount: catalogCount,
-                statusText: status
-            )
-        } catch {
-            return MetricsSnapshot(
-                cycleID: nil,
-                actDescriptorCatalogCount: nil,
-                statusText: "Failed to fetch metrics: \(error.localizedDescription)"
-            )
-        }
-    }
-
-    private nonisolated static func parsePrometheusGauge(
-        named metricName: String,
-        in payload: String
-    ) -> Double? {
-        var latestValue: Double?
-        for rawLine in payload.split(whereSeparator: \.isNewline) {
-            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
-            if line.isEmpty || line.hasPrefix("#") || !line.hasPrefix(metricName) {
-                continue
-            }
-
-            let valueText: Substring
-            if let closeBrace = line.firstIndex(of: "}") {
-                valueText = line[line.index(after: closeBrace)...]
-            } else {
-                valueText = line.dropFirst(metricName.count)
-            }
-
-            let parts = valueText.split(whereSeparator: \.isWhitespace)
-            guard let valueLiteral = parts.first, let value = Double(valueLiteral) else {
-                continue
-            }
-            latestValue = value
-        }
-        return latestValue
-    }
-
-    private nonisolated static func organPairKey(
-        cycleID: UInt64,
-        awakeSequence: UInt64?,
-        stage: String
-    ) -> String {
-        "\(awakeSequence.map(String.init) ?? "unknown")|\(cycleID)|\(stage)"
-    }
-
-    private nonisolated static func cortexCycleKey(cycleID: UInt64, awakeSequence: UInt64?) -> String {
-        "\(awakeSequence.map(String.init) ?? "unknown")|\(cycleID)"
-    }
 }
-
-private struct MetricsSnapshot: Sendable {
-    let cycleID: Double?
-    let actDescriptorCatalogCount: Double?
-    let statusText: String
-}
-
-

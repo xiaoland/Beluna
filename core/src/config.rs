@@ -20,6 +20,8 @@ pub struct Config {
     #[serde(default)]
     pub logging: LoggingConfig,
     #[serde(default)]
+    pub observability: ObservabilityConfig,
+    #[serde(default)]
     pub cortex: CortexRuntimeConfig,
     #[serde(default)]
     pub continuity: ContinuityRuntimeConfig,
@@ -71,6 +73,22 @@ fn default_logging_retention_days() -> usize {
     14
 }
 
+fn default_observability_otlp_endpoint() -> String {
+    "http://127.0.0.1:4318".to_string()
+}
+
+fn default_observability_export_timeout_ms() -> u64 {
+    5_000
+}
+
+fn default_observability_metrics_export_interval_ms() -> u64 {
+    5_000
+}
+
+fn default_observability_logs_export_interval_ms() -> u64 {
+    2_000
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LoggingConfig {
     #[serde(default = "default_logging_dir")]
@@ -90,6 +108,46 @@ impl Default for LoggingConfig {
             filter: default_logging_filter(),
             retention_days: default_logging_retention_days(),
             stderr_warn_enabled: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ObservabilityConfig {
+    #[serde(default)]
+    pub otlp: OtlpConfig,
+}
+
+impl Default for ObservabilityConfig {
+    fn default() -> Self {
+        Self {
+            otlp: OtlpConfig::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OtlpConfig {
+    #[serde(default = "default_enabled_true")]
+    pub enabled: bool,
+    #[serde(default = "default_observability_otlp_endpoint")]
+    pub endpoint: String,
+    #[serde(default = "default_observability_export_timeout_ms")]
+    pub export_timeout_ms: u64,
+    #[serde(default = "default_observability_metrics_export_interval_ms")]
+    pub metrics_export_interval_ms: u64,
+    #[serde(default = "default_observability_logs_export_interval_ms")]
+    pub logs_export_interval_ms: u64,
+}
+
+impl Default for OtlpConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            endpoint: default_observability_otlp_endpoint(),
+            export_timeout_ms: default_observability_export_timeout_ms(),
+            metrics_export_interval_ms: default_observability_metrics_export_interval_ms(),
+            logs_export_interval_ms: default_observability_logs_export_interval_ms(),
         }
     }
 }
@@ -402,7 +460,7 @@ mod tests {
 
     use uuid::Uuid;
 
-    use super::{Config, LoggingConfig};
+    use super::{Config, LoggingConfig, ObservabilityConfig};
 
     #[test]
     fn logging_config_defaults_match_contract() {
@@ -411,6 +469,16 @@ mod tests {
         assert_eq!(config.filter, "info");
         assert_eq!(config.retention_days, 14);
         assert!(config.stderr_warn_enabled);
+    }
+
+    #[test]
+    fn observability_config_defaults_match_contract() {
+        let config = ObservabilityConfig::default();
+        assert!(config.otlp.enabled);
+        assert_eq!(config.otlp.endpoint, "http://127.0.0.1:4318");
+        assert_eq!(config.otlp.export_timeout_ms, 5_000);
+        assert_eq!(config.otlp.metrics_export_interval_ms, 5_000);
+        assert_eq!(config.otlp.logs_export_interval_ms, 2_000);
     }
 
     #[test]

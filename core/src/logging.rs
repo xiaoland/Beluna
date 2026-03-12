@@ -10,7 +10,8 @@ use time::{OffsetDateTime, UtcOffset};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_error::ErrorLayer;
 use tracing_subscriber::{
-    EnvFilter, Layer, filter::LevelFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt,
+    EnvFilter, Layer, Registry, filter::LevelFilter, fmt, layer::SubscriberExt,
+    util::SubscriberInitExt,
 };
 use uuid::Uuid;
 
@@ -30,7 +31,10 @@ impl LoggingGuard {
     }
 }
 
-pub fn init_tracing(logging_config: &LoggingConfig) -> Result<LoggingGuard> {
+pub fn init_tracing(
+    logging_config: &LoggingConfig,
+    otlp_log_layer: Option<Box<dyn Layer<Registry> + Send + Sync>>,
+) -> Result<LoggingGuard> {
     if logging_config.filter.trim().is_empty() {
         return Err(anyhow!("logging.filter cannot be empty"));
     }
@@ -67,6 +71,7 @@ pub fn init_tracing(logging_config: &LoggingConfig) -> Result<LoggingGuard> {
     });
 
     tracing_subscriber::registry()
+        .with(otlp_log_layer)
         .with(ErrorLayer::default())
         .with(file_layer)
         .with(stderr_layer)

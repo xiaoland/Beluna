@@ -777,6 +777,9 @@ impl Cortex {
         let deadline = Duration::from_millis(self.limits.max_cycle_time_ms.max(1));
         let sense_descriptors = helpers::sense_descriptors(&physical_state.ns_descriptor.entries);
         let act_descriptors = helpers::act_descriptors(&physical_state.ns_descriptor.entries);
+        observability_metrics::record_cortex_input_ir_act_descriptor_catalog_count(
+            act_descriptors.len(),
+        );
 
         let senses_owned = senses.to_vec();
         let sense_tool_context =

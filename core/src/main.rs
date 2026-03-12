@@ -18,7 +18,7 @@ use beluna::{
     continuity::ContinuityEngine,
     cortex::{Cortex, CortexDeps, CortexRuntime, PhysicalStateReadPort},
     logging::init_tracing,
-    observability::metrics::{MetricsRuntime, start_prometheus_exporter},
+    observability::otel::OpenTelemetryRuntime,
     spine::{Spine, shutdown_global_spine},
     stem::{
         AfferentControlHandle, AfferentRuleControlPort, SenseAfferentPathway, StemControlPort,
@@ -134,27 +134,19 @@ async fn main() -> Result<()> {
     let config_path = config_path_from_args()?;
     let config = Config::load(&config_path)
         .with_context(|| format!("failed to load config from {}", config_path.display()))?;
-    let _logging_guard =
-        init_tracing(&config.logging).context("failed to initialize tracing logging")?;
-    let _metrics_runtime = match start_prometheus_exporter(MetricsRuntime::default_listen_addr()) {
-        Ok(runtime) => {
-            tracing::info!(
-                target: "observability",
-                listen_addr = %runtime.listen_addr,
-                "prometheus_metrics_exporter_started"
-            );
-            Some(runtime)
-        }
-        Err(err) => {
-            tracing::warn!(
-                target: "observability",
-                listen_addr = %MetricsRuntime::default_listen_addr(),
-                error = %err,
-                "prometheus_metrics_exporter_disabled"
-            );
-            None
-        }
-    };
+    let observability_runtime = OpenTelemetryRuntime::init(&config.observability)
+        .context("failed to initialize OpenTelemetry runtime")?;
+    let _logging_guard = init_tracing(&config.logging, observability_runtime.log_layer())
+        .context("failed to initialize tracing logging")?;
+    if let Some(endpoint) = observability_runtime.endpoint() {
+        tracing::info!(
+            target: "observability",
+            endpoint = endpoint,
+            "opentelemetry_otlp_started"
+        );
+    } else {
+        tracing::info!(target: "observability", "opentelemetry_otlp_disabled");
+    }
     let _run_span = tracing::info_span!("core_run", run_id = %_logging_guard.run_id()).entered();
     tracing::info!(
         target: "core",
@@ -305,5 +297,8 @@ async fn main() -> Result<()> {
         signal_name = signal_name,
         "core_runtime_stopped"
     );
+    if let Err(err) = observability_runtime.shutdown() {
+        eprintln!("WARN observability: opentelemetry_otlp_shutdown_failed error={err}");
+    }
     Ok(())
 }

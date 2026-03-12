@@ -6,7 +6,7 @@ SwiftUI-based Beluna Body Endpoint for Apple platforms (currently focused on mac
 
 1. Connects to Beluna Core via Unix socket (`/tmp/beluna.sock` by default).
 2. Uses POSIX socket I/O with reconnect/backoff and manual retry support.
-3. Persists connection settings (socket path, auto-connect), observability settings, and message capacity in `UserDefaults`.
+3. Persists connection settings (socket path, auto-connect) and message capacity in `UserDefaults`.
 4. Uses endpoint IDs aligned with Apple body endpoint identity:
 - `apple.universal` (family)
 - `macos.app` (macOS runtime)
@@ -24,9 +24,7 @@ SwiftUI-based Beluna Body Endpoint for Apple platforms (currently focused on mac
 10. Persists local Sense/Act history to disk and restores it after app restart.
 11. Exposes "Clear Local History" in `SettingView`.
 12. Keeps a bounded in-memory ring buffer with incremental pagination for visible messages.
-13. Polls Core Prometheus metrics (5s when connected + manual refresh).
-14. Polls Core logs (3s), pairs `cortex_organ_input` and `cortex_organ_output`, and renders cycle cards.
-15. Supports configurable metrics endpoint and log directory.
+13. Keeps app-side observability removed; Core observability is handled in Core itself.
 
 ## Run
 
@@ -43,5 +41,7 @@ xcodebuild \
   -scheme BelunaApp \
   -configuration Debug \
   -destination 'platform=macOS' \
+  CODE_SIGNING_ALLOWED=NO \
+  CODE_SIGNING_REQUIRED=NO \
   build
 ```

@@ -6,7 +6,7 @@ Beluna Core runtime topology (current implementation).
 
 ```text
 main()
-  ├─ load config + init tracing + metrics exporter
+  ├─ load config + init OpenTelemetry + init tracing
   ├─ build Stem-owned afferent pathway handles
   ├─ build Stem physical-state store (StemControlPort)
   ├─ build Spine runtime (wired with afferent ingress + StemControlPort)

@@ -38,78 +38,48 @@ struct ChatView: View {
     }
 
     private var header: some View {
-        VStack(spacing: 10) {
-            HStack(alignment: .center, spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Beluna")
-                        .font(.title3.bold())
-                    Text("Apple Universal Body Endpoint")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                HStack(spacing: 8) {
-                    statusPill(
-                        title: "Connection",
-                        value: viewModel.connectionState.rawValue,
-                        tint: viewModel.connectionState.tint
-                    )
-                    statusPill(
-                        title: "Beluna",
-                        value: viewModel.belunaState.rawValue,
-                        tint: viewModel.belunaState.tint
-                    )
-                }
-
-                Button(viewModel.connectButtonTitle) {
-                    viewModel.toggleConnection()
-                }
-                .buttonStyle(.borderedProminent)
-
-                Button("Retry") {
-                    viewModel.retryConnection()
-                }
-                .buttonStyle(.bordered)
-                .disabled(!viewModel.canRetry)
-
-                Button {
-                    openSettings()
-                } label: {
-                    Image(systemName: "gearshape")
-                }
-                .buttonStyle(.bordered)
-                .help("Open Settings")
-            }
-
-            HStack(spacing: 8) {
-                metricPill(title: "Cycle", value: viewModel.metricsCycleIDText)
-                metricPill(title: "Act Catalog", value: viewModel.metricsActDescriptorCatalogCountText)
-
-                if let lastUpdated = viewModel.metricsLastUpdatedLabel {
-                    Text(lastUpdated)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer(minLength: 8)
-
-                Text(viewModel.metricsStatusText)
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Beluna")
+                    .font(.title3.bold())
+                Text("Apple Universal Body Endpoint")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-
-                Button {
-                    viewModel.refreshMetrics()
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .buttonStyle(.bordered)
-                .disabled(viewModel.isMetricsRefreshing)
-                .help("Refresh Metrics")
             }
+
+            Spacer()
+
+            HStack(spacing: 8) {
+                statusPill(
+                    title: "Connection",
+                    value: viewModel.connectionState.rawValue,
+                    tint: viewModel.connectionState.tint
+                )
+                statusPill(
+                    title: "Beluna",
+                    value: viewModel.belunaState.rawValue,
+                    tint: viewModel.belunaState.tint
+                )
+            }
+
+            Button(viewModel.connectButtonTitle) {
+                viewModel.toggleConnection()
+            }
+            .buttonStyle(.borderedProminent)
+
+            Button("Retry") {
+                viewModel.retryConnection()
+            }
+            .buttonStyle(.bordered)
+            .disabled(!viewModel.canRetry)
+
+            Button {
+                openSettings()
+            } label: {
+                Image(systemName: "gearshape")
+            }
+            .buttonStyle(.bordered)
+            .help("Open Settings")
         }
         .padding(12)
         .background(Color(NSColor.windowBackgroundColor))
@@ -185,20 +155,6 @@ struct ChatView: View {
         .background(.regularMaterial, in: Capsule())
     }
 
-    private func metricPill(title: String, value: String) -> some View {
-        HStack(spacing: 6) {
-            Text(title)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.caption.monospaced().weight(.semibold))
-                .foregroundStyle(.primary)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(Color.primary.opacity(0.06), in: Capsule())
-    }
-
     private func paginationHint(_ text: String) -> some View {
         HStack {
             Spacer()
@@ -217,18 +173,11 @@ private struct MessageRow: View {
     let message: ChatMessage
 
     var body: some View {
-        switch message.body {
-        case let .cortexCycle(payload):
-            CortexCycleMessageView(message: message, payload: payload)
-        case .text:
-            switch message.role {
-            case .system, .debug:
-                CenterNoticeBubble(message: message)
-            case .user, .assistant:
-                MessageBubble(message: message)
-            case .organActivity:
-                CenterNoticeBubble(message: message)
-            }
+        switch message.role {
+        case .system, .debug:
+            CenterNoticeBubble(message: message)
+        case .user, .assistant:
+            MessageBubble(message: message)
         }
     }
 }
@@ -257,7 +206,7 @@ private struct CenterNoticeBubble: View {
             return Color.orange.opacity(0.18)
         case .debug:
             return Color.gray.opacity(0.2)
-        case .user, .assistant, .organActivity:
+        case .user, .assistant:
             return .clear
         }
     }
@@ -306,8 +255,6 @@ private struct MessageBubble: View {
             return "System"
         case .debug:
             return "Debug"
-        case .organActivity:
-            return "Organ Activity"
         }
     }
 
@@ -321,8 +268,6 @@ private struct MessageBubble: View {
             return Color.orange.opacity(0.18)
         case .debug:
             return Color.gray.opacity(0.2)
-        case .organActivity:
-            return Color.primary.opacity(0.1)
         }
     }
 
@@ -330,7 +275,7 @@ private struct MessageBubble: View {
         switch message.role {
         case .user:
             return .white
-        case .assistant, .system, .organActivity:
+        case .assistant, .system:
             return .primary
         case .debug:
             return .secondary

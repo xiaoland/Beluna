@@ -10,7 +10,7 @@ Beluna Apple Universal App is the app that bridges human interaction with Beluna
 
 ## Current Focus
 
-- Harden desktop endpoint UX and in-chat observability for Beluna Core integration.
+- Harden desktop endpoint UX and connection lifecycle reliability for Beluna Core integration.
 
 ## Boundary and Quality Rules
 
@@ -27,22 +27,18 @@ Beluna Apple Universal App is the app that bridges human interaction with Beluna
 
 ## Current State
 
-> Last Updated At: 2026-03-02T17:40+08:00
+> Last Updated At: 2026-03-12T17:10+08:00
 
 ### Live Capabilities
 
 - SwiftUI desktop chat endpoint connects to Core via Unix Socket NDJSON (`UnixSocketBodyEndpointClient`).
 - Connection controls are exposed in `SettingView` (socket path, connect/disconnect, retry).
-- Observability controls are exposed in `SettingView` (metrics endpoint + log directory).
 - Chat history controls are exposed in `SettingView` (message buffer capacity + local Sense/Act history clearing).
 - Connection intent and socket path are persisted via `UserDefaults`.
 - Local Sense/Act chat traffic is persisted to disk and restored on app relaunch.
 - App enforces single-instance runtime lock on macOS.
 - Xcode debug sessions default to manual connect.
 - Socket path is configured directly from `SettingView` and applied immediately on reconnect.
-- Metrics are rendered in Chat header (`cortex_cycle_id`, `input_ir_act_descriptor_catalog_count`), auto-refreshed every 5s only when socket-connected, with manual refresh.
-- Core log watching uses `DispatchSource` file system object sources to monitor the log directory and active log files, delivering organ log events incrementally as files are written. On initial watch, reads the last 512KB of the latest 2 files. Falls back to a 5-second retry timer when the directory does not yet exist. Parses log file awake sequence (`core.log.<YYYY-MM-DD>.<n>`), and pairs `cortex_organ_input` + `cortex_organ_output` into awake-aware cycle-level cortex cycle cards in Chat view.
-- Clicking a cortex cycle card opens a popup that lists per-stage organ activity messages with selectable input/output payload text.
 - Chat view keeps a bounded in-memory message ring buffer and incrementally loads older/newer pages on scroll.
 - Beluna lifecycle state uses `Hibernate` (instead of `Sleeping`) when Core is unavailable after connection history exists.
 - Auth `ns_descriptors` follow Apple endpoint identity and semantic IDs:
@@ -55,12 +51,11 @@ Beluna Apple Universal App is the app that bridges human interaction with Beluna
 
 ### Known Limitations & Mocks
 
-- Organ-log pairing relies on `(awake_sequence, cycle_id, stage)` FIFO and may skip unmatched events when source files rotate aggressively.
-- No in-chat filter/search for cortex cycle cards yet.
+- In-chat observability surfaces are intentionally removed from Apple Universal; runtime metrics/logs are handled by Core-side observability.
 - Local history persistence currently focuses on Sense/Act traffic only; runtime system/debug notices are intentionally not replayed.
-- Protocol/lifecycle tests should be expanded for metrics and organ-log polling flows.
+- Protocol/lifecycle tests should be expanded for reconnect edge cases and large-history pagination.
 
 ### Immediate Next Focus
 
-- Add test coverage for metrics polling and organ-log file-system watching behavior.
-- Add in-chat filtering/search for cortex cycle cards and large-payload truncation controls.
+- Add test coverage for connection lifecycle and pagination behaviors.
+- Improve in-chat filtering/search for large local Sense/Act history.

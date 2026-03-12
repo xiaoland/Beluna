@@ -41,7 +41,7 @@ Beluna Core is the runnable runtime and domain agent implementation.
 
 ## Current State
 
-> Last Updated At: 2026-03-02T18:05+08:00
+> Last Updated At: 2026-03-12T17:10+08:00
 
 ### Live Capabilities
 
@@ -50,7 +50,8 @@ Beluna Core is the runnable runtime and domain agent implementation.
 - Runtime uses one bounded Rust MPSC sense queue with native sender backpressure.
 - `main` boots continuity/spine/cortex, starts Stem tick runtime and Cortex runtime on separate tasks, and listens for SIGTERM/SIGINT.
 - Shutdown closes ingress gate and cancels runtime tasks (no `hibernate` control sense).
-- Runtime logging is `tracing`-only: JSON file logs named `core.log.<YYYY-MM-DD>.<awake_sequence>` with retention cleanup and optional stderr warn/error mirroring via `logging.*` config.
+- Runtime logging is `tracing`-only with dual sinks: JSON file logs named `core.log.<YYYY-MM-DD>.<awake_sequence>` (retention cleanup + optional stderr warn/error via `logging.*`) and OTLP log export via `observability.otlp.*`.
+- Runtime metrics use OpenTelemetry OTLP export via `observability.otlp.*`; Prometheus pull endpoint is removed.
 - Stem is tick-driven (`loop.tick_interval_ms`, default 10s) and only emits tick grants.
 - Cortex owns cycle execution (hybrid tick + sense trigger) and consumes the afferent receive handle in its own runtime task.
 - Cortex Primary persists cognition state through Continuity directly from cognition tools.

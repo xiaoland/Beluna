@@ -5,8 +5,7 @@ This module defines Core runtime observability conventions and cross-module tele
 ## Logging Baseline
 
 - Runtime logging is `tracing`-only.
-- No `eprintln!` fallback in runtime path.
-- No `TelemetrySink` abstraction.
+- Runtime logs are emitted through tracing layers; a final process-tail OTLP shutdown failure uses one stderr fallback after tracing teardown.
 - `BELUNA_DEBUG_AI_GATEWAY` is removed; log verbosity is controlled by `logging.filter`.
 
 ## Logging Pipeline
@@ -22,8 +21,27 @@ Core initializes tracing at startup (`core/src/logging.rs`) with:
 3. stderr mirror layer:
    - enabled by `logging.stderr_warn_enabled`
    - only `warn/error` for operator visibility
+4. OpenTelemetry log bridge layer:
+   - forwards `tracing` events to OTLP/HTTP protobuf (`/v1/logs`)
+   - configured by `observability.otlp.*`
 
-Initialization is fail-fast for invalid filter or unusable log directory.
+## Metrics Pipeline
+
+- Core uses OpenTelemetry metrics export (OTLP/HTTP protobuf, `/v1/metrics`).
+- No Prometheus pull endpoint is exposed by Core.
+- Current key gauges:
+  - `beluna_cortex_cycle_id`
+  - `beluna_cortex_input_ir_act_descriptor_catalog_count`
+
+## Runtime Config Contract
+
+- `logging.*` controls local file/stderr behavior.
+- `observability.otlp.*` controls OTLP export:
+  - `enabled`
+  - `endpoint`
+  - `export_timeout_ms`
+  - `metrics_export_interval_ms`
+  - `logs_export_interval_ms`
 
 ## Context Propagation
 
@@ -40,14 +58,6 @@ Initialization is fail-fast for invalid filter or unusable log directory.
   - gateway lifecycle events
   - adapter dispatch logs
   - ai-gateway `llm_input`/`llm_output` logs
-
-## Metrics Pull Endpoint
-
-- Core exposes a Prometheus pull endpoint on `127.0.0.1:9464`.
-- Scrape path: `/metrics`.
-- Initial gauges:
-  - `beluna_cortex_cycle_id`
-  - `beluna_cortex_input_ir_act_descriptor_catalog_count`
 
 ## AI Gateway Telemetry Shape
 
@@ -70,15 +80,3 @@ Initialization is fail-fast for invalid filter or unusable log directory.
   - `output_ir_acts`
   - `final_returned_acts`
 - Cortex does not log `llm_input` / `llm_output`; those are emitted by AI Gateway.
-
-## Recommended Filter Profiles
-
-- Default: `info`
-- Troubleshooting Gateway + Cortex:
-  - `info,ai_gateway=debug,ai_gateway.openai_compatible=debug,ai_gateway.ollama=debug,ai_gateway.github_copilot=debug,cortex=debug`
-
-## Next Enhancements
-
-- Add OpenTelemetry exporter (optional) while keeping file logs as baseline.
-- Add span latency histograms (per stage and per backend).
-- Add redaction helpers for sensitive prompt/credential fields in debug mode.

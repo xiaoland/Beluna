@@ -275,6 +275,37 @@
       },
       "additionalProperties": false
     },
+    "observability": {
+      "type": "object",
+      "properties": {
+        "otlp": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "endpoint": {
+              "type": "string",
+              "minLength": 1
+            },
+            "export_timeout_ms": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "metrics_export_interval_ms": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "logs_export_interval_ms": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "cortex": {
       "type": "object",
       "properties": {
