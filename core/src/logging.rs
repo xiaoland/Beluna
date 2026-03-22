@@ -36,13 +36,6 @@ pub fn init_tracing(
     otlp_log_layer: Option<Box<dyn Layer<Registry> + Send + Sync>>,
     otlp_trace_layer: Option<Box<dyn Layer<Registry> + Send + Sync>>,
 ) -> Result<LoggingGuard> {
-    if logging_config.filter.trim().is_empty() {
-        return Err(anyhow!("logging.filter cannot be empty"));
-    }
-    if logging_config.dir.as_os_str().is_empty() {
-        return Err(anyhow!("logging.dir cannot be empty"));
-    }
-
     let log_dir = resolve_log_dir(&logging_config.dir)?;
     fs::create_dir_all(&log_dir)
         .with_context(|| format!("failed to create logging directory {}", log_dir.display()))?;

@@ -80,8 +80,12 @@ impl Message {
             ChatRole::Tool => vec![Message::ToolCallResult(ToolCallResultMessage {
                 id: message_id,
                 created_at_ms: now_ms,
-                call_id: message.tool_call_id.unwrap_or_else(|| "unknown-call".to_string()),
-                name: message.tool_name.unwrap_or_else(|| "unknown-tool".to_string()),
+                call_id: message
+                    .tool_call_id
+                    .unwrap_or_else(|| "unknown-call".to_string()),
+                name: message
+                    .tool_name
+                    .unwrap_or_else(|| "unknown-tool".to_string()),
                 payload: tool_payload_from_parts(message.parts),
             })],
         }

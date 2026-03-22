@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use validator::Validate;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ShellExecRequest {
@@ -17,13 +19,20 @@ pub struct ShellExecRequest {
     pub stderr_max_bytes: Option<usize>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct ShellLimits {
+    #[validate(range(min = 1))]
     pub default_timeout_ms: u64,
+    #[validate(range(min = 1))]
     pub max_timeout_ms: u64,
+    #[validate(range(min = 1))]
     pub default_stdout_max_bytes: usize,
+    #[validate(range(min = 1))]
     pub max_stdout_max_bytes: usize,
+    #[validate(range(min = 1))]
     pub default_stderr_max_bytes: usize,
+    #[validate(range(min = 1))]
     pub max_stderr_max_bytes: usize,
 }
 
@@ -75,11 +84,16 @@ pub struct WebFetchRequest {
     pub response_max_bytes: Option<usize>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct WebLimits {
+    #[validate(range(min = 1))]
     pub default_timeout_ms: u64,
+    #[validate(range(min = 1))]
     pub max_timeout_ms: u64,
+    #[validate(range(min = 1))]
     pub default_response_max_bytes: usize,
+    #[validate(range(min = 1))]
     pub max_response_max_bytes: usize,
 }
 

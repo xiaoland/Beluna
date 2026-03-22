@@ -56,7 +56,9 @@ fn instruments() -> &'static MetricsInstruments {
                 .build(),
             chat_task_latency_ms: meter
                 .f64_gauge(CHAT_TASK_LATENCY_MS_METRIC)
-                .with_description("Latest latency observed for chat tasks by task type/backend/model.")
+                .with_description(
+                    "Latest latency observed for chat tasks by task type/backend/model.",
+                )
                 .with_unit("ms")
                 .build(),
             chat_task_failures_total: meter

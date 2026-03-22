@@ -45,7 +45,8 @@ impl Turn {
                     )
                     .with_retryable(false));
                 };
-                self.messages.push(Message::ToolCall(tool_call_message.clone()));
+                self.messages
+                    .push(Message::ToolCall(tool_call_message.clone()));
                 let (result, call_reset_messages_applied) =
                     scheduler.execute_tool_call(&tool_call_message).await;
                 self.messages.push(result);

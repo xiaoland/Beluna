@@ -88,11 +88,17 @@ async fn clone_thread_with_turns_reorders_turns_and_reindexes_ids() {
     assert_eq!(turns[0].turn_id(), 1);
     assert_eq!(turns[1].turn_id(), 2);
     assert_eq!(
-        turns[0].metadata().get("source_turn_id").map(String::as_str),
+        turns[0]
+            .metadata()
+            .get("source_turn_id")
+            .map(String::as_str),
         Some("2")
     );
     assert_eq!(
-        turns[1].metadata().get("source_turn_id").map(String::as_str),
+        turns[1]
+            .metadata()
+            .get("source_turn_id")
+            .map(String::as_str),
         Some("1")
     );
 

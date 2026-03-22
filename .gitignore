@@ -18,6 +18,7 @@ __pycache__/
 /rust/target/
 /target/
 /core/target/
+/core/beluna.schema.json
 
 # IDE
 .codex/

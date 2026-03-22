@@ -21,7 +21,10 @@ use crate::{
     observability::metrics as observability_metrics,
 };
 
-use super::{capabilities::CapabilityGuard, types::{TurnPayload, TurnResponse}};
+use super::{
+    capabilities::CapabilityGuard,
+    types::{TurnPayload, TurnResponse},
+};
 
 pub(crate) struct ChatRuntime {
     pub router: BackendRouter,
@@ -98,7 +101,9 @@ impl ChatRuntime {
                     .as_ref()
                     .map(|item| item.effective_timeout)
                     .unwrap_or_else(|| {
-                        std::time::Duration::from_millis(self.resilience.config().request_timeout_ms)
+                        std::time::Duration::from_millis(
+                            self.resilience.config().request_timeout_ms,
+                        )
                     }),
                 request_id: request_id.clone(),
             };

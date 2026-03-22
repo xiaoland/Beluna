@@ -13,8 +13,8 @@ use tracing::Instrument;
 use beluna::{
     ai_gateway::{chat::Chat, credentials::EnvCredentialProvider},
     body::start_inline_body_endpoints,
-    cli::config_path_from_args,
-    config::{Config, TickMissedBehavior},
+    cli::{CliCommand, command_from_args},
+    config::{Config, TickMissedBehavior, generate_schema_json_pretty, write_schema_to_path},
     continuity::ContinuityEngine,
     cortex::{Cortex, CortexDeps, CortexRuntime, PhysicalStateReadPort},
     logging::init_tracing,
@@ -131,7 +131,13 @@ fn collect_network_summary() -> String {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let config_path = config_path_from_args()?;
+    let config_path = match command_from_args()? {
+        CliCommand::Run { config_path } => config_path,
+        CliCommand::ConfigSchema { output } => {
+            handle_schema_command(output)?;
+            return Ok(());
+        }
+    };
     let config = Config::load(&config_path)
         .with_context(|| format!("failed to load config from {}", config_path.display()))?;
     let observability_runtime = OpenTelemetryRuntime::init(&config.observability)
@@ -207,7 +213,7 @@ async fn main() -> Result<()> {
     let afferent_rule_control: Arc<dyn AfferentRuleControlPort> =
         Arc::new(afferent_control.clone());
     let (efferent_producer, efferent_rx) =
-        new_efferent_pathway(Some(config.cortex.outbox_capacity.max(1)));
+        new_efferent_pathway(Some(config.cortex.outbox_capacity));
 
     let cortex = Arc::new(Cortex::from_config(
         &config.cortex,
@@ -219,7 +225,7 @@ async fn main() -> Result<()> {
         Some(efferent_producer.clone()),
     ));
 
-    let (tick_grant_tx, tick_grant_rx) = mpsc::channel(config.cortex.inbox_capacity.max(1));
+    let (tick_grant_tx, tick_grant_rx) = mpsc::channel(config.cortex.inbox_capacity);
 
     let app_context = AppContext {
         lifecycle,
@@ -250,7 +256,7 @@ async fn main() -> Result<()> {
         spine_runtime,
         stem_control,
         app_context.shutdown.child_token(),
-        Duration::from_millis(config.r#loop.efferent_shutdown_drain_timeout_ms.max(1)),
+        Duration::from_millis(config.r#loop.efferent_shutdown_drain_timeout_ms),
     );
 
     let cortex_runtime = CortexRuntime::new(
@@ -309,4 +315,19 @@ async fn main() -> Result<()> {
         eprintln!("WARN observability: opentelemetry_otlp_shutdown_failed error={err}");
     }
     Ok(())
+}
+
+fn handle_schema_command(output: Option<std::path::PathBuf>) -> Result<()> {
+    match output {
+        Some(path) => {
+            write_schema_to_path(&path)?;
+            println!("generated config schema at {}", path.display());
+            Ok(())
+        }
+        None => {
+            let schema = generate_schema_json_pretty()?;
+            print!("{schema}");
+            Ok(())
+        }
+    }
 }

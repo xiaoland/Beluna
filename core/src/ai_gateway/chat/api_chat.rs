@@ -99,9 +99,9 @@ impl Chat {
             source_backend
         };
 
-        let thread_id = opts
-            .thread_id
-            .unwrap_or_else(|| format!("thread-{}", self.thread_seq.fetch_add(1, Ordering::Relaxed)));
+        let thread_id = opts.thread_id.unwrap_or_else(|| {
+            format!("thread-{}", self.thread_seq.fetch_add(1, Ordering::Relaxed))
+        });
         let next_turn_id = selected_turns.len() as u64 + 1;
 
         let state = ThreadState {
@@ -122,10 +122,7 @@ impl Chat {
             Arc::clone(&self.runtime),
             state,
         );
-        self.threads
-            .write()
-            .await
-            .insert(thread_id, thread.clone());
+        self.threads.write().await.insert(thread_id, thread.clone());
         Ok(thread)
     }
 
@@ -178,8 +175,9 @@ impl Chat {
             seed_turns,
         } = opts;
 
-        let thread_id = thread_id
-            .unwrap_or_else(|| format!("thread-{}", self.thread_seq.fetch_add(1, Ordering::Relaxed)));
+        let thread_id = thread_id.unwrap_or_else(|| {
+            format!("thread-{}", self.thread_seq.fetch_add(1, Ordering::Relaxed))
+        });
         let mut turns = seed_turns;
         for turn in &turns {
             turn.validate_tool_linkage()?;
@@ -205,15 +203,15 @@ impl Chat {
             Arc::clone(&self.runtime),
             state,
         );
-        self.threads
-            .write()
-            .await
-            .insert(thread_id, thread.clone());
+        self.threads.write().await.insert(thread_id, thread.clone());
         Ok(thread)
     }
 }
 
-fn select_turns(source_turns: &[Turn], ordered_turn_ids: &[u64]) -> Result<Vec<Turn>, GatewayError> {
+fn select_turns(
+    source_turns: &[Turn],
+    ordered_turn_ids: &[u64],
+) -> Result<Vec<Turn>, GatewayError> {
     if ordered_turn_ids.is_empty() {
         return Ok(Vec::new());
     }

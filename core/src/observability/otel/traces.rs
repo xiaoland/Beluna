@@ -27,7 +27,9 @@ pub fn build_tracer_provider(
     }
     .context("failed to construct OTLP trace exporter")?;
 
-    let sampler = Sampler::ParentBased(Box::new(Sampler::TraceIdRatioBased(settings.sampling_ratio)));
+    let sampler = Sampler::ParentBased(Box::new(Sampler::TraceIdRatioBased(
+        settings.sampling_ratio,
+    )));
 
     Ok(SdkTracerProvider::builder()
         .with_resource(resource.clone())

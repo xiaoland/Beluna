@@ -7,10 +7,7 @@ use anyhow::{Result, anyhow};
 use opentelemetry::{KeyValue, global};
 use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
 use opentelemetry_sdk::{
-    Resource,
-    error::OTelSdkError,
-    logs::SdkLoggerProvider,
-    metrics::SdkMeterProvider,
+    Resource, error::OTelSdkError, logs::SdkLoggerProvider, metrics::SdkMeterProvider,
     trace::SdkTracerProvider,
 };
 use tracing_subscriber::{Layer, Registry};
@@ -58,12 +55,10 @@ impl OpenTelemetryRuntime {
     }
 
     pub fn log_layer(&self) -> Option<Box<dyn Layer<Registry> + Send + Sync>> {
-        self.logger_provider
-            .as_ref()
-            .map(|provider| {
-                Box::new(OpenTelemetryTracingBridge::new(provider))
-                    as Box<dyn Layer<Registry> + Send + Sync>
-            })
+        self.logger_provider.as_ref().map(|provider| {
+            Box::new(OpenTelemetryTracingBridge::new(provider))
+                as Box<dyn Layer<Registry> + Send + Sync>
+        })
     }
 
     pub fn trace_layer(&self) -> Option<Box<dyn Layer<Registry> + Send + Sync>> {
@@ -86,8 +81,9 @@ impl OpenTelemetryRuntime {
         if let Some(meter_provider) = self.meter_provider {
             match meter_provider.shutdown() {
                 Ok(()) | Err(OTelSdkError::AlreadyShutdown) => {}
-                Err(err) => shutdown_errors
-                    .push(format!("failed to shutdown OTLP metrics provider: {err}")),
+                Err(err) => {
+                    shutdown_errors.push(format!("failed to shutdown OTLP metrics provider: {err}"))
+                }
             }
         }
 
@@ -103,8 +99,9 @@ impl OpenTelemetryRuntime {
         if let Some(tracer_provider) = self.tracer_provider {
             match tracer_provider.shutdown() {
                 Ok(()) | Err(OTelSdkError::AlreadyShutdown) => {}
-                Err(err) => shutdown_errors
-                    .push(format!("failed to shutdown OTLP trace provider: {err}")),
+                Err(err) => {
+                    shutdown_errors.push(format!("failed to shutdown OTLP trace provider: {err}"))
+                }
             }
         }
 

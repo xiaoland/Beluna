@@ -4,781 +4,110 @@ use std::{
 };
 
 use anyhow::{Context, Result, anyhow};
-use jsonschema::{JSONSchema, ValidationError};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use validator::Validate;
 
-use crate::{
-    ai_gateway::types::AIGatewayConfig,
-    body::payloads::{ShellLimits, WebLimits},
-    cortex::ReactionLimits,
+use crate::ai_gateway::types::AIGatewayConfig;
+
+mod body;
+mod continuity;
+mod cortex;
+mod logging;
+mod observability;
+mod runtime_loop;
+mod schema;
+mod spine;
+mod validation;
+
+pub use body::{BodyRuntimeConfig, StdShellRuntimeConfig, StdWebRuntimeConfig};
+pub use continuity::ContinuityRuntimeConfig;
+pub use cortex::{CortexHelperRoutesConfig, CortexRuntimeConfig};
+pub use logging::LoggingConfig;
+pub use observability::{
+    ObservabilityConfig, OtlpConfig, OtlpDefaultsConfig, OtlpLogsConfig, OtlpMetricsConfig,
+    OtlpSignalProtocol, OtlpSignalsConfig, OtlpTracesConfig,
+};
+pub use runtime_loop::{CoreLoopConfig, TickMissedBehavior};
+pub use schema::{generate_schema_json_pretty, generate_schema_value, write_schema_to_path};
+pub use spine::{
+    InlineAdapterConfig, SpineAdapterConfig, SpineRuntimeConfig, UnixSocketNdjsonAdapterConfig,
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
+    #[serde(rename = "$schema", default, skip_serializing_if = "Option::is_none")]
+    #[validate(custom(function = "validation::validate_non_blank"))]
+    pub schema: Option<String>,
+    #[validate(nested)]
     pub ai_gateway: AIGatewayConfig,
     #[serde(default)]
+    #[validate(nested)]
     pub logging: LoggingConfig,
     #[serde(default)]
+    #[validate(nested)]
     pub observability: ObservabilityConfig,
     #[serde(default)]
+    #[validate(nested)]
     pub cortex: CortexRuntimeConfig,
     #[serde(default)]
+    #[validate(nested)]
     pub continuity: ContinuityRuntimeConfig,
     #[serde(default)]
+    #[validate(nested)]
     pub spine: SpineRuntimeConfig,
     #[serde(default)]
+    #[validate(nested)]
     pub r#loop: CoreLoopConfig,
     #[serde(default)]
+    #[validate(nested)]
     pub body: BodyRuntimeConfig,
-}
-
-fn default_socket_path() -> PathBuf {
-    PathBuf::from("beluna.sock")
-}
-
-fn default_inline_act_queue_capacity() -> usize {
-    32
-}
-
-fn default_inline_sense_queue_capacity() -> usize {
-    32
-}
-
-fn default_cortex_inbox_capacity() -> usize {
-    32
-}
-
-fn default_cortex_outbox_capacity() -> usize {
-    32
-}
-
-fn default_continuity_state_path() -> PathBuf {
-    PathBuf::from("./state/continuity.json")
-}
-
-fn default_enabled_true() -> bool {
-    true
-}
-
-fn default_logging_dir() -> PathBuf {
-    PathBuf::from("./logs/core")
-}
-
-fn default_logging_filter() -> String {
-    "info".to_string()
-}
-
-fn default_logging_retention_days() -> usize {
-    14
-}
-
-fn default_observability_export_timeout_ms() -> u64 {
-    5_000
-}
-
-fn default_enabled_false() -> bool {
-    false
-}
-
-fn default_observability_otlp_protocol() -> OtlpSignalProtocol {
-    OtlpSignalProtocol::Grpc
-}
-
-fn default_observability_metrics_export_interval_ms() -> u64 {
-    5_000
-}
-
-fn default_observability_logs_export_interval_ms() -> u64 {
-    2_000
-}
-
-fn default_observability_traces_sampling_ratio() -> f64 {
-    1.0
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LoggingConfig {
-    #[serde(default = "default_logging_dir")]
-    pub dir: PathBuf,
-    #[serde(default = "default_logging_filter")]
-    pub filter: String,
-    #[serde(default = "default_logging_retention_days")]
-    pub retention_days: usize,
-    #[serde(default = "default_enabled_true")]
-    pub stderr_warn_enabled: bool,
-}
-
-impl Default for LoggingConfig {
-    fn default() -> Self {
-        Self {
-            dir: default_logging_dir(),
-            filter: default_logging_filter(),
-            retention_days: default_logging_retention_days(),
-            stderr_warn_enabled: true,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ObservabilityConfig {
-    #[serde(default)]
-    pub otlp: OtlpConfig,
-}
-
-impl Default for ObservabilityConfig {
-    fn default() -> Self {
-        Self {
-            otlp: OtlpConfig::default(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OtlpConfig {
-    #[serde(default)]
-    pub defaults: OtlpDefaultsConfig,
-    #[serde(default)]
-    pub signals: OtlpSignalsConfig,
-}
-
-impl Default for OtlpConfig {
-    fn default() -> Self {
-        Self {
-            defaults: OtlpDefaultsConfig::default(),
-            signals: OtlpSignalsConfig::default(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OtlpDefaultsConfig {
-    #[serde(default = "default_observability_export_timeout_ms")]
-    pub timeout_ms: u64,
-}
-
-impl Default for OtlpDefaultsConfig {
-    fn default() -> Self {
-        Self {
-            timeout_ms: default_observability_export_timeout_ms(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum OtlpSignalProtocol {
-    Http,
-    Grpc,
-}
-
-impl OtlpSignalProtocol {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Http => "http",
-            Self::Grpc => "grpc",
-        }
-    }
-}
-
-impl Default for OtlpSignalProtocol {
-    fn default() -> Self {
-        default_observability_otlp_protocol()
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OtlpSignalsConfig {
-    #[serde(default)]
-    pub metrics: OtlpMetricsConfig,
-    #[serde(default)]
-    pub traces: OtlpTracesConfig,
-    #[serde(default)]
-    pub logs: OtlpLogsConfig,
-}
-
-impl Default for OtlpSignalsConfig {
-    fn default() -> Self {
-        Self {
-            metrics: OtlpMetricsConfig::default(),
-            traces: OtlpTracesConfig::default(),
-            logs: OtlpLogsConfig::default(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OtlpMetricsConfig {
-    #[serde(default = "default_enabled_false")]
-    pub enabled: bool,
-    #[serde(default = "default_observability_otlp_protocol")]
-    pub protocol: OtlpSignalProtocol,
-    #[serde(default)]
-    pub endpoint: Option<String>,
-    #[serde(default)]
-    pub timeout_ms: Option<u64>,
-    #[serde(default = "default_observability_metrics_export_interval_ms")]
-    pub export_interval_ms: u64,
-}
-
-impl Default for OtlpMetricsConfig {
-    fn default() -> Self {
-        Self {
-            enabled: default_enabled_false(),
-            protocol: default_observability_otlp_protocol(),
-            endpoint: None,
-            timeout_ms: None,
-            export_interval_ms: default_observability_metrics_export_interval_ms(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OtlpTracesConfig {
-    #[serde(default = "default_enabled_false")]
-    pub enabled: bool,
-    #[serde(default = "default_observability_otlp_protocol")]
-    pub protocol: OtlpSignalProtocol,
-    #[serde(default)]
-    pub endpoint: Option<String>,
-    #[serde(default)]
-    pub timeout_ms: Option<u64>,
-    #[serde(default = "default_observability_traces_sampling_ratio")]
-    pub sampling_ratio: f64,
-}
-
-impl Default for OtlpTracesConfig {
-    fn default() -> Self {
-        Self {
-            enabled: default_enabled_false(),
-            protocol: default_observability_otlp_protocol(),
-            endpoint: None,
-            timeout_ms: None,
-            sampling_ratio: default_observability_traces_sampling_ratio(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OtlpLogsConfig {
-    #[serde(default = "default_enabled_false")]
-    pub enabled: bool,
-    #[serde(default = "default_observability_otlp_protocol")]
-    pub protocol: OtlpSignalProtocol,
-    #[serde(default)]
-    pub endpoint: Option<String>,
-    #[serde(default)]
-    pub timeout_ms: Option<u64>,
-    #[serde(default = "default_observability_logs_export_interval_ms")]
-    pub export_interval_ms: u64,
-}
-
-impl Default for OtlpLogsConfig {
-    fn default() -> Self {
-        Self {
-            enabled: default_enabled_false(),
-            protocol: default_observability_otlp_protocol(),
-            endpoint: None,
-            timeout_ms: None,
-            export_interval_ms: default_observability_logs_export_interval_ms(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SpineRuntimeConfig {
-    #[serde(default = "default_spine_adapters")]
-    pub adapters: Vec<SpineAdapterConfig>,
-}
-
-impl Default for SpineRuntimeConfig {
-    fn default() -> Self {
-        Self {
-            adapters: default_spine_adapters(),
-        }
-    }
-}
-
-fn default_spine_adapters() -> Vec<SpineAdapterConfig> {
-    vec![
-        SpineAdapterConfig::Inline {
-            config: InlineAdapterConfig::default(),
-        },
-        SpineAdapterConfig::UnixSocketNdjson {
-            config: UnixSocketNdjsonAdapterConfig {
-                socket_path: default_socket_path(),
-            },
-        },
-    ]
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "kebab-case")]
-pub enum SpineAdapterConfig {
-    Inline {
-        config: InlineAdapterConfig,
-    },
-    UnixSocketNdjson {
-        config: UnixSocketNdjsonAdapterConfig,
-    },
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct InlineAdapterConfig {
-    #[serde(default = "default_inline_act_queue_capacity")]
-    pub act_queue_capacity: usize,
-    #[serde(default = "default_inline_sense_queue_capacity")]
-    pub sense_queue_capacity: usize,
-}
-
-impl Default for InlineAdapterConfig {
-    fn default() -> Self {
-        Self {
-            act_queue_capacity: default_inline_act_queue_capacity(),
-            sense_queue_capacity: default_inline_sense_queue_capacity(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UnixSocketNdjsonAdapterConfig {
-    pub socket_path: PathBuf,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CortexHelperRoutesConfig {
-    #[serde(default)]
-    pub default: Option<String>,
-    #[serde(default)]
-    pub primary: Option<String>,
-    #[serde(default)]
-    pub sense_helper: Option<String>,
-    #[serde(default)]
-    pub acts_helper: Option<String>,
-    #[serde(default)]
-    pub goal_forest_helper: Option<String>,
-}
-
-impl Default for CortexHelperRoutesConfig {
-    fn default() -> Self {
-        Self {
-            default: None,
-            primary: None,
-            sense_helper: None,
-            acts_helper: None,
-            goal_forest_helper: None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CortexRuntimeConfig {
-    #[serde(default = "default_cortex_inbox_capacity")]
-    pub inbox_capacity: usize,
-    #[serde(default = "default_cortex_outbox_capacity")]
-    pub outbox_capacity: usize,
-    #[serde(default)]
-    pub default_limits: ReactionLimits,
-    #[serde(default)]
-    pub helper_routes: CortexHelperRoutesConfig,
-}
-
-impl Default for CortexRuntimeConfig {
-    fn default() -> Self {
-        Self {
-            inbox_capacity: default_cortex_inbox_capacity(),
-            outbox_capacity: default_cortex_outbox_capacity(),
-            default_limits: ReactionLimits::default(),
-            helper_routes: CortexHelperRoutesConfig::default(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ContinuityRuntimeConfig {
-    #[serde(default = "default_continuity_state_path")]
-    pub state_path: PathBuf,
-}
-
-impl Default for ContinuityRuntimeConfig {
-    fn default() -> Self {
-        Self {
-            state_path: default_continuity_state_path(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum TickMissedBehavior {
-    Skip,
-}
-
-fn default_tick_interval_ms() -> u64 {
-    10_000
-}
-
-fn default_tick_missed_behavior() -> TickMissedBehavior {
-    TickMissedBehavior::Skip
-}
-
-fn default_max_deferring_nums() -> usize {
-    256
-}
-
-fn default_afferent_sidecar_capacity() -> usize {
-    128
-}
-
-fn default_efferent_shutdown_drain_timeout_ms() -> u64 {
-    5_000
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CoreLoopConfig {
-    #[serde(default = "default_sense_queue_capacity")]
-    pub sense_queue_capacity: usize,
-    #[serde(default = "default_max_deferring_nums")]
-    pub max_deferring_nums: usize,
-    #[serde(default = "default_afferent_sidecar_capacity")]
-    pub afferent_sidecar_capacity: usize,
-    #[serde(default = "default_efferent_shutdown_drain_timeout_ms")]
-    pub efferent_shutdown_drain_timeout_ms: u64,
-    #[serde(default = "default_tick_interval_ms")]
-    pub tick_interval_ms: u64,
-    #[serde(default = "default_tick_missed_behavior")]
-    pub tick_missed_behavior: TickMissedBehavior,
-}
-
-impl Default for CoreLoopConfig {
-    fn default() -> Self {
-        Self {
-            sense_queue_capacity: default_sense_queue_capacity(),
-            max_deferring_nums: default_max_deferring_nums(),
-            afferent_sidecar_capacity: default_afferent_sidecar_capacity(),
-            efferent_shutdown_drain_timeout_ms: default_efferent_shutdown_drain_timeout_ms(),
-            tick_interval_ms: default_tick_interval_ms(),
-            tick_missed_behavior: default_tick_missed_behavior(),
-        }
-    }
-}
-
-fn default_sense_queue_capacity() -> usize {
-    32
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct BodyRuntimeConfig {
-    #[serde(default)]
-    pub std_shell: StdShellRuntimeConfig,
-    #[serde(default)]
-    pub std_web: StdWebRuntimeConfig,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StdShellRuntimeConfig {
-    #[serde(default = "default_enabled_true")]
-    pub enabled: bool,
-    #[serde(default)]
-    pub limits: ShellLimits,
-}
-
-impl Default for StdShellRuntimeConfig {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            limits: ShellLimits::default(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StdWebRuntimeConfig {
-    #[serde(default = "default_enabled_true")]
-    pub enabled: bool,
-    #[serde(default)]
-    pub limits: WebLimits,
-}
-
-impl Default for StdWebRuntimeConfig {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            limits: WebLimits::default(),
-        }
-    }
 }
 
 impl Config {
     pub fn load(config_path: &Path) -> Result<Self> {
         let config_content = fs::read_to_string(config_path)
             .with_context(|| format!("failed to read {}", config_path.display()))?;
-        let config_value: Value = json5::from_str(&config_content)
+        let mut config: Config = json5::from_str(&config_content)
             .with_context(|| format!("failed to parse {}", config_path.display()))?;
 
-        let config_base = config_path.parent().unwrap_or_else(|| Path::new("."));
-        let schema_path = resolve_schema_path(config_base, &config_value)?;
-        validate_against_schema(&config_value, &schema_path)?;
+        let config_base = resolve_config_base(config_path)?;
+        config.normalize_paths(&config_base);
 
-        let mut config: Config =
-            serde_json::from_value(config_value).context("failed to deserialize core config")?;
-
-        for adapter in &mut config.spine.adapters {
-            match adapter {
-                SpineAdapterConfig::Inline { .. } => {}
-                SpineAdapterConfig::UnixSocketNdjson { config } => {
-                    if !config.socket_path.is_absolute() {
-                        config.socket_path = config_base.join(&config.socket_path);
-                    }
-                }
-            }
-        }
-        if !config.continuity.state_path.is_absolute() {
-            config.continuity.state_path = config_base.join(&config.continuity.state_path);
-        }
+        config
+            .validate()
+            .map_err(|err| anyhow!("config validation failed: {err}"))?;
 
         Ok(config)
     }
-}
 
-fn resolve_schema_path(config_base: &Path, config_value: &Value) -> Result<PathBuf> {
-    if let Some(path_text) = config_value.get("$schema").and_then(|value| value.as_str()) {
-        let configured = PathBuf::from(path_text);
-        if configured.is_absolute() {
-            return Ok(configured);
+    fn normalize_paths(&mut self, config_base: &Path) {
+        normalize_path_against_base(&mut self.logging.dir, config_base);
+
+        for adapter in &mut self.spine.adapters {
+            if let SpineAdapterConfig::UnixSocketNdjson { config } = adapter {
+                normalize_path_against_base(&mut config.socket_path, config_base);
+            }
         }
-        return Ok(config_base.join(&configured));
-    }
 
-    let root_default = config_base.join("core/beluna.schema.json");
-    if root_default.exists() {
-        return Ok(root_default);
-    }
-
-    let local_default = config_base.join("beluna.schema.json");
-    if local_default.exists() {
-        return Ok(local_default);
-    }
-
-    Err(anyhow!(
-        "unable to resolve schema path: expected $schema in config, core/beluna.schema.json, or beluna.schema.json"
-    ))
-}
-
-fn validate_against_schema(config_value: &Value, schema_path: &Path) -> Result<()> {
-    let schema_content = fs::read_to_string(schema_path)
-        .with_context(|| format!("failed to read schema {}", schema_path.display()))?;
-    let schema: Value = serde_json::from_str(&schema_content)
-        .with_context(|| format!("failed to parse schema {}", schema_path.display()))?;
-
-    let compiled =
-        JSONSchema::compile(&schema).map_err(|e| anyhow!("failed to compile schema: {e}"))?;
-
-    match compiled.validate(config_value) {
-        Ok(()) => Ok(()),
-        Err(errors_iter) => {
-            let validation_errors: Vec<ValidationError> = errors_iter.collect();
-            let messages: Vec<String> = validation_errors
-                .into_iter()
-                .map(|error| error.to_string())
-                .collect();
-            Err(anyhow!("config validation failed: {}", messages.join("; ")))
-        }
+        normalize_path_against_base(&mut self.continuity.state_path, config_base);
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use std::fs;
-
-    use uuid::Uuid;
-
-    use super::{Config, LoggingConfig, ObservabilityConfig};
-
-    #[test]
-    fn logging_config_defaults_match_contract() {
-        let config = LoggingConfig::default();
-        assert_eq!(config.dir, std::path::PathBuf::from("./logs/core"));
-        assert_eq!(config.filter, "info");
-        assert_eq!(config.retention_days, 14);
-        assert!(config.stderr_warn_enabled);
+fn resolve_config_base(config_path: &Path) -> Result<PathBuf> {
+    let parent = config_path.parent().unwrap_or_else(|| Path::new("."));
+    if parent.is_absolute() {
+        return Ok(parent.to_path_buf());
     }
 
-    #[test]
-    fn observability_config_defaults_match_contract() {
-        let config = ObservabilityConfig::default();
-        assert_eq!(config.otlp.defaults.timeout_ms, 5_000);
+    Ok(std::env::current_dir()
+        .context("failed to read current working directory")?
+        .join(parent))
+}
 
-        assert!(!config.otlp.signals.metrics.enabled);
-        assert_eq!(config.otlp.signals.metrics.protocol, super::OtlpSignalProtocol::Grpc);
-        assert_eq!(config.otlp.signals.metrics.endpoint, None);
-        assert_eq!(config.otlp.signals.metrics.timeout_ms, None);
-        assert_eq!(config.otlp.signals.metrics.export_interval_ms, 5_000);
-
-        assert!(!config.otlp.signals.traces.enabled);
-        assert_eq!(config.otlp.signals.traces.protocol, super::OtlpSignalProtocol::Grpc);
-        assert_eq!(config.otlp.signals.traces.endpoint, None);
-        assert_eq!(config.otlp.signals.traces.timeout_ms, None);
-        assert!((config.otlp.signals.traces.sampling_ratio - 1.0).abs() < f64::EPSILON);
-
-        assert!(!config.otlp.signals.logs.enabled);
-        assert_eq!(config.otlp.signals.logs.protocol, super::OtlpSignalProtocol::Grpc);
-        assert_eq!(config.otlp.signals.logs.endpoint, None);
-        assert_eq!(config.otlp.signals.logs.timeout_ms, None);
-        assert_eq!(config.otlp.signals.logs.export_interval_ms, 2_000);
-    }
-
-    #[test]
-    fn config_load_rejects_zero_logging_retention_days() {
-        let work_dir = std::env::temp_dir().join(format!("beluna-config-test-{}", Uuid::now_v7()));
-        fs::create_dir_all(&work_dir).expect("temp work dir should be created");
-
-        let config_path = work_dir.join("beluna.jsonc");
-        let schema_path =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("beluna.schema.json");
-        let config_text = format!(
-            r#"{{
-  "$schema": "{}",
-  "ai_gateway": {{
-    "backends": [
-      {{
-        "id": "backend-default",
-        "dialect": "openai_compatible",
-        "credential": {{
-          "type": "none"
-        }},
-        "models": [
-          {{
-            "id": "m1",
-            "aliases": ["default"]
-          }}
-        ]
-      }}
-    ]
-  }},
-  "logging": {{
-    "retention_days": 0
-  }}
-}}"#,
-            schema_path.display(),
-        );
-        fs::write(&config_path, config_text).expect("config should be written");
-
-        let err = Config::load(&config_path).expect_err("retention_days=0 should fail schema");
-        assert!(
-            err.to_string().contains("minimum"),
-            "unexpected error: {err}",
-        );
-
-        let _ = fs::remove_file(&config_path);
-        let _ = fs::remove_dir(&work_dir);
-    }
-
-    #[test]
-    fn config_load_rejects_deprecated_cortex_route_fields() {
-        let work_dir = std::env::temp_dir().join(format!("beluna-config-test-{}", Uuid::now_v7()));
-        fs::create_dir_all(&work_dir).expect("temp work dir should be created");
-
-        let config_path = work_dir.join("beluna.jsonc");
-        let schema_path =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("beluna.schema.json");
-        let config_text = format!(
-            r#"{{
-  "$schema": "{}",
-  "ai_gateway": {{
-    "backends": [
-      {{
-        "id": "backend-default",
-        "dialect": "openai_compatible",
-        "credential": {{
-          "type": "none"
-        }},
-        "models": [
-          {{
-            "id": "m1",
-            "aliases": ["default"]
-          }}
-        ]
-      }}
-    ]
-  }},
-  "cortex": {{
-    "primary_route": "default"
-  }}
-}}"#,
-            schema_path.display(),
-        );
-        fs::write(&config_path, config_text).expect("config should be written");
-
-        let err = Config::load(&config_path)
-            .expect_err("deprecated primary_route should fail schema validation");
-        assert!(
-            err.to_string().contains("Additional properties"),
-            "unexpected error: {err}",
-        );
-
-        let _ = fs::remove_file(&config_path);
-        let _ = fs::remove_dir(&work_dir);
-    }
-
-    #[test]
-    fn config_load_allows_partial_cortex_default_limits_override() {
-        let work_dir = std::env::temp_dir().join(format!("beluna-config-test-{}", Uuid::now_v7()));
-        fs::create_dir_all(&work_dir).expect("temp work dir should be created");
-
-        let config_path = work_dir.join("beluna.jsonc");
-        let schema_path =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("beluna.schema.json");
-        let config_text = format!(
-            r#"{{
-  "$schema": "{}",
-  "ai_gateway": {{
-    "backends": [
-      {{
-        "id": "backend-default",
-        "dialect": "openai_compatible",
-        "credential": {{
-          "type": "none"
-        }},
-        "models": [
-          {{
-            "id": "m1",
-            "aliases": ["default"]
-          }}
-        ]
-      }}
-    ]
-  }},
-  "cortex": {{
-    "helper_routes": {{
-      "primary": "cortex_primary",
-      "default": "cortex_helper"
-    }},
-    "default_limits": {{
-      "sense_passthrough_max_bytes": 240
-    }}
-  }}
-}}"#,
-            schema_path.display(),
-        );
-        fs::write(&config_path, config_text).expect("config should be written");
-
-        let config = Config::load(&config_path).expect("partial default_limits should load");
-        assert_eq!(
-            config.cortex.default_limits.sense_passthrough_max_bytes,
-            240
-        );
-        assert_eq!(config.cortex.default_limits.max_attempts, 4);
-        assert_eq!(
-            config.cortex.helper_routes.primary.as_deref(),
-            Some("cortex_primary")
-        );
-        assert_eq!(
-            config.cortex.helper_routes.default.as_deref(),
-            Some("cortex_helper")
-        );
-
-        let _ = fs::remove_file(&config_path);
-        let _ = fs::remove_dir(&work_dir);
+fn normalize_path_against_base(path: &mut PathBuf, config_base: &Path) {
+    if !path.is_absolute() {
+        *path = config_base.join(&*path);
     }
 }

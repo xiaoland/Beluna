@@ -2,25 +2,67 @@ use std::{env, path::PathBuf};
 
 use anyhow::{Result, anyhow};
 
-pub fn config_path_from_args() -> Result<PathBuf> {
-    let mut args = env::args().skip(1);
-    let mut config_path = None;
+pub enum CliCommand {
+    Run { config_path: PathBuf },
+    ConfigSchema { output: Option<PathBuf> },
+}
 
-    while let Some(arg) = args.next() {
-        match arg.as_str() {
-            "--config" => {
-                let value = args
-                    .next()
-                    .ok_or_else(|| anyhow!("missing value for --config"))?;
-                config_path = Some(PathBuf::from(value));
+pub fn command_from_args() -> Result<CliCommand> {
+    let args: Vec<String> = env::args().skip(1).collect();
+    if args.is_empty() {
+        return Ok(CliCommand::Run {
+            config_path: PathBuf::from("./beluna.jsonc"),
+        });
+    }
+
+    match args[0].as_str() {
+        "--config" => parse_run_command(&args),
+        "config" => parse_config_command(&args),
+        other => Err(anyhow!(
+            "unknown argument: {other}. usage: beluna [--config <path>] | beluna config schema [--output <path>]"
+        )),
+    }
+}
+
+fn parse_run_command(args: &[String]) -> Result<CliCommand> {
+    if args.len() != 2 {
+        return Err(anyhow!(
+            "invalid run arguments. usage: beluna [--config <path>]"
+        ));
+    }
+
+    Ok(CliCommand::Run {
+        config_path: PathBuf::from(&args[1]),
+    })
+}
+
+fn parse_config_command(args: &[String]) -> Result<CliCommand> {
+    if args.get(1).map(String::as_str) != Some("schema") {
+        return Err(anyhow!(
+            "unknown config subcommand. usage: beluna config schema [--output <path>]"
+        ));
+    }
+
+    let mut output: Option<PathBuf> = None;
+    let mut index = 2;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--output" => {
+                let value = args.get(index + 1).ok_or_else(|| {
+                    anyhow!(
+                        "missing value for --output. usage: beluna config schema --output <path>"
+                    )
+                })?;
+                output = Some(PathBuf::from(value));
+                index += 2;
             }
             other => {
                 return Err(anyhow!(
-                    "unknown argument: {other}. usage: beluna [--config <path>]"
+                    "unknown argument for schema command: {other}. usage: beluna config schema [--output <path>]"
                 ));
             }
         }
     }
 
-    Ok(config_path.unwrap_or_else(|| PathBuf::from("./beluna.jsonc")))
+    Ok(CliCommand::ConfigSchema { output })
 }

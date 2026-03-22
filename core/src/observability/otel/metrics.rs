@@ -9,7 +9,10 @@ use crate::config::OtlpSignalProtocol;
 
 use super::settings::MetricsSettings;
 
-pub fn build_meter_provider(resource: &Resource, settings: &MetricsSettings) -> Result<SdkMeterProvider> {
+pub fn build_meter_provider(
+    resource: &Resource,
+    settings: &MetricsSettings,
+) -> Result<SdkMeterProvider> {
     let metric_exporter = match settings.protocol {
         OtlpSignalProtocol::Http => MetricExporter::builder()
             .with_http()

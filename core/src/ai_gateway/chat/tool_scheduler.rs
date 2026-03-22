@@ -29,10 +29,7 @@ impl ToolScheduler {
         }
     }
 
-    pub async fn execute_tool_call(
-        &self,
-        call_message: &ToolCallMessage,
-    ) -> (Message, bool) {
+    pub async fn execute_tool_call(&self, call_message: &ToolCallMessage) -> (Message, bool) {
         let call = ToolCallResult {
             id: call_message.call_id.clone(),
             name: call_message.name.clone(),
@@ -51,7 +48,10 @@ impl ToolScheduler {
             Ok(ToolExecutionResult {
                 payload,
                 reset_messages_applied,
-            }) => (Message::tool_call_result(call.id, call.name, payload), reset_messages_applied),
+            }) => (
+                Message::tool_call_result(call.id, call.name, payload),
+                reset_messages_applied,
+            ),
             Err(err) => (
                 Message::tool_call_result(
                     call.id,

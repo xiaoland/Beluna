@@ -15,8 +15,9 @@ use tokio::time::{Duration, timeout};
 use crate::{
     ai_gateway::chat::{
         Chat, ChatMessage, ChatRole, ChatToolDefinition, CloneThreadOptions, ContentPart,
-        OutputMode, Thread, ThreadOptions, ToolCallResult, ToolExecutionRequest, TurnQuery,
-        ToolExecutionResult, ToolExecutor, ToolOverride, TurnInput, TurnLimits, TurnResponse,
+        OutputMode, Thread, ThreadOptions, ToolCallResult, ToolExecutionRequest,
+        ToolExecutionResult, ToolExecutor, ToolOverride, TurnInput, TurnLimits, TurnQuery,
+        TurnResponse,
     },
     config::CortexHelperRoutesConfig,
     continuity::ContinuityEngine,
@@ -1136,12 +1137,12 @@ impl Cortex {
         };
         options.route_or_alias = route;
         let thread = gateway
-            .open_thread(ThreadOptions {
-                ..options
-            })
+            .open_thread(ThreadOptions { ..options })
             .await
             .map_err(|err| primary_failed(err.to_string()))?;
-        let state = PrimaryThreadState { thread: thread.clone() };
+        let state = PrimaryThreadState {
+            thread: thread.clone(),
+        };
         *guard = Some(state);
         Ok(thread)
     }

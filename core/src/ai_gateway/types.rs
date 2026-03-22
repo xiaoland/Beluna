@@ -1,13 +1,22 @@
 use std::{collections::BTreeMap, time::Duration};
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use validator::{Validate, ValidationError};
 
 pub type BackendId = String;
 pub type ModelId = String;
 pub type RequestId = String;
 pub const DEFAULT_ROUTE_ALIAS: &str = "default";
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+fn validate_non_blank(value: &str) -> Result<(), ValidationError> {
+    if value.trim().is_empty() {
+        return Err(ValidationError::new("non_blank"));
+    }
+    Ok(())
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, JsonSchema)]
 pub enum BackendDialect {
     #[serde(rename = "openai_compatible")]
     OpenAiCompatible,
@@ -17,7 +26,8 @@ pub enum BackendDialect {
     GitHubCopilotSdk,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Validate, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct BackendCapabilities {
     #[serde(default)]
     pub streaming: bool,
@@ -49,14 +59,16 @@ impl Default for BackendCapabilities {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct CopilotConfig {
+    #[validate(custom(function = "validate_non_blank"))]
     pub command: String,
     #[serde(default)]
     pub args: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum CredentialRef {
     Env { var: String },
@@ -81,21 +93,30 @@ impl ResolvedCredential {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct BackendProfile {
+    #[validate(custom(function = "validate_non_blank"))]
     pub id: BackendId,
     pub dialect: BackendDialect,
+    #[validate(custom(function = "validate_non_blank"))]
     pub endpoint: Option<String>,
     pub credential: CredentialRef,
+    #[validate(length(min = 1))]
+    #[validate(nested)]
     pub models: Vec<ModelProfile>,
     #[serde(default)]
+    #[validate(nested)]
     pub capabilities: Option<BackendCapabilities>,
     #[serde(default)]
+    #[validate(nested)]
     pub copilot: Option<CopilotConfig>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Validate, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct ModelProfile {
+    #[validate(custom(function = "validate_non_blank"))]
     pub id: ModelId,
     #[serde(default)]
     pub aliases: Vec<String>,
@@ -107,27 +128,37 @@ pub struct ModelTarget {
     pub model_id: ModelId,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct ResilienceConfig {
     #[serde(default = "default_max_request_time_ms")]
+    #[validate(range(min = 1))]
     pub max_request_time_ms: u64,
     #[serde(default = "default_request_timeout_ms")]
+    #[validate(range(min = 1))]
     pub request_timeout_ms: u64,
     #[serde(default = "default_max_retries")]
+    #[validate(range(min = 0))]
     pub max_retries: u32,
     #[serde(default = "default_backoff_base_ms")]
+    #[validate(range(min = 1))]
     pub backoff_base_ms: u64,
     #[serde(default = "default_backoff_max_ms")]
+    #[validate(range(min = 1))]
     pub backoff_max_ms: u64,
     #[serde(default)]
     pub retry_policy: RetryPolicy,
     #[serde(default = "default_breaker_failure_threshold")]
+    #[validate(range(min = 1))]
     pub breaker_failure_threshold: u32,
     #[serde(default = "default_breaker_open_ms")]
+    #[validate(range(min = 1))]
     pub breaker_open_ms: u64,
     #[serde(default = "default_max_concurrency_per_backend")]
+    #[validate(range(min = 1))]
     pub max_concurrency_per_backend: u32,
     #[serde(default)]
+    #[validate(range(min = 1))]
     pub rate_smoothing_per_second: Option<u32>,
 }
 
@@ -168,17 +199,23 @@ fn default_chat_default_turn_timeout_ms() -> u64 {
     30_000
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct ChatConfig {
     #[serde(default = "default_chat_default_route")]
+    #[validate(custom(function = "validate_non_blank"))]
     pub default_route: Option<String>,
     #[serde(default = "default_chat_default_max_tool_rounds")]
+    #[validate(range(min = 1))]
     pub default_max_tool_rounds: u32,
     #[serde(default = "default_chat_default_max_turn_context_messages")]
+    #[validate(range(min = 1))]
     pub default_max_turn_context_messages: usize,
     #[serde(default = "default_chat_default_session_ttl_seconds")]
+    #[validate(range(min = 1))]
     pub default_session_ttl_seconds: u64,
     #[serde(default = "default_chat_default_turn_timeout_ms")]
+    #[validate(range(min = 1))]
     pub default_turn_timeout_ms: u64,
 }
 
@@ -226,7 +263,7 @@ fn default_max_concurrency_per_backend() -> u32 {
     8
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum RetryPolicy {
     BeforeFirstEventOnly,
@@ -239,12 +276,17 @@ impl Default for RetryPolicy {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct AIGatewayConfig {
+    #[validate(length(min = 1))]
+    #[validate(nested)]
     pub backends: Vec<BackendProfile>,
     #[serde(default)]
+    #[validate(nested)]
     pub chat: ChatConfig,
     #[serde(default)]
+    #[validate(nested)]
     pub resilience: ResilienceConfig,
 }
 

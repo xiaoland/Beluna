@@ -8,9 +8,9 @@ use crate::{
 };
 
 use super::{
-    runtime::{BoundBackend, ChatRuntime},
     message::{AssistantMessage, Message},
     message_codec::current_timestamp_ms,
+    runtime::{BoundBackend, ChatRuntime},
     thread_types::{TurnInput, TurnOutput, TurnQuery, TurnRef},
     tool::{ChatToolDefinition, resolve_tools},
     tool_scheduler::ToolScheduler,
@@ -111,9 +111,7 @@ impl Thread {
         let started_at = Instant::now();
 
         let effective_tools = resolve_tools(&guard.tools, &input.tool_overrides);
-        let mut limits = input
-            .limits
-            .unwrap_or_else(|| guard.default_limits.clone());
+        let mut limits = input.limits.unwrap_or_else(|| guard.default_limits.clone());
         if limits.max_request_time_ms.is_none() {
             limits.max_request_time_ms = Some(guard.default_turn_timeout_ms);
         }
@@ -137,7 +135,10 @@ impl Thread {
             metadata: metadata.clone(),
         };
 
-        let mut response = self.runtime.dispatch_complete(&guard.backend, &payload).await?;
+        let mut response = self
+            .runtime
+            .dispatch_complete(&guard.backend, &payload)
+            .await?;
         let mut turn = Turn::new(turn_id);
         *turn.metadata_mut() = metadata;
         for input_message in input.messages {
@@ -239,7 +240,10 @@ impl Thread {
     }
 }
 
-fn build_dispatch_messages(state: &ThreadState, input_messages: &[ChatMessage]) -> Vec<ChatMessage> {
+fn build_dispatch_messages(
+    state: &ThreadState,
+    input_messages: &[ChatMessage],
+) -> Vec<ChatMessage> {
     let mut messages = Vec::new();
     if let Some(system_prompt) = state.system_prompt.as_ref() {
         messages.push(ChatMessage {
