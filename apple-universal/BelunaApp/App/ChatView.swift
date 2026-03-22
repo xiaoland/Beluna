@@ -67,11 +67,19 @@ struct ChatView: View {
             }
             .buttonStyle(.borderedProminent)
 
-            Button("Retry") {
-                viewModel.retryConnection()
+            VStack(alignment: .leading, spacing: 2) {
+                Button(viewModel.retryButtonTitle) {
+                    viewModel.retryConnection()
+                }
+                .buttonStyle(.bordered)
+                .disabled(!viewModel.canRetry)
+
+                if let retryStatusText = viewModel.retryStatusText {
+                    Text(retryStatusText)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
-            .buttonStyle(.bordered)
-            .disabled(!viewModel.canRetry)
 
             Button {
                 openSettings()
@@ -174,15 +182,15 @@ private struct MessageRow: View {
 
     var body: some View {
         switch message.role {
-        case .system, .debug:
-            CenterNoticeBubble(message: message)
+        case .system:
+            CenterNoticeText(message: message)
         case .user, .assistant:
             MessageBubble(message: message)
         }
     }
 }
 
-private struct CenterNoticeBubble: View {
+private struct CenterNoticeText: View {
     let message: ChatMessage
 
     var body: some View {
@@ -190,29 +198,12 @@ private struct CenterNoticeBubble: View {
             Spacer()
             Text(message.text)
                 .font(.caption)
-                .foregroundStyle(textColor)
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .textSelection(.enabled)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(backgroundColor, in: Capsule())
+                .padding(.vertical, 2)
             Spacer()
         }
-    }
-
-    private var backgroundColor: Color {
-        switch message.role {
-        case .system:
-            return Color.orange.opacity(0.18)
-        case .debug:
-            return Color.gray.opacity(0.2)
-        case .user, .assistant:
-            return .clear
-        }
-    }
-
-    private var textColor: Color {
-        message.role == .debug ? .secondary : .primary
     }
 }
 
@@ -253,8 +244,6 @@ private struct MessageBubble: View {
             return "Beluna"
         case .system:
             return "System"
-        case .debug:
-            return "Debug"
         }
     }
 
@@ -265,9 +254,7 @@ private struct MessageBubble: View {
         case .assistant:
             return Color.gray.opacity(0.18)
         case .system:
-            return Color.orange.opacity(0.18)
-        case .debug:
-            return Color.gray.opacity(0.2)
+            return .clear
         }
     }
 
@@ -277,8 +264,6 @@ private struct MessageBubble: View {
             return .white
         case .assistant, .system:
             return .primary
-        case .debug:
-            return .secondary
         }
     }
 }

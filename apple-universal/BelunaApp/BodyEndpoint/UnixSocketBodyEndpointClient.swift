@@ -44,6 +44,7 @@ actor UnixSocketBodyEndpointClient {
     typealias StateHandler = @Sendable (ConnectionState) -> Void
     typealias MessageHandler = @Sendable (ServerWireMessage) -> Void
     typealias DebugHandler = @Sendable (String) -> Void
+    typealias ReconnectStatusHandler = @Sendable (ReconnectStatus) -> Void
 
     private var socketPath: String
     private let maxReconnectAttempts = 5
@@ -60,6 +61,7 @@ actor UnixSocketBodyEndpointClient {
     var onStateChange: StateHandler?
     var onServerMessage: MessageHandler?
     var onDebug: DebugHandler?
+    var onReconnectStatus: ReconnectStatusHandler?
 
     init(socketPath: String) {
         self.socketPath = socketPath
@@ -72,11 +74,13 @@ actor UnixSocketBodyEndpointClient {
     func setHandlers(
         onStateChange: StateHandler?,
         onServerMessage: MessageHandler?,
-        onDebug: DebugHandler?
+        onDebug: DebugHandler?,
+        onReconnectStatus: ReconnectStatusHandler?
     ) {
         self.onStateChange = onStateChange
         self.onServerMessage = onServerMessage
         self.onDebug = onDebug
+        self.onReconnectStatus = onReconnectStatus
     }
 
     func start() {
@@ -86,6 +90,7 @@ actor UnixSocketBodyEndpointClient {
 
         stopped = false
         connectionWasEstablished = false
+        onReconnectStatus?(.idle)
         runLoopGeneration &+= 1
         let generation = runLoopGeneration
         runTask = Task {
@@ -103,6 +108,7 @@ actor UnixSocketBodyEndpointClient {
         runLoopGeneration &+= 1
         runTask?.cancel()
         runTask = nil
+        onReconnectStatus?(.idle)
         cleanupConnection()
     }
 
@@ -137,6 +143,7 @@ actor UnixSocketBodyEndpointClient {
 
         while !stopped && !Task.isCancelled && runLoopGeneration == generation {
             do {
+                onReconnectStatus?(.idle)
                 onStateChange?(.connecting)
                 try await connectAndReadLoop()
             } catch {
@@ -153,12 +160,20 @@ actor UnixSocketBodyEndpointClient {
 
                 retryAttempt += 1
                 guard retryAttempt <= maxReconnectAttempts else {
+                    onReconnectStatus?(.exhausted(maxAttempts: maxReconnectAttempts))
                     onDebug?("Reconnect stopped after \(maxReconnectAttempts) retries. You can retry manually.")
                     break
                 }
 
                 let delayNanos = reconnectDelayNanos(forAttempt: retryAttempt)
                 let delaySeconds = Double(delayNanos) / 1_000_000_000
+                onReconnectStatus?(
+                    .scheduled(
+                        attempt: retryAttempt,
+                        maxAttempts: maxReconnectAttempts,
+                        delaySeconds: delaySeconds
+                    )
+                )
                 onDebug?(
                     "Reconnect \(retryAttempt)/\(maxReconnectAttempts) in \(String(format: "%.1f", delaySeconds))s (\(error.localizedDescription))"
                 )
@@ -166,6 +181,7 @@ actor UnixSocketBodyEndpointClient {
             }
         }
 
+        onReconnectStatus?(.idle)
         onStateChange?(.disconnected)
         cleanupConnection()
     }
@@ -174,6 +190,7 @@ actor UnixSocketBodyEndpointClient {
         let fd = try openUnixSocket(path: socketPath)
         socketFD = fd
         connectionWasEstablished = true
+        onReconnectStatus?(.idle)
         onStateChange?(.connected)
         try await sendRegister()
 

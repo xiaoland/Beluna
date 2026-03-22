@@ -11,6 +11,7 @@ final class ChatViewModel: ObservableObject {
     @Published var draft: String = ""
     @Published var connectionState: ConnectionState = .disconnected
     @Published var belunaState: BelunaState = .unknown
+    @Published private(set) var reconnectStatus: ReconnectStatus = .idle
 
     @Published var socketPathDraft: String
     @Published private(set) var socketPath: String
@@ -42,6 +43,30 @@ final class ChatViewModel: ObservableObject {
 
     var connectButtonTitle: String {
         isConnectionEnabled ? "Disconnect" : "Connect"
+    }
+
+    var retryButtonTitle: String {
+        switch reconnectStatus {
+        case let .scheduled(_, _, delaySeconds):
+            return "Retry in \(Self.formatRetryDelay(delaySeconds))"
+        case .idle, .exhausted:
+            return "Retry"
+        }
+    }
+
+    var retryStatusText: String? {
+        guard isConnectionEnabled else {
+            return nil
+        }
+
+        switch reconnectStatus {
+        case let .scheduled(attempt, maxAttempts, _):
+            return "Auto reconnect \(attempt)/\(maxAttempts)"
+        case let .exhausted(maxAttempts):
+            return "Auto reconnect stopped after \(maxAttempts) attempts."
+        case .idle:
+            return nil
+        }
     }
 
     var canRetry: Bool {
@@ -231,6 +256,7 @@ final class ChatViewModel: ObservableObject {
         }
 
         isConnectionEnabled = true
+        updateReconnectStatus(.idle)
         persistConnectionSettings()
         log("manual connect to \(socketPath)")
         connectInternal(announce: true)
@@ -242,6 +268,7 @@ final class ChatViewModel: ObservableObject {
         }
 
         isConnectionEnabled = false
+        updateReconnectStatus(.idle)
         persistConnectionSettings()
         log("manual disconnect")
         disconnectInternal(announce: true)
@@ -253,7 +280,7 @@ final class ChatViewModel: ObservableObject {
             return
         }
 
-        appendSystemMessage("Manual retry...")
+        updateReconnectStatus(.idle)
         log("manual retry")
         reconnectForCurrentSettings(announce: false)
     }
@@ -296,6 +323,7 @@ final class ChatViewModel: ObservableObject {
 
     private func connectInternal(announce: Bool) {
         belunaState = .unknown
+        updateReconnectStatus(.idle)
         if announce {
             appendSystemMessage("Connecting to \(socketPath)...")
         }
@@ -308,6 +336,7 @@ final class ChatViewModel: ObservableObject {
     private func disconnectInternal(announce: Bool) {
         connectionState = .disconnected
         belunaState = .unknown
+        updateReconnectStatus(.idle)
         if announce {
             appendSystemMessage(disconnectedNoticeText)
         }
@@ -322,6 +351,7 @@ final class ChatViewModel: ObservableObject {
         let updatedSocketPath = socketPath
         connectionState = .disconnected
         belunaState = .unknown
+        updateReconnectStatus(.idle)
 
         Task {
             await bodyEndpointClient.stop()
@@ -354,7 +384,12 @@ final class ChatViewModel: ObservableObject {
                 },
                 onDebug: { [weak self] debugText in
                     Task { @MainActor in
-                        self?.appendDebugMessage(debugText)
+                        self?.log("debug: \(debugText)")
+                    }
+                },
+                onReconnectStatus: { [weak self] status in
+                    Task { @MainActor in
+                        self?.updateReconnectStatus(status)
                     }
                 }
             )
@@ -372,14 +407,14 @@ final class ChatViewModel: ObservableObject {
 
     private func handleAct(_ action: InboundActWire) async {
         guard action.neuralSignalDescriptorID == bodyEndpointActPresentMessageTextDescriptorID else {
-            appendDebugMessage(
+            log(
                 "Ignored act for unexpected descriptor \(action.neuralSignalDescriptorID) on endpoint \(action.endpointID)"
             )
             return
         }
 
         guard rememberHandledAction(action.actID) else {
-            appendDebugMessage("Ignored duplicate act \(action.actID)")
+            log("Ignored duplicate act \(action.actID)")
             return
         }
 
@@ -623,6 +658,13 @@ final class ChatViewModel: ObservableObject {
         return clamped
     }
 
+    private nonisolated static func formatRetryDelay(_ seconds: Double) -> String {
+        if seconds >= 10 {
+            return "\(Int(seconds.rounded()))s"
+        }
+        return String(format: "%.1fs", seconds)
+    }
+
     private func hibernateHelpText() -> String {
         "Beluna is in Hibernate. Start Beluna Core to wake it up."
     }
@@ -642,17 +684,19 @@ final class ChatViewModel: ObservableObject {
         appendMessage(role: .system, text: text)
     }
 
-    private func appendDebugMessage(_ text: String) {
-        log(text)
-        appendMessage(role: .debug, text: text)
-    }
-
     private func appendMessage(role: ChatRole, text: String) {
         if let last = messageBuffer.last, last.role == role, last.text == text {
             return
         }
 
         appendBufferedMessage(ChatMessage(role: role, text: text))
+    }
+
+    private func updateReconnectStatus(_ status: ReconnectStatus) {
+        guard reconnectStatus != status else {
+            return
+        }
+        reconnectStatus = status
     }
 
     private func rememberHandledAction(_ actionID: String) -> Bool {

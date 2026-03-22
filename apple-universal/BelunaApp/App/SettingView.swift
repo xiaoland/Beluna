@@ -22,7 +22,7 @@ struct SettingView: View {
                     }
                     .buttonStyle(.bordered)
 
-                    Button("Retry") {
+                    Button(viewModel.retryButtonTitle) {
                         viewModel.retryConnection()
                     }
                     .buttonStyle(.bordered)

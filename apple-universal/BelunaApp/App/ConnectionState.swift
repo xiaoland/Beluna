@@ -16,3 +16,9 @@ enum ConnectionState: String {
         }
     }
 }
+
+enum ReconnectStatus: Equatable {
+    case idle
+    case scheduled(attempt: Int, maxAttempts: Int, delaySeconds: Double)
+    case exhausted(maxAttempts: Int)
+}
