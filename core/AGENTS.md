@@ -6,6 +6,14 @@ Beluna Core is the runnable runtime and domain agent implementation.
 
 - Language: Rust (2024 edition)
 
+## Design Sources
+
+- Product intent/invariants: `../docs/10-prd/index.md`
+- System-level design: `../docs/20-product-tdd/index.md`
+- Core unit design/interfaces/operations: `../docs/30-unit-tdd/core/README.md`
+- Deployment constraints: `../docs/40-deployment/index.md`
+- Decision history: `../docs/90-decisions/README.md`
+
 ## File Structure (Crucial Only)
 
 ```text
@@ -54,7 +62,7 @@ Beluna Core is the runnable runtime and domain agent implementation.
 - Runtime metrics use OpenTelemetry OTLP export via `observability.otlp.signals.metrics.*`; Prometheus pull endpoint is removed.
 - Runtime traces use OpenTelemetry OTLP export via `observability.otlp.signals.traces.*` with configurable parent-based ratio sampling.
 - Stem is tick-driven (`loop.tick_interval_ms`, default 10s) and only emits tick grants.
-- Cortex owns cycle execution (hybrid tick + sense trigger) and consumes the afferent receive handle in its own runtime task.
+- Cortex owns admitted cognition cycle execution (tick-gated with buffered senses) and consumes the afferent receive handle in its own runtime task.
 - Cortex Primary persists cognition state through Continuity directly from cognition tools.
 - Cortex Primary act tools dispatch directly into the efferent FIFO and receive `ActDispatchResult` (bounded wait; timeout -> `lost`).
 - Cortex Primary act tools emit per-act `wait_for_sense` integer seconds (`0` means no wait) and use unified `expand-senses`.

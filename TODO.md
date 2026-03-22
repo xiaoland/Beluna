@@ -1,12 +1,14 @@
 # TODOs of Beluna
 
+- [ ] 迁移到 Github Issues & Project
+
 ## Core
 
 - [x] 文档化拓扑结构
 - [ ] descriptor 缺少 description 字段 😆
-- [ ] config.rs 过耦合了其它业务，我认为就根据 json schema 来检查就可以了 <https://gemini.google.com/u/1/app/19d2716163455423>
+- [x] config.rs 过耦合了其它业务，我认为就根据 json schema 来检查就可以了 <https://gemini.google.com/u/1/app/19d2716163455423>
 - [ ] 文档模式再重构 <https://chatgpt.com/share/69a94971-bebc-800c-a38e-b243c67d0efe>
-- [ ] 让 json schema 通过 cli 生成
+- [x] 让 json schema 通过 cli 生成
 
 ### Cortex
 
@@ -44,6 +46,8 @@
   - add `trim_if_resolvable`
 - [x] goal forest remains revision 1
 - [ ] 进一步解除 cortex runtime 和 cortex 与 primary 的边界
+- [ ] GoalForest 与 context reset 依然不工作
+- [ ] Cortex 当前的设计存在系统性的问题，导致 "spinning in an idle “self-talk” loop with no new external input, generating high-volume repetitive logs."
 
 ### Continuity
 
@@ -57,9 +61,10 @@
 
 ### Observability
 
-- [ ] 拥抱 OpenTelemetry
+- [x] 拥抱 OpenTelemetry
 - [ ] Local metrics (cortex-organ-output)
 - [x] rotate，但是基于日期 + awake from hibernate times monotoic int
+- [ ] Cortex 的日志设计还需要优化（比如`input_payload` 应该在 `body` 而不是 `attributes`；结构化而不是 string）
 
 ### AI Gateway
 

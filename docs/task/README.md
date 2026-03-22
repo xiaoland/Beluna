@@ -1,30 +1,35 @@
-# docs/task README
+# docs/task Workspace
 
-## Complex task workflow
+`docs/task` is an active procedural workspace for plans, execution notes, and result logs.
 
-Make progressive planning (ask user's approval before getting into next planning stage):
+## Authority Rule (Soft Quarantine)
 
-1. Analyze L0 (User Input) & Context: Deconstruct the request. Explore the codebase for existing patterns, identify architectural trade-offs; and research external sources, ask clarifying questions if necessary.
-2. Draft L1 (High-Level Strategy): Define the technical approach. Establish the architectural design, key technical decisions, and dependency requirements. It's suggested to interact with user actively at this stage.
-3. Draft L2 (Low-level Design): Iterate on L1 until approved. Then, define the low-level specifics: interfaces, data structures, and algorithms.
-4. Draft L3 (Implementation Plan): Iterate on L2 until approved. Then, outline the execution roadmap: pseudo-code, step-by-step logic, boundaries, and test plans.
-5. Execute Implementation: Iterate on L3 until approved. Implement the solution strictly following the comprehensive L3 plan.
-6. Finalize Documentation: Compile the output and write `docs/task/RESULT.md`.  
+1. `docs/task` is **non-authoritative**.
+2. Task files may reference authoritative docs, but authoritative docs must not depend on task files for core definitions.
+3. Stable outcomes discovered in tasks must be promoted to one of:
+- `docs/10-prd`
+- `docs/20-product-tdd`
+- `docs/30-unit-tdd`
+- `docs/40-deployment`
 
-Notes:
+## Complex Task Workflow
 
-- Write each stage of plan to file `docs/task/<task-name>/L<X>-PLAN.md`. Spilt into multiple sub-files if needed.
-- You are encouraged to doubt user's requests/decisions for better maintainability/readability.
-- Avoid preconceived assumptions; should reason from first principles and leverage both inductive and deductive reasoning.
+1. Analyze request and context (`L0`).
+2. Draft high-level strategy (`L1`).
+3. Draft low-level design (`L2`).
+4. Draft implementation plan (`L3`).
+5. Execute implementation against approved plan.
+6. Record task result.
 
-## Simple task workflow
+## File Convention
 
-Draft a simple implementation plan (expand key changes) and ask for my approval. If you find out key decisions needed, stop and discuss with me.
+- Use `docs/task/<task-name>/`.
+- Keep planning stages as `L0/L1/L2/L3` files when needed.
+- Keep final outcome as `RESULT.md` when needed.
 
-## Refactoring task workflow
+## Quality Notes
 
-Refactoring in all these three levels:
-
-- Local Refactoring: Rename, Extract function, Remove duplication, Improve naming -> improves readability.
-- Structural Refactoring: Split modules, Introduce boundaries, Change data flow, Replace patterns -> improves maintainability.
-- Architectural Reset: Remove features, Break backward compatibility, Redesign abstractions, Rewrite subsystems -> improves long-term velocity.
+- Prefer clear reasoning over procedural verbosity.
+- Do not treat temporary trade-offs as durable truth.
+- If a repeated rule appears across tasks, promote it into authoritative docs.
+- Historical task files may reference removed legacy docs; treat those references as archival context only.

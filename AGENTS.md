@@ -1,48 +1,53 @@
 # AGENTS.md of Beluna Workspace
 
-Beluna is now organized as a multi-component repository.
+Respond to user in English.
+If a user decision degrades readability or maintainability, pause and request a trade-off discussion.
+
+Beluna is organized as a multi-component repository.
 
 ## Repository Layout (Crucial Only)
 
-```
+```text
 .
-├── core/               # Beluna (Rust)
-├── cli/                # Beluna Body Endpoint, CLI (Rust)
-├── apple-universal/    # Beluna Body Endpoint, Apple Universal App (Swift)
-└── docs/               # Product, BDT contracts, modules, ADR and tasks
+├── core/               # Beluna runtime (Rust)
+├── cli/                # Beluna body endpoint, CLI client (Rust)
+├── apple-universal/    # Beluna body endpoint, Apple Universal app (Swift)
+└── docs/               # Authoritative layered docs + ADRs + task workspace
 ```
 
-## Documents
+## Authoritative Documentation Map
 
-Read following documents if needed, and keep them current:
+Read and keep these current:
 
-- [Overview](./docs/overview.md): Product overview.
-- [Glossary](./docs/glossary.md): Product top-level glossary.
-- [Feature Document](./docs/features/README.md): Feature document, answers "What to do", each feature has its PRD, HLD and LLD.
-- [Modules](./docs/modules/README.md)
-- [ADR](./docs/descisions/README.md)
-- [Core's AGENTS.md](./core/AGENTS.md)
-- [Apple Universal App's AGENTS.md](./apple-universal/AGENTS.md)
-- [CLI's AGENTS.md](./core/AGENTS.md)
+- [Meta](./docs/00-meta/index.md): terminology and doc-system rules.
+- [PRD](./docs/10-prd/index.md): product intent and product invariants.
+- [Product TDD](./docs/20-product-tdd/index.md): system-level technical realization.
+- [Unit TDD](./docs/30-unit-tdd/index.md): unit-level technical realization.
+- [Deployment](./docs/40-deployment/index.md): runtime/deployment operational truth.
+- [ADR](./docs/90-decisions/README.md): decision history and rationale.
+- [Core AGENTS](./core/AGENTS.md)
+- [Apple Universal AGENTS](./apple-universal/AGENTS.md)
 
-> Do NOT use task documents (docs/task) as a source of truth, as they are procedural artifacts and are often outdated.
+### `docs/task` Rule
+
+- `docs/task` is procedural and non-authoritative.
+- Promote stable outcomes from tasks into authoritative layers above.
 
 ## Development Workflow
 
-- You are encouraged to add an AGENTS.md file under modules with significant complexity when needed.
-- Whenever new understanding emerges during implementation, you should decide whether that knowledge is reusable. If yes, it must be promoted from working memory to documentation.
-- Less is more; better none than inferior; quality over quantity; High cohension, low coupling.
-- Do NOT maintaining/running tests, just make sure the build passes.
-- No backward compability needed.
+- Add local `AGENTS.md` under complex modules when local constraints are needed.
+- When implementation reveals reusable knowledge, promote it into durable docs.
+- Less is more: quality over quantity; high cohesion and low coupling.
+- No backward compatibility is required unless explicitly requested.
 - Establish invariants at system boundaries and rely on them internally.
 - Inspect logs with `jq`.
 
 ## Coding Guidelines
 
 - Prefer abstraction only when duplication or patterns become clear.
-- Source file should be shorter than 300 lines.
+- Source files should stay under 300 lines where practical.
 
-### Naming Conventions
+## Naming Conventions
 
-- Omit "Beluna" prefix in directory name, file name and internal documents. Use short, descriptive names. eg. use `cli/`, instead of `beluna-cli`.
-- Include "Beluna" in package name (eg. `Cargo.toml`), user-facing documentation for user clarity and discoverability. eg. use `Beluna CLI` instead of `CLI`.
+- Omit `Beluna` prefix in directory names, file names, and internal docs.
+- Keep `Beluna` in user-facing package names/documentation for discoverability.
