@@ -22,26 +22,70 @@ Core initializes tracing at startup (`core/src/logging.rs`) with:
    - enabled by `logging.stderr_warn_enabled`
    - only `warn/error` for operator visibility
 4. OpenTelemetry log bridge layer:
-   - forwards `tracing` events to OTLP/HTTP protobuf (`/v1/logs`)
+   - forwards `tracing` events to OTLP (`http` or `grpc`, per signal config)
    - configured by `observability.otlp.*`
+5. OTLP log timestamp invariant:
+   - Core backfills `timestamp` from `observed_timestamp` when source timestamp is absent.
+   - This keeps OTLP log export compatible with backends that require non-empty event timestamp fields (for example Quickwit OTLP logs ingestion).
 
 ## Metrics Pipeline
 
-- Core uses OpenTelemetry metrics export (OTLP/HTTP protobuf, `/v1/metrics`).
+- Core uses OpenTelemetry metrics export over OTLP (`http` or `grpc`).
 - No Prometheus pull endpoint is exposed by Core.
 - Current key gauges:
   - `beluna_cortex_cycle_id`
   - `beluna_cortex_input_ir_act_descriptor_catalog_count`
 
+## Traces Pipeline
+
+- Core exports traces over OTLP (`http` or `grpc`).
+- Trace sampling is configurable via `observability.otlp.signals.traces.sampling_ratio`.
+- Runtime uses `ParentBased(TraceIdRatioBased(ratio))`.
+
 ## Runtime Config Contract
 
 - `logging.*` controls local file/stderr behavior.
 - `observability.otlp.*` controls OTLP export:
-  - `enabled`
-  - `endpoint`
-  - `export_timeout_ms`
-  - `metrics_export_interval_ms`
-  - `logs_export_interval_ms`
+  - `defaults.timeout_ms`
+  - `signals.metrics.*` (`enabled`, `protocol`, `endpoint`, optional `timeout_ms`, `export_interval_ms`)
+  - `signals.logs.*` (`enabled`, `protocol`, `endpoint`, optional `timeout_ms`, `export_interval_ms`)
+  - `signals.traces.*` (`enabled`, `protocol`, `endpoint`, optional `timeout_ms`, `sampling_ratio`)
+  - default signal `protocol` is `grpc`
+  - when a signal is enabled, `endpoint` is required (no `endpoint_base` fallback)
+
+## Quickwit gRPC Example
+
+```jsonc
+{
+  "observability": {
+    "otlp": {
+      "defaults": {
+        "timeout_ms": 5000
+      },
+      "signals": {
+        "metrics": {
+          "enabled": true,
+          "protocol": "grpc",
+          "endpoint": "http://127.0.0.1:7281",
+          "export_interval_ms": 5000
+        },
+        "logs": {
+          "enabled": true,
+          "protocol": "grpc",
+          "endpoint": "http://127.0.0.1:7281",
+          "export_interval_ms": 2000
+        },
+        "traces": {
+          "enabled": true,
+          "protocol": "grpc",
+          "endpoint": "http://127.0.0.1:7281",
+          "sampling_ratio": 1.0
+        }
+      }
+    }
+  }
+}
+```
 
 ## Context Propagation
 

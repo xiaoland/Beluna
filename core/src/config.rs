@@ -73,12 +73,16 @@ fn default_logging_retention_days() -> usize {
     14
 }
 
-fn default_observability_otlp_endpoint() -> String {
-    "http://127.0.0.1:4318".to_string()
-}
-
 fn default_observability_export_timeout_ms() -> u64 {
     5_000
+}
+
+fn default_enabled_false() -> bool {
+    false
+}
+
+fn default_observability_otlp_protocol() -> OtlpSignalProtocol {
+    OtlpSignalProtocol::Grpc
 }
 
 fn default_observability_metrics_export_interval_ms() -> u64 {
@@ -87,6 +91,10 @@ fn default_observability_metrics_export_interval_ms() -> u64 {
 
 fn default_observability_logs_export_interval_ms() -> u64 {
     2_000
+}
+
+fn default_observability_traces_sampling_ratio() -> f64 {
+    1.0
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -128,26 +136,151 @@ impl Default for ObservabilityConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OtlpConfig {
-    #[serde(default = "default_enabled_true")]
-    pub enabled: bool,
-    #[serde(default = "default_observability_otlp_endpoint")]
-    pub endpoint: String,
-    #[serde(default = "default_observability_export_timeout_ms")]
-    pub export_timeout_ms: u64,
-    #[serde(default = "default_observability_metrics_export_interval_ms")]
-    pub metrics_export_interval_ms: u64,
-    #[serde(default = "default_observability_logs_export_interval_ms")]
-    pub logs_export_interval_ms: u64,
+    #[serde(default)]
+    pub defaults: OtlpDefaultsConfig,
+    #[serde(default)]
+    pub signals: OtlpSignalsConfig,
 }
 
 impl Default for OtlpConfig {
     fn default() -> Self {
         Self {
-            enabled: true,
-            endpoint: default_observability_otlp_endpoint(),
-            export_timeout_ms: default_observability_export_timeout_ms(),
-            metrics_export_interval_ms: default_observability_metrics_export_interval_ms(),
-            logs_export_interval_ms: default_observability_logs_export_interval_ms(),
+            defaults: OtlpDefaultsConfig::default(),
+            signals: OtlpSignalsConfig::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OtlpDefaultsConfig {
+    #[serde(default = "default_observability_export_timeout_ms")]
+    pub timeout_ms: u64,
+}
+
+impl Default for OtlpDefaultsConfig {
+    fn default() -> Self {
+        Self {
+            timeout_ms: default_observability_export_timeout_ms(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum OtlpSignalProtocol {
+    Http,
+    Grpc,
+}
+
+impl OtlpSignalProtocol {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Http => "http",
+            Self::Grpc => "grpc",
+        }
+    }
+}
+
+impl Default for OtlpSignalProtocol {
+    fn default() -> Self {
+        default_observability_otlp_protocol()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OtlpSignalsConfig {
+    #[serde(default)]
+    pub metrics: OtlpMetricsConfig,
+    #[serde(default)]
+    pub traces: OtlpTracesConfig,
+    #[serde(default)]
+    pub logs: OtlpLogsConfig,
+}
+
+impl Default for OtlpSignalsConfig {
+    fn default() -> Self {
+        Self {
+            metrics: OtlpMetricsConfig::default(),
+            traces: OtlpTracesConfig::default(),
+            logs: OtlpLogsConfig::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OtlpMetricsConfig {
+    #[serde(default = "default_enabled_false")]
+    pub enabled: bool,
+    #[serde(default = "default_observability_otlp_protocol")]
+    pub protocol: OtlpSignalProtocol,
+    #[serde(default)]
+    pub endpoint: Option<String>,
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
+    #[serde(default = "default_observability_metrics_export_interval_ms")]
+    pub export_interval_ms: u64,
+}
+
+impl Default for OtlpMetricsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_enabled_false(),
+            protocol: default_observability_otlp_protocol(),
+            endpoint: None,
+            timeout_ms: None,
+            export_interval_ms: default_observability_metrics_export_interval_ms(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OtlpTracesConfig {
+    #[serde(default = "default_enabled_false")]
+    pub enabled: bool,
+    #[serde(default = "default_observability_otlp_protocol")]
+    pub protocol: OtlpSignalProtocol,
+    #[serde(default)]
+    pub endpoint: Option<String>,
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
+    #[serde(default = "default_observability_traces_sampling_ratio")]
+    pub sampling_ratio: f64,
+}
+
+impl Default for OtlpTracesConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_enabled_false(),
+            protocol: default_observability_otlp_protocol(),
+            endpoint: None,
+            timeout_ms: None,
+            sampling_ratio: default_observability_traces_sampling_ratio(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OtlpLogsConfig {
+    #[serde(default = "default_enabled_false")]
+    pub enabled: bool,
+    #[serde(default = "default_observability_otlp_protocol")]
+    pub protocol: OtlpSignalProtocol,
+    #[serde(default)]
+    pub endpoint: Option<String>,
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
+    #[serde(default = "default_observability_logs_export_interval_ms")]
+    pub export_interval_ms: u64,
+}
+
+impl Default for OtlpLogsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_enabled_false(),
+            protocol: default_observability_otlp_protocol(),
+            endpoint: None,
+            timeout_ms: None,
+            export_interval_ms: default_observability_logs_export_interval_ms(),
         }
     }
 }
@@ -474,11 +607,25 @@ mod tests {
     #[test]
     fn observability_config_defaults_match_contract() {
         let config = ObservabilityConfig::default();
-        assert!(config.otlp.enabled);
-        assert_eq!(config.otlp.endpoint, "http://127.0.0.1:4318");
-        assert_eq!(config.otlp.export_timeout_ms, 5_000);
-        assert_eq!(config.otlp.metrics_export_interval_ms, 5_000);
-        assert_eq!(config.otlp.logs_export_interval_ms, 2_000);
+        assert_eq!(config.otlp.defaults.timeout_ms, 5_000);
+
+        assert!(!config.otlp.signals.metrics.enabled);
+        assert_eq!(config.otlp.signals.metrics.protocol, super::OtlpSignalProtocol::Grpc);
+        assert_eq!(config.otlp.signals.metrics.endpoint, None);
+        assert_eq!(config.otlp.signals.metrics.timeout_ms, None);
+        assert_eq!(config.otlp.signals.metrics.export_interval_ms, 5_000);
+
+        assert!(!config.otlp.signals.traces.enabled);
+        assert_eq!(config.otlp.signals.traces.protocol, super::OtlpSignalProtocol::Grpc);
+        assert_eq!(config.otlp.signals.traces.endpoint, None);
+        assert_eq!(config.otlp.signals.traces.timeout_ms, None);
+        assert!((config.otlp.signals.traces.sampling_ratio - 1.0).abs() < f64::EPSILON);
+
+        assert!(!config.otlp.signals.logs.enabled);
+        assert_eq!(config.otlp.signals.logs.protocol, super::OtlpSignalProtocol::Grpc);
+        assert_eq!(config.otlp.signals.logs.endpoint, None);
+        assert_eq!(config.otlp.signals.logs.timeout_ms, None);
+        assert_eq!(config.otlp.signals.logs.export_interval_ms, 2_000);
     }
 
     #[test]

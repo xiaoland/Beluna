@@ -281,24 +281,106 @@
         "otlp": {
           "type": "object",
           "properties": {
-            "enabled": {
-              "type": "boolean"
+            "defaults": {
+              "type": "object",
+              "properties": {
+                "timeout_ms": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "additionalProperties": false
             },
-            "endpoint": {
-              "type": "string",
-              "minLength": 1
-            },
-            "export_timeout_ms": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "metrics_export_interval_ms": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "logs_export_interval_ms": {
-              "type": "integer",
-              "minimum": 1
+            "signals": {
+              "type": "object",
+              "properties": {
+                "metrics": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "protocol": {
+                      "type": "string",
+                      "enum": [
+                        "http",
+                        "grpc"
+                      ]
+                    },
+                    "endpoint": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "timeout_ms": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "export_interval_ms": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "traces": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "protocol": {
+                      "type": "string",
+                      "enum": [
+                        "http",
+                        "grpc"
+                      ]
+                    },
+                    "endpoint": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "timeout_ms": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "sampling_ratio": {
+                      "type": "number",
+                      "minimum": 0.0,
+                      "maximum": 1.0
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "logs": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "protocol": {
+                      "type": "string",
+                      "enum": [
+                        "http",
+                        "grpc"
+                      ]
+                    },
+                    "endpoint": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "timeout_ms": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "export_interval_ms": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
             }
           },
           "additionalProperties": false

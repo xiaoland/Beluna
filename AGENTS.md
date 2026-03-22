@@ -35,6 +35,7 @@ Read following documents if needed, and keep them current:
 - Do NOT maintaining/running tests, just make sure the build passes.
 - No backward compability needed.
 - Establish invariants at system boundaries and rely on them internally.
+- Inspect logs with `jq`.
 
 ## Coding Guidelines
 

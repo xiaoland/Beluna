@@ -18,7 +18,7 @@ jsonschema = "0.18.2"
 md5 = "0.7.0"
 opentelemetry = "0.31.0"
 opentelemetry-appender-tracing = "0.31.1"
-opentelemetry-otlp = { version = "0.31.0", default-features = false, features = ["http-proto", "logs", "metrics", "reqwest-blocking-client"] }
+opentelemetry-otlp = { version = "0.31.0", default-features = false, features = ["grpc-tonic", "http-proto", "logs", "metrics", "reqwest-blocking-client"] }
 opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio"] }
 reqwest = { version = "0.12.14", default-features = false, features = ["json", "rustls-tls", "stream"] }
 regex = "1.11.1"
@@ -34,5 +34,6 @@ tokio-util = "0.7.13"
 tracing = "0.1.41"
 tracing-appender = "0.2.3"
 tracing-error = "0.2.1"
+tracing-opentelemetry = "0.32.0"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter", "fmt", "json", "time"] }
 uuid = { version = "1.15.1", features = ["serde", "v4", "v7"] }

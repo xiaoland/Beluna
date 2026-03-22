@@ -31,6 +31,8 @@ beluna.jsonc
 *.sock
 /logs/
 /state/
+.o11y
+.tmp
 
 
 # XCode & SPM & CocoaPods
@@ -50,4 +52,4 @@ apple-universal/DerivedData/
 *.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings
 *.xcodeproj/xcuserdata/
 *.crash
-Pods/
+Pods/.firecrawl/

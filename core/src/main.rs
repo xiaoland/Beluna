@@ -136,16 +136,24 @@ async fn main() -> Result<()> {
         .with_context(|| format!("failed to load config from {}", config_path.display()))?;
     let observability_runtime = OpenTelemetryRuntime::init(&config.observability)
         .context("failed to initialize OpenTelemetry runtime")?;
-    let _logging_guard = init_tracing(&config.logging, observability_runtime.log_layer())
-        .context("failed to initialize tracing logging")?;
-    if let Some(endpoint) = observability_runtime.endpoint() {
+    let _logging_guard = init_tracing(
+        &config.logging,
+        observability_runtime.log_layer(),
+        observability_runtime.trace_layer(),
+    )
+    .context("failed to initialize tracing logging")?;
+    for state in observability_runtime.signal_states() {
         tracing::info!(
             target: "observability",
-            endpoint = endpoint,
-            "opentelemetry_otlp_started"
+            signal = state.signal,
+            requested = state.requested,
+            enabled = state.enabled,
+            protocol = ?state.protocol,
+            endpoint = ?state.endpoint,
+            timeout_ms = ?state.timeout_ms,
+            detail = ?state.detail,
+            "opentelemetry_otlp_signal_state"
         );
-    } else {
-        tracing::info!(target: "observability", "opentelemetry_otlp_disabled");
     }
     let _run_span = tracing::info_span!("core_run", run_id = %_logging_guard.run_id()).entered();
     tracing::info!(

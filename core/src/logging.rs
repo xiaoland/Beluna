@@ -34,6 +34,7 @@ impl LoggingGuard {
 pub fn init_tracing(
     logging_config: &LoggingConfig,
     otlp_log_layer: Option<Box<dyn Layer<Registry> + Send + Sync>>,
+    otlp_trace_layer: Option<Box<dyn Layer<Registry> + Send + Sync>>,
 ) -> Result<LoggingGuard> {
     if logging_config.filter.trim().is_empty() {
         return Err(anyhow!("logging.filter cannot be empty"));
@@ -70,8 +71,10 @@ pub fn init_tracing(
             .with_filter(LevelFilter::WARN)
     });
 
+    let otlp_layer = compose_otlp_layers(otlp_trace_layer, otlp_log_layer);
+
     tracing_subscriber::registry()
-        .with(otlp_log_layer)
+        .with(otlp_layer)
         .with(ErrorLayer::default())
         .with(file_layer)
         .with(stderr_layer)
@@ -98,6 +101,18 @@ pub fn init_tracing(
         _worker_guard: worker_guard,
         run_id,
     })
+}
+
+fn compose_otlp_layers(
+    otlp_trace_layer: Option<Box<dyn Layer<Registry> + Send + Sync>>,
+    otlp_log_layer: Option<Box<dyn Layer<Registry> + Send + Sync>>,
+) -> Option<Box<dyn Layer<Registry> + Send + Sync>> {
+    match (otlp_trace_layer, otlp_log_layer) {
+        (Some(trace_layer), Some(log_layer)) => Some(trace_layer.and_then(log_layer).boxed()),
+        (Some(trace_layer), None) => Some(trace_layer),
+        (None, Some(log_layer)) => Some(log_layer),
+        (None, None) => None,
+    }
 }
 
 fn build_env_filter(filter: &str) -> Result<EnvFilter> {
