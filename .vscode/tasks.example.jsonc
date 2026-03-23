@@ -1,0 +1,113 @@
+{
+    // Example Tasks for Beluna workspace
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build-core",
+            "type": "shell",
+            "command": "cargo",
+            "args": [
+                "build"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/core"
+            },
+            "problemMatcher": [
+                "$rustc"
+            ]
+        },
+        {
+            "label": "ensure-quickwit",
+            "type": "process",
+            "command": "/usr/bin/env",
+            "args": [
+                "bash",
+                "${workspaceFolder}/scripts/ensure-quickwit.sh"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "isBackground": true,
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": [
+                {
+                    "owner": "quickwit",
+                    "fileLocation": [
+                        "absolute"
+                    ],
+                    "pattern": {
+                        "regexp": "^(.*)$",
+                        "file": 1,
+                        "message": 1
+                    },
+                    "background": {
+                        "activeOnStart": true,
+                        "beginsPattern": "quickwit starting|__QW_BEGIN__",
+                        "endsPattern": "__QW_READY__"
+                    }
+                }
+            ]
+        },
+        {
+            "label": "prepare-debug-core",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "build-core",
+                "ensure-quickwit"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "start-quickwit",
+            "type": "process",
+            "command": "/usr/bin/env",
+            "args": [
+                "bash",
+                "${workspaceFolder}/scripts/run-quickwit-managed.sh",
+                "${workspaceFolder}"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "isBackground": true,
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": [
+                {
+                    "owner": "quickwit",
+                    "fileLocation": [
+                        "absolute"
+                    ],
+                    "pattern": {
+                        "regexp": "^(.*)$",
+                        "file": 1,
+                        "message": 1
+                    },
+                    "background": {
+                        "activeOnStart": true,
+                        "beginsPattern": "__QW_BEGIN__",
+                        "endsPattern": "__QW_READY__"
+                    }
+                }
+            ]
+        },
+        {
+            "label": "stop-quickwit",
+            "type": "process",
+            "command": "/bin/zsh",
+            "args": [
+                "-lc",
+                "if pgrep -x quickwit >/dev/null 2>&1; then pkill -x quickwit; sleep 1; if pgrep -x quickwit >/dev/null 2>&1; then echo \"failed to stop quickwit\"; exit 1; else echo \"quickwit stopped\"; fi; else echo \"quickwit is not running\"; fi"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        }
+    ]
+}

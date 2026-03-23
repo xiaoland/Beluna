@@ -1,0 +1,19 @@
+{
+    // Example Launch for Beluna workspace
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug Core",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/core/target/debug/beluna",
+            "args": [
+                "--config",
+                "${workspaceFolder}/beluna.jsonc"
+            ],
+            "cwd": "${workspaceFolder}",
+            "envFile": "${workspaceFolder}/.env",
+            "preLaunchTask": "prepare-debug-core"
+        }
+    ]
+}

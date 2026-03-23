@@ -23,7 +23,9 @@ __pycache__/
 # IDE
 .codex/
 .claude/
-.vscode/
+.vscode/*
+!.vscode/launch.example.jsonc
+!.vscode/tasks.example.jsonc
 .firecrawl
 
 # Debug
