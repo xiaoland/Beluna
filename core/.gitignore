@@ -1,0 +1,5 @@
+# Core Rust build output
+/target/
+
+# Generated config schema
+/beluna.schema.json

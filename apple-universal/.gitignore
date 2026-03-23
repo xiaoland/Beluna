@@ -1,0 +1,22 @@
+# SwiftPM/Xcode build output
+.swiftpm/
+.build/
+build/
+DerivedData/
+
+# Xcode intermediate products and user-local state
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+*.swiftdoc
+*.swiftmodule
+*.swiftinterface
+*.xcuserdatad/
+*.xcworkspace/xcuserdata/
+*.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings
+*.xcodeproj/xcuserdata/
+*.crash
+
+# Local tool state under iOS dependency trees
+Pods/.firecrawl/

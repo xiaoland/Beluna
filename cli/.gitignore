@@ -1,1 +1,2 @@
-target/
+# CLI Rust build output
+/target/

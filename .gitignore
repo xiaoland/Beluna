@@ -1,4 +1,4 @@
-# MacOS System files
+# macOS system files
 .DS_Store
 .AppleDouble
 .LSOverride
@@ -6,7 +6,7 @@
 .Spotlight-V100
 .Trashes
 
-# Python
+# Python caches and virtual envs
 __pycache__/
 *.py[cod]
 .venv/
@@ -14,21 +14,19 @@ __pycache__/
 .pdm-build/
 .pytest_cache/
 
-# Rust
-/rust/target/
+# Rust workspace build output
 /target/
-/core/target/
-/core/beluna.schema.json
+/rust/target/
 
-# IDE
-.codex/
-.claude/
+# Editor and local tooling state
+.codex
+.claude
 .vscode/*
 !.vscode/launch.example.jsonc
 !.vscode/tasks.example.jsonc
 .firecrawl
 
-# Debug
+# Local runtime/debug artifacts
 .env
 beluna.jsonc
 *.sock
@@ -36,23 +34,3 @@ beluna.jsonc
 /state/
 .o11y
 .tmp
-
-
-# XCode & SPM & CocoaPods
-apple-universal/.swiftpm/
-apple-universal/.build/
-apple-universal/build/
-apple-universal/DerivedData/
-*.hmap
-*.ipa
-*.dSYM.zip
-*.dSYM
-*.swiftdoc
-*.swiftmodule
-*.swiftinterface
-*.xcuserdatad/
-*.xcworkspace/xcuserdata/
-*.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings
-*.xcodeproj/xcuserdata/
-*.crash
-Pods/.firecrawl/
