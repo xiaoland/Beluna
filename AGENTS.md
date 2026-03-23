@@ -1,7 +1,4 @@
-# AGENTS.md of Beluna Workspace
-
-Respond to user in English.
-If a user decision degrades readability or maintainability, pause and request a trade-off discussion.
+# AGENTS.md of Beluna
 
 Beluna is organized as a multi-component repository.
 
@@ -9,24 +6,28 @@ Beluna is organized as a multi-component repository.
 
 ```text
 .
-├── core/               # Beluna runtime (Rust)
-├── cli/                # Beluna body endpoint, CLI client (Rust)
-├── apple-universal/    # Beluna body endpoint, Apple Universal app (Swift)
-└── docs/               # Authoritative layered docs + ADRs + task workspace
+├── core/               # Beluna core (Rust)
+├── cli/                # Beluna body endpoint - CLI client (Rust)
+├── apple-universal/    # Beluna body endpoint - Apple Universal app (Swift)
+└── docs/               # Authoritative layered docs + task workspace
 ```
 
-## Authoritative Documentation Map
+## Documentation System
 
 Read and keep these current:
 
 - [Meta](./docs/00-meta/index.md): terminology and doc-system rules.
-- [PRD](./docs/10-prd/index.md): product intent and product invariants.
+- [Read Order](./docs/00-meta/read-order.md): default cross-layer loading order for humans and agents.
+- [Intake Protocol](./docs/00-meta/intake-protocol.md): perturbation classification and containment workflow.
+- [PRD](./docs/10-prd/index.md): pressure-driven product truth (`_drivers -> behavior -> domain-structure`).
 - [Product TDD](./docs/20-product-tdd/index.md): system-level technical realization.
 - [Unit TDD](./docs/30-unit-tdd/index.md): unit-level technical realization.
 - [Deployment](./docs/40-deployment/index.md): runtime/deployment operational truth.
-- [ADR](./docs/90-decisions/README.md): decision history and rationale.
 - [Core AGENTS](./core/AGENTS.md)
 - [Apple Universal AGENTS](./apple-universal/AGENTS.md)
+
+> Add local `AGENTS.md` under complex modules when local constraints are needed.
+> When implementation reveals reusable knowledge, promote it into durable docs.
 
 ### `docs/task` Rule
 
@@ -35,12 +36,11 @@ Read and keep these current:
 
 ## Development Workflow
 
-- Add local `AGENTS.md` under complex modules when local constraints are needed.
-- When implementation reveals reusable knowledge, promote it into durable docs.
 - Less is more: quality over quantity; high cohesion and low coupling.
 - No backward compatibility is required unless explicitly requested.
 - Establish invariants at system boundaries and rely on them internally.
-- Inspect logs with `jq`.
+- Tooling: `jq`, `gh`, `rg`.
+- Make use of sub-agents.
 
 ## Coding Guidelines
 

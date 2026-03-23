@@ -7,24 +7,30 @@ Beluna uses a layered documentation system to preserve alignment without excessi
 | Area | Purpose | Mode | Notes |
 |---|---|---|---|
 | `00-meta` | Definitions, document meanings, governance rules. | Constitutional | Start here for terminology and system rules. |
-| `10-prd` | Product intent, domains, workflows, and invariants. | Constitutional | Domain map is first-class; keep product discussion domain-oriented. |
-| `20-product-tdd` | System-level technical composition of units. | Constitutional | Defines unit topology, coordination, and domain-to-unit realization. |
-| `30-unit-tdd` | Local technical design per unit. | Operational-to-constitutional | Inherits Product TDD constraints; captures local interfaces, state, and verification. |
+| `10-prd` | Pressure-driven product truth (`_drivers -> behavior -> domain-structure`). | Constitutional | Drivers are upstream; domain structure is derived. |
+| `20-product-tdd` | System-level technical composition of units. | Constitutional | Defines unit topology, coordination, and system constraints. |
+| `30-unit-tdd` | Local technical design per unit. | Operational-to-constitutional | Inherits Product TDD constraints and localizes implementation contracts. |
 | `40-deployment` | Runtime and rollout truth. | Operational-to-constitutional | Environments, rollout, observability, recovery. |
-| `90-decisions` | ADRs for decision memory and rationale. | Constitutional | Operative conclusions must still land in the TDD layers. |
 | `AGENTS.md` | Agent governance (root + local refinements). | Constitutional | Hierarchical; nearest relevant file refines, not replaces, root rules. |
 | `docs/task` | Procedural task plans and verification packets. | Operational | Non-authoritative; promote stable outcomes upward. |
-| Codebase | Executable truth. | Operational | Tests, schemas, runtime behavior; must match the governing layers. |
+| Codebase | Executable truth. | Operational | Tests, schemas, runtime behavior; must match governing layers. |
 
-Constitutional structure (definitions and governance) changes slowly; operational structure (daily workflow, tasks, and verification) changes as needed but must respect the constitutional anchors.
+Constitutional structure (definitions and governance) changes slowly; operational structure (daily workflow, tasks, and verification) changes as needed but must respect constitutional anchors.
+
+The `00-meta` baseline is:
+
+- `concepts.md`
+- `doc-system.md`
+- `read-order.md`
+- `intake-protocol.md`
 
 ## Stability Placement
 
 | Stability | Layers | Examples |
 |---|---|---|
-| **Slow** | `00-meta`, `10-prd`, `20-product-tdd`, major `30-unit-tdd` boundaries | terminology, product invariants, unit topology |
-| **Medium** | unit interfaces, operations, `40-deployment` runbooks | interface contracts, deployment steps |
-| **Fast** | `docs/task` plans and in-progress notes | task L0–L3 files, scratch analysis |
+| **Slow** | `00-meta`, `10-prd`, `20-product-tdd`, major `30-unit-tdd` boundaries | terminology, product claims, unit topology |
+| **Medium** | unit interfaces, operations, `40-deployment` runbooks | interface contracts, deployment procedures |
+| **Fast** | `docs/task` plans and in-progress notes | task L0-L3 files, scratch analysis |
 | **Executable** | codebase | tests, schemas, runtime validation |
 
 Slow-layer statements must survive multiple task cycles without meaningful change.
@@ -34,31 +40,50 @@ Executable truth must always match authoritative layer contracts; divergence is 
 
 ## Operating Workflow
 
-1. **Classify** the change: terminology/meta, product intent, system design, unit-local design, deployment/runtime, or task-only.
-2. **Anchor** in the right layer first (update or add the smallest governing statement before coding).
-3. **Execute** the change in code/config with the governing anchor in view.
-4. **Verify** using a task verification packet (intent, design consistency, behavior, operational readiness, evidence).
-5. **Promote** only stable learning back into authoritative layers; keep one authoritative home per decision.
+1. **Classify perturbation type**: `Intent`, `Constraint`, `Reality`, or `Artifact`.
+2. **Contain volatility** in `docs/task/<task>/` with perturbation, impact hypothesis, assumptions, and negotiation triggers.
+3. **Anchor** in the right durable layer first (update or add the smallest governing statement before coding).
+4. **Execute** code/config changes under explicit acceptance criteria and guardrails.
+5. **Verify** intent, design consistency, behavior correctness, and operational readiness with evidence.
+6. **Decide outcome** explicitly (`promote`, `complete_without_promotion`, `defer`, `reject`, or `experiment`).
+7. **Promote** only stable learning back into authoritative layers; keep one authoritative home per decision.
+
+## Intake Classification (Required for Non-Trivial Changes)
+
+- `Intent`: behavior/product request pressure; usually hits PRD first, then TDD.
+- `Constraint`: budget/platform/performance/team limits; usually hits Product TDD, Unit TDD, or deployment.
+- `Reality`: bug/incident/observed failure; usually hits code + verification first, then back-propagation.
+- `Artifact`: code/schema/log/draft input; interpret first, then classify as one of the above.
 
 ## Layer Shapes (Essentials)
 
-### PRD (Domain-Oriented)
+### PRD (Pressure-Driven, Claim-Centered)
 
-- Keep domain map explicit: boundaries, cross-domain workflows, and ownership rationale.
-- Partition by business semantics, not by routes/screens. Include rules, invariants, edge cases, and acceptance hints per domain.
+- `10-prd/_drivers` defines upstream pressure field: market/user, business/service, hard constraints, operational realities.
+- `10-prd/behavior` defines product claims, capabilities, user-observable workflows, and product rules/invariants.
+- `10-prd/domain-structure` records derived semantic boundaries after drivers and behavior are stable.
+
+Derived-domain rule:
+
+- Domain boundaries are structuring outcomes of PRD, not upstream requirement sources.
+
+PRD layer purity rule:
+
+- PRD governs product truth only.
+- PRD must not govern mechanism ordering, module ownership, transport internals, or local technical contracts.
+- Mechanism contracts belong to `20-product-tdd`, `30-unit-tdd`, and `40-deployment`.
 
 ### Product TDD (System Composition)
 
 - Define unit topology and why it is shaped that way.
-- Describe coordination models (requests, events, ordering, failure behavior) that let units jointly realize product workflows.
-- Bridge domains to units (who owns authoritative state, who participates, which coordination pattern applies).
-- Capture inherited system constraints and deployment-shaping constraints that downstream Unit TDDs must respect.
+- Describe coordination models (requests, events, ordering, failure behavior) that realize PRD behavior.
+- Capture inherited system constraints and deployment-shaping constraints for Unit TDD.
 
 ### Unit TDD (Local Realization)
 
 - Localize ownership: responsibilities, consumed/produced interfaces, data/state, and dependencies.
 - Record local design assumptions, operational rules, and verification/guardrails.
-- Inherit Product TDD constraints rather than redefining boundaries.
+- Inherit Product TDD constraints rather than redefining system boundaries.
 
 ## Promotion Gate (Required)
 
@@ -74,11 +99,11 @@ A statement can be promoted from `docs/task` or from code into an authoritative 
 | Discovery | Promote To |
 |---|---|
 | New canonical term or concept | `00-meta/concepts.md` |
-| Product intent or invariant | `10-prd` |
+| Product driver/claim/invariant/workflow truth | `10-prd` |
 | Cross-unit design decision | `20-product-tdd` |
 | Unit-local design decision | `30-unit-tdd/<unit>` |
 | Runtime or operational constraint | `40-deployment` |
-| Significant design decision with rationale | `90-decisions` (ADR) |
+| Historical rationale that remains useful | Decision-memory section in the owning authoritative doc |
 
 ### Promotion Rules
 
@@ -89,20 +114,26 @@ A statement can be promoted from `docs/task` or from code into an authoritative 
 
 When validating a change that spans multiple layers:
 
-1. Confirm the outer-layer statement (PRD invariant or product-tdd contract) is satisfied.
-2. Confirm unit-level contracts (interfaces, operations) remain consistent.
-3. Confirm executable truth (tests, schema) enforces the contract.
+1. Confirm PRD claims/rules are still satisfied.
+2. Confirm Product/Unit TDD contracts remain consistent.
+3. Confirm executable truth (tests, schema) enforces contracts.
 4. If any layer is inconsistent, fix the authoritative layer first, then propagate downward.
 
 ### Task Verification Packet
 
 For non-trivial tasks, carry a lightweight packet:
 
+- Perturbation: raw user/reality signal.
+- Input Type: `Intent` / `Constraint` / `Reality` / `Artifact`.
 - Governing Anchors: stable docs this task depends on.
 - Intended Change: what is being changed.
+- Impact Hypothesis: primary hit, likely secondary hits, confidence, unknowns.
+- Temporary Assumptions: reversible assumptions made to proceed.
+- Negotiation Triggers: what requires explicit user decision before continuing.
 - Acceptance Criteria: what must be true for completion.
 - Guardrails Touched: tests, schemas, CI checks, rollout checks involved.
 - Evidence Expected: proof expected before closure.
+- Outcome: `promote` / `complete_without_promotion` / `defer` / `reject` / `experiment`.
 - Promotion Candidates: recurring truths to promote back into durable docs.
 
 ## Task Quarantine (`docs/task`)
@@ -111,15 +142,15 @@ For non-trivial tasks, carry a lightweight packet:
 - Durable docs may reference a task as evidence, not as governing truth.
 - If a task conclusion becomes repeatedly relevant, promote it to `10/20/30/40` layers.
 
-## ADR Usage
+## Decision Memory
 
-- ADRs preserve decision memory and rationale.
-- Current operative conclusions must be reflected in `20-product-tdd` or `30-unit-tdd`.
-- Reviewers should understand current system state without reading full ADR history.
+- Beluna does not maintain a separate ADR family.
+- Important rationale should be captured inline in the authoritative doc that owns the live rule.
+- Reviewers should understand current state and rationale from current layer docs without replaying detached history folders.
 
 ## Deployment Boundary
 
-Distinguish between deployment-shaping constraints captured in Product TDD and runtime truth in `40-deployment` (environments, rollout, observability, recovery).
+Distinguish between deployment-shaping constraints in Product TDD and runtime truth in `40-deployment` (environments, rollout, observability, recovery).
 
 ## Split Rules
 
@@ -128,19 +159,21 @@ Split a file only when it becomes hard to read as one concept, sections change a
 ## Anti-Patterns
 
 - Treating chat history as source of truth.
+- Treating derived domain structure as upstream requirement source.
+- Mixing product truth with implementation mechanisms in PRD.
 - Mixing constitutional rules and daily workflow without acknowledging the difference.
-- Leaving domain or unit boundaries implicit.
-- Re-discovering coordination, verification, or runtime realities from code instead of capturing them in the governing layers.
+- Re-discovering coordination, verification, or runtime realities from code instead of capturing them in governing layers.
 
 ## Removed Legacy Families
 
-The following legacy families were removed from the authoritative map:
+The following legacy families are removed from the authoritative map:
 
 - `docs/features`
 - `docs/modules`
 - `docs/contracts`
 - `docs/overview.md`
 - `docs/glossary.md`
-- `docs/descisions` (replaced by `docs/90-decisions`)
+- `docs/descisions`
+- `docs/90-decisions`
 
 Do not reintroduce these as parallel authoritative systems.

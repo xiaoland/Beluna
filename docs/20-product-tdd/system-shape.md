@@ -15,5 +15,3 @@ Core process shape:
 5. Build Cortex runtime with AI Gateway dependencies.
 6. Spawn Stem tick runtime, efferent runtime, and Cortex runtime.
 7. Handle graceful shutdown with bounded drain.
-
-Design Source: ADR-001, ADR-002.

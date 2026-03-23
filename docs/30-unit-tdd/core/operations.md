@@ -19,5 +19,3 @@
 1. JSON runtime logs are emitted locally.
 2. OTLP export handles logs/metrics/traces per signal configuration.
 3. Core owns runtime observability export responsibility.
-
-Decision Source: ADR-001.

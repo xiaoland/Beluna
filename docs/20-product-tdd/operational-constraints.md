@@ -7,16 +7,12 @@
 3. Prometheus pull endpoint is not part of current Core runtime contract.
 4. Apple body endpoint does not own runtime observability control surfaces.
 
-Decision Source: ADR-001.
-
 ## Configuration Contract
 
 1. Typed Rust config structs are the single source of truth for config shape/defaults.
 2. Validation is performed at config boundary through typed validation rules.
 3. `core/beluna.schema.json` is generated from code, not hand-authored as an independent source.
 4. Runtime startup does not depend on schema-file validation path.
-
-Decision Source: ADR-002.
 
 ## Reliability Constraints
 

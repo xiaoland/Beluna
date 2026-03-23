@@ -19,5 +19,3 @@
 2. Tick grants control admitted Cortex cycle execution.
 3. Act dispatch returns one terminal outcome per act.
 4. Continuity persists and restores cognition state with guardrails.
-
-Decision Source: ADR-002 (config contract).

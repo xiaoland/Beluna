@@ -5,7 +5,9 @@ This file defines shared terminology for humans and coding agents.
 ## Ontology
 
 - Product: user and business value Beluna must realize, including operational realities.
-- Domain: stable business meaning boundary with its own vocabulary, invariants, and change drivers.
+- Product Driver: market, business, constraint, or operational pressure that shapes product truth.
+- Product Claim: durable product promise used to evaluate whether Beluna is delivering intended value.
+- Domain: derived semantic structure that stabilizes meaning boundaries after product drivers and behavior claims are defined.
 - Capability: something the product or system can do; may span domains or units.
 - Workflow: ordered behavior path across actors, states, and system steps.
 - Unit: technical planning and ownership boundary; current units are `core`, `cli`, and `apple-universal`.
@@ -63,7 +65,7 @@ Beluna's documentation and development process forms a **decision network**, not
 1. Decisions cascade **downward**: product intent constrains system design; system design constrains unit design.
 2. Discoveries propagate **upward**: stable outcomes learned in tasks or code must be promoted to the appropriate layer.
 3. A decision must live in **exactly one** authoritative layer; duplication creates drift.
-4. When layers conflict, the outer layer wins. An ADR may record a rationale for a deliberate exception, but the ADR itself does not become an authoritative layer; any operative conclusion from an ADR must still be reflected in the appropriate `10–40` layer.
+4. When layers conflict, the outer layer wins and the conflict must be resolved in authoritative layer docs rather than task history.
 
 ## Terminology Rules
 

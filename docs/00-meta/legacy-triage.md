@@ -2,6 +2,8 @@
 
 This ledger records the migration outcome for every legacy durable document removed during the hard reset.
 
+This file is archival context only. Historical `New Location` entries may reference paths removed in later restructures.
+
 Outcome meanings:
 
 - `Promote`: moved as-is (or nearly as-is) into the new authoritative system.
@@ -31,22 +33,22 @@ Outcome meanings:
 | `docs/contracts/mind/preemption.md` | Drop | `-` | Deprecated domain surface removed from authoritative model |
 | `docs/contracts/spine/README.md` | Drop | `docs/20-product-tdd/*; docs/30-unit-tdd/*` | Dedicated contract family removed; stable contracts embedded in TDD layers |
 | `docs/contracts/stem/README.md` | Drop | `docs/20-product-tdd/*; docs/30-unit-tdd/*` | Dedicated contract family removed; stable contracts embedded in TDD layers |
-| `docs/descisions/001-observability-opentelemetry.md` | Promote | `docs/90-decisions/001-observability-opentelemetry.md` | Operative conclusions projected to docs/20-product-tdd/operational-constraints.md; docs/30-unit-tdd/core/operations.md; docs/30-unit-tdd/apple-universal/design.md; docs/40-deployment/observability.md |
-| `docs/descisions/002-config-schema-single-source-of-truth.md` | Promote | `docs/90-decisions/002-config-schema-single-source-of-truth.md` | Operative conclusions projected to docs/20-product-tdd/operational-constraints.md; docs/30-unit-tdd/core/interfaces.md; docs/40-deployment/environments.md |
-| `docs/descisions/README.md` | Rewrite | `docs/90-decisions/README.md` | ADR index retained with projection rule |
+| `docs/descisions/001-observability-opentelemetry.md` | Promote | `-` | ADR family was later hard-deleted; operative conclusions remain in `20/30/40` layers |
+| `docs/descisions/002-config-schema-single-source-of-truth.md` | Promote | `-` | ADR family was later hard-deleted; operative conclusions remain in `20/30/40` layers |
+| `docs/descisions/README.md` | Rewrite | `-` | ADR index was later removed with `docs/90-decisions` hard deletion |
 | `docs/features/README.md` | Drop | `-` | Feature-family documents removed in layered hard reset |
 | `docs/features/ai-gateway/HLD.md` | Drop | `-` | Feature-family documents removed in layered hard reset |
 | `docs/features/ai-gateway/LLD.md` | Drop | `-` | Feature-family documents removed in layered hard reset |
-| `docs/features/ai-gateway/PRD.md` | Rewrite | `docs/10-prd/workflows.md; docs/30-unit-tdd/core/design.md` | Stable gateway role and workflow kept; feature-local packaging removed |
+| `docs/features/ai-gateway/PRD.md` | Rewrite | `docs/10-prd/behavior/workflows.md; docs/30-unit-tdd/core/design.md` | Stable gateway role and workflow kept; feature-local packaging removed |
 | `docs/features/continuity/HLD.md` | Drop | `-` | Feature-family documents removed in layered hard reset |
 | `docs/features/continuity/LLD.md` | Drop | `-` | Feature-family documents removed in layered hard reset |
 | `docs/features/continuity/PRD.md` | Rewrite | `docs/20-product-tdd/coordination.md; docs/30-unit-tdd/core/design.md` | Stable persistence/gate ownership retained |
 | `docs/features/cortex/HLD.md` | Drop | `-` | Feature-family documents removed in layered hard reset |
 | `docs/features/cortex/LLD.md` | Drop | `-` | Feature-family documents removed in layered hard reset |
-| `docs/features/cortex/PRD.md` | Rewrite | `docs/10-prd/invariants.md; docs/20-product-tdd/coordination.md; docs/30-unit-tdd/core/design.md` | Stable cognition-cycle truths retained in unit/system layers |
+| `docs/features/cortex/PRD.md` | Rewrite | `docs/10-prd/behavior/rules-and-invariants.md; docs/20-product-tdd/coordination.md; docs/30-unit-tdd/core/design.md` | Stable cognition-cycle truths retained in unit/system layers |
 | `docs/features/ledger/HLD.md` | Drop | `-` | Feature-family documents removed in layered hard reset |
 | `docs/features/ledger/LLD.md` | Drop | `-` | Feature-family documents removed in layered hard reset |
-| `docs/features/ledger/PRD.md` | Rewrite | `docs/30-unit-tdd/core/design.md; docs/10-prd/invariants.md` | Stable resource-control role retained |
+| `docs/features/ledger/PRD.md` | Rewrite | `docs/30-unit-tdd/core/design.md; docs/10-prd/behavior/rules-and-invariants.md` | Stable resource-control role retained |
 | `docs/features/mind/HLD.md` | Drop | `-` | Deprecated domain surface removed from authoritative model |
 | `docs/features/mind/LLD.md` | Drop | `-` | Deprecated domain surface removed from authoritative model |
 | `docs/features/mind/PRD.md` | Drop | `-` | Deprecated domain surface removed from authoritative model |
@@ -90,4 +92,4 @@ Outcome meanings:
 | `docs/modules/spine/TOPOGRAPHY.md` | Drop | `-` | Module-family documents removed in layered hard reset |
 | `docs/modules/stem/README.md` | Drop | `-` | Module-family documents removed in layered hard reset |
 | `docs/modules/stem/TOPOGRAPHY.md` | Drop | `-` | Module-family documents removed in layered hard reset |
-| `docs/overview.md` | Rewrite | `docs/10-prd/vision.md; docs/10-prd/workflows.md; docs/20-product-tdd/system-shape.md` | Stable topology and product intent retained in layered form |
+| `docs/overview.md` | Rewrite | `docs/10-prd/behavior/claims.md; docs/10-prd/behavior/workflows.md; docs/20-product-tdd/system-shape.md` | Stable topology and product intent retained in layered form |

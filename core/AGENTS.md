@@ -8,11 +8,10 @@ Beluna Core is the runnable runtime and domain agent implementation.
 
 ## Design Sources
 
-- Product intent/invariants: `../docs/10-prd/index.md`
+- Product drivers/behavior claims: `../docs/10-prd/index.md`
 - System-level design: `../docs/20-product-tdd/index.md`
 - Core unit design/interfaces/operations: `../docs/30-unit-tdd/core/README.md`
 - Deployment constraints: `../docs/40-deployment/index.md`
-- Decision history: `../docs/90-decisions/README.md`
 
 ## File Structure (Crucial Only)
 

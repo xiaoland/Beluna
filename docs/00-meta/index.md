@@ -5,11 +5,10 @@ Beluna documentation is organized by stability and decision scope.
 ## Authoritative Layers
 
 1. `docs/00-meta/`: terminology, documentation rules, and governance.
-2. `docs/10-prd/`: product intent and product-level invariants.
+2. `docs/10-prd/`: pressure-driven product intent (`_drivers -> behavior -> domain-structure`).
 3. `docs/20-product-tdd/`: system-level technical realization.
 4. `docs/30-unit-tdd/`: unit-level technical realization.
 5. `docs/40-deployment/`: deployment and runtime operational truth.
-6. `docs/90-decisions/`: ADR history.
 
 ## Non-Authoritative Area
 
@@ -19,9 +18,11 @@ Beluna documentation is organized by stability and decision scope.
 
 ## How To Read
 
-1. Start with [`concepts.md`](./concepts.md) — ontology, structural modes, and the Decision Network & Workflow Layers model.
-2. Read [`doc-system.md`](./doc-system.md) — document families, stability rules, operating workflow, promotion criteria, and verification guidance.
-3. Review migration outcomes in [`legacy-triage.md`](./legacy-triage.md).
-4. Read `10-prd` before `20-product-tdd` and `30-unit-tdd`.
-5. Read `40-deployment` for runtime constraints.
-6. Read ADRs only for decision history and rationale; operative conclusions should already be reflected in TDD layers.
+1. Read [`read-order.md`](./read-order.md) for the default cross-layer loading order.
+2. Read [`concepts.md`](./concepts.md) for ontology and terminology.
+3. Read [`doc-system.md`](./doc-system.md) for document families, stability rules, and promotion/verification gates.
+4. Read [`intake-protocol.md`](./intake-protocol.md) before planning or implementation.
+5. Read PRD in order: `_drivers` first, `behavior` second, `domain-structure` third.
+6. Read `40-deployment` for runtime constraints.
+7. Read relevant `docs/task/<task>/` files for transient context only.
+8. Use [`legacy-triage.md`](./legacy-triage.md) only for migration history and archival mapping.

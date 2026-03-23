@@ -21,7 +21,7 @@ Beluna Apple Universal App is the app that bridges human interaction with Beluna
 
 ## Design Sources
 
-- Product intent and invariants: `../docs/10-prd/index.md`
+- Product drivers and behavior claims: `../docs/10-prd/index.md`
 - System and unit boundaries: `../docs/20-product-tdd/index.md`, `../docs/30-unit-tdd/index.md`
 - Deployment and operations constraints: `../docs/40-deployment/index.md`
 

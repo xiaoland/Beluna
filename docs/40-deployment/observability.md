@@ -15,5 +15,3 @@ Core is the single owner of runtime observability export.
 1. No Prometheus pull endpoint in current contract.
 2. Body endpoints do not duplicate Core observability control surfaces.
 3. OTLP signal configuration is explicit and per-signal.
-
-Decision Source: ADR-001.

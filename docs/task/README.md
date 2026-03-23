@@ -15,6 +15,17 @@
 - `docs/30-unit-tdd`
 - `docs/40-deployment`
 
+## Input Classification (Required for Non-Trivial Tasks)
+
+Before planning, classify the perturbation type:
+
+- `Intent`: new behavior or policy request.
+- `Constraint`: budget/platform/performance/team constraint.
+- `Reality`: bug, incident, runtime/user failure signal.
+- `Artifact`: code/schema/log/draft input requiring interpretation.
+
+If mixed, record one primary type and list secondary types.
+
 ## When to Promote
 
 Promote a task outcome when it meets **all** of the following:
@@ -40,16 +51,23 @@ If in doubt, record the outcome in `RESULT.md` first and promote in a follow-up 
 
 For non-trivial tasks, keep a lightweight packet with:
 
+- **Perturbation**: raw user/reality signal.
+- **Input Type**: `Intent` / `Constraint` / `Reality` / `Artifact`.
 - **Governing Anchors**: stable docs the task depends on.
 - **Intended Change**: concise statement of scope.
+- **Impact Hypothesis**: primary hit, secondary hits, confidence, unknowns.
+- **Temporary Assumptions**: reversible assumptions used to proceed.
+- **Negotiation Triggers**: when explicit user decision is required.
 - **Acceptance Criteria**: what must be true to call the task done.
 - **Guardrails Touched**: tests, schemas, CI checks, rollout checks involved.
 - **Evidence Expected**: proof needed before closure.
+- **Outcome**: `promote` / `complete_without_promotion` / `defer` / `reject` / `experiment`.
 - **Promotion Candidates**: recurring truths to push back into `10/20/30/40`.
 
 ## File Convention
 
 - Use `docs/task/<task-name>/`.
+- Start from `docs/task/_template.md` for non-trivial tasks.
 - Keep planning stages as `L0/L1/L2/L3` files when needed.
 - Keep final outcome as `RESULT.md` when needed.
 

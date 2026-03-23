@@ -12,5 +12,3 @@
 2. Keep protocol compatibility explicit and typed.
 3. Keep I/O and decoding off main thread to preserve UI responsiveness.
 4. Keep observability export in Core, not in app UI surfaces.
-
-Decision Source: ADR-001.
