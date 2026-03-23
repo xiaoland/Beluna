@@ -2,6 +2,22 @@
 
 Beluna uses a layered documentation system to preserve alignment without excessive maintenance cost.
 
+## Document Families and Ownership
+
+| Area | Purpose | Mode | Notes |
+|---|---|---|---|
+| `00-meta` | Definitions, document meanings, governance rules. | Constitutional | Start here for terminology and system rules. |
+| `10-prd` | Product intent, domains, workflows, and invariants. | Constitutional | Domain map is first-class; keep product discussion domain-oriented. |
+| `20-product-tdd` | System-level technical composition of units. | Constitutional | Defines unit topology, coordination, and domain-to-unit realization. |
+| `30-unit-tdd` | Local technical design per unit. | Operational-to-constitutional | Inherits Product TDD constraints; captures local interfaces, state, and verification. |
+| `40-deployment` | Runtime and rollout truth. | Operational-to-constitutional | Environments, rollout, observability, recovery. |
+| `90-decisions` | ADRs for decision memory and rationale. | Constitutional | Operative conclusions must still land in the TDD layers. |
+| `AGENTS.md` | Agent governance (root + local refinements). | Constitutional | Hierarchical; nearest relevant file refines, not replaces, root rules. |
+| `docs/task` | Procedural task plans and verification packets. | Operational | Non-authoritative; promote stable outcomes upward. |
+| Codebase | Executable truth. | Operational | Tests, schemas, runtime behavior; must match the governing layers. |
+
+Constitutional structure (definitions and governance) changes slowly; operational structure (daily workflow, tasks, and verification) changes as needed but must respect the constitutional anchors.
+
 ## Stability Placement
 
 | Stability | Layers | Examples |
@@ -16,13 +32,33 @@ Medium-layer statements should remain stable within a release cycle.
 Fast-layer content is ephemeral and expires with the task that produced it.
 Executable truth must always match authoritative layer contracts; divergence is a defect.
 
-## Update Workflow
+## Operating Workflow
 
-1. Classify the change by scope: terminology, product intent, cross-unit design, unit-local design, deployment/runtime, or task-local.
-2. Update the nearest stable anchor first.
-3. Implement the change in code/config.
-4. Verify behavior and operational impact.
-5. Promote only stable learning back into authoritative docs.
+1. **Classify** the change: terminology/meta, product intent, system design, unit-local design, deployment/runtime, or task-only.
+2. **Anchor** in the right layer first (update or add the smallest governing statement before coding).
+3. **Execute** the change in code/config with the governing anchor in view.
+4. **Verify** using a task verification packet (intent, design consistency, behavior, operational readiness, evidence).
+5. **Promote** only stable learning back into authoritative layers; keep one authoritative home per decision.
+
+## Layer Shapes (Essentials)
+
+### PRD (Domain-Oriented)
+
+- Keep domain map explicit: boundaries, cross-domain workflows, and ownership rationale.
+- Partition by business semantics, not by routes/screens. Include rules, invariants, edge cases, and acceptance hints per domain.
+
+### Product TDD (System Composition)
+
+- Define unit topology and why it is shaped that way.
+- Describe coordination models (requests, events, ordering, failure behavior) that let units jointly realize product workflows.
+- Bridge domains to units (who owns authoritative state, who participates, which coordination pattern applies).
+- Capture inherited system constraints and deployment-shaping constraints that downstream Unit TDDs must respect.
+
+### Unit TDD (Local Realization)
+
+- Localize ownership: responsibilities, consumed/produced interfaces, data/state, and dependencies.
+- Record local design assumptions, operational rules, and verification/guardrails.
+- Inherit Product TDD constraints rather than redefining boundaries.
 
 ## Promotion Gate (Required)
 
@@ -44,6 +80,11 @@ A statement can be promoted from `docs/task` or from code into an authoritative 
 | Runtime or operational constraint | `40-deployment` |
 | Significant design decision with rationale | `90-decisions` (ADR) |
 
+### Promotion Rules
+
+- Promote acceptance criteria into contracts when they recur, are stable across tasks, and are important enough to guide future work.
+- Add guardrails to contracts when the rule is safety-critical, frequently violated, cheap to check mechanically, or when human review has proven unreliable.
+
 ### QA Cross-Cutting Guidance
 
 When validating a change that spans multiple layers:
@@ -52,6 +93,17 @@ When validating a change that spans multiple layers:
 2. Confirm unit-level contracts (interfaces, operations) remain consistent.
 3. Confirm executable truth (tests, schema) enforces the contract.
 4. If any layer is inconsistent, fix the authoritative layer first, then propagate downward.
+
+### Task Verification Packet
+
+For non-trivial tasks, carry a lightweight packet:
+
+- Governing Anchors: stable docs this task depends on.
+- Intended Change: what is being changed.
+- Acceptance Criteria: what must be true for completion.
+- Guardrails Touched: tests, schemas, CI checks, rollout checks involved.
+- Evidence Expected: proof expected before closure.
+- Promotion Candidates: recurring truths to promote back into durable docs.
 
 ## Task Quarantine (`docs/task`)
 
@@ -64,6 +116,21 @@ When validating a change that spans multiple layers:
 - ADRs preserve decision memory and rationale.
 - Current operative conclusions must be reflected in `20-product-tdd` or `30-unit-tdd`.
 - Reviewers should understand current system state without reading full ADR history.
+
+## Deployment Boundary
+
+Distinguish between deployment-shaping constraints captured in Product TDD and runtime truth in `40-deployment` (environments, rollout, observability, recovery).
+
+## Split Rules
+
+Split a file only when it becomes hard to read as one concept, sections change at different rates, contributors repeatedly touch unrelated parts, or misunderstandings stem from mixed abstraction levels. Do not split solely because a theoretical category exists.
+
+## Anti-Patterns
+
+- Treating chat history as source of truth.
+- Mixing constitutional rules and daily workflow without acknowledging the difference.
+- Leaving domain or unit boundaries implicit.
+- Re-discovering coordination, verification, or runtime realities from code instead of capturing them in the governing layers.
 
 ## Removed Legacy Families
 

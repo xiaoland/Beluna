@@ -36,6 +36,17 @@ If in doubt, record the outcome in `RESULT.md` first and promote in a follow-up 
 6. Record task result.
 7. **Promote** stable findings to authoritative docs.
 
+## Task Verification Packet
+
+For non-trivial tasks, keep a lightweight packet with:
+
+- **Governing Anchors**: stable docs the task depends on.
+- **Intended Change**: concise statement of scope.
+- **Acceptance Criteria**: what must be true to call the task done.
+- **Guardrails Touched**: tests, schemas, CI checks, rollout checks involved.
+- **Evidence Expected**: proof needed before closure.
+- **Promotion Candidates**: recurring truths to push back into `10/20/30/40`.
+
 ## File Convention
 
 - Use `docs/task/<task-name>/`.

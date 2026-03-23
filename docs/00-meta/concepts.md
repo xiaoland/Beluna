@@ -2,16 +2,25 @@
 
 This file defines shared terminology for humans and coding agents.
 
-## Documentation Concepts
+## Ontology
 
-- Product: the user and operational value Beluna must realize.
-- Product TDD: system-level technical design that realizes product intent.
-- Unit TDD: local technical design within one technical management boundary.
-- Unit: a technical planning and ownership boundary. In Beluna, initial units are `core`, `cli`, and `apple-universal`.
-- Contract: stable normative behavior statement inside TDD/interface docs.
-- Guardrail: executable or procedural enforcement of contracts (tests, schema validation, runtime checks).
-- Stable Truth: information that remains useful and valid beyond one task.
-- Task Truth: procedural or temporary decisions specific to one task iteration.
+- Product: user and business value Beluna must realize, including operational realities.
+- Domain: stable business meaning boundary with its own vocabulary, invariants, and change drivers.
+- Capability: something the product or system can do; may span domains or units.
+- Workflow: ordered behavior path across actors, states, and system steps.
+- Unit: technical planning and ownership boundary; current units are `core`, `cli`, and `apple-universal`.
+- Product TDD: system-level technical design that composes units to realize product intent.
+- Unit TDD: local technical design within one unit that inherits Product TDD constraints.
+- Contract: stable normative statement that should guide implementation and verification.
+- Guardrail: executable or procedural enforcement of a contract (tests, schema validation, CI checks).
+- Acceptance Criteria: task-scoped verification targets; recurring stable ones may be promoted into contracts.
+- Stable Truth: information useful beyond one task cycle.
+- Task Truth: procedural or temporary decisions specific to a task iteration.
+
+## Structural Modes
+
+- **Constitutional structure**: definitions, document meanings, and governance rules (e.g., this file, `doc-system.md`).
+- **Operational structure**: day-to-day workflow for initiating, verifying, promoting, and propagating work.
 
 ## Runtime Concepts
 
@@ -29,7 +38,7 @@ This file defines shared terminology for humans and coding agents.
 
 ## Decision Network & Workflow Layers
 
-Beluna's documentation and development process forms a **decision network**: a set of interlocking layers where each layer's constraints and truths propagate downward and discoveries propagate upward.
+Beluna's documentation and development process forms a **decision network**, not a waterfall. Layers constrain one another and are updated iteratively.
 
 ### Layers (outer → inner)
 
