@@ -19,8 +19,8 @@ Beluna documentation is organized by stability and decision scope.
 
 ## How To Read
 
-1. Start with [`concepts.md`](./concepts.md).
-2. Read [`doc-system.md`](./doc-system.md) to understand update rules.
+1. Start with [`concepts.md`](./concepts.md) — includes the Decision Network & Workflow Layers model.
+2. Read [`doc-system.md`](./doc-system.md) — includes stability rules, promotion criteria, and QA cross-cutting guidance.
 3. Review migration outcomes in [`legacy-triage.md`](./legacy-triage.md).
 4. Read `10-prd` before `20-product-tdd` and `30-unit-tdd`.
 5. Read `40-deployment` for runtime constraints.

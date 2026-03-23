@@ -27,6 +27,35 @@ This file defines shared terminology for humans and coding agents.
 - Cognition State: persisted cognitive state (goal-forest and memory structures).
 - Fully Qualified Signal ID: `endpoint_id/neural_signal_descriptor_id`.
 
+## Decision Network & Workflow Layers
+
+Beluna's documentation and development process forms a **decision network**: a set of interlocking layers where each layer's constraints and truths propagate downward and discoveries propagate upward.
+
+### Layers (outer → inner)
+
+| Layer | Folder | Governs |
+|---|---|---|
+| Product Intent | `10-prd` | What Beluna must do and why. |
+| System Design | `20-product-tdd` | How units collaborate to realize product intent. |
+| Unit Design | `30-unit-tdd` | Local design within one unit boundary. |
+| Deployment | `40-deployment` | Runtime configuration and operational constraints. |
+| Executable Truth | codebase | Tests, schemas, and runtime behavior. |
+
+### Workflow Layers (per task)
+
+- **L0 — Context**: understand the change scope and affected layers.
+- **L1 — Strategy**: select the target layers and outline the approach.
+- **L2 — Design**: specify interfaces, contracts, and cross-unit impact.
+- **L3 — Plan**: concrete implementation steps and rollback criteria.
+- **Execution**: implement, verify, and record stable outcomes.
+
+### Decision Flow Rules
+
+1. Decisions cascade **downward**: product intent constrains system design; system design constrains unit design.
+2. Discoveries propagate **upward**: stable outcomes learned in tasks or code must be promoted to the appropriate layer.
+3. A decision must live in **exactly one** authoritative layer; duplication creates drift.
+4. When layers conflict, the outer layer wins. An ADR may record a rationale for a deliberate exception, but the ADR itself does not become an authoritative layer; any operative conclusion from an ADR must still be reflected in the appropriate `10–40` layer.
+
 ## Terminology Rules
 
 1. Use one canonical term for one concept.
