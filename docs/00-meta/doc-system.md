@@ -95,6 +95,15 @@ PRD layer purity rule:
 - Localize ownership: responsibilities, consumed/produced interfaces, data/state, and dependencies.
 - Record local design assumptions, operational rules, and verification/guardrails.
 - Inherit Product TDD constraints rather than redefining system boundaries.
+- `30-unit-tdd/index.md` is the layer adapter contract for scope, escalation, and anti-overreach interpretation.
+- Each unit must keep the required six-doc set:
+  - `README.md`
+  - `design.md`
+  - `interfaces.md`
+  - `data-and-state.md`
+  - `operations.md`
+  - `verification.md`
+- Unit docs may decide only local realization details; decomposition policy, cross-unit contracts, and authority ownership must escalate to Product TDD.
 
 ## Promotion Gate (Required)
 
