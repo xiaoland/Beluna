@@ -1,0 +1,9 @@
+# Claim Realization Matrix
+
+Matrix granularity is per major PRD claim.
+
+| Claim ID | Product Claim | Owner Unit(s) | Participating Units | Coordination Pattern | Governing Cross-Unit Contracts | Authority Owner | Primary Failure Modes | Verification Homes |
+|---|---|---|---|---|---|---|---|---|
+| C1 | Coherent continuity across cycles | `core` | `core` | tick-admitted cognition cycle + continuity persistence | identity contract (for correlated runtime signals as needed) | `core` (`continuity` for persistence, `cortex` for transformation) | persistence corruption, continuity loss after restart, inconsistent cognition restore | `docs/20-product-tdd/system-state-and-authority.md`; `docs/30-unit-tdd/core/interfaces.md`; `docs/40-deployment/rollout-and-recovery.md`; core tests/guardrails |
+| C2 | Reliable world interaction through endpoints | `core` | `core`, `cli`, `apple-universal` | protocol-mediated endpoint ingress and explicit terminal dispatch outcomes | endpoint protocol contract, dispatch outcome contract, identity contract | `core` (`spine` routing/dispatch authority) | protocol incompatibility, endpoint disconnects, dispatch reject/lost handling regressions | `docs/20-product-tdd/cross-unit-contracts.md`; `docs/30-unit-tdd/cli/interfaces.md`; `docs/30-unit-tdd/apple-universal/interfaces.md`; protocol/dispatch tests |
+| C3 | Operationally trustworthy runtime | `core` | `core`, endpoint units (consumers) | runtime observability export + bounded shutdown/recovery | observability ownership contract, configuration contract | `core` (runtime observability and startup/shutdown policy) | missing telemetry, unbounded shutdown, config contract drift | `docs/20-product-tdd/deployment-shaping-constraints.md`; `docs/20-product-tdd/failure-and-recovery-model.md`; `docs/40-deployment/observability.md`; `docs/40-deployment/rollout-and-recovery.md` |

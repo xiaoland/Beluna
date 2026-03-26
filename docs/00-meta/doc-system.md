@@ -78,6 +78,17 @@ PRD layer purity rule:
 - Define unit topology and why it is shaped that way.
 - Describe coordination models (requests, events, ordering, failure behavior) that realize PRD behavior.
 - Capture inherited system constraints and deployment-shaping constraints for Unit TDD.
+- Keep governance and trace artifacts explicit:
+  - `system-objective`
+  - `unit-topology`
+  - `unit-boundary-rules`
+  - `unit-to-container-mapping`
+  - `coordination-model`
+  - `cross-unit-contracts`
+  - `system-state-and-authority`
+  - `claim-realization-matrix`
+  - `failure-and-recovery-model`
+  - `deployment-shaping-constraints`
 
 ### Unit TDD (Local Realization)
 

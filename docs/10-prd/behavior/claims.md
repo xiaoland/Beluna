@@ -27,8 +27,9 @@ Source rationale:
 
 Realization pointers:
 
-- `docs/20-product-tdd/data-and-state.md`
-- `docs/20-product-tdd/coordination.md`
+- `docs/20-product-tdd/system-state-and-authority.md`
+- `docs/20-product-tdd/coordination-model.md`
+- `docs/20-product-tdd/claim-realization-matrix.md`
 - `docs/30-unit-tdd/core/interfaces.md`
 - `docs/40-deployment/rollout-and-recovery.md`
 
@@ -55,8 +56,10 @@ Source rationale:
 
 Realization pointers:
 
-- `docs/20-product-tdd/coordination.md`
-- `docs/20-product-tdd/unit-boundaries.md`
+- `docs/20-product-tdd/coordination-model.md`
+- `docs/20-product-tdd/unit-topology.md`
+- `docs/20-product-tdd/cross-unit-contracts.md`
+- `docs/20-product-tdd/claim-realization-matrix.md`
 - `docs/30-unit-tdd/cli/interfaces.md`
 - `docs/30-unit-tdd/apple-universal/interfaces.md`
 
@@ -83,7 +86,9 @@ Source rationale:
 
 Realization pointers:
 
-- `docs/20-product-tdd/operational-constraints.md`
+- `docs/20-product-tdd/deployment-shaping-constraints.md`
+- `docs/20-product-tdd/failure-and-recovery-model.md`
+- `docs/20-product-tdd/claim-realization-matrix.md`
 - `docs/30-unit-tdd/core/operations.md`
 - `docs/40-deployment/observability.md`
 - `docs/40-deployment/environments.md`
