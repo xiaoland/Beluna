@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Beluna Monitor</title>
+    <link rel="stylesheet" href="./app.css" />
+    <link rel="stylesheet" href="./panes.css" />
+    <link rel="stylesheet" href="./responsive.css" />
+  </head>
+  <body>
+    <div class="bg-orb orb-a"></div>
+    <div class="bg-orb orb-b"></div>
+
+    <header class="topbar">
+      <div>
+        <p class="kicker">Beluna Observability</p>
+        <h1>Local Log Monitor</h1>
+      </div>
+      <div class="actions">
+        <button id="chooseDirBtn" class="primary">Choose Log Directory</button>
+        <button id="refreshBtn" class="secondary" disabled>Refresh</button>
+      </div>
+    </header>
+
+    <section class="panel filters" aria-label="filters">
+      <div class="field grow">
+        <label for="keywordInput">Keyword Search</label>
+        <input
+          id="keywordInput"
+          type="text"
+          placeholder="message, run_id, endpoint_id..."
+        />
+      </div>
+      <div class="field">
+        <label for="levelSelect">Level</label>
+        <select id="levelSelect">
+          <option value="ALL">ALL</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="targetSelect">Target</label>
+        <select id="targetSelect">
+          <option value="ALL">ALL</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="startInput">Start</label>
+        <input id="startInput" type="datetime-local" />
+      </div>
+      <div class="field">
+        <label for="endInput">End</label>
+        <input id="endInput" type="datetime-local" />
+      </div>
+      <div class="field field-small">
+        <label for="maxEntriesInput">Max Rows</label>
+        <input
+          id="maxEntriesInput"
+          type="number"
+          min="200"
+          max="20000"
+          step="100"
+          value="5000"
+        />
+      </div>
+      <div class="field toggles">
+        <label class="switch-line" for="autoRefreshToggle">
+          <input id="autoRefreshToggle" type="checkbox" checked />
+          <span>Auto Refresh</span>
+        </label>
+        <button id="clearFiltersBtn" class="ghost">Clear Filters</button>
+      </div>
+    </section>
+
+    <section class="panel stats" aria-label="status">
+      <div>
+        <span class="label">Directory</span>
+        <span id="directoryText">Not selected</span>
+      </div>
+      <div>
+        <span class="label">Mode</span>
+        <span id="modeText">idle</span>
+      </div>
+      <div>
+        <span class="label">Logs</span>
+        <span id="countText">0</span>
+      </div>
+      <div>
+        <span class="label">Filtered</span>
+        <span id="filteredCountText">0</span>
+      </div>
+      <div>
+        <span class="label">Parse Errors</span>
+        <span id="errorCountText">0</span>
+      </div>
+      <div>
+        <span class="label">Last Refresh</span>
+        <span id="refreshText">-</span>
+      </div>
+    </section>
+
+    <main class="workspace">
+      <section class="panel log-list-panel">
+        <h2>Log Stream</h2>
+        <div
+          id="logList"
+          class="log-list"
+          role="listbox"
+          aria-label="log entries"
+        ></div>
+      </section>
+
+      <section class="panel detail-panel">
+        <h2>JSON Detail</h2>
+        <div id="detailMeta" class="detail-meta">
+          Select one row from Log Stream.
+        </div>
+        <div id="jsonTree" class="json-tree"></div>
+      </section>
+    </main>
+
+    <template id="rowTemplate">
+      <button class="log-row" type="button">
+        <div class="row-head">
+          <span class="badge level"></span>
+          <span class="target"></span>
+          <span class="time"></span>
+        </div>
+        <div class="message"></div>
+        <div class="row-foot"></div>
+      </button>
+    </template>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

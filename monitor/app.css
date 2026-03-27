@@ -1,0 +1,223 @@
+:root {
+  --bg: #f5efe6;
+  --bg-alt: #ede4d9;
+  --panel: rgba(255, 250, 243, 0.88);
+  --line: #d3c5b5;
+  --text: #2c241b;
+  --muted: #6f6256;
+  --accent: #c46a2f;
+  --accent-strong: #9e4e1b;
+  --ok: #2f8f52;
+  --warn: #ca8e25;
+  --err: #b8472c;
+  --shadow: 0 10px 30px rgba(90, 54, 32, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Avenir Next", "Segoe UI Variable", "Noto Sans", sans-serif;
+  color: var(--text);
+  background: radial-gradient(
+    circle at 10% 8%,
+    #fff8ef 0%,
+    var(--bg) 35%,
+    var(--bg-alt) 100%
+  );
+  min-height: 100vh;
+  padding: 1.25rem;
+  position: relative;
+  overflow-x: hidden;
+}
+
+.bg-orb {
+  position: fixed;
+  width: 38rem;
+  height: 38rem;
+  border-radius: 999px;
+  filter: blur(70px);
+  opacity: 0.2;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.orb-a {
+  background: #f5b477;
+  top: -12rem;
+  left: -10rem;
+}
+
+.orb-b {
+  background: #8fbc8f;
+  right: -12rem;
+  bottom: -14rem;
+}
+
+.topbar,
+.panel,
+.workspace {
+  position: relative;
+  z-index: 1;
+}
+
+.topbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.kicker {
+  margin: 0;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+h1,
+h2 {
+  margin: 0;
+  font-family: "Iowan Old Style", "Palatino Linotype", serif;
+}
+
+h1 {
+  font-size: clamp(1.5rem, 2.8vw, 2.2rem);
+}
+
+h2 {
+  font-size: 1.08rem;
+  margin-bottom: 0.75rem;
+}
+
+.actions {
+  display: flex;
+  gap: 0.55rem;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  border: 1px solid transparent;
+  border-radius: 0.6rem;
+  padding: 0.58rem 0.9rem;
+  cursor: pointer;
+  transition:
+    transform 120ms ease,
+    background-color 120ms ease,
+    border-color 120ms ease;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+}
+
+.secondary {
+  background: #efe5d8;
+  border-color: var(--line);
+  color: var(--text);
+}
+
+.ghost {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid rgba(211, 197, 181, 0.88);
+  border-radius: 0.95rem;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(8px);
+  margin-bottom: 1rem;
+  padding: 0.95rem;
+}
+
+.filters {
+  display: grid;
+  grid-template-columns:
+    minmax(11rem, 1.6fr) repeat(4, minmax(7rem, 1fr))
+    minmax(6.5rem, 0.7fr) minmax(10rem, 0.9fr);
+  gap: 0.65rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.field.grow {
+  min-width: 15rem;
+}
+
+.field-small {
+  min-width: 5rem;
+}
+
+.field label {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.field input,
+.field select {
+  border-radius: 0.5rem;
+  border: 1px solid var(--line);
+  background: #fffdf9;
+  padding: 0.5rem 0.58rem;
+  color: var(--text);
+}
+
+.toggles {
+  justify-content: space-between;
+}
+
+.switch-line {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--muted);
+  margin-top: 0.15rem;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(8rem, 1fr));
+  gap: 0.5rem;
+}
+
+.stats .label {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(24rem, 1.2fr) minmax(22rem, 1fr);
+  gap: 1rem;
+}

@@ -9,18 +9,21 @@ Beluna is organized as a multi-component repository.
 ├── core/               # Beluna core (Rust)
 ├── cli/                # Beluna body endpoint - CLI client (Rust)
 ├── apple-universal/    # Beluna body endpoint - Apple Universal app (Swift)
+├── monitor/            # Beluna local observability monitor (Web)
 └── docs/               # Authoritative layered docs + task workspace
 ```
 
 ## Documentation System
 
-Read and keep these current:
+Beluna uses a layered documentation profile. Use the smallest relevant slice for each task.
+
+Typical references:
 
 - [Meta](./docs/00-meta/index.md): terminology and doc-system rules.
-- [Read Order](./docs/00-meta/read-order.md): default cross-layer loading order for humans and agents.
+- [Read Order](./docs/00-meta/read-order.md): advisory cross-layer reading strategy for humans and agents.
 - [Intake Protocol](./docs/00-meta/intake-protocol.md): perturbation classification and containment workflow.
 - [Promotion Rules](./docs/00-meta/promotion-rules.md): promotion gates and authoritative target rules.
-- [PRD](./docs/10-prd/index.md): pressure-driven product truth (`_drivers -> behavior -> domain-structure`).
+- [PRD](./docs/10-prd/index.md): pressure-driven product truth (`_drivers -> behavior -> glossary -> domain-structure`).
 - [Product TDD](./docs/20-product-tdd/index.md): system-level technical realization.
 - [Unit TDD](./docs/30-unit-tdd/index.md): unit-level technical realization.
 - [Deployment](./docs/40-deployment/index.md): runtime/deployment operational truth.
@@ -29,6 +32,19 @@ Read and keep these current:
 
 > Add local `AGENTS.md` under complex modules when local constraints are needed.
 > When implementation reveals reusable knowledge, promote it into durable docs.
+
+### Pre-Execution Restatement (Risky or Reference-Sensitive Changes)
+
+Before implementation, restate:
+
+- Target.
+- Target path/anchor.
+- State/context.
+- Operation type.
+- Scope boundaries.
+- Invariants that must remain unchanged.
+- Likely affected files.
+- Uncertainty.
 
 ### `docs/task` Rule
 

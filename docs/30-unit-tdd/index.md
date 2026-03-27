@@ -80,3 +80,4 @@ Anti-overreach interpretation rules (agents/reviewers):
 - [Core Unit](./core/README.md)
 - [CLI Unit](./cli/README.md)
 - [Apple Universal Unit](./apple-universal/README.md)
+- [Monitor Unit](./monitor/README.md)
