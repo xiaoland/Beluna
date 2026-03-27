@@ -20,9 +20,10 @@ Beluna documentation is organized by stability and decision scope.
 
 1. Read [`read-order.md`](./read-order.md) for the default cross-layer loading order.
 2. Read [`concepts.md`](./concepts.md) for ontology and terminology.
-3. Read [`doc-system.md`](./doc-system.md) for document families, stability rules, and promotion/verification gates.
-4. Read [`intake-protocol.md`](./intake-protocol.md) before planning or implementation.
-5. Read PRD in order: `_drivers` first, `behavior` second, `domain-structure` third.
-6. Read `40-deployment` for runtime constraints.
-7. Read relevant `docs/task/<task>/` files for transient context only.
-8. Use [`legacy-triage.md`](./legacy-triage.md) only for migration history and archival mapping.
+3. Read [`intake-protocol.md`](./intake-protocol.md) before planning or implementation.
+4. Read [`promotion-rules.md`](./promotion-rules.md) before promoting transient outcomes.
+5. Read [`doc-system.md`](./doc-system.md) for document families and stability placement.
+6. Read PRD in order: `_drivers` first, `behavior` second, `domain-structure` third.
+7. Read `40-deployment` for runtime constraints.
+8. Read relevant `docs/task/<task>/` files for transient context only.
+9. Use [`legacy-triage.md`](./legacy-triage.md) only for migration history and archival mapping.

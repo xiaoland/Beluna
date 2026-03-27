@@ -19,6 +19,7 @@ Read and keep these current:
 - [Meta](./docs/00-meta/index.md): terminology and doc-system rules.
 - [Read Order](./docs/00-meta/read-order.md): default cross-layer loading order for humans and agents.
 - [Intake Protocol](./docs/00-meta/intake-protocol.md): perturbation classification and containment workflow.
+- [Promotion Rules](./docs/00-meta/promotion-rules.md): promotion gates and authoritative target rules.
 - [PRD](./docs/10-prd/index.md): pressure-driven product truth (`_drivers -> behavior -> domain-structure`).
 - [Product TDD](./docs/20-product-tdd/index.md): system-level technical realization.
 - [Unit TDD](./docs/30-unit-tdd/index.md): unit-level technical realization.

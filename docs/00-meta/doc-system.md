@@ -23,6 +23,7 @@ The `00-meta` baseline is:
 - `doc-system.md`
 - `read-order.md`
 - `intake-protocol.md`
+- `promotion-rules.md`
 
 ## Stability Placement
 
@@ -106,6 +107,8 @@ PRD layer purity rule:
 - Unit docs may decide only local realization details; decomposition policy, cross-unit contracts, and authority ownership must escalate to Product TDD.
 
 ## Promotion Gate (Required)
+
+Canonical promotion policy lives in [`promotion-rules.md`](./promotion-rules.md).
 
 A statement can be promoted from `docs/task` or from code into an authoritative layer only if all checks pass:
 
