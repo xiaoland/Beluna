@@ -2,6 +2,11 @@
 
 Beluna Apple Universal App is the app that bridges human interaction with Beluna Core in Apple ecosystem.
 
+## Local Use
+
+- Follow [`../AGENTS.md`](../AGENTS.md) for the decision-network workflow and layer routing.
+- Use this file only for Apple Universal local boundaries, risks, and coding constraints.
+
 ## Tech Stacks
 
 - Language: Swift

@@ -1,32 +1,41 @@
-# Beluna Documentation System
+# Meta Index
 
-Beluna documentation is organized by stability and decision scope.
-This is a Beluna-local operating model, not a universal requirement for every repository.
+`docs/00-meta` is Beluna's small cross-layer coordination surface.
+It is Beluna-local, not a mandatory baseline for every repository.
 
-## Beluna Authoritative Layers
+For most implementation work, do not start here.
+Start from the nearest `AGENTS.md`, then the authoritative layer that owns the decision.
 
-1. `docs/00-meta/`: terminology, documentation rules, and governance.
-2. `docs/10-prd/`: pressure-driven product intent (`_drivers -> behavior -> glossary -> domain-structure`).
-3. `docs/20-product-tdd/`: system-level technical realization.
-4. `docs/30-unit-tdd/`: unit-level technical realization.
-5. `docs/40-deployment/`: deployment and runtime operational truth.
+## What `00-meta` Owns
 
-## Non-Authoritative Area
+- Cross-layer operating terms and the decision-network workflow.
+- Minimal read guidance for ambiguous or cross-layer work.
+- Intake rules for non-trivial perturbations.
+- Promotion and demotion rules for durable docs.
+- Boundaries of the documentation system itself.
 
-- `docs/task/` is procedural workspace for tasks and plans.
-- Task files are not source of truth.
-- Stable outcomes discovered in tasks must be promoted into authoritative layers above.
+## What `00-meta` Does Not Own
 
-## How To Read (Contextual)
+- Product/domain semantics or glossary truth: `docs/10-prd`.
+- Cross-unit technical realization: `docs/20-product-tdd`.
+- Unit-local contracts: `docs/30-unit-tdd`.
+- Runtime operations: `docs/40-deployment`.
+- Task reasoning and execution notes: `docs/task`.
 
-Use the smallest relevant slice for the change you are making.
+## Open `00-meta` Only When Needed
 
-Typical path:
+Use this folder when one or more apply:
 
-1. Start from nearest relevant `AGENTS.md`.
-2. Read the relevant layer index (`10/20/30/40`).
-3. Read [`read-order.md`](./read-order.md) if scope is cross-layer or ambiguous.
-4. Read [`concepts.md`](./concepts.md), [`intake-protocol.md`](./intake-protocol.md), [`promotion-rules.md`](./promotion-rules.md), and [`doc-system.md`](./doc-system.md) when terminology/governance/promotion decisions are involved.
-5. Read PRD in order: `_drivers` first, `behavior` second, `glossary` third, `domain-structure` fourth.
-6. Read relevant `docs/task/<task>/` files for transient context only.
-7. Use [`legacy-triage.md`](./legacy-triage.md) only for migration history and archival mapping.
+1. The request is cross-layer or ambiguous.
+2. You are changing documentation policy, ownership, or promotion rules.
+3. The task needs explicit perturbation classification or task-packet discipline.
+4. You are resolving drift between layers or removing stale durable docs.
+
+## Files
+
+- [`concepts.md`](./concepts.md): cross-layer terms and the decision-network model.
+- [`read-order.md`](./read-order.md): minimal loading strategy.
+- [`intake-protocol.md`](./intake-protocol.md): classify and contain non-trivial work.
+- [`promotion-rules.md`](./promotion-rules.md): promote, demote, and place durable truth.
+- [`doc-system.md`](./doc-system.md): ownership boundary of `00-meta` versus `10/20/30/40`.
+- [`legacy-triage.md`](./legacy-triage.md): archival migration context only.

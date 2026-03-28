@@ -1,44 +1,25 @@
 # Concepts
 
-This file defines cross-layer operational terminology for humans and coding agents.
+This file defines Beluna's cross-layer operating terms for humans and coding agents.
 
-Canonical product/domain semantics are owned by PRD (`docs/10-prd`), especially `docs/10-prd/glossary.md`.
+Canonical product/domain semantics belong in PRD (`docs/10-prd`), especially [`glossary.md`](../10-prd/glossary.md).
+Beluna runtime terms such as `Cortex`, `Stem`, `Continuity`, `Ledger`, and `Spine` belong in Product TDD or the relevant Unit TDD, not in `00-meta`.
 
-## Ontology
+## Core Operating Terms
 
-- Product: user and business value Beluna must realize, including operational realities.
-- Product Driver: market, business, constraint, or operational pressure that shapes product truth.
-- Product Claim: durable product promise used to evaluate whether Beluna is delivering intended value.
-- Domain: derived semantic structure that stabilizes meaning boundaries after product drivers and behavior claims are defined.
-- Capability: something the product or system can do; may span domains or units.
-- Workflow: ordered behavior path across actors, states, and system steps.
-- Unit: technical planning and ownership boundary; current units are `core`, `cli`, `apple-universal`, and `monitor`.
-- Product TDD: system-level technical design that composes units to realize product intent.
-- Unit TDD: local technical design within one unit that inherits Product TDD constraints.
-- Contract: stable normative statement that should guide implementation and verification.
-- Guardrail: executable or procedural enforcement of a contract (tests, schema validation, CI checks).
-- Acceptance Criteria: task-scoped verification targets; recurring stable ones may be promoted into contracts.
-- Stable Truth: information useful beyond one task cycle.
-- Task Truth: procedural or temporary decisions specific to a task iteration.
-
-## Structural Modes
-
-- **Constitutional structure**: definitions, document meanings, and governance rules (e.g., this file, `doc-system.md`).
-- **Operational structure**: day-to-day workflow for initiating, verifying, promoting, and propagating work.
-
-## Runtime Concepts
-
-- Cortex: deliberative cognition runtime boundary.
-- Stem: runtime orchestrator that owns tick grants, physical state mutation, and pathways.
-- Continuity: deterministic cognition persistence and dispatch gate owner.
-- Ledger: resource accounting and settlement owner.
-- Spine: endpoint routing and act dispatch substrate.
-- Body Endpoint: world-facing endpoint that publishes senses and executes acts.
-- Afferent Pathway: bounded ingress pathway from endpoint/domain senses into Cortex runtime.
-- Efferent Pathway: ordered act dispatch pathway (`Continuity -> Spine`).
-- Physical State: ledger snapshot + descriptor catalog + proprioception snapshot visible to Cortex.
-- Cognition State: persisted cognitive state (goal-forest and memory structures).
-- Fully Qualified Signal ID: `endpoint_id/neural_signal_descriptor_id`.
+- Decision Network: the way Beluna's durable layers and executable truth constrain one another without forming a waterfall.
+- Perturbation: any incoming request, incident, constraint, or artifact that may require a change.
+- Governing Anchor: the smallest authoritative doc or executable guardrail that currently owns the decision being changed.
+- Unit: a technical ownership boundary. Current units are `core`, `cli`, `apple-universal`, and `monitor`.
+- Product TDD: the authoritative cross-unit technical design layer.
+- Unit TDD: the authoritative unit-local design and verification layer.
+- Contract: a stable rule that should guide implementation and review.
+- Guardrail: executable or procedural enforcement of a contract.
+- Acceptance Criteria: task-scoped completion targets that may later be promoted into contracts.
+- Stable Truth: information that should survive beyond a single task cycle.
+- Task Truth: temporary reasoning or execution detail that belongs only in `docs/task`.
+- Promotion: moving stable truth into its authoritative layer.
+- Demotion: simplifying or removing durable text that no longer deserves preservation.
 
 ## Decision Network & Workflow Layers
 

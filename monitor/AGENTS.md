@@ -1,5 +1,10 @@
 # AGENTS.md for monitor
 
+## Local Use
+
+- Follow [`../AGENTS.md`](../AGENTS.md) for the decision-network workflow and layer routing.
+- Use this file only for monitor-local boundaries and constraints.
+
 ## Design Sources
 
 - `docs/20-product-tdd/unit-topology.md`

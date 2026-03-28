@@ -32,7 +32,7 @@ Promote a task outcome when it meets **all** of the following:
 
 - The conclusion is likely to recur or apply beyond this task.
 - It matches current implementation/runtime behavior (or will once the task lands).
-- It belongs clearly to one authoritative layer (see [Promotion Targets](../00-meta/doc-system.md#promotion-targets)).
+- It belongs clearly to one authoritative layer (see [Promotion Targets](../00-meta/promotion-rules.md#promotion-targets)).
 - It improves clarity without duplicating existing statements.
 
 If in doubt, record the outcome in `RESULT.md` first and promote in a follow-up PR.
