@@ -1,90 +1,47 @@
 # docs/task Workspace
 
-`docs/task` is an active procedural workspace for plans, execution notes, and result logs.
+`docs/task` is the volatile workspace for plans, investigations, and result notes.
 
-> **Non-authoritative.** Nothing in `docs/task` governs Beluna's design or behavior.
-> Stable outcomes discovered here must be promoted into the authoritative layers before they can be relied upon.
+> **Non-authoritative.** Nothing here governs Beluna's behavior.
+> Promote stable outcomes into the proper durable layer before relying on them.
 
-## Authority Rule (Soft Quarantine)
+## When To Use It
 
-1. `docs/task` is **non-authoritative**.
-2. Task files may reference authoritative docs, but authoritative docs must not depend on task files for core definitions.
-3. Stable outcomes discovered in tasks must be promoted to one of:
-- `docs/10-prd`
-- `docs/20-product-tdd`
-- `docs/30-unit-tdd`
-- `docs/40-deployment`
+Use a task folder only when the work is large, ambiguous, or needs temporary coordination.
+Straightforward changes do not need task docs.
 
-## Input Classification (Required for Non-Trivial Tasks)
+## Minimal Workflow
 
-Before planning, classify the perturbation type:
+1. Capture enough context to keep the work coherent.
+2. Record only the notes you actually need.
+3. Verify the change.
+4. Promote stable truths into `10/20/30/40` or code/tests when appropriate.
 
-- `Intent`: new behavior or policy request.
-- `Constraint`: budget/platform/performance/team constraint.
-- `Reality`: bug, incident, runtime/user failure signal.
-- `Artifact`: code/schema/log/draft input requiring interpretation.
+Existing `L0/L1/L2/L3` task packs are historical deep-work conventions, not the default workflow.
 
-If mixed, record one primary type and list secondary types.
+## Promotion Test
 
-## When to Promote
+Promote a task finding only when it is:
 
-Promote a task outcome when it meets **all** of the following:
+- stable
+- reusable beyond the current task
+- costly or risky to rediscover
+- not better enforced mechanically
 
-- The conclusion is likely to recur or apply beyond this task.
-- It matches current implementation/runtime behavior (or will once the task lands).
-- It belongs clearly to one authoritative layer (see [Promotion Targets](../00-meta/promotion-rules.md#promotion-targets)).
-- It improves clarity without duplicating existing statements.
+## Suggested Shape
 
-If in doubt, record the outcome in `RESULT.md` first and promote in a follow-up PR.
+- `PLAN.md` for working notes when needed
+- `RESULT.md` for closure when needed
+- extra files only when the task is genuinely large
 
-## Complex Task Workflow
+Start from [`_template.md`](./_template.md) if you want a lightweight note.
 
-1. Analyze request and context (`L0`).
-2. Draft high-level strategy (`L1`).
-3. Draft low-level design (`L2`).
-4. Draft implementation plan (`L3`).
-5. Execute implementation against approved plan.
-6. Record task result.
-7. **Promote** stable findings to authoritative docs.
+## Durable Destinations
 
-## Task Verification Packet
+- Product what/why: `docs/10-prd`
+- Cross-unit technical truth: `docs/20-product-tdd`
+- Hard-unit local design memory: `docs/30-unit-tdd`
+- Runtime and operational truth: `docs/40-deployment`
+- Mechanically enforced rules: code/tests/CI
 
-For non-trivial tasks, keep a lightweight packet with:
-
-- **Perturbation**: raw user/reality signal.
-- **Input Type**: `Intent` / `Constraint` / `Reality` / `Artifact`.
-- **Governing Anchors**: stable docs the task depends on.
-- **Intended Change**: concise statement of scope.
-- **Impact Hypothesis**: primary hit, secondary hits, confidence, unknowns.
-- **Temporary Assumptions**: reversible assumptions used to proceed.
-- **Negotiation Triggers**: when explicit user decision is required.
-- **Acceptance Criteria**: what must be true to call the task done.
-- **Guardrails Touched**: tests, schemas, CI checks, rollout checks involved.
-- **Evidence Expected**: proof needed before closure.
-- **Outcome**: `promote` / `complete_without_promotion` / `defer` / `reject` / `experiment`.
-- **Promotion Candidates**: recurring truths to push back into `10/20/30/40`.
-
-## File Convention
-
-- Use `docs/task/<task-name>/`.
-- Start from `docs/task/_template.md` for non-trivial tasks.
-- Keep planning stages as `L0/L1/L2/L3` files when needed.
-- Keep final outcome as `RESULT.md` when needed.
-
-## Quality Notes
-
-- Prefer clear reasoning over procedural verbosity.
-- Do not treat temporary trade-offs as durable truth.
-- If a repeated rule appears across tasks, promote it into authoritative docs.
-- Historical task files may reference removed legacy docs; treat those references as archival context only.
-
-## QA Cross-Cutting Guidance
-
-Before closing a task, verify across layers:
-
-1. Any new product invariant is reflected in `10-prd`.
-2. Any cross-unit design change is reflected in `20-product-tdd`.
-3. Any unit contract change is reflected in `30-unit-tdd`.
-4. Executable truth (tests, schemas) enforces the updated contracts.
-
-If a layer is inconsistent, fix it before marking the task complete.
+Delete or ignore leftover task detail once it stops being useful.

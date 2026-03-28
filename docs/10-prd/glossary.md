@@ -20,5 +20,5 @@ If a term changes product meaning, update this file first and then propagate dow
 
 ## Boundary Note
 
-Cross-layer operational/governance terminology remains in `docs/00-meta/concepts.md`.
-This glossary owns product/domain meaning; meta docs must not redefine these semantics.
+This glossary owns product and domain meaning.
+Repo-level workflow terms, if documented at all, belong in `docs/00-meta`.

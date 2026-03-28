@@ -5,6 +5,7 @@
 `10-prd` is the authoritative layer for product intent.
 
 It defines the pressure field Beluna must answer and the durable user-visible truth that technical realization must honor.
+Read only the files relevant to the product question at hand.
 
 ## What this layer owns
 
@@ -23,11 +24,11 @@ It defines the pressure field Beluna must answer and the durable user-visible tr
 
 ## How to read this layer
 
-1. Read [`_drivers/index.md`](./_drivers/index.md) first because drivers are upstream constraints.
-2. Read [`behavior/index.md`](./behavior/index.md) second because behavior is the center of PRD.
-3. Read [`glossary.md`](./glossary.md) to align canonical product/domain semantics.
-4. Read [`domain-structure/index.md`](./domain-structure/index.md) as derived structure that cannot redefine upstream truth.
-5. Move to `20-product-tdd` after PRD context is clear to see realization design.
+1. Start with the file that owns your question; do not read the whole layer by default.
+2. For new or scope-shaping product work, begin with [`_drivers/index.md`](./_drivers/index.md) and [`behavior/index.md`](./behavior/index.md).
+3. Use [`glossary.md`](./glossary.md) when term meaning matters.
+4. Use [`domain-structure/index.md`](./domain-structure/index.md) only when boundary or lifecycle structure is part of the question.
+5. Move to `20-product-tdd` only when you need system realization detail.
 
 ## How this layer connects to adjacent layers
 

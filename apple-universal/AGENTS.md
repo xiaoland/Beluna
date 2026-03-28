@@ -4,7 +4,7 @@ Beluna Apple Universal App is the app that bridges human interaction with Beluna
 
 ## Local Use
 
-- Follow [`../AGENTS.md`](../AGENTS.md) for the decision-network workflow and layer routing.
+- Follow [`../AGENTS.md`](../AGENTS.md) for the default workflow and layer routing.
 - Use this file only for Apple Universal local boundaries, risks, and coding constraints.
 
 ## Tech Stacks
@@ -12,10 +12,6 @@ Beluna Apple Universal App is the app that bridges human interaction with Beluna
 - Language: Swift
 - Platform: macOS (for now), iOS, iPadOS
 - UI: SwiftUI (use AppKit bridge only when necessary)
-
-## Current Focus
-
-- Harden desktop endpoint UX and connection lifecycle reliability for Beluna Core integration.
 
 ## Boundary and Quality Rules
 
@@ -33,7 +29,7 @@ Beluna Apple Universal App is the app that bridges human interaction with Beluna
 ## Stability Boundary
 
 - Keep durable boundary and quality constraints in this file; avoid volatile runtime capability snapshots.
-- Current behavior/status/focus should live in task packets or release notes.
+- Current behavior/status/focus should live in task notes or release notes.
 - Treat `docs/30-unit-tdd/apple-universal/*`, `docs/20-product-tdd/*`, and `docs/40-deployment/*` as authoritative for evolving contracts.
 
 ## High-Risk Areas

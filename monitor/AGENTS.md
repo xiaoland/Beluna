@@ -2,7 +2,7 @@
 
 ## Local Use
 
-- Follow [`../AGENTS.md`](../AGENTS.md) for the decision-network workflow and layer routing.
+- Follow [`../AGENTS.md`](../AGENTS.md) for the default workflow and layer routing.
 - Use this file only for monitor-local boundaries and constraints.
 
 ## Design Sources
@@ -18,7 +18,7 @@
 2. Monitor must not redefine or mutate core runtime authority.
 3. Monitor must not change core log format assumptions locally; any contract drift must be promoted via docs.
 
-## Current MVP Constraints
+## Constraints
 
 1. Pure static browser app (no backend).
 2. Directory access via `showDirectoryPicker`.

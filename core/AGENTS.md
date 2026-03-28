@@ -49,7 +49,7 @@ Beluna Core is the runnable runtime and domain agent implementation.
 ## Stability Boundary
 
 - Keep durable constraints in this file; avoid storing volatile runtime capability snapshots here.
-- Current runtime behavior, limitations, and near-term focus should live in task packets or release notes.
+- Current runtime behavior, limitations, and near-term focus should live in task notes or release notes.
 - Treat `docs/30-unit-tdd/core/*`, `docs/20-product-tdd/*`, and `docs/40-deployment/*` as authoritative for evolving behavior contracts.
 
 ## High-Risk Areas

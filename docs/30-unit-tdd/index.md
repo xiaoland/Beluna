@@ -5,6 +5,7 @@
 `30-unit-tdd` defines local technical realization per unit under Product TDD constraints.
 
 It is the authoritative layer for unit-local responsibilities, interfaces, data/state assumptions, operations, and verification contracts.
+Read only the unit and files relevant to your change.
 
 ## What this layer owns
 
@@ -24,11 +25,9 @@ It is the authoritative layer for unit-local responsibilities, interfaces, data/
 
 ## How to read this layer
 
-1. Read this index first to understand Unit TDD scope and escalation rules.
-2. Read the unit `README.md`.
-3. Read `design.md` and `interfaces.md`.
-4. Read `data-and-state.md` and `operations.md`.
-5. Read `verification.md` before making or reviewing changes.
+1. Start with the unit `README.md`.
+2. Open only the exact files needed for the question at hand.
+3. Read `verification.md` before making or reviewing risky changes.
 
 ## How this layer connects to adjacent layers
 
@@ -101,6 +100,6 @@ Anti-overreach interpretation rules (agents/reviewers):
 ## Unit Catalog
 
 - [Core Unit](./core/README.md) - Hard-unit profile
+- [Moira Unit](./moira/README.md) - Hard-unit profile
 - [Apple Universal Unit](./apple-universal/README.md) - Hard-unit profile
 - [CLI Unit](./cli/README.md) - Lightweight profile (currently retains full pack)
-- [Monitor Unit](./monitor/README.md) - Lightweight profile (currently retains full pack)

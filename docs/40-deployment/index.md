@@ -5,6 +5,7 @@
 `40-deployment` is the authoritative runtime truth layer.
 
 It defines how Beluna is operated, observed, rolled out, and recovered in real environments.
+Read only the files relevant to the runtime question you are answering.
 
 ## What this layer owns
 
@@ -21,10 +22,10 @@ It defines how Beluna is operated, observed, rolled out, and recovered in real e
 
 ## How to read this layer
 
-1. Read [Environments](./environments.md) for runtime context and constraints.
-2. Read [Rollout And Recovery](./rollout-and-recovery.md) for release, rollback, and incident handling procedures.
-3. Read [Observability](./observability.md) for telemetry and debugging expectations.
-4. Cross-check [Deployment-Shaping Constraints](../20-product-tdd/deployment-shaping-constraints.md) if runtime practice and system design diverge.
+1. Use [Environments](./environments.md) for runtime context and constraints.
+2. Use [Rollout And Recovery](./rollout-and-recovery.md) for release, rollback, and incident handling.
+3. Use [Observability](./observability.md) for telemetry and debugging expectations.
+4. Cross-check [Deployment-Shaping Constraints](../20-product-tdd/deployment-shaping-constraints.md) only if runtime practice and system design diverge.
 
 ## How this layer connects to adjacent layers
 

@@ -1,37 +1,18 @@
-# Task Packet Template
+# Task Note Template
 
-## Perturbation
-Raw user or reality signal.
+Delete sections you do not need.
 
-## Input Type
-`Intent` / `Constraint` / `Reality` / `Artifact`.
-
-## Governing Anchors
-Stable docs this task depends on.
+## Context
+What problem, request, or observation this task is addressing.
 
 ## Intended Change
-What is being changed.
+What should be different when the task is done.
 
-## Impact Hypothesis
-Primary hit, likely secondary hits, confidence, unknowns.
+## Working Notes
+Only the temporary reasoning needed to execute the task.
 
-## Temporary Assumptions
-Reversible assumptions made to proceed.
+## Verification
+What evidence will be used to confirm the change.
 
-## Negotiation Triggers
-What requires explicit user decision before continuing.
-
-## Acceptance Criteria
-What must be true for this task to count as complete.
-
-## Guardrails Touched
-Tests, schemas, CI checks, rollout checks, or monitoring touched.
-
-## Evidence Expected
-What proof is expected before closing the task.
-
-## Outcome
-`promote` / `complete_without_promotion` / `defer` / `reject` / `experiment`.
-
-## Promotion Candidates
-Stable truths to promote into authoritative layers.
+## Promotion
+Stable truths worth moving into durable docs or code/tests.

@@ -1,41 +1,31 @@
-# Meta Index
+# Docs Policy
 
-`docs/00-meta` is Beluna's small cross-layer coordination surface.
-It is Beluna-local, not a mandatory baseline for every repository.
+`docs/00-meta` is a small Beluna-local note about the documentation system itself.
+It is optional. Most work should start from `AGENTS.md` and the owning layer, not here.
 
-For most implementation work, do not start here.
-Start from the nearest `AGENTS.md`, then the authoritative layer that owns the decision.
+## Use This Folder Only When
 
-## What `00-meta` Owns
+- changing the documentation system itself
+- resolving ownership ambiguity between durable layers
+- deciding whether a truth belongs in docs, code/tests, or a task note
 
-- Cross-layer operating terms and the decision-network workflow.
-- Minimal read guidance for ambiguous or cross-layer work.
-- Intake rules for non-trivial perturbations.
-- Promotion and demotion rules for durable docs.
-- Boundaries of the documentation system itself.
+## Routing
 
-## What `00-meta` Does Not Own
+- Product what/why, claims, workflows, scope, glossary: `docs/10-prd`
+- Cross-unit technical truth: `docs/20-product-tdd`
+- Hard-unit local design memory: `docs/30-unit-tdd`
+- Runtime and operational truth: `docs/40-deployment`
+- Volatile reasoning and plans: `docs/task`
+- Mechanically enforced truth: code/tests/CI
 
-- Product/domain semantics or glossary truth: `docs/10-prd`.
-- Cross-unit technical realization: `docs/20-product-tdd`.
-- Unit-local contracts: `docs/30-unit-tdd`.
-- Runtime operations: `docs/40-deployment`.
-- Task reasoning and execution notes: `docs/task`.
+## Promotion
 
-## Open `00-meta` Only When Needed
+Promote a finding into durable docs only when it is stable, reusable, costly to rediscover, and not better enforced mechanically.
 
-Use this folder when one or more apply:
+## Demotion
 
-1. The request is cross-layer or ambiguous.
-2. You are changing documentation policy, ownership, or promotion rules.
-3. The task needs explicit perturbation classification or task-packet discipline.
-4. You are resolving drift between layers or removing stale durable docs.
+Delete or simplify durable docs when they stop answering expensive recurring questions or duplicate a clearer authoritative owner.
 
-## Files
+## Note
 
-- [`concepts.md`](./concepts.md): cross-layer terms and the decision-network model.
-- [`read-order.md`](./read-order.md): minimal loading strategy.
-- [`intake-protocol.md`](./intake-protocol.md): classify and contain non-trivial work.
-- [`promotion-rules.md`](./promotion-rules.md): promote, demote, and place durable truth.
-- [`doc-system.md`](./doc-system.md): ownership boundary of `00-meta` versus `10/20/30/40`.
-- [`legacy-triage.md`](./legacy-triage.md): archival migration context only.
+- [`concepts.md`](./concepts.md) keeps a few repo-level workflow terms. Product and domain semantics belong in [`docs/10-prd/glossary.md`](../10-prd/glossary.md).

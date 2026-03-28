@@ -75,7 +75,7 @@ Evaluation dimensions:
 
 Evidence expectation:
 
-- Operators can diagnose service regressions using logs/metrics/traces without code archaeology.
+- Operators can diagnose local service regressions through Beluna-native control-plane views and linked telemetry surfaces without code archaeology.
 - Shutdown/recovery paths remain bounded and reproducible in operational checks.
 - Reliability/operational constraints are explicitly documented and testable at system boundaries.
 
@@ -89,6 +89,8 @@ Realization pointers:
 - `docs/20-product-tdd/deployment-shaping-constraints.md`
 - `docs/20-product-tdd/failure-and-recovery-model.md`
 - `docs/20-product-tdd/claim-realization-matrix.md`
+- `docs/20-product-tdd/unit-topology.md`
 - `docs/30-unit-tdd/core/operations.md`
+- `docs/30-unit-tdd/moira/README.md`
 - `docs/40-deployment/observability.md`
 - `docs/40-deployment/environments.md`
