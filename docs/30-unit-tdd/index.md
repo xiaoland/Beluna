@@ -60,7 +60,22 @@ Unit docs must escalate upward when a change affects:
 3. system authority ownership.
 4. unit-to-container mapping.
 
-Required per-unit structure:
+## Admission Rule (Hard-Unit First)
+
+Create or maintain a full Unit TDD contract pack only for hard units.
+
+A unit is hard when one or more materially apply:
+
+1. Non-obvious authority or state ownership.
+2. Concurrency, ordering, or timing sensitivity.
+3. Subtle failure semantics.
+4. Multiple interacting interfaces with meaningful risk.
+5. Invariants easy to violate during normal iteration.
+6. High blast radius or high change cost.
+
+## Unit TDD Profiles
+
+Hard-unit profile (required):
 
 - `README.md`
 - `design.md`
@@ -68,6 +83,14 @@ Required per-unit structure:
 - `data-and-state.md`
 - `operations.md`
 - `verification.md`
+
+Lightweight profile (allowed for straightforward units):
+
+- Required: `README.md`
+- Recommended as needed: `interfaces.md`, `verification.md`
+- Optional when risk justifies: `design.md`, `data-and-state.md`, `operations.md`
+
+Existing full packs for straightforward units may remain during transition, but future maintenance should avoid unnecessary ceremony.
 
 Anti-overreach interpretation rules (agents/reviewers):
 
@@ -77,7 +100,7 @@ Anti-overreach interpretation rules (agents/reviewers):
 
 ## Unit Catalog
 
-- [Core Unit](./core/README.md)
-- [CLI Unit](./cli/README.md)
-- [Apple Universal Unit](./apple-universal/README.md)
-- [Monitor Unit](./monitor/README.md)
+- [Core Unit](./core/README.md) - Hard-unit profile
+- [Apple Universal Unit](./apple-universal/README.md) - Hard-unit profile
+- [CLI Unit](./cli/README.md) - Lightweight profile (currently retains full pack)
+- [Monitor Unit](./monitor/README.md) - Lightweight profile (currently retains full pack)

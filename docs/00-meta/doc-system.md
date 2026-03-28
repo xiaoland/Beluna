@@ -1,13 +1,14 @@
 # Documentation System Rules
 
 Beluna uses a layered documentation system to preserve alignment without excessive maintenance cost.
+This configuration is a Beluna-local governance profile; other repositories may choose a smaller baseline.
 
 ## Document Families and Ownership
 
 | Area | Purpose | Mode | Notes |
 |---|---|---|---|
-| `00-meta` | Definitions, document meanings, governance rules. | Constitutional | Start here for terminology and system rules. |
-| `10-prd` | Pressure-driven product truth (`_drivers -> behavior -> domain-structure`). | Constitutional | Drivers are upstream; domain structure is derived. |
+| `00-meta` | Definitions, document meanings, governance rules. | Constitutional | Beluna-local governance profile; use for terminology/policy/promotion decisions. |
+| `10-prd` | Pressure-driven product truth (`_drivers -> behavior -> glossary -> domain-structure`). | Constitutional | Drivers are upstream; domain structure is derived. |
 | `20-product-tdd` | System-level technical composition of units. | Constitutional | Defines unit topology, coordination, and system constraints. |
 | `30-unit-tdd` | Local technical design per unit. | Operational-to-constitutional | Inherits Product TDD constraints and localizes implementation contracts. |
 | `40-deployment` | Runtime and rollout truth. | Operational-to-constitutional | Environments, rollout, observability, recovery. |
@@ -17,7 +18,7 @@ Beluna uses a layered documentation system to preserve alignment without excessi
 
 Constitutional structure (definitions and governance) changes slowly; operational structure (daily workflow, tasks, and verification) changes as needed but must respect constitutional anchors.
 
-The `00-meta` baseline is:
+Beluna keeps this `00-meta` baseline:
 
 - `concepts.md`
 - `doc-system.md`
@@ -62,6 +63,7 @@ Executable truth must always match authoritative layer contracts; divergence is 
 
 - `10-prd/_drivers` defines upstream pressure field: market/user, business/service, hard constraints, operational realities.
 - `10-prd/behavior` defines product claims, capabilities, user-observable workflows, and product rules/invariants.
+- `10-prd/glossary.md` owns canonical product/domain semantic definitions.
 - `10-prd/domain-structure` records derived semantic boundaries after drivers and behavior are stable.
 
 Derived-domain rule:
@@ -97,13 +99,18 @@ PRD layer purity rule:
 - Record local design assumptions, operational rules, and verification/guardrails.
 - Inherit Product TDD constraints rather than redefining system boundaries.
 - `30-unit-tdd/index.md` is the layer adapter contract for scope, escalation, and anti-overreach interpretation.
-- Each unit must keep the required six-doc set:
+- Apply hard-unit-first admission: use full Unit TDD packs for hard units, and lightweight profiles for straightforward units.
+- Hard-unit full pack:
   - `README.md`
   - `design.md`
   - `interfaces.md`
   - `data-and-state.md`
   - `operations.md`
   - `verification.md`
+- Lightweight profile for straightforward units:
+  - required: `README.md`
+  - recommended as needed: `interfaces.md`, `verification.md`
+  - optional when risk justifies: `design.md`, `data-and-state.md`, `operations.md`
 - Unit docs may decide only local realization details; decomposition policy, cross-unit contracts, and authority ownership must escalate to Product TDD.
 
 ## Promotion Gate (Required)
@@ -121,7 +128,8 @@ A statement can be promoted from `docs/task` or from code into an authoritative 
 
 | Discovery | Promote To |
 |---|---|
-| New canonical term or concept | `00-meta/concepts.md` |
+| Canonical product/domain term or semantic definition | `10-prd/glossary.md` (or owning PRD file) |
+| Cross-layer operational/governance term | `00-meta/concepts.md` |
 | Product driver/claim/invariant/workflow truth | `10-prd` |
 | Cross-unit design decision | `20-product-tdd` |
 | Unit-local design decision | `30-unit-tdd/<unit>` |
@@ -132,6 +140,17 @@ A statement can be promoted from `docs/task` or from code into an authoritative 
 
 - Promote acceptance criteria into contracts when they recur, are stable across tasks, and are important enough to guide future work.
 - Add guardrails to contracts when the rule is safety-critical, frequently violated, cheap to check mechanically, or when human review has proven unreliable.
+
+### Demotion and Removal Rules
+
+Demote, simplify, merge, or remove a durable doc statement when one or more apply:
+
+1. It no longer answers an expensive or risky question.
+2. It duplicates truth already owned by another authoritative layer.
+3. It is better enforced mechanically in code/tests/schemas/CI.
+4. It has drifted from runtime behavior and cannot be justified as an intentional target state.
+
+When a statement is demoted or removed, update the owning layer first and then remove downstream duplicates.
 
 ### QA Cross-Cutting Guidance
 

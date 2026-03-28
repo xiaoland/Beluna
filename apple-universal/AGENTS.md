@@ -25,37 +25,15 @@ Beluna Apple Universal App is the app that bridges human interaction with Beluna
 - System and unit boundaries: `../docs/20-product-tdd/index.md`, `../docs/30-unit-tdd/index.md`
 - Deployment and operations constraints: `../docs/40-deployment/index.md`
 
-## Current State
+## Stability Boundary
 
-> Last Updated At: 2026-03-12T17:10+08:00
+- Keep durable boundary and quality constraints in this file; avoid volatile runtime capability snapshots.
+- Current behavior/status/focus should live in task packets or release notes.
+- Treat `docs/30-unit-tdd/apple-universal/*`, `docs/20-product-tdd/*`, and `docs/40-deployment/*` as authoritative for evolving contracts.
 
-### Live Capabilities
+## High-Risk Areas
 
-- SwiftUI desktop chat endpoint connects to Core via Unix Socket NDJSON (`UnixSocketBodyEndpointClient`).
-- Connection controls are exposed in `SettingView` (socket path, connect/disconnect, retry).
-- Chat history controls are exposed in `SettingView` (message buffer capacity + local Sense/Act history clearing).
-- Connection intent and socket path are persisted via `UserDefaults`.
-- Local Sense/Act chat traffic is persisted to disk and restored on app relaunch.
-- App enforces single-instance runtime lock on macOS.
-- Xcode debug sessions default to manual connect.
-- Socket path is configured directly from `SettingView` and applied immediately on reconnect.
-- Chat view keeps a bounded in-memory message ring buffer and incrementally loads older/newer pages on scroll.
-- Beluna lifecycle state uses `Hibernate` (instead of `Sleeping`) when Core is unavailable after connection history exists.
-- Auth `ns_descriptors` follow Apple endpoint identity and semantic IDs:
-- endpoint IDs: `apple.universal` / `macos.app` / `ios.app`
-- act: `present.message.text`
-- senses: `user.message.text`, `present.message.text.success`, `present.message.text.failure`
-- sense payload schemas are intentionally simple and text-only.
-- correlated result senses carry `act_instance_id` as sense body field.
-- Spine may canonicalize endpoint id to generated body endpoint id on auth.
-
-### Known Limitations & Mocks
-
-- In-chat observability surfaces are intentionally removed from Apple Universal; runtime metrics/logs are handled by Core-side observability.
-- Local history persistence currently focuses on Sense/Act traffic only; runtime system/debug notices are intentionally not replayed.
-- Protocol/lifecycle tests should be expanded for reconnect edge cases and large-history pagination.
-
-### Immediate Next Focus
-
-- Add test coverage for connection lifecycle and pagination behaviors.
-- Improve in-chat filtering/search for large local Sense/Act history.
+- Socket protocol compatibility with Core-side contracts.
+- Connection lifecycle and reconnection behavior under failure.
+- Main-thread responsiveness under socket I/O and parsing load.
+- Local persistence and history pagination behavior for large chat state.

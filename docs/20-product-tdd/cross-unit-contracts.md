@@ -25,6 +25,11 @@ System-level contracts between units are authoritative here.
 - `core` owns runtime observability export.
 - Endpoint units may emit local app diagnostics but must not duplicate core runtime observability control surfaces.
 
+6. Local log consumption contract
+- `core` emits local NDJSON runtime logs under configured `logging.dir`.
+- `monitor` consumes those files as read-only artifacts and must tolerate malformed lines without redefining core ownership.
+- Filtering/search behavior in `monitor` is a consumer concern; log field production remains core-owned.
+
 ## Compatibility Rule
 
 Cross-unit contract changes require synchronized updates to Product TDD contract definitions and affected Unit TDD interface/operation docs.

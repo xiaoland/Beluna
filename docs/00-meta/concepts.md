@@ -1,6 +1,8 @@
 # Concepts
 
-This file defines shared terminology for humans and coding agents.
+This file defines cross-layer operational terminology for humans and coding agents.
+
+Canonical product/domain semantics are owned by PRD (`docs/10-prd`), especially `docs/10-prd/glossary.md`.
 
 ## Ontology
 
@@ -10,7 +12,7 @@ This file defines shared terminology for humans and coding agents.
 - Domain: derived semantic structure that stabilizes meaning boundaries after product drivers and behavior claims are defined.
 - Capability: something the product or system can do; may span domains or units.
 - Workflow: ordered behavior path across actors, states, and system steps.
-- Unit: technical planning and ownership boundary; current units are `core`, `cli`, and `apple-universal`.
+- Unit: technical planning and ownership boundary; current units are `core`, `cli`, `apple-universal`, and `monitor`.
 - Product TDD: system-level technical design that composes units to realize product intent.
 - Unit TDD: local technical design within one unit that inherits Product TDD constraints.
 - Contract: stable normative statement that should guide implementation and verification.
@@ -71,5 +73,6 @@ Beluna's documentation and development process forms a **decision network**, not
 
 1. Use one canonical term for one concept.
 2. Avoid deprecated names in new docs.
-3. When terminology changes, update this file first, then propagate.
-4. Avoid mixing product intent and implementation detail in one statement.
+3. For product/domain semantic terms, update PRD glossary first, then propagate.
+4. For cross-layer operational/governance terms, update this file first, then propagate.
+5. Avoid mixing product intent and implementation detail in one statement.

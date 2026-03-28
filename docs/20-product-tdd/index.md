@@ -32,7 +32,7 @@ It translates PRD intent into technical units, contracts, authority boundaries, 
 ## How this layer connects to adjacent layers
 
 1. Inherits product truth from PRD and turns it into system-level technical contracts.
-2. Constrains Unit TDD by defining what units may decide locally versus what must be escalated.
+2. Constrains Unit TDD by defining what units may decide locally versus what must be escalated, including when full unit-local contract memory is required.
 3. Provides deployment-shaping constraints to `40-deployment`, while runtime execution truth remains in deployment docs.
 
 ## Common local mistakes
@@ -42,6 +42,7 @@ It translates PRD intent into technical units, contracts, authority boundaries, 
 3. Leaving claim-to-unit realization implicit.
 4. Allowing Unit TDD docs to redefine cross-unit contracts.
 5. Mixing rollout/runbook procedures into Product TDD instead of deployment docs.
+6. Requiring full Unit TDD ceremony for straightforward units without hard-unit signals.
 
 ## Product TDD Catalog
 

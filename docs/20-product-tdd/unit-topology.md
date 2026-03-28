@@ -1,6 +1,6 @@
 # Unit Topology
 
-Beluna currently has three technical units.
+Beluna currently has four technical units.
 
 ## Units
 
@@ -15,6 +15,10 @@ Beluna currently has three technical units.
 3. `apple-universal`
 - Apple ecosystem external body endpoint UX.
 - Uses core endpoint protocol; does not own core domain authority.
+
+4. `monitor`
+- Local observability reader for runtime log consumption and filtering UX.
+- Consumes core local log artifacts; does not own runtime authority.
 
 ## Core Internal Subsystems (Inside `core` Unit)
 

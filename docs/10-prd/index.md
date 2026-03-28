@@ -10,7 +10,8 @@ It defines the pressure field Beluna must answer and the durable user-visible tr
 
 1. Upstream product drivers in `_drivers` (market/user pressure, business/service objectives, hard constraints, operational realities).
 2. Product behavior truth in `behavior` (claims, capabilities, workflows, rules/invariants, scope boundaries).
-3. Derived semantic structure in `domain-structure` (vocabulary, boundaries, lifecycle, cross-domain interactions) after drivers and behavior are stable.
+3. Canonical product/domain semantics in [`glossary.md`](./glossary.md).
+4. Derived semantic structure in `domain-structure` (vocabulary, boundaries, lifecycle, cross-domain interactions) after drivers and behavior are stable.
 
 ## What must NOT appear here
 
@@ -24,8 +25,9 @@ It defines the pressure field Beluna must answer and the durable user-visible tr
 
 1. Read [`_drivers/index.md`](./_drivers/index.md) first because drivers are upstream constraints.
 2. Read [`behavior/index.md`](./behavior/index.md) second because behavior is the center of PRD.
-3. Read [`domain-structure/index.md`](./domain-structure/index.md) third as derived structure that cannot redefine upstream truth.
-4. Move to `20-product-tdd` after PRD context is clear to see realization design.
+3. Read [`glossary.md`](./glossary.md) to align canonical product/domain semantics.
+4. Read [`domain-structure/index.md`](./domain-structure/index.md) as derived structure that cannot redefine upstream truth.
+5. Move to `20-product-tdd` after PRD context is clear to see realization design.
 
 ## How this layer connects to adjacent layers
 
@@ -40,3 +42,4 @@ It defines the pressure field Beluna must answer and the durable user-visible tr
 3. Mixing technical mechanism contracts into PRD files.
 4. Leaving product claims without evaluation dimensions and evidence expectations.
 5. Updating user-visible behavior only in task/code without PRD promotion.
+6. Leaving canonical product/domain semantics only in meta-layer docs instead of PRD.
