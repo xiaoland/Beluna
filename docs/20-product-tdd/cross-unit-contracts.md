@@ -23,12 +23,17 @@ System-level contracts between units are authoritative here.
 
 5. Observability ownership contract
 - `core` owns runtime observability export.
-- Endpoint units may emit local app diagnostics but must not duplicate core runtime observability control surfaces.
+- Endpoint units and Moira may emit local app diagnostics but must not duplicate core runtime observability control surfaces.
 
-6. Local log consumption contract
-- `core` emits local NDJSON runtime logs under configured `logging.dir`.
-- `monitor` consumes those files as read-only artifacts and must tolerate malformed lines without redefining core ownership.
-- Filtering/search behavior in `monitor` is a consumer concern; log field production remains core-owned.
+6. Local control-plane and observability consumer contract
+- `moira` may prepare local Core profiles and artifact selections, but `core` remains the typed config shape authority.
+- `moira` may wake, stop, and locally supervise Core processes, but `core` remains the authority for runtime behavior after launch.
+- `moira` may ingest and query Core OTLP logs as a local observability consumer/storage surface, but log semantics and export policy remain core-owned.
+- Metrics and traces may be surfaced through exporter status and handoff links without making Moira the authority for those signals.
+
+7. Log inspection contract
+- Required cross-unit structured observability surfaces and reconstruction guarantees are defined in `docs/20-product-tdd/observability-contract.md`.
+- Core-owned event-family naming and Moira-owned Loom composition remain unit-local as long as those guarantees remain intact.
 
 ## Compatibility Rule
 

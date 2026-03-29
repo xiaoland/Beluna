@@ -1,0 +1,179 @@
+{
+  "schema_version": 1,
+  "subsystem": "cortex",
+  "fixtures": [
+    {
+      "fixture_id": "cortex.tick.nominal",
+      "event": {
+        "family": "cortex.tick",
+        "run_id": "run.local.20260328.0001",
+        "timestamp": "2026-03-28T10:00:00Z",
+        "tick": 42,
+        "trigger_summary": {
+          "kind": "sense_and_continuation",
+          "pending_sense_count": 3
+        },
+        "senses_summary": [
+          {
+            "endpoint_id": "ep.cli",
+            "sense_id": "sense:001"
+          },
+          {
+            "endpoint_id": "ep.cli",
+            "sense_id": "sense:002"
+          }
+        ],
+        "proprioception_snapshot_or_ref": {
+          "entries": {
+            "cwd": "/tmp/project",
+            "mode": "interactive"
+          },
+          "kind": "inline_snapshot"
+        },
+        "acts_summary": [
+          {
+            "act_id": "act:001",
+            "endpoint_id": "ep.shell"
+          },
+          {
+            "act_id": "act:002",
+            "endpoint_id": "ep.web"
+          }
+        ],
+        "goal_forest_ref": {
+          "kind": "snapshot_id",
+          "value": "goal-forest:run.local.20260328.0001:42"
+        }
+      }
+    },
+    {
+      "fixture_id": "cortex.tick.minimal",
+      "event": {
+        "family": "cortex.tick",
+        "run_id": "run.local.20260328.0001",
+        "timestamp": "2026-03-28T10:00:01Z",
+        "tick": 43,
+        "trigger_summary": {
+          "kind": "idle"
+        },
+        "senses_summary": [],
+        "proprioception_snapshot_or_ref": {
+          "entries": {},
+          "kind": "inline_snapshot"
+        },
+        "acts_summary": [],
+        "goal_forest_ref": {
+          "kind": "snapshot_id",
+          "value": "goal-forest:run.local.20260328.0001:43"
+        }
+      }
+    },
+    {
+      "fixture_id": "cortex.organ.request.nominal",
+      "event": {
+        "family": "cortex.organ.request",
+        "run_id": "run.local.20260328.0001",
+        "timestamp": "2026-03-28T10:00:00Z",
+        "tick": 42,
+        "stage": "primary_message",
+        "route_or_organ": "ai_gateway.chat.primary",
+        "request_id": "req:primary:42",
+        "input_summary": {
+          "message_count": 2,
+          "tool_call_budget": 4
+        }
+      }
+    },
+    {
+      "fixture_id": "cortex.organ.response.nominal",
+      "event": {
+        "family": "cortex.organ.response",
+        "run_id": "run.local.20260328.0001",
+        "timestamp": "2026-03-28T10:00:00Z",
+        "tick": 42,
+        "stage": "primary_message",
+        "request_id": "req:primary:42",
+        "status": "ok",
+        "response_summary": {
+          "finish_reason": "tool_call",
+          "model": "gpt-5.4"
+        },
+        "tool_summary": [
+          {
+            "tool_call_count": 1,
+            "tool_name": "shell.exec"
+          }
+        ],
+        "act_summary": [
+          {
+            "act_id": "act:001",
+            "descriptor_id": "shell.exec",
+            "endpoint_id": "ep.shell"
+          }
+        ]
+      }
+    },
+    {
+      "fixture_id": "cortex.organ.response.error",
+      "event": {
+        "family": "cortex.organ.response",
+        "run_id": "run.local.20260328.0001",
+        "timestamp": "2026-03-28T10:00:02Z",
+        "tick": 43,
+        "stage": "primary_message",
+        "request_id": "req:primary:43",
+        "status": "error",
+        "response_summary": {
+          "finish_reason": "error",
+          "model": "gpt-5.4"
+        },
+        "tool_summary": [],
+        "act_summary": [],
+        "error_summary_when_present": {
+          "code": "provider_timeout",
+          "message": "deadline exceeded"
+        }
+      }
+    },
+    {
+      "fixture_id": "cortex.goal_forest.snapshot.inline",
+      "event": {
+        "family": "cortex.goal_forest.snapshot",
+        "run_id": "run.local.20260328.0001",
+        "timestamp": "2026-03-28T10:00:00Z",
+        "tick": 42,
+        "snapshot_summary": {
+          "active_goal_count": 2,
+          "root_goal_id": "goal:root"
+        },
+        "snapshot_or_ref": {
+          "kind": "inline_snapshot",
+          "nodes": [
+            {
+              "label": "investigate",
+              "node_id": "goal:root",
+              "status": "active"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fixture_id": "cortex.goal_forest.snapshot.reference",
+      "event": {
+        "family": "cortex.goal_forest.snapshot",
+        "run_id": "run.local.20260328.0001",
+        "timestamp": "2026-03-28T10:00:01Z",
+        "tick": 43,
+        "snapshot_summary": {
+          "active_goal_count": 1,
+          "root_goal_id": "goal:root"
+        },
+        "snapshot_or_ref": {
+          "kind": "snapshot_id",
+          "value": "goal-forest:run.local.20260328.0001:43"
+        }
+      }
+    }
+  ]
+}

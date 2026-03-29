@@ -24,11 +24,17 @@ It does not redefine cross-unit contracts, decomposition policy, or system autho
 - Ingress gating, task cancellation, and bounded drain behavior remain consistent with runtime constraints.
 - Evidence homes: `core/src/main.rs`, runtime integration tests, `docs/40-deployment/rollout-and-recovery.md`.
 
+5. OTLP log inspection contract:
+- Core emits a subsystem-owned OTLP family catalog that satisfies `docs/20-product-tdd/observability-contract.md`.
+- Moira's consumed inspection surfaces remain reconstructable without treating free-form log text as the primary contract.
+- Evidence homes: observability export code, OTLP event-shape tests, `docs/30-unit-tdd/core/observability.md`, and integration checks against Moira-facing contract fixtures.
+
 ## Expected Guardrails
 
 1. Changes to boundary types, schemas, or terminal outcome semantics require matching updates to tests/contracts.
 2. New stateful behavior must include failure-path verification, not only happy-path checks.
 3. Any cross-unit contract implication must trigger Product TDD updates before unit-level acceptance.
+4. OTLP family changes must update the family spec table and minimum fixture set in `docs/30-unit-tdd/core/observability.md`.
 
 ## Escalation Rules
 

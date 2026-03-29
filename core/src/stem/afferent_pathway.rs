@@ -11,7 +11,13 @@ use async_trait::async_trait;
 use regex::Regex;
 use tokio::sync::{Mutex, broadcast, mpsc, oneshot};
 
-use crate::types::{Sense, build_fq_neural_signal_id};
+use crate::{
+    observability::{
+        contract::{SignalDirection, TransitionKind},
+        runtime as observability_runtime,
+    },
+    types::{Sense, build_fq_neural_signal_id},
+};
 
 pub type SenseIngressHandle = SenseAfferentPathway;
 pub type AfferentControlHandle = SenseAfferentPathway;
@@ -340,10 +346,23 @@ impl SenseAfferentPathway {
         if !self.gate_open.load(Ordering::Acquire) {
             return Err(AfferentPathwayError::closed());
         }
+        let endpoint_id = sense.endpoint_id.clone();
+        let descriptor_id = sense.neural_signal_descriptor_id.clone();
+        let sense_id = sense.sense_instance_id.clone();
         self.ingress_tx
             .send(sense)
             .await
-            .map_err(|_| AfferentPathwayError::queue_closed())
+            .map_err(|_| AfferentPathwayError::queue_closed())?;
+        observability_runtime::emit_stem_signal_transition(
+            SignalDirection::Afferent,
+            TransitionKind::Enqueue,
+            &descriptor_id,
+            Some(&endpoint_id),
+            Some(&sense_id),
+            None,
+            None,
+        );
+        Ok(())
     }
 
     pub async fn close_gate(&self) {
@@ -466,13 +485,23 @@ async fn handle_ingress_sense(
     state.deferred_fifo.push_back(DeferredSenseEntry {
         sense: sense.clone(),
     });
+    let sense_instance_id = sense.sense_instance_id.clone();
     emit_sidecar(
         sidecar_tx,
         AfferentSidecarEvent::SenseDeferred {
-            sense_instance_id: sense.sense_instance_id,
+            sense_instance_id,
             rule_ids: matched_rule_ids,
             deferred_len: state.deferred_fifo.len(),
         },
+    );
+    observability_runtime::emit_stem_signal_transition(
+        SignalDirection::Afferent,
+        TransitionKind::Defer,
+        &sense.neural_signal_descriptor_id,
+        Some(&sense.endpoint_id),
+        Some(&sense.sense_instance_id),
+        None,
+        None,
     );
 
     while state.deferred_fifo.len() > max_deferring_nums {
@@ -579,6 +608,8 @@ async fn release_unblocked_front_fifo(
         };
 
         let sense_instance_id = released.sense.sense_instance_id.clone();
+        let endpoint_id = released.sense.endpoint_id.clone();
+        let descriptor_id = released.sense.neural_signal_descriptor_id.clone();
         if egress_tx.send(released.sense).await.is_err() {
             tracing::warn!(target: "stem.afferent", "consumer_channel_closed_drop_released_sense");
             break;
@@ -587,9 +618,18 @@ async fn release_unblocked_front_fifo(
         emit_sidecar(
             sidecar_tx,
             AfferentSidecarEvent::SenseReleased {
-                sense_instance_id,
+                sense_instance_id: sense_instance_id.clone(),
                 deferred_len: state.deferred_fifo.len(),
             },
+        );
+        observability_runtime::emit_stem_signal_transition(
+            SignalDirection::Afferent,
+            TransitionKind::Release,
+            &descriptor_id,
+            Some(&endpoint_id),
+            Some(&sense_instance_id),
+            None,
+            None,
         );
     }
 }

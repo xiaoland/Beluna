@@ -1,0 +1,26 @@
+{
+  "name": "moira",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.14.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "2.10.1",
+    "vue": "3.5.31"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.10.1",
+    "@types/node": "25.5.0",
+    "@vitejs/plugin-vue": "6.0.5",
+    "esbuild": "0.27.4",
+    "typescript": "6.0.2",
+    "vite": "8.0.3",
+    "vue-tsc": "3.2.6"
+  }
+}

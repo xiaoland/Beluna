@@ -89,6 +89,7 @@ Realization pointers:
 - `docs/20-product-tdd/deployment-shaping-constraints.md`
 - `docs/20-product-tdd/failure-and-recovery-model.md`
 - `docs/20-product-tdd/claim-realization-matrix.md`
+- `docs/20-product-tdd/observability-contract.md`
 - `docs/20-product-tdd/unit-topology.md`
 - `docs/30-unit-tdd/core/operations.md`
 - `docs/30-unit-tdd/moira/README.md`

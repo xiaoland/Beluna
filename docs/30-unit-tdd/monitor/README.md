@@ -1,9 +1,7 @@
-# Monitor Unit
+# Monitor Unit (Historical)
 
-Monitor is a local observability consumer for Beluna runtime logs.
+`monitor` was Beluna's earlier static web observability page.
 
-- [Design](./design.md)
-- [Interfaces](./interfaces.md)
-- [Data And State](./data-and-state.md)
-- [Operations](./operations.md)
-- [Verification](./verification.md)
+It is superseded by [`moira`](../moira/README.md) as the authoritative local control-plane and observability unit contract.
+
+This directory remains only as a migration tombstone while the implementation moves off the legacy `monitor/` container path.

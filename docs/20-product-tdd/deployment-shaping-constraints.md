@@ -6,7 +6,7 @@ These constraints shape system design choices and unit contracts.
 
 1. Core observability ownership
 - Core exports runtime logs/metrics/traces.
-- Endpoint units must not duplicate core runtime observability control surfaces.
+- Non-core units must not duplicate core runtime observability control surfaces.
 
 2. Configuration authority
 - Typed Rust config boundary defines runtime config shape/defaults/validation.
@@ -16,6 +16,14 @@ These constraints shape system design choices and unit contracts.
 - Shutdown must be bounded and explicit.
 - Dispatch outcomes must remain explicit terminal classes.
 - Hidden fallback behavior is disallowed in routing and config interpretation.
+
+4. Local control-plane constraints
+- A first-party local control plane may prepare artifacts, supervise core, and consume runtime observability.
+- That control plane must not become the authority for runtime behavior, config shape, or observability emission policy.
+
+5. Local observability constraints
+- Local first-party storage/query targets logs as the primary signal.
+- Metrics and traces may surface exporter status and handoff destinations without becoming first-party locally stored datasets.
 
 ## Boundary To Deployment Docs
 

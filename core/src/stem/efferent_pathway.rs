@@ -5,6 +5,7 @@ use std::{
     time::Duration,
 };
 
+use serde_json::json;
 use tokio::{
     sync::{Mutex, mpsc, oneshot},
     task::JoinHandle,
@@ -14,6 +15,10 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     continuity::{ContinuityEngine, DispatchContext as ContinuityDispatchContext},
+    observability::{
+        contract::{DispatchOutcomeClass, SignalDirection, TransitionKind},
+        runtime as observability_runtime,
+    },
     spine::{ActDispatchResult, Spine},
     stem::runtime::StemControlPort,
     types::{Act, DispatchDecision, ProprioceptionDropPatch, ProprioceptionPatch},
@@ -67,8 +72,19 @@ pub struct ActProducerHandle {
 
 impl ActProducerHandle {
     pub async fn enqueue(&self, envelope: EfferentActEnvelope) -> Result<(), EfferentEnqueueError> {
+        let cycle_id = envelope.cycle_id;
+        let act_id = envelope.act.act_instance_id.clone();
         match self.tx.send(envelope).await {
-            Ok(()) => Ok(()),
+            Ok(()) => {
+                observability_runtime::emit_stem_dispatch_transition(
+                    &act_id,
+                    TransitionKind::Enqueue,
+                    json!({ "queue_name": "efferent" }),
+                    Some(cycle_id),
+                    None,
+                );
+                Ok(())
+            }
             Err(err) => {
                 let dropped = err.0;
                 tracing::warn!(
@@ -221,6 +237,22 @@ async fn process_efferent_dispatch(
 
     let status_key = dispatch_status_key(&act.act_instance_id);
     emit_status_patch(stem_control, &status_key, "DISPATCHING").await;
+    observability_runtime::emit_stem_signal_transition(
+        SignalDirection::Efferent,
+        TransitionKind::Dispatch,
+        &act.neural_signal_descriptor_id,
+        Some(&act.endpoint_id),
+        None,
+        Some(&act.act_instance_id),
+        Some(cycle_id),
+    );
+    observability_runtime::emit_stem_dispatch_transition(
+        &act.act_instance_id,
+        TransitionKind::Dispatch,
+        json!({ "queue_name": "efferent" }),
+        Some(cycle_id),
+        None,
+    );
 
     let continuity_status = match continuity.lock().await.on_act(
         &act,
@@ -274,6 +306,16 @@ async fn process_efferent_dispatch(
 
     let terminal_status = dispatch_terminal_status(&dispatch_result);
     emit_status_patch(stem_control, &status_key, terminal_status).await;
+    observability_runtime::emit_stem_dispatch_transition(
+        &act.act_instance_id,
+        TransitionKind::Result,
+        json!({
+            "queue_name": "efferent",
+            "status": terminal_status,
+        }),
+        Some(cycle_id),
+        Some(dispatch_outcome_class(&dispatch_result)),
+    );
 
     if let Some(tx) = response_tx {
         let _ = tx.send(dispatch_result);
@@ -296,6 +338,14 @@ fn dispatch_terminal_status(dispatch_result: &ActDispatchResult) -> &'static str
         ActDispatchResult::Acknowledged { .. } => "ACK",
         ActDispatchResult::Rejected { .. } => "REJECTED",
         ActDispatchResult::Lost { .. } => "LOST",
+    }
+}
+
+fn dispatch_outcome_class(dispatch_result: &ActDispatchResult) -> DispatchOutcomeClass {
+    match dispatch_result {
+        ActDispatchResult::Acknowledged { .. } => DispatchOutcomeClass::Acknowledged,
+        ActDispatchResult::Rejected { .. } => DispatchOutcomeClass::Rejected,
+        ActDispatchResult::Lost { .. } => DispatchOutcomeClass::Lost,
     }
 }
 

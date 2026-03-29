@@ -5,6 +5,7 @@
 `20-product-tdd` is the authoritative layer for system-level technical composition.
 
 It translates PRD intent into technical units, contracts, authority boundaries, and realization traces.
+Read only the files relevant to the cross-unit decision you are changing.
 
 ## What this layer owns
 
@@ -22,12 +23,11 @@ It translates PRD intent into technical units, contracts, authority boundaries, 
 
 ## How to read this layer
 
-1. Read [System Objective](./system-objective.md) first.
-2. Read [Unit Topology](./unit-topology.md) and [Unit Boundary Rules](./unit-boundary-rules.md) to understand decomposition policy.
-3. Read [Unit-To-Container Mapping](./unit-to-container-mapping.md) to distinguish technical units from code containers.
-4. Read [System State And Authority](./system-state-and-authority.md) and [Cross-Unit Contracts](./cross-unit-contracts.md) for authority and boundary contracts.
-5. Read [Coordination Model](./coordination-model.md), [Failure And Recovery Model](./failure-and-recovery-model.md), and [Deployment-Shaping Constraints](./deployment-shaping-constraints.md).
-6. Read [Claim Realization Matrix](./claim-realization-matrix.md) to trace PRD claims/workflows into unit behavior and verification.
+1. Start with [System Objective](./system-objective.md) only if you need system-wide context.
+2. Use [Unit Topology](./unit-topology.md), [Unit Boundary Rules](./unit-boundary-rules.md), and [Unit-To-Container Mapping](./unit-to-container-mapping.md) when the question is about decomposition.
+3. Use [System State And Authority](./system-state-and-authority.md), [Cross-Unit Contracts](./cross-unit-contracts.md), and [Observability Contract](./observability-contract.md) when the question is about ownership or interfaces.
+4. Use [Coordination Model](./coordination-model.md), [Failure And Recovery Model](./failure-and-recovery-model.md), and [Deployment-Shaping Constraints](./deployment-shaping-constraints.md) only when those concerns are directly in play.
+5. Use [Claim Realization Matrix](./claim-realization-matrix.md) when tracing a PRD claim or workflow into technical realization.
 
 ## How this layer connects to adjacent layers
 
@@ -52,6 +52,7 @@ It translates PRD intent into technical units, contracts, authority boundaries, 
 - [Unit-To-Container Mapping](./unit-to-container-mapping.md)
 - [Coordination Model](./coordination-model.md)
 - [Cross-Unit Contracts](./cross-unit-contracts.md)
+- [Observability Contract](./observability-contract.md)
 - [System State And Authority](./system-state-and-authority.md)
 - [Claim Realization Matrix](./claim-realization-matrix.md)
 - [Failure And Recovery Model](./failure-and-recovery-model.md)

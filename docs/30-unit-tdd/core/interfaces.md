@@ -13,6 +13,11 @@
 - Single JSONC input (`beluna.jsonc`) validated through typed config boundary.
 - Schema generation via CLI command (`beluna config schema`).
 
+4. Observability export interface:
+- OTLP logs satisfy the cross-unit reconstruction guarantees defined in `docs/20-product-tdd/observability-contract.md`.
+- The operator-facing cognition-cycle anchor is exported as `tick`.
+- Current subsystem family catalog and fixture contract are defined in [Observability](./observability.md).
+
 ## Core Runtime Interface Contracts
 
 1. Afferent ingress accepts domain senses with descriptor identity.

@@ -14,6 +14,10 @@ use tracing::Instrument;
 
 use crate::{
     config::SpineRuntimeConfig,
+    observability::{
+        contract::{AdapterLifecycleState, DispatchOutcomeClass, EndpointLifecycleTransition},
+        runtime as observability_runtime,
+    },
     spine::{
         SpineExecutionMode,
         adapters::{inline::SpineInlineAdapter, unix_socket::UnixSocketAdapter},
@@ -182,6 +186,12 @@ impl Spine {
                         sense_queue_capacity = adapter_cfg.sense_queue_capacity,
                         "adapter_started"
                     );
+                    observability_runtime::emit_spine_adapter_lifecycle(
+                        "inline",
+                        &adapter.adapter_id().to_string(),
+                        AdapterLifecycleState::Enabled,
+                        None,
+                    );
                 }
                 crate::config::SpineAdapterConfig::UnixSocketNdjson {
                     config: adapter_cfg,
@@ -206,7 +216,23 @@ impl Spine {
                                 socket_path = %socket_path.display(),
                                 "adapter_started"
                             );
-                            adapter.run(spine, shutdown).await
+                            observability_runtime::emit_spine_adapter_lifecycle(
+                                "unix_socket_ndjson",
+                                &adapter_id.to_string(),
+                                AdapterLifecycleState::Enabled,
+                                None,
+                            );
+                            let result = adapter.run(spine, shutdown).await;
+                            if let Err(err) = &result {
+                                let reason = err.to_string();
+                                observability_runtime::emit_spine_adapter_lifecycle(
+                                    "unix_socket_ndjson",
+                                    &adapter_id.to_string(),
+                                    AdapterLifecycleState::Faulted,
+                                    Some(&reason),
+                                );
+                            }
+                            result
                         }
                         .instrument(adapter_span),
                     );
@@ -439,6 +465,15 @@ impl Spine {
                 .insert(body_endpoint_id.clone());
         }
         state.by_id.insert(body_endpoint_id.clone(), registered);
+        let channel_or_session = endpoint_channel_or_session(&dispatch);
+        drop(state);
+
+        observability_runtime::emit_spine_endpoint_lifecycle(
+            &body_endpoint_id,
+            EndpointLifecycleTransition::Connected,
+            channel_or_session,
+            None,
+        );
 
         Ok(BodyEndpointHandle { body_endpoint_id })
     }
@@ -569,6 +604,12 @@ impl Spine {
 
             endpoint
         };
+        observability_runtime::emit_spine_endpoint_lifecycle(
+            body_endpoint_id,
+            EndpointLifecycleTransition::Dropped,
+            endpoint_channel_or_session(&endpoint.dispatch),
+            None,
+        );
         let endpoint_routes = endpoint.route_keys.into_iter().collect::<Vec<_>>();
 
         let drop_commit = self
@@ -740,6 +781,14 @@ impl Spine {
         channel_id: Option<u64>,
         outcome: &ActDispatchResult,
     ) {
+        observability_runtime::emit_spine_dispatch_outcome(
+            &act.act_instance_id,
+            &format!("endpoint:{}", act.endpoint_id),
+            dispatch_outcome_class(outcome),
+            Some(&act.neural_signal_descriptor_id),
+            None,
+            None,
+        );
         match (outcome, channel_id) {
             (ActDispatchResult::Acknowledged { reference_id }, Some(channel_id)) => {
                 tracing::info!(
@@ -898,6 +947,23 @@ fn route_key_from_descriptor(
         r#type: descriptor.r#type,
         endpoint_id: descriptor.endpoint_id.clone(),
         neural_signal_descriptor_id: descriptor.neural_signal_descriptor_id.clone(),
+    }
+}
+
+fn endpoint_channel_or_session(dispatch: &EndpointDispatch) -> Option<String> {
+    match dispatch {
+        EndpointDispatch::Inline(_) => Some("inline".to_string()),
+        EndpointDispatch::AdapterChannel(channel_id) => {
+            Some(format!("adapter_channel:{channel_id}"))
+        }
+    }
+}
+
+fn dispatch_outcome_class(outcome: &ActDispatchResult) -> DispatchOutcomeClass {
+    match outcome {
+        ActDispatchResult::Acknowledged { .. } => DispatchOutcomeClass::Acknowledged,
+        ActDispatchResult::Rejected { .. } => DispatchOutcomeClass::Rejected,
+        ActDispatchResult::Lost { .. } => DispatchOutcomeClass::Lost,
     }
 }
 

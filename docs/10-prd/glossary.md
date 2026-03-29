@@ -17,6 +17,9 @@ If a term changes product meaning, update this file first and then propagate dow
 - **Cognition Continuity**: product expectation that intent and cognitive context survive normal runtime cycles and bounded recovery.
 - **World Interaction**: product-level exchange between endpoints and core runtime through senses and actions.
 - **Operational Trust**: user-visible reliability expectation supported by observability and bounded recovery behavior.
+- **Moira**: Beluna's local binary control-plane application for Core artifact preparation, local runtime supervision, and operator-facing observability.
+- **Loom**: the human-facing UI control plane inside Moira.
+- **Tick**: Beluna's runtime life rhythm, analogous to a game tick, within which one admitted cognition cycle may execute.
 
 ## Boundary Note
 

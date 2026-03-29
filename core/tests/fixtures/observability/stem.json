@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "subsystem": "stem",
+  "fixtures": [
+    {
+      "fixture_id": "stem.signal.transition.afferent",
+      "event": {
+        "family": "stem.signal.transition",
+        "run_id": "run.local.20260328.0001",
+        "timestamp": "2026-03-28T10:00:00Z",
+        "direction": "afferent",
+        "transition_kind": "enqueue",
+        "descriptor_id": "cli.input.text",
+        "endpoint_id": "ep.cli",
+        "sense_id": "sense:001",
+        "tick_when_known": 42
+      }
+    },
+    {
+      "fixture_id": "stem.signal.transition.efferent",
+      "event": {
+        "family": "stem.signal.transition",
+        "run_id": "run.local.20260328.0001",
+        "timestamp": "2026-03-28T10:00:00Z",
+        "direction": "efferent",
+        "transition_kind": "dispatch",
+        "descriptor_id": "shell.exec",
+        "endpoint_id": "ep.shell",
+        "act_id": "act:001",
+        "tick_when_known": 42
+      }
+    },
+    {
+      "fixture_id": "stem.dispatch.transition.queue",
+      "event": {
+        "family": "stem.dispatch.transition",
+        "run_id": "run.local.20260328.0001",
+        "timestamp": "2026-03-28T10:00:00Z",
+        "act_id": "act:001",
+        "transition_kind": "enqueue",
+        "queue_or_flow_summary": {
+          "queue_depth": 1,
+          "queue_name": "efferent"
+        },
+        "tick_when_known": 42
+      }
+    },
+    {
+      "fixture_id": "stem.dispatch.transition.result",
+      "event": {
+        "family": "stem.dispatch.transition",
+        "run_id": "run.local.20260328.0001",
+        "timestamp": "2026-03-28T10:00:01Z",
+        "act_id": "act:001",
+        "transition_kind": "result",
+        "queue_or_flow_summary": {
+          "queue_depth": 0,
+          "queue_name": "efferent"
+        },
+        "tick_when_known": 42,
+        "terminal_outcome_when_present": "acknowledged"
+      }
+    },
+    {
+      "fixture_id": "stem.descriptor.catalog.snapshot",
+      "event": {
+        "family": "stem.descriptor.catalog",
+        "run_id": "run.local.20260328.0001",
+        "timestamp": "2026-03-28T09:59:59Z",
+        "catalog_version": "catalog:001",
+        "change_mode": "snapshot",
+        "changed_descriptor_summary": {
+          "changed_count": 2
+        },
+        "catalog_snapshot_when_required": {
+          "entries": [
+            {
+              "descriptor_id": "cli.input.text",
+              "endpoint_id": "ep.cli",
+              "signal_type": "sense"
+            },
+            {
+              "descriptor_id": "shell.exec",
+              "endpoint_id": "ep.shell",
+              "signal_type": "act"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fixture_id": "stem.descriptor.catalog.update",
+      "event": {
+        "family": "stem.descriptor.catalog",
+        "run_id": "run.local.20260328.0001",
+        "timestamp": "2026-03-28T10:00:02Z",
+        "catalog_version": "catalog:002",
+        "change_mode": "update",
+        "changed_descriptor_summary": {
+          "added": [
+            "web.fetch"
+          ],
+          "removed": [],
+          "updated": [
+            "shell.exec"
+          ]
+        }
+      }
+    }
+  ]
+}

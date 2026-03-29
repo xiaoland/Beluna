@@ -1,18 +1,23 @@
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
+use serde_json::json;
 use tokio::{
     sync::{RwLock, mpsc},
     time::Instant,
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::types::{
-    NeuralSignalDescriptor, NeuralSignalDescriptorCatalog, NeuralSignalDescriptorDropCommit,
-    NeuralSignalDescriptorDropPatch, NeuralSignalDescriptorDropRejection,
-    NeuralSignalDescriptorPatch, NeuralSignalDescriptorPatchCommit,
-    NeuralSignalDescriptorPatchRejection, NeuralSignalDescriptorRouteKey, PhysicalLedgerSnapshot,
-    PhysicalState, ProprioceptionDropPatch, ProprioceptionPatch, is_valid_neural_signal_identifier,
+use crate::{
+    observability::{contract::DescriptorCatalogChangeMode, runtime as observability_runtime},
+    types::{
+        NeuralSignalDescriptor, NeuralSignalDescriptorCatalog, NeuralSignalDescriptorDropCommit,
+        NeuralSignalDescriptorDropPatch, NeuralSignalDescriptorDropRejection,
+        NeuralSignalDescriptorPatch, NeuralSignalDescriptorPatchCommit,
+        NeuralSignalDescriptorPatchRejection, NeuralSignalDescriptorRouteKey,
+        PhysicalLedgerSnapshot, PhysicalState, ProprioceptionDropPatch, ProprioceptionPatch,
+        is_valid_neural_signal_identifier,
+    },
 };
 
 #[derive(Clone)]
@@ -61,8 +66,10 @@ impl StemPhysicalStateStore {
         if patch.entries.is_empty() {
             return NeuralSignalDescriptorPatchCommit::default();
         }
+
         let mut state = self.inner.write().await;
         let entries = &mut state.ns_descriptor.entries;
+        let original_was_empty = entries.is_empty();
         let mut changed = false;
         let mut accepted_entries = Vec::new();
         let mut rejected_entries = Vec::new();
@@ -98,15 +105,53 @@ impl StemPhysicalStateStore {
             }
             accepted_entries.push(committed);
         }
+
+        let mut catalog_event = None;
         if changed {
             sort_ns_descriptor_entries(entries);
             state.ns_descriptor.version =
                 next_stem_ns_descriptor_version(&state.ns_descriptor.version);
+            catalog_event = Some((
+                if original_was_empty {
+                    DescriptorCatalogChangeMode::Snapshot
+                } else {
+                    DescriptorCatalogChangeMode::Update
+                },
+                state.ns_descriptor.version.clone(),
+                state.ns_descriptor.entries.clone(),
+            ));
         }
-        NeuralSignalDescriptorPatchCommit {
+
+        let commit = NeuralSignalDescriptorPatchCommit {
             accepted_entries,
             rejected_entries,
+        };
+        drop(state);
+
+        if let Some((change_mode, catalog_version, catalog_entries)) = catalog_event {
+            let snapshot = matches!(change_mode, DescriptorCatalogChangeMode::Snapshot)
+                .then(|| json!({ "entries": catalog_entries }));
+            let changed_descriptor_summary =
+                if matches!(change_mode, DescriptorCatalogChangeMode::Snapshot) {
+                    json!({
+                        "changed_count": commit.accepted_entries.len(),
+                        "rejected_count": commit.rejected_entries.len(),
+                    })
+                } else {
+                    json!({
+                        "accepted": descriptor_refs(&commit.accepted_entries),
+                        "rejected_count": commit.rejected_entries.len(),
+                    })
+                };
+            observability_runtime::emit_stem_descriptor_catalog(
+                &catalog_version,
+                change_mode,
+                changed_descriptor_summary,
+                snapshot,
+            );
         }
+
+        commit
     }
 
     async fn apply_neural_signal_descriptor_drop_inner(
@@ -152,14 +197,32 @@ impl StemPhysicalStateStore {
             .entries
             .retain(|descriptor| !routes.contains(&route_key_from_descriptor(descriptor)));
         let changed = state.ns_descriptor.entries.len() != original_len;
+        let mut catalog_event = None;
         if changed {
             state.ns_descriptor.version =
                 next_stem_ns_descriptor_version(&state.ns_descriptor.version);
+            catalog_event = Some(state.ns_descriptor.version.clone());
         }
-        NeuralSignalDescriptorDropCommit {
+
+        let commit = NeuralSignalDescriptorDropCommit {
             accepted_routes: routes.into_iter().collect(),
             rejected_routes,
+        };
+        drop(state);
+
+        if let Some(catalog_version) = catalog_event {
+            observability_runtime::emit_stem_descriptor_catalog(
+                &catalog_version,
+                DescriptorCatalogChangeMode::Drop,
+                json!({
+                    "removed": route_refs(&commit.accepted_routes),
+                    "rejected_count": commit.rejected_routes.len(),
+                }),
+                None,
+            );
         }
+
+        commit
     }
 
     async fn apply_proprioception_patch_inner(&self, patch: ProprioceptionPatch) {
@@ -212,6 +275,25 @@ fn next_stem_ns_descriptor_version(current: &str) -> String {
         .unwrap_or(0)
         .saturating_add(1);
     format!("stem:v{next}")
+}
+
+fn descriptor_refs(entries: &[NeuralSignalDescriptor]) -> Vec<String> {
+    entries
+        .iter()
+        .map(|descriptor| {
+            format!(
+                "{}/{}",
+                descriptor.endpoint_id, descriptor.neural_signal_descriptor_id
+            )
+        })
+        .collect()
+}
+
+fn route_refs(routes: &[NeuralSignalDescriptorRouteKey]) -> Vec<String> {
+    routes
+        .iter()
+        .map(NeuralSignalDescriptorRouteKey::fq_neural_signal_id)
+        .collect()
 }
 
 #[async_trait]

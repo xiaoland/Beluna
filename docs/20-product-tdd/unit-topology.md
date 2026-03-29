@@ -16,9 +16,10 @@ Beluna currently has four technical units.
 - Apple ecosystem external body endpoint UX.
 - Uses core endpoint protocol; does not own core domain authority.
 
-4. `monitor`
-- Local observability reader for runtime log consumption and filtering UX.
-- Consumes core local log artifacts; does not own runtime authority.
+4. `moira`
+- Local control-plane and observability unit for Beluna runtime operation.
+- Prepares local Core artifacts/profiles, supervises local Core lifecycle, ingests Core OTLP logs, and provides human-facing inspection/control through Loom.
+- Does not own core runtime authority, config shape authority, endpoint protocol authority, or observability emission policy.
 
 ## Core Internal Subsystems (Inside `core` Unit)
 

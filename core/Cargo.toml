@@ -28,7 +28,7 @@ serde_json = "1.0.140"
 sha2 = "0.10.8"
 sysinfo = "0.38.2"
 thiserror = "2.0.12"
-time = { version = "0.3.41", features = ["local-offset"] }
+time = { version = "0.3.41", features = ["formatting", "local-offset"] }
 tokio = { version = "1.44.1", features = ["io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }
 tokio-stream = "0.1.17"
 tokio-util = "0.7.13"

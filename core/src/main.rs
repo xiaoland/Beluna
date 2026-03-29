@@ -18,7 +18,7 @@ use beluna::{
     continuity::ContinuityEngine,
     cortex::{Cortex, CortexDeps, CortexRuntime, PhysicalStateReadPort},
     logging::init_tracing,
-    observability::otel::OpenTelemetryRuntime,
+    observability::{otel::OpenTelemetryRuntime, runtime as observability_runtime},
     spine::{Spine, shutdown_global_spine},
     stem::{
         AfferentControlHandle, AfferentRuleControlPort, SenseAfferentPathway, StemControlPort,
@@ -148,6 +148,9 @@ async fn main() -> Result<()> {
         observability_runtime.trace_layer(),
     )
     .context("failed to initialize tracing logging")?;
+    observability_runtime::install_run_id(_logging_guard.run_id().to_string())
+        .map_err(anyhow::Error::msg)
+        .context("failed to install observability runtime run id")?;
     for state in observability_runtime.signal_states() {
         tracing::info!(
             target: "observability",

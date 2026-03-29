@@ -4,6 +4,7 @@ Core is Beluna's runtime authority and composition root.
 
 - [Design](./design.md)
 - [Interfaces](./interfaces.md)
+- [Observability](./observability.md)
 - [Data And State](./data-and-state.md)
 - [Operations](./operations.md)
 - [Verification](./verification.md)

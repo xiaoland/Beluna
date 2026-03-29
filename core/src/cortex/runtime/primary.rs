@@ -15,7 +15,7 @@ use tokio::time::{Duration, timeout};
 use crate::{
     ai_gateway::chat::{
         Chat, ChatMessage, ChatRole, ChatToolDefinition, CloneThreadOptions, ContentPart,
-        OutputMode, Thread, ThreadOptions, ToolCallResult, ToolExecutionRequest,
+        FinishReason, OutputMode, Thread, ThreadOptions, ToolCallResult, ToolExecutionRequest,
         ToolExecutionResult, ToolExecutor, ToolOverride, TurnInput, TurnLimits, TurnQuery,
         TurnResponse,
     },
@@ -36,7 +36,10 @@ use crate::{
             WaitForSenseControlDirective,
         },
     },
-    observability::metrics as observability_metrics,
+    observability::{
+        contract::OrganResponseStatus, metrics as observability_metrics,
+        runtime as observability_runtime,
+    },
     spine::ActDispatchResult,
     stem::{ActProducerHandle, AfferentRuleControlPort, DeferralRuleAddInput, EfferentActEnvelope},
     types::{Act, NeuralSignalDescriptor, PhysicalState, Sense, build_fq_neural_signal_id},
@@ -135,6 +138,7 @@ struct PrimaryEngineResult {
     dispatched_act_count: usize,
     control: CortexControlDirective,
     pending_continuation: bool,
+    goal_forest_nodes: Vec<GoalNode>,
 }
 
 #[derive(Clone)]
@@ -878,6 +882,25 @@ impl Cortex {
                 return Ok(self.noop_output(physical_state.cycle_id, "primary_timeout"));
             }
         };
+        let emit_tick_observation = |status: &'static str| {
+            let goal_forest_snapshot_id = observability_runtime::emit_cortex_goal_forest_snapshot(
+                physical_state.cycle_id,
+                &primary_output.goal_forest_nodes,
+            );
+            observability_runtime::emit_cortex_tick(
+                physical_state.cycle_id,
+                serde_json::json!({
+                    "kind": if senses.is_empty() { "idle" } else { "sense" },
+                    "pending_sense_count": senses.len(),
+                    "status": status,
+                    "pending_continuation": primary_output.pending_continuation,
+                }),
+                senses,
+                physical_state,
+                primary_output.dispatched_act_count,
+                goal_forest_snapshot_id,
+            );
+        };
 
         if !primary_output.pending_continuation {
             let _output_ir = match ir::parse_output_ir(&primary_output.output_text) {
@@ -893,6 +916,7 @@ impl Cortex {
                         error = %err,
                         "primary_contract_failed_noop"
                     );
+                    emit_tick_observation("primary_contract_error");
                     return Ok(self.noop_output(physical_state.cycle_id, "primary_contract"));
                 }
             };
@@ -908,6 +932,7 @@ impl Cortex {
             cycle_id: physical_state.cycle_id,
             act_count: primary_output.dispatched_act_count,
         });
+        emit_tick_observation("ok");
 
         Ok(CortexOutput {
             control: primary_output.control,
@@ -974,6 +999,7 @@ impl Cortex {
                 dispatched_act_count: 0,
                 control: CortexControlDirective::default(),
                 pending_continuation: false,
+                goal_forest_nodes: initial_goal_forest_nodes,
             });
         }
 
@@ -1091,9 +1117,11 @@ impl Cortex {
                     wait_for_sense: turn_state.wait_for_sense.clone(),
                 },
                 pending_continuation: false,
+                goal_forest_nodes: working_goal_forest_nodes,
             });
         }
 
+        let goal_forest_nodes = working_goal_forest_nodes.clone();
         let mut continuation_state_guard = self.primary_continuation_state.lock().await;
         *continuation_state_guard = Some(PrimaryContinuationState {
             sense_tool_context: effective_sense_tool_context,
@@ -1113,6 +1141,7 @@ impl Cortex {
                 wait_for_sense: turn_state.wait_for_sense,
             },
             pending_continuation: true,
+            goal_forest_nodes,
         })
     }
 
@@ -1211,6 +1240,20 @@ impl Cortex {
         let stage = CognitionOrgan::Primary.stage();
         let request_id = format!("cortex-{stage}-{cycle_id}-turn-{step}");
         let started_at = Instant::now();
+        let route_or_organ = self
+            .resolve_route(CognitionOrgan::Primary)
+            .unwrap_or_else(|| stage.to_string());
+        observability_runtime::emit_cortex_organ_request(
+            cycle_id,
+            stage,
+            Some(&route_or_organ),
+            &request_id,
+            serde_json::json!({
+                "message_count": input_messages.len(),
+                "tool_override_count": tool_overrides.len(),
+                "max_output_tokens": self.limits.max_primary_output_tokens,
+            }),
+        );
         let mut input = build_turn_input(
             request_id.clone(),
             self.limits.max_primary_output_tokens,
@@ -1222,6 +1265,16 @@ impl Cortex {
         );
         input.tool_executor = tool_executor;
         let output = thread.complete(input).await.map_err(|err| {
+            observability_runtime::emit_cortex_organ_response(
+                cycle_id,
+                stage,
+                &request_id,
+                OrganResponseStatus::Error,
+                serde_json::json!({ "finish_reason": "error" }),
+                serde_json::json!([]),
+                serde_json::json!([]),
+                Some(gateway_error_summary(&err)),
+            );
             tracing::debug!(
                 target: "cortex",
                 stage = stage,
@@ -1235,6 +1288,16 @@ impl Cortex {
             );
             primary_failed(err.to_string())
         })?;
+        observability_runtime::emit_cortex_organ_response(
+            cycle_id,
+            stage,
+            &request_id,
+            OrganResponseStatus::Ok,
+            turn_response_summary(&output.response),
+            turn_tool_summary(&output.response),
+            unknown_act_summary(),
+            None,
+        );
 
         Ok(output.response)
     }
@@ -1280,6 +1343,19 @@ impl Cortex {
         let request_id = format!("cortex-{stage}-{cycle_id}");
         let started_at = Instant::now();
         let route = self.resolve_route(organ);
+        let route_or_organ = route.clone().unwrap_or_else(|| stage.to_string());
+        let output_mode_label = output_mode_label(&output_mode);
+        observability_runtime::emit_cortex_organ_request(
+            cycle_id,
+            stage,
+            Some(&route_or_organ),
+            &request_id,
+            serde_json::json!({
+                "max_output_tokens": max_output_tokens,
+                "output_mode": output_mode_label,
+                "user_prompt_chars": user_prompt.len(),
+            }),
+        );
         let input = build_turn_input(
             request_id.clone(),
             max_output_tokens,
@@ -1313,12 +1389,32 @@ impl Cortex {
         {
             Ok(thread) => thread,
             Err(err) => {
+                observability_runtime::emit_cortex_organ_response(
+                    cycle_id,
+                    stage,
+                    &request_id,
+                    OrganResponseStatus::Error,
+                    serde_json::json!({ "finish_reason": "error" }),
+                    serde_json::json!([]),
+                    serde_json::json!([]),
+                    Some(gateway_error_summary(&err)),
+                );
                 return Err(map_organ_gateway_error(organ, err.to_string()));
             }
         };
 
         let result = thread.complete(input).await;
         let output = result.map_err(|err| {
+            observability_runtime::emit_cortex_organ_response(
+                cycle_id,
+                stage,
+                &request_id,
+                OrganResponseStatus::Error,
+                serde_json::json!({ "finish_reason": "error" }),
+                serde_json::json!([]),
+                serde_json::json!([]),
+                Some(gateway_error_summary(&err)),
+            );
             tracing::debug!(
                 target: "cortex",
                 stage = stage,
@@ -1331,6 +1427,16 @@ impl Cortex {
             );
             map_organ_gateway_error(organ, err.to_string())
         })?;
+        observability_runtime::emit_cortex_organ_response(
+            cycle_id,
+            stage,
+            &request_id,
+            OrganResponseStatus::Ok,
+            turn_response_summary(&output.response),
+            turn_tool_summary(&output.response),
+            unknown_act_summary(),
+            None,
+        );
 
         Ok(output.response)
     }
@@ -1612,6 +1718,63 @@ fn string_array_field(object: &serde_json::Value, key: &str) -> Vec<String> {
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default()
+}
+
+fn turn_response_summary(response: &TurnResponse) -> serde_json::Value {
+    serde_json::json!({
+        "finish_reason": finish_reason_label(&response.finish_reason),
+        "model": response
+            .backend_metadata
+            .get("model")
+            .and_then(|value| value.as_str()),
+        "backend_id": response
+            .backend_metadata
+            .get("backend_id")
+            .and_then(|value| value.as_str()),
+    })
+}
+
+fn turn_tool_summary(response: &TurnResponse) -> serde_json::Value {
+    serde_json::json!({
+        "tool_call_count": response.tool_calls.len(),
+        "pending_tool_call_continuation": response.pending_tool_call_continuation,
+    })
+}
+
+fn unknown_act_summary() -> serde_json::Value {
+    serde_json::json!({
+        "known": false,
+    })
+}
+
+fn gateway_error_summary(err: &crate::ai_gateway::error::GatewayError) -> serde_json::Value {
+    serde_json::json!({
+        "code": serde_json::to_value(err.kind)
+            .ok()
+            .and_then(|value| value.as_str().map(str::to_string))
+            .unwrap_or_else(|| "internal".to_string()),
+        "message": err.message.clone(),
+        "backend_id": err.backend_id.clone(),
+        "provider_code": err.provider_code.clone(),
+        "provider_http_status": err.provider_http_status,
+    })
+}
+
+fn finish_reason_label(reason: &FinishReason) -> &str {
+    match reason {
+        FinishReason::Stop => "stop",
+        FinishReason::Length => "length",
+        FinishReason::ToolCalls => "tool_calls",
+        FinishReason::Other(_) => "other",
+    }
+}
+
+fn output_mode_label(output_mode: &OutputMode) -> &str {
+    match output_mode {
+        OutputMode::Text => "text",
+        OutputMode::JsonObject => "json_object",
+        OutputMode::JsonSchema { .. } => "json_schema",
+    }
 }
 
 fn primary_internal_tools() -> Vec<ChatToolDefinition> {
