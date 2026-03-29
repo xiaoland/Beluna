@@ -22,7 +22,7 @@ const tone = computed(() => stateTone(props.status?.state ?? null))
       <p class="eyebrow">Moira / Loom</p>
       <h1>Wake Inspection Control Plane</h1>
       <p class="hero-text">
-        Stage 1 Lachesis view over local OTLP ingest, wake sessions, and tick-scoped inspection.
+        Stage 2 Lachesis view over local OTLP ingest, wake sessions, humane tick chronology, and raw drilldown.
       </p>
       <div class="hero-tags">
         <span class="status-badge" :class="`status-${tone}`">
@@ -77,7 +77,7 @@ const tone = computed(() => stateTone(props.status?.state ?? null))
   position: relative;
   z-index: 1;
   margin-bottom: 1rem;
-  padding: 1.1rem;
+  padding: 0.95rem;
   display: grid;
   gap: 1rem;
   grid-template-columns: minmax(0, 1.3fr) auto;
@@ -122,7 +122,6 @@ h1 {
   align-items: center;
   min-height: 2rem;
   padding: 0.2rem 0.75rem;
-  border-radius: 999px;
   background: rgba(164, 63, 47, 0.12);
   color: var(--err);
   border: 1px solid rgba(164, 63, 47, 0.22);
@@ -138,11 +137,9 @@ h1 {
 
 .metric-card {
   min-width: 0;
-  padding: 0.9rem;
-  border-radius: 0.95rem;
+  padding: 0.78rem;
   background: var(--panel-strong);
   border: 1px solid var(--line-soft);
-  box-shadow: var(--shadow-card);
 }
 
 .metric-card.wide {

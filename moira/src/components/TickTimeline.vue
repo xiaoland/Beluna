@@ -66,7 +66,7 @@ defineEmits<{
 .timeline {
   display: grid;
   gap: 0.3rem;
-  padding: 0 0.9rem 1rem;
+  padding: 0 0.9rem 0.9rem;
 }
 
 .timeline-row {
@@ -75,25 +75,22 @@ defineEmits<{
   grid-template-columns: 1.6rem minmax(0, 1fr);
   gap: 0.8rem;
   text-align: left;
-  padding: 0.75rem 0.8rem;
+  padding: 0.68rem 0.75rem;
   border: 1px solid transparent;
   background: transparent;
-  border-radius: 0.95rem;
   transition:
     background-color 140ms ease,
-    border-color 140ms ease,
-    transform 140ms ease;
+    border-color 140ms ease;
 }
 
 .timeline-row:hover {
-  background: rgba(255, 251, 246, 0.74);
+  background: var(--panel);
   border-color: var(--line-soft);
-  transform: translateY(-1px);
 }
 
 .timeline-row.selected {
-  background: rgba(168, 93, 44, 0.08);
-  border-color: rgba(168, 93, 44, 0.26);
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
 }
 
 .rail {
@@ -108,7 +105,7 @@ defineEmits<{
   top: 0;
   bottom: 0;
   width: 2px;
-  background: rgba(103, 84, 66, 0.14);
+  background: var(--line-soft);
 }
 
 .dot {
@@ -117,9 +114,8 @@ defineEmits<{
   width: 0.82rem;
   height: 0.82rem;
   margin-top: 0.12rem;
-  border-radius: 999px;
   background: linear-gradient(180deg, var(--accent-soft), var(--accent));
-  box-shadow: 0 0 0 4px rgba(229, 188, 134, 0.22);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 .timeline-head {

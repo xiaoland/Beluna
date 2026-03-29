@@ -131,22 +131,15 @@ impl StemPhysicalStateStore {
         if let Some((change_mode, catalog_version, catalog_entries)) = catalog_event {
             let snapshot = matches!(change_mode, DescriptorCatalogChangeMode::Snapshot)
                 .then(|| json!({ "entries": catalog_entries }));
-            let changed_descriptor_summary =
-                if matches!(change_mode, DescriptorCatalogChangeMode::Snapshot) {
-                    json!({
-                        "changed_count": commit.accepted_entries.len(),
-                        "rejected_count": commit.rejected_entries.len(),
-                    })
-                } else {
-                    json!({
-                        "accepted": descriptor_refs(&commit.accepted_entries),
-                        "rejected_count": commit.rejected_entries.len(),
-                    })
-                };
             observability_runtime::emit_stem_descriptor_catalog(
+                None,
                 &catalog_version,
                 change_mode,
-                changed_descriptor_summary,
+                json!({
+                    "entries": commit.accepted_entries,
+                    "routes": descriptor_refs(&commit.accepted_entries),
+                }),
+                json!(commit.rejected_entries),
                 snapshot,
             );
         }
@@ -212,12 +205,13 @@ impl StemPhysicalStateStore {
 
         if let Some(catalog_version) = catalog_event {
             observability_runtime::emit_stem_descriptor_catalog(
+                None,
                 &catalog_version,
                 DescriptorCatalogChangeMode::Drop,
                 json!({
-                    "removed": route_refs(&commit.accepted_routes),
-                    "rejected_count": commit.rejected_routes.len(),
+                    "routes": route_refs(&commit.accepted_routes),
                 }),
+                json!(commit.rejected_routes),
                 None,
             );
         }
@@ -229,20 +223,30 @@ impl StemPhysicalStateStore {
         if patch.entries.is_empty() {
             return;
         }
+        let observability_payload = json!({
+            "entries": patch.entries.clone(),
+        });
         let mut state = self.inner.write().await;
         for (key, value) in patch.entries {
             state.proprioception.insert(key, value);
         }
+        drop(state);
+        observability_runtime::emit_stem_proprioception("patch", None, observability_payload);
     }
 
     async fn apply_proprioception_drop_inner(&self, patch: ProprioceptionDropPatch) {
         if patch.keys.is_empty() {
             return;
         }
+        let observability_payload = json!({
+            "keys": patch.keys.clone(),
+        });
         let mut state = self.inner.write().await;
         for key in patch.keys {
             state.proprioception.remove(&key);
         }
+        drop(state);
+        observability_runtime::emit_stem_proprioception("drop", None, observability_payload);
     }
 }
 
@@ -370,6 +374,7 @@ impl StemTickRuntime {
                 }
                 _ = tick.tick() => {
                     tick_seq = tick_seq.saturating_add(1);
+                    observability_runtime::emit_stem_tick(tick_seq, tick_seq, "granted");
                     if self.deps.tick_grant_tx.send(TickGrant {
                         tick_seq,
                         emitted_at: Instant::now(),

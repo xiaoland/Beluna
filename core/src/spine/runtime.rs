@@ -267,8 +267,8 @@ impl Spine {
             neural_signal_descriptor_id = %act.neural_signal_descriptor_id
         )
     )]
-    pub async fn on_act_final(&self, act: Act) -> Result<ActDispatchResult, SpineError> {
-        match self.dispatch_act(act.clone()).await {
+    pub async fn on_act_final(&self, tick: u64, act: Act) -> Result<ActDispatchResult, SpineError> {
+        match self.dispatch_act(tick, act.clone()).await {
             Ok(ActDispatchResult::Acknowledged { reference_id }) => {
                 Ok(ActDispatchResult::Acknowledged { reference_id })
             }
@@ -318,7 +318,7 @@ impl Spine {
             neural_signal_descriptor_id = %act.neural_signal_descriptor_id
         )
     )]
-    pub async fn dispatch_act(&self, act: Act) -> Result<ActDispatchResult, SpineError> {
+    pub async fn dispatch_act(&self, tick: u64, act: Act) -> Result<ActDispatchResult, SpineError> {
         if act.act_instance_id.trim().is_empty() || act.endpoint_id.trim().is_empty() {
             tracing::warn!(
                 target: "spine.dispatch",
@@ -334,12 +334,20 @@ impl Spine {
                 reason_code: "endpoint_not_found".to_string(),
                 reference_id: format!("spine:missing_endpoint:{}", act.act_instance_id),
             };
-            Self::log_dispatch_outcome(&act, "unknown", None, &outcome);
+            Self::log_dispatch_outcome(tick, &act, "unknown", None, &outcome);
             return Ok(outcome);
         };
 
         match dispatch {
             EndpointDispatch::Inline(endpoint) => {
+                observability_runtime::emit_spine_dispatch_bind(
+                    tick,
+                    &act.act_instance_id,
+                    &act.endpoint_id,
+                    Some(&act.neural_signal_descriptor_id),
+                    Some("inline"),
+                    None,
+                );
                 tracing::debug!(
                     target: "spine.dispatch",
                     dispatch_binding = "inline",
@@ -348,7 +356,7 @@ impl Spine {
 
                 match endpoint.invoke(act.clone()).await {
                     Ok(outcome) => {
-                        Self::log_dispatch_outcome(&act, "inline", None, &outcome);
+                        Self::log_dispatch_outcome(tick, &act, "inline", None, &outcome);
                         Ok(outcome)
                     }
                     Err(err) => {
@@ -362,12 +370,20 @@ impl Spine {
                             reason_code: "endpoint_error".to_string(),
                             reference_id: format!("spine:error:{}", act.act_instance_id),
                         };
-                        Self::log_dispatch_outcome(&act, "inline", None, &outcome);
+                        Self::log_dispatch_outcome(tick, &act, "inline", None, &outcome);
                         Ok(outcome)
                     }
                 }
             }
             EndpointDispatch::AdapterChannel(channel_id) => {
+                observability_runtime::emit_spine_dispatch_bind(
+                    tick,
+                    &act.act_instance_id,
+                    &act.endpoint_id,
+                    Some(&act.neural_signal_descriptor_id),
+                    Some("adapter"),
+                    Some(channel_id),
+                );
                 tracing::debug!(
                     target: "spine.dispatch",
                     dispatch_binding = "adapter",
@@ -376,7 +392,13 @@ impl Spine {
                 );
                 match self.invoke_adapter_endpoint(channel_id, act.clone()) {
                     Ok(outcome) => {
-                        Self::log_dispatch_outcome(&act, "adapter", Some(channel_id), &outcome);
+                        Self::log_dispatch_outcome(
+                            tick,
+                            &act,
+                            "adapter",
+                            Some(channel_id),
+                            &outcome,
+                        );
                         Ok(outcome)
                     }
                     Err(err) => {
@@ -391,7 +413,13 @@ impl Spine {
                             reason_code: "dispatch_lost".to_string(),
                             reference_id: format!("spine:lost:{}", act.act_instance_id),
                         };
-                        Self::log_dispatch_outcome(&act, "adapter", Some(channel_id), &outcome);
+                        Self::log_dispatch_outcome(
+                            tick,
+                            &act,
+                            "adapter",
+                            Some(channel_id),
+                            &outcome,
+                        );
                         Ok(outcome)
                     }
                 }
@@ -776,18 +804,22 @@ impl Spine {
     }
 
     fn log_dispatch_outcome(
+        tick: u64,
         act: &Act,
         dispatch_binding: &'static str,
         channel_id: Option<u64>,
         outcome: &ActDispatchResult,
     ) {
         observability_runtime::emit_spine_dispatch_outcome(
+            tick,
             &act.act_instance_id,
-            &format!("endpoint:{}", act.endpoint_id),
-            dispatch_outcome_class(outcome),
+            &act.endpoint_id,
             Some(&act.neural_signal_descriptor_id),
-            None,
-            None,
+            Some(dispatch_binding),
+            channel_id,
+            dispatch_outcome_class(outcome),
+            dispatch_reason_code(outcome),
+            dispatch_reference_id(outcome),
         );
         match (outcome, channel_id) {
             (ActDispatchResult::Acknowledged { reference_id }, Some(channel_id)) => {
@@ -964,6 +996,22 @@ fn dispatch_outcome_class(outcome: &ActDispatchResult) -> DispatchOutcomeClass {
         ActDispatchResult::Acknowledged { .. } => DispatchOutcomeClass::Acknowledged,
         ActDispatchResult::Rejected { .. } => DispatchOutcomeClass::Rejected,
         ActDispatchResult::Lost { .. } => DispatchOutcomeClass::Lost,
+    }
+}
+
+fn dispatch_reason_code(outcome: &ActDispatchResult) -> Option<&str> {
+    match outcome {
+        ActDispatchResult::Acknowledged { .. } => None,
+        ActDispatchResult::Rejected { reason_code, .. }
+        | ActDispatchResult::Lost { reason_code, .. } => Some(reason_code.as_str()),
+    }
+}
+
+fn dispatch_reference_id(outcome: &ActDispatchResult) -> Option<&str> {
+    match outcome {
+        ActDispatchResult::Acknowledged { reference_id }
+        | ActDispatchResult::Rejected { reference_id, .. }
+        | ActDispatchResult::Lost { reference_id, .. } => Some(reference_id.as_str()),
     }
 }
 

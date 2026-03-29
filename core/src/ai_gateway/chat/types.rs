@@ -94,7 +94,8 @@ pub struct TurnLimits {
 // Tool-call results returned by backends
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ToolCallStatus {
     Partial,
     Ready,
@@ -102,7 +103,7 @@ pub enum ToolCallStatus {
     Rejected,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolCallResult {
     pub id: String,
     pub name: String,
@@ -114,7 +115,7 @@ pub struct ToolCallResult {
 // Usage
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UsageStats {
     pub input_tokens: Option<u64>,
     pub output_tokens: Option<u64>,
@@ -126,7 +127,8 @@ pub struct UsageStats {
 // Finish reason
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum FinishReason {
     Stop,
     Length,
@@ -152,7 +154,7 @@ pub(crate) struct TurnPayload {
 // Turn response
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TurnResponse {
     pub output_text: String,
     pub tool_calls: Vec<ToolCallResult>,

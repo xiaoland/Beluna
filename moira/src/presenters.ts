@@ -33,7 +33,34 @@ export function stateTone(state: string | null): 'ok' | 'warn' | 'err' | 'idle' 
 }
 
 export function rawEventHeadline(event: RawEvent): string {
-  return event.messageText || [event.subsystem, event.family, event.target].filter(Boolean).join(' / ') || 'Raw event'
+  const payload = toRecord(event.payload)
+  const identity = [
+    stringify(payload.organ_id),
+    stringify(payload.thread_id),
+    stringify(payload.turn_id),
+    stringify(payload.request_id_when_present ?? payload.request_id),
+    stringify(payload.sense_id_when_present ?? payload.sense_id),
+    stringify(payload.act_id_when_present ?? payload.act_id),
+    stringify(payload.endpoint_id_when_present ?? payload.endpoint_id),
+    stringify(payload.adapter_id),
+  ].filter(Boolean)
+  const state = [
+    stringify(payload.kind),
+    stringify(payload.phase),
+    stringify(payload.status),
+    stringify(payload.kind_or_status),
+    stringify(payload.transition_kind),
+    stringify(payload.kind_or_transition),
+    stringify(payload.kind_or_state),
+    stringify(payload.outcome_when_present),
+  ].filter(Boolean)
+
+  return (
+    event.messageText ||
+    [event.family, state.join(' / '), identity.join(' · ')].filter(Boolean).join(' · ') ||
+    [event.subsystem, event.family, event.target].filter(Boolean).join(' / ') ||
+    'Raw event'
+  )
 }
 
 export function summarizeEntry(value: unknown): string {
@@ -50,6 +77,17 @@ export function summarizeEntry(value: unknown): string {
   }
 
   const record = toRecord(value)
+  const nestedMessage = toRecord(record.message)
+  if (Object.keys(nestedMessage).length > 0) {
+    return [
+      stringify(record.turn_id) ? `turn ${stringify(record.turn_id)}` : null,
+      stringify(nestedMessage.kind),
+      stringify(nestedMessage.id),
+    ]
+      .filter(Boolean)
+      .join(' · ')
+  }
+
   const candidates = [
     'label',
     'name',
@@ -63,14 +101,32 @@ export function summarizeEntry(value: unknown): string {
     'signalId',
     'adapter_id',
     'adapterId',
+    'organ_id',
+    'organId',
+    'thread_id',
+    'threadId',
+    'turn_id',
+    'turnId',
     'endpoint_id',
     'endpointId',
     'request_id',
+    'request_id_when_present',
     'requestId',
     'act_id',
     'actId',
     'sense_id',
     'senseId',
+    'phase',
+    'status',
+    'kind',
+    'kind_or_status',
+    'kind_or_transition',
+    'kind_or_state',
+    'transition_kind',
+    'binding_kind',
+    'catalog_version',
+    'backend_id',
+    'model',
     'tick',
     'outcome',
     'state_transition',
@@ -110,6 +166,21 @@ export function narrativeSections(
         hint: 'Tool selections or calls anchored to this tick.',
         items: detail.cortex.primaryTools,
       },
+      {
+        title: 'Gateway Requests',
+        hint: 'LLM backend requests, retries, and usage for this tick.',
+        items: detail.cortex.gatewayRequests,
+      },
+      {
+        title: 'Committed Turns',
+        hint: 'Committed AI-gateway turns with finish reasons and message payloads.',
+        items: detail.cortex.gatewayTurns,
+      },
+      {
+        title: 'Thread Snapshots',
+        hint: 'Authoritative thread snapshots that connect turns without replay heuristics.',
+        items: detail.cortex.gatewayThreads,
+      },
       { title: 'Acts', hint: 'Actions chosen or attempted.', items: detail.cortex.acts },
       {
         title: 'Goal Forest Snapshot',
@@ -137,6 +208,16 @@ export function narrativeSections(
         hint: 'Descriptor records observed for this tick.',
         items: detail.stem.descriptorCatalog,
       },
+      {
+        title: 'Proprioception',
+        hint: 'Physical-state mutations and retained status patches.',
+        items: detail.stem.proprioception,
+      },
+      {
+        title: 'Afferent Rules',
+        hint: 'Deferral-rule lifecycle observed inside Stem.',
+        items: detail.stem.afferentRules,
+      },
     ]
   }
 
@@ -152,8 +233,8 @@ export function narrativeSections(
       items: detail.spine.bodyEndpoints,
     },
     {
-      title: 'Dispatch Outcomes',
-      hint: 'Terminal dispatch outcomes observed around this tick.',
+      title: 'Dispatch',
+      hint: 'Dispatch bindings and outcomes observed around this tick.',
       items: detail.spine.topologyEvents,
     },
   ]

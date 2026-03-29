@@ -1,10 +1,11 @@
-use std::{sync::Arc, time::Instant};
+use std::{collections::BTreeMap, sync::Arc, time::Instant};
 
+use serde_json::{Value, json};
 use tokio::sync::Mutex;
 
 use crate::{
     ai_gateway::error::{GatewayError, GatewayErrorKind},
-    observability::metrics as observability_metrics,
+    observability::{metrics as observability_metrics, runtime as observability_runtime},
 };
 
 use super::{
@@ -135,12 +136,37 @@ impl Thread {
             metadata: metadata.clone(),
         };
 
-        let mut response = self
+        let mut response = match self
             .runtime
             .dispatch_complete(&guard.backend, &payload)
-            .await?;
+            .await
+        {
+            Ok(response) => response,
+            Err(err) => {
+                observability_runtime::emit_ai_gateway_turn(
+                    observability_runtime::AiGatewayTurnArgs {
+                        tick: metadata_tick(&metadata),
+                        thread_id: self.thread_id.clone(),
+                        turn_id,
+                        span_id: format!("ai-gateway.turn:{}:{turn_id}", self.thread_id),
+                        parent_span_id_when_present: metadata_parent_span_id(&metadata),
+                        organ_id_when_present: metadata.get("organ_id").cloned(),
+                        request_id_when_present: None,
+                        status: "error".to_string(),
+                        messages_when_committed: None,
+                        metadata: serde_json::to_value(&metadata)
+                            .unwrap_or_else(|_| json!({ "serialization_error": true })),
+                        finish_reason_when_present: None,
+                        usage_when_present: None,
+                        backend_metadata_when_present: Some(backend_summary_value(&guard.backend)),
+                        error_when_present: Some(json!(err.clone())),
+                    },
+                );
+                return Err(err);
+            }
+        };
         let mut turn = Turn::new(turn_id);
-        *turn.metadata_mut() = metadata;
+        *turn.metadata_mut() = metadata.clone();
         for input_message in input.messages {
             for message in Message::from_chat_message(input_message) {
                 turn.append_one(message, None).await?;
@@ -196,6 +222,7 @@ impl Thread {
 
         guard.turns.push(turn);
         guard.next_turn_id = guard.next_turn_id.saturating_add(1);
+        let committed_turn = guard.turns.last().cloned();
 
         observability_metrics::set_chat_thread_last_turn_latency_ms(
             &self.chat_id,
@@ -203,6 +230,41 @@ impl Thread {
             started_at.elapsed().as_millis() as u64,
         );
         observability_metrics::increment_chat_thread_turns_total(&self.chat_id, &self.thread_id);
+        if let Some(committed_turn) = committed_turn.as_ref() {
+            observability_runtime::emit_ai_gateway_turn(observability_runtime::AiGatewayTurnArgs {
+                tick: metadata_tick(committed_turn.metadata()),
+                thread_id: self.thread_id.clone(),
+                turn_id,
+                span_id: format!("ai-gateway.turn:{}:{turn_id}", self.thread_id),
+                parent_span_id_when_present: metadata_parent_span_id(committed_turn.metadata()),
+                organ_id_when_present: committed_turn.metadata().get("organ_id").cloned(),
+                request_id_when_present: response
+                    .backend_metadata
+                    .get("request_id")
+                    .and_then(|value| value.as_str())
+                    .map(str::to_string),
+                status: turn_status_label(&response).to_string(),
+                messages_when_committed: serde_json::to_value(committed_turn.messages()).ok(),
+                metadata: serde_json::to_value(committed_turn.metadata())
+                    .unwrap_or_else(|_| json!({ "serialization_error": true })),
+                finish_reason_when_present: serde_json::to_value(&response.finish_reason).ok(),
+                usage_when_present: option_value(response.usage.as_ref()),
+                backend_metadata_when_present: serde_json::to_value(&response.backend_metadata)
+                    .ok(),
+                error_when_present: None,
+            });
+        }
+        observability_runtime::emit_ai_gateway_thread(observability_runtime::AiGatewayThreadArgs {
+            tick: metadata_tick(&metadata),
+            thread_id: self.thread_id.clone(),
+            span_id: format!("ai-gateway.thread:turn-committed:{}", self.thread_id),
+            parent_span_id_when_present: metadata_parent_span_id(&metadata),
+            organ_id_when_present: metadata.get("organ_id").cloned(),
+            kind: "turn_committed".to_string(),
+            messages: thread_messages_snapshot(&guard.turns),
+            turn_summaries_when_present: Some(turn_summaries_value(&guard.turns)),
+            source_turn_ids_when_present: None,
+        });
 
         Ok(TurnOutput {
             chat_id: self.chat_id.clone(),
@@ -238,6 +300,82 @@ impl Thread {
         )
         .with_retryable(false))
     }
+}
+
+pub(crate) fn metadata_tick(metadata: &BTreeMap<String, String>) -> u64 {
+    metadata
+        .get("tick")
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(0)
+}
+
+pub(crate) fn metadata_parent_span_id(metadata: &BTreeMap<String, String>) -> Option<String> {
+    metadata
+        .get("parent_span_id")
+        .cloned()
+        .or_else(|| metadata.get("request_id").cloned())
+}
+
+fn option_value<T: serde::Serialize>(value: Option<&T>) -> Option<Value> {
+    value.and_then(|item| serde_json::to_value(item).ok())
+}
+
+fn backend_summary_value(backend: &BoundBackend) -> Value {
+    json!({
+        "backend_id": backend.backend_id,
+        "model": backend.model,
+    })
+}
+
+fn turn_status_label(response: &super::types::TurnResponse) -> &'static str {
+    if response.pending_tool_call_continuation {
+        "committed_pending_continuation"
+    } else {
+        "committed"
+    }
+}
+
+pub(crate) fn thread_messages_snapshot(turns: &[Turn]) -> Value {
+    Value::Array(
+        turns
+            .iter()
+            .flat_map(|turn| {
+                turn.messages()
+                    .iter()
+                    .enumerate()
+                    .map(move |(message_index, message)| {
+                        json!({
+                            "turn_id": turn.turn_id(),
+                            "message_index": message_index,
+                            "message": message,
+                        })
+                    })
+            })
+            .collect(),
+    )
+}
+
+fn turn_summaries_value(turns: &[Turn]) -> Value {
+    Value::Array(
+        turns
+            .iter()
+            .map(|turn| {
+                json!({
+                    "turn_id": turn.turn_id(),
+                    "message_count": turn.message_count(),
+                    "tool_call_count": turn.tool_call_count(),
+                    "completed": turn.completed(),
+                    "metadata": turn.metadata(),
+                    "usage": turn.usage(),
+                    "finish_reason": turn.finish_reason(),
+                })
+            })
+            .collect(),
+    )
+}
+
+pub(crate) fn thread_turn_summaries(turns: &[Turn]) -> Value {
+    turn_summaries_value(turns)
 }
 
 fn build_dispatch_messages(

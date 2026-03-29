@@ -1,5 +1,7 @@
 use std::{collections::BTreeMap, sync::Arc};
 
+use serde::{Deserialize, Serialize};
+
 use super::{
     executor::ToolExecutor,
     tool::{ChatToolDefinition, ToolOverride},
@@ -21,7 +23,7 @@ pub struct TurnRef {
     pub index: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TurnSummary {
     pub turn_id: u64,
     pub message_count: usize,
@@ -39,12 +41,14 @@ pub struct ThreadOptions {
     pub default_limits: Option<TurnLimits>,
     pub enable_thinking: bool,
     pub seed_turns: Vec<Turn>,
+    pub metadata: BTreeMap<String, String>,
 }
 
 pub struct CloneThreadOptions {
     pub thread_id: Option<String>,
     pub route_or_alias: Option<String>,
     pub system_prompt: Option<String>,
+    pub metadata: BTreeMap<String, String>,
 }
 
 impl Default for CloneThreadOptions {
@@ -53,6 +57,7 @@ impl Default for CloneThreadOptions {
             thread_id: None,
             route_or_alias: None,
             system_prompt: None,
+            metadata: BTreeMap::new(),
         }
     }
 }

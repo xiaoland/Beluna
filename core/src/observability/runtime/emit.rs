@@ -15,8 +15,9 @@ fn log_flat_event(flat: FlatContractEvent, payload: String) {
         family,
         run_id,
         tick,
-        stage,
-        route_or_organ,
+        organ_id,
+        thread_id,
+        turn_id,
         request_id,
         endpoint_id,
         descriptor_id,
@@ -27,15 +28,16 @@ fn log_flat_event(flat: FlatContractEvent, payload: String) {
         transition_kind,
         outcome,
         direction,
-        binding_target,
+        binding_kind,
         change_mode,
         state,
+        kind,
     } = flat;
 
-    let tick = tick.unwrap_or(0);
     let tick_present = tick > 0;
-    let stage = stage.as_deref().unwrap_or("");
-    let route_or_organ = route_or_organ.as_deref().unwrap_or("");
+    let organ_id = organ_id.as_deref().unwrap_or("");
+    let thread_id = thread_id.as_deref().unwrap_or("");
+    let turn_id = turn_id.as_deref().unwrap_or("");
     let request_id = request_id.as_deref().unwrap_or("");
     let endpoint_id = endpoint_id.as_deref().unwrap_or("");
     let descriptor_id = descriptor_id.as_deref().unwrap_or("");
@@ -46,9 +48,10 @@ fn log_flat_event(flat: FlatContractEvent, payload: String) {
     let transition_kind = transition_kind.as_deref().unwrap_or("");
     let outcome = outcome.as_deref().unwrap_or("");
     let direction = direction.as_deref().unwrap_or("");
-    let binding_target = binding_target.as_deref().unwrap_or("");
+    let binding_kind = binding_kind.as_deref().unwrap_or("");
     let change_mode = change_mode.as_deref().unwrap_or("");
     let state = state.as_deref().unwrap_or("");
+    let kind = kind.as_deref().unwrap_or("");
 
     match level {
         EventLevel::Info => tracing::info!(
@@ -58,8 +61,9 @@ fn log_flat_event(flat: FlatContractEvent, payload: String) {
             run_id = %run_id,
             tick = tick,
             tick_present = tick_present,
-            stage = stage,
-            route_or_organ = route_or_organ,
+            organ_id = organ_id,
+            thread_id = thread_id,
+            turn_id = turn_id,
             request_id = request_id,
             endpoint_id = endpoint_id,
             descriptor_id = descriptor_id,
@@ -70,9 +74,10 @@ fn log_flat_event(flat: FlatContractEvent, payload: String) {
             transition_kind = transition_kind,
             outcome = outcome,
             direction = direction,
-            binding_target = binding_target,
+            binding_kind = binding_kind,
             change_mode = change_mode,
             state = state,
+            kind = kind,
             payload = %payload,
             "contract_event"
         ),
@@ -83,8 +88,9 @@ fn log_flat_event(flat: FlatContractEvent, payload: String) {
             run_id = %run_id,
             tick = tick,
             tick_present = tick_present,
-            stage = stage,
-            route_or_organ = route_or_organ,
+            organ_id = organ_id,
+            thread_id = thread_id,
+            turn_id = turn_id,
             request_id = request_id,
             endpoint_id = endpoint_id,
             descriptor_id = descriptor_id,
@@ -95,9 +101,10 @@ fn log_flat_event(flat: FlatContractEvent, payload: String) {
             transition_kind = transition_kind,
             outcome = outcome,
             direction = direction,
-            binding_target = binding_target,
+            binding_kind = binding_kind,
             change_mode = change_mode,
             state = state,
+            kind = kind,
             payload = %payload,
             "contract_event"
         ),

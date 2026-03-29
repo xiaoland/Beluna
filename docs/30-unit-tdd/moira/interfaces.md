@@ -20,8 +20,16 @@
 4. Observability interface:
 - Local OTLP gRPC logs receiver.
 - Raw-event query and live-subscription interfaces for Loom.
-- Minimum guaranteed log-backed Loom surfaces: run list, tick timeline, tick detail with Cortex/Stem/Spine tabs, and raw event inspector.
-- Dedicated goal-forest compare, Stem signal timeline, and Spine topology pages are follow-on Loom surfaces built on the same ingestion/query boundary rather than prerequisites for the first landable slice.
+- Minimum guaranteed log-backed Loom surfaces:
+  - wake list
+  - tick list
+  - selected tick workspace
+  - human-friendly per-tick chronology grouped by span or stable resource lane
+  - AI-gateway thread/turn inspection plus linked request lifecycle
+  - Cortex organ and goal-forest inspection
+  - Stem state and pathway inspection
+  - Spine topology and dispatch inspection
+  - raw event inspector as a secondary drilldown surface
 - Metrics/traces exporter-status surfaces and handoff links only.
 
 ## Consumed Contract

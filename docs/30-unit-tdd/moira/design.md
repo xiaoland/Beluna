@@ -23,6 +23,8 @@ Moira provides Beluna's first-party local control plane for:
 2. Quitting Moira stops the supervised Core.
 3. Force-kill requires a distinct second confirmation path.
 4. Logs are first-class locally stored observability data; metrics/traces remain exporter-status and handoff-link surfaces.
-5. Goal-forest comparison is derived between two ticks rather than stored as a precomputed diff artifact.
-6. Moira lands observability first: the minimum useful slice is raw OTLP ingest plus run- and tick-scoped inspection before artifact-management or supervision expansion.
-7. Clotho and Atropos must reuse the same Moira-owned run and query surfaces rather than introducing parallel state models.
+5. Human-friendly browsing is a primary Loom responsibility. Raw JSON inspection is a secondary drilldown surface, not the main browsing mode.
+6. Full payload preservation is preferred for first-party local observability while Beluna is still in the observability-heavy early phase.
+7. Selected tick inspection is organized around tick-scoped chronology and lane grouping rather than one flat event list.
+8. Goal-forest comparison is derived between two ticks rather than stored as a precomputed diff artifact.
+9. Clotho and Atropos must reuse the same Moira-owned wake and query surfaces rather than introducing parallel state models.

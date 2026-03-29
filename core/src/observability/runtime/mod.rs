@@ -1,3 +1,4 @@
+mod ai_gateway;
 mod cortex;
 mod emit;
 mod flatten;
@@ -10,15 +11,21 @@ use std::sync::OnceLock;
 
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
+pub use ai_gateway::{
+    AiGatewayRequestArgs, AiGatewayThreadArgs, AiGatewayTurnArgs, emit_ai_gateway_request,
+    emit_ai_gateway_thread, emit_ai_gateway_turn,
+};
 pub use cortex::{
-    emit_cortex_goal_forest_snapshot, emit_cortex_organ_request, emit_cortex_organ_response,
-    emit_cortex_tick,
+    emit_cortex_goal_forest_patch, emit_cortex_goal_forest_snapshot, emit_cortex_organ_end,
+    emit_cortex_organ_start, emit_cortex_tick,
 };
 pub use spine::{
-    emit_spine_adapter_lifecycle, emit_spine_dispatch_outcome, emit_spine_endpoint_lifecycle,
+    emit_spine_adapter_lifecycle, emit_spine_dispatch_bind, emit_spine_dispatch_outcome,
+    emit_spine_endpoint_lifecycle,
 };
 pub use stem::{
-    emit_stem_descriptor_catalog, emit_stem_dispatch_transition, emit_stem_signal_transition,
+    emit_stem_afferent_rule, emit_stem_descriptor_catalog, emit_stem_dispatch_transition,
+    emit_stem_proprioception, emit_stem_signal_transition, emit_stem_tick,
 };
 
 pub(crate) use emit::emit_contract_event;

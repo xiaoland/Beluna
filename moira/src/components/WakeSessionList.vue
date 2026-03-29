@@ -76,17 +76,17 @@ defineEmits<{
   min-width: 2rem;
   height: 2rem;
   padding: 0 0.65rem;
-  border-radius: 999px;
-  background: rgba(168, 93, 44, 0.12);
+  background: color-mix(in srgb, var(--accent) 18%, var(--panel));
   color: var(--accent);
-  border: 1px solid rgba(168, 93, 44, 0.18);
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
   font-weight: 600;
 }
 
 .session-list {
   display: grid;
-  gap: 0.75rem;
-  padding: 0 1rem 1rem;
+  gap: 0.55rem;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  padding: 0 0.9rem 0.9rem;
 }
 
 .session-card {
@@ -94,23 +94,19 @@ defineEmits<{
   text-align: left;
   border: 1px solid var(--line-soft);
   background: var(--panel-strong);
-  border-radius: 1rem;
-  padding: 0.9rem;
-  box-shadow: var(--shadow-card);
+  padding: 0.78rem;
   transition:
     border-color 140ms ease,
-    transform 140ms ease,
-    box-shadow 140ms ease;
+    transform 140ms ease;
 }
 
 .session-card:hover {
-  transform: translateY(-1px);
-  border-color: rgba(168, 93, 44, 0.3);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
 }
 
 .session-card.selected {
-  border-color: rgba(168, 93, 44, 0.48);
-  box-shadow: 0 16px 28px rgba(168, 93, 44, 0.14);
+  border-color: color-mix(in srgb, var(--accent) 62%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel-strong));
 }
 
 .card-head {
@@ -146,6 +142,10 @@ strong {
 }
 
 @media (max-width: 780px) {
+  .session-list {
+    grid-template-columns: 1fr;
+  }
+
   .card-grid {
     grid-template-columns: 1fr;
   }

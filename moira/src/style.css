@@ -1,20 +1,20 @@
 :root {
-  --bg: #f3ecdf;
-  --bg-deep: #e4d5bf;
-  --panel: rgba(255, 249, 242, 0.9);
-  --panel-strong: rgba(255, 252, 247, 0.94);
-  --line-soft: rgba(103, 84, 66, 0.15);
-  --line-strong: rgba(103, 84, 66, 0.28);
-  --text-strong: #2b221b;
-  --text-muted: #6d5b4d;
-  --accent: #a85d2c;
-  --accent-soft: #e5bc86;
-  --ok: #2e7d55;
-  --warn: #ae7a1f;
-  --err: #a43f2f;
-  --idle: #8b7868;
-  --shadow-soft: 0 16px 40px rgba(80, 54, 33, 0.12);
-  --shadow-card: 0 10px 24px rgba(80, 54, 33, 0.08);
+  --bg: #08121f;
+  --bg-deep: #040b14;
+  --panel: rgba(10, 21, 36, 0.9);
+  --panel-strong: rgba(13, 27, 45, 0.96);
+  --line-soft: rgba(122, 153, 194, 0.18);
+  --line-strong: rgba(122, 153, 194, 0.34);
+  --text-strong: #dfe9f7;
+  --text-muted: #8ea3c4;
+  --accent: #5c8fd0;
+  --accent-soft: #9fc0ea;
+  --ok: #72b89c;
+  --warn: #d2b16a;
+  --err: #cf7f7f;
+  --idle: #7389a7;
+  --shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.08);
   --font-body: "Avenir Next", "Segoe UI Variable Text", "Noto Sans", sans-serif;
   --font-display: "Iowan Old Style", "Baskerville", "Palatino Linotype", serif;
 }
@@ -36,9 +36,9 @@ body {
   font-family: var(--font-body);
   color: var(--text-strong);
   background:
-    radial-gradient(circle at 14% 10%, rgba(255, 248, 235, 0.94), transparent 30%),
-    radial-gradient(circle at 82% 12%, rgba(206, 158, 103, 0.14), transparent 24%),
-    linear-gradient(180deg, #faf3e8 0%, var(--bg) 48%, var(--bg-deep) 100%);
+    radial-gradient(circle at 14% 10%, rgba(71, 106, 154, 0.18), transparent 28%),
+    radial-gradient(circle at 82% 12%, rgba(40, 72, 117, 0.18), transparent 22%),
+    linear-gradient(180deg, #0a1524 0%, var(--bg) 44%, var(--bg-deep) 100%);
 }
 
 button,
@@ -77,15 +77,6 @@ code,
   padding: 1.4rem;
 }
 
-.workspace-grid {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  gap: 1rem;
-  grid-template-columns: minmax(17rem, 0.9fr) minmax(18rem, 1fr) minmax(25rem, 1.2fr);
-  align-items: start;
-}
-
 .pane {
   min-width: 0;
 }
@@ -93,9 +84,7 @@ code,
 .panel-shell {
   background: var(--panel);
   border: 1px solid var(--line-soft);
-  border-radius: 1.15rem;
-  box-shadow: var(--shadow-soft);
-  backdrop-filter: blur(10px);
+  border-radius: 0.55rem;
 }
 
 .panel-head {
@@ -130,8 +119,7 @@ code,
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  padding: 0.34rem 0.66rem;
-  border-radius: 999px;
+  padding: 0.28rem 0.58rem;
   font-size: 0.82rem;
   border: 1px solid transparent;
   text-transform: capitalize;
@@ -139,9 +127,8 @@ code,
 
 .status-badge::before {
   content: "";
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 999px;
+  width: 0.42rem;
+  height: 0.42rem;
   background: currentColor;
 }
 
@@ -175,31 +162,28 @@ code,
   align-items: center;
   justify-content: center;
   gap: 0.45rem;
-  min-height: 2.5rem;
-  padding: 0.64rem 0.96rem;
-  border-radius: 0.8rem;
+  min-height: 2.35rem;
+  padding: 0.56rem 0.82rem;
   border: 1px solid transparent;
   transition:
-    transform 140ms ease,
     background-color 140ms ease,
     border-color 140ms ease;
 }
 
 .button-primary {
-  color: #fff7ee;
-  background: linear-gradient(135deg, var(--accent), #8b471f);
-  box-shadow: 0 10px 22px rgba(168, 93, 44, 0.28);
+  color: #eaf3ff;
+  background: linear-gradient(135deg, #4f7fbf, var(--accent));
 }
 
 .button-secondary {
   color: var(--text-strong);
-  background: rgba(255, 250, 245, 0.75);
+  background: var(--panel);
   border-color: var(--line-strong);
 }
 
 .button-primary:hover,
 .button-secondary:hover {
-  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
 }
 
 .button-primary:disabled,
@@ -220,39 +204,25 @@ code,
   width: 34rem;
   height: 34rem;
   border-radius: 999px;
-  filter: blur(72px);
-  opacity: 0.24;
+  filter: blur(88px);
+  opacity: 0.16;
   pointer-events: none;
 }
 
 .orb-a {
   left: -10rem;
   top: -8rem;
-  background: #f6c28a;
+  background: #4f7fbf;
 }
 
 .orb-b {
   right: -12rem;
   bottom: -12rem;
-  background: #92b49d;
-}
-
-@media (max-width: 1180px) {
-  .workspace-grid {
-    grid-template-columns: minmax(16rem, 0.95fr) minmax(16rem, 1fr);
-  }
-
-  .detail-pane {
-    grid-column: 1 / -1;
-  }
+  background: #27507e;
 }
 
 @media (max-width: 780px) {
   .app-shell {
     padding: 1rem;
-  }
-
-  .workspace-grid {
-    grid-template-columns: 1fr;
   }
 }

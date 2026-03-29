@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import TickChronology from '@/components/TickChronology.vue'
 import RawEventInspector from '@/components/RawEventInspector.vue'
 import { formatWhen, narrativeSections, summarizeEntry } from '@/presenters'
 import type { DetailTab, TickDetail } from '@/types'
@@ -15,6 +16,7 @@ const emit = defineEmits<{
 }>()
 
 const tabs: Array<{ key: DetailTab; label: string }> = [
+  { key: 'chronology', label: 'Chronology' },
   { key: 'cortex', label: 'Cortex' },
   { key: 'stem', label: 'Stem' },
   { key: 'spine', label: 'Spine' },
@@ -22,7 +24,7 @@ const tabs: Array<{ key: DetailTab; label: string }> = [
 ]
 
 const sections = computed(() => {
-  if (!props.detail || props.tab === 'raw') {
+  if (!props.detail || props.tab === 'raw' || props.tab === 'chronology') {
     return []
   }
 
@@ -68,7 +70,11 @@ function pretty(value: unknown): string {
 
     <div v-if="loading && !detail" class="empty-state">Loading tick detail…</div>
     <div v-else-if="!detail" class="empty-state">
-      Select a tick from the middle timeline to inspect its narrative and raw events.
+      Select a tick from the timeline to inspect its chronology, narrative, and raw events.
+    </div>
+
+    <div v-else-if="tab === 'chronology'" class="detail-body">
+      <TickChronology :chronology="detail.chronology" />
     </div>
 
     <div v-else-if="tab === 'raw'" class="detail-body">
@@ -120,37 +126,34 @@ function pretty(value: unknown): string {
 .tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.55rem;
-  padding: 0 1rem 0.75rem;
+  gap: 0.35rem;
+  padding: 0 0.9rem 0.65rem;
 }
 
 .tab {
   min-height: 2.25rem;
-  padding: 0.45rem 0.85rem;
-  border-radius: 999px;
+  padding: 0.42rem 0.72rem;
   border: 1px solid var(--line-soft);
-  background: rgba(255, 251, 246, 0.72);
+  background: var(--panel);
   color: var(--text-muted);
 }
 
 .tab.active {
-  color: #fff7ee;
-  border-color: transparent;
-  background: linear-gradient(135deg, var(--accent), #8b471f);
+  color: var(--text-strong);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, var(--panel-strong));
 }
 
 .detail-body {
   display: grid;
-  gap: 0.85rem;
-  padding: 0 1rem 1rem;
+  gap: 0.7rem;
+  padding: 0 0.9rem 0.9rem;
 }
 
 .narrative-section {
-  padding: 0.95rem;
-  border-radius: 1rem;
+  padding: 0.78rem;
   background: var(--panel-strong);
   border: 1px solid var(--line-soft);
-  box-shadow: var(--shadow-card);
 }
 
 .section-head {
@@ -184,10 +187,9 @@ function pretty(value: unknown): string {
 }
 
 .entry-card {
-  padding: 0.85rem;
-  border-radius: 0.9rem;
-  border: 1px solid rgba(103, 84, 66, 0.08);
-  background: rgba(255, 249, 242, 0.85);
+  padding: 0.72rem;
+  border: 1px solid var(--line-soft);
+  background: var(--panel);
 }
 
 .entry-card header {

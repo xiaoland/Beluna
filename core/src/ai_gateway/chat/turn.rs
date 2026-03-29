@@ -1,5 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 
+use serde::{Deserialize, Serialize};
+
 use crate::ai_gateway::error::{GatewayError, GatewayErrorKind};
 
 use super::{
@@ -8,7 +10,7 @@ use super::{
     types::{FinishReason, UsageStats},
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Turn {
     turn_id: u64,
     messages: Vec<Message>,

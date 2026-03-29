@@ -4,135 +4,145 @@ All stages in this file are Lachesis sub-stages inside the same Moira task. They
 
 ## Design Goal
 
-Lachesis should make Beluna explainable during early development. The collection model should therefore optimize for:
+Lachesis should make Beluna explainable during early development. The collection and browsing model therefore optimize for:
 
-- reconstructing what happened at a given tick
-- following signal flow through Stem and Spine
-- understanding which runtime topology was active
-- preserving enough raw evidence that the UI does not become a lossy summary layer
+- reconstructing what happened at one selected tick
+- following AI-gateway conversation flow without replay heuristics
+- following Stem and Spine movement as a lane-based chronology instead of one flat log list
+- preserving enough raw evidence that Loom does not become a lossy summary layer
+- keeping the Stage 2 event catalog owner-centric and coarse-grained enough that it matches the actual Core runtime boundaries
 
 ## Collection Principles
 
 ### 1. Collect raw first, project second
 
 - Persist every accepted OTLP log event in a raw table.
-- Build derived tables only for views that are repeatedly expensive or awkward to reconstruct.
-- Do not store precomputed interpretations such as “goal-forest diff” when they can be derived from two snapshots.
+- Build derived tables or indexes only for views that are repeatedly expensive or awkward to reconstruct.
+- Do not store precomputed interpretations such as goal-forest diff when they can be derived from two snapshots.
 
 ### 2. Collect Beluna-native structure, not just text
 
 - The primary contract must be structured event fields.
-- Free-form text can remain as debugging payload, but must not be the only way to recover a tick, signal, or dispatch story.
+- Free-form text can remain as debugging payload, but must not be the only way to recover a tick, thread, signal, or dispatch story.
 
-### 3. Prefer snapshots at semantic boundaries
+### 3. Prefer lossless payload retention during early development
 
-- At tick boundaries, store enough data to reconstruct the tick in isolation.
-- At descriptor/topology changes, store snapshot-like records so later queries do not require replaying the entire run from the beginning.
+- Do not fear large payloads in raw events while Beluna is still observability-heavy.
+- Preserve full request, response, sense, act, thinking, and topology payloads in the raw store by default.
+- Keep derived tables selective so the contract stays readable even when raw events stay large.
 
-## What Lachesis Should Collect In V1
+### 4. Tick is the trace anchor
 
-## A. Run And Process Lifecycle
+- Every event belongs to one `tick`.
+- Within a tick, chronology is reconstructed by timestamp plus span or lane identity.
+- Loom should be able to render a per-tick Gantt-like chronology where the vertical axis is span or stable resource lane.
+- Events that happen before the first live tick grant should remain inspectable under bootstrap `tick = 0` rather than falling outside the model.
 
-- Moira-supervised run id
+## What Lachesis Should Collect In This Task
+
+## A. Wake And Process Lifecycle
+
+Collect:
+
+- Moira-supervised wake id
 - Core version or source-build identity
 - profile/config identity
 - wake time, stop time, termination reason
 - OTLP receiver health and ingest lag indicators
 
 Why:
-- every later view needs to scope itself to a run
+
+- every later view needs to scope itself to a wake
 - failures during wake/stop must be visible as first-class events
 
-## B. Cortex Tick Records
+## B. AI-Gateway Conversation Surface
 
-For each tick:
+Collect:
+
+- `ai-gateway.request`
+- `ai-gateway.turn`
+- `ai-gateway.thread`
+
+Each conversation record should preserve:
 
 - `tick`
-- run id
-- trigger summary
-- pending sense count
-- selected or consumed senses
-- proprioception snapshot
-- primary request metadata
-- primary response metadata
-- primary tool list
-- emitted acts
-- goal-forest snapshot reference
+- request id, thread id, or turn id as appropriate
+- provider
+- model
+- tool usage
+- token consumption
+- thinking payload when present
+- full request or response payload
+- originating `organ_id`
+- committed turn messages array when a turn is actually persisted
+- authoritative thread snapshot after each completed turn or thread rewrite
 
 Why:
-- this is the core unit of reasoning inspection the user asked for
-- a single tick page should answer “what did Beluna know, decide, and emit here?”
 
-## C. Goal-Forest Snapshots
+- human-friendly browsing needs committed conversation state, not isolated Cortex summaries pretending to be conversation history
+- backend retry or failure detail lives at the AI-gateway request boundary, not at the committed-turn boundary
+- primary-thread replacement and reset-context flows are naturally explained by authoritative thread snapshots
+
+## C. Stem State And Pathways
 
 Collect:
 
-- full goal-forest snapshot at each tick for now
-- snapshot handle keyed by run + tick
-- summary fields for quick browsing
+- `stem.tick`
+- `stem.signal`
+- `stem.dispatch`
+- `stem.proprioception`
+- `stem.descriptor.catalog`
+- `stem.afferent.rule`
 
-Do not collect:
+Each pathway record should preserve:
 
-- precomputed goal-forest diff rows as the canonical source of truth
-
-Visualization:
-
-- let Loom compare any two selected ticks side by side
-- derive added, removed, and changed nodes in query/UI code
-
-## D. Stem Signal Flow
-
-Collect afferent and efferent transitions with:
-
-- run id
-- tick if known at the moment
-- signal direction
-- endpoint id
-- neural-signal descriptor id
-- sense or act instance id
-- transition kind: enqueue, defer, release, drop, dispatch, result
-- terminal outcome where relevant
+- direction or kind
+- descriptor identity
+- endpoint identity when present
+- sense or act identity when present
+- payload
+- queue or deferral state when present
+- rule ids or rule selectors when relevant
+- terminal reason or reference when relevant
 
 Why:
-- this powers the requested live neural-signal understanding
-- it makes backpressure and queue behavior visible
 
-## E. Neural-Signal Descriptor Catalog
+- this is the minimum needed so Stem is not visually empty
+- the real runtime model is transition-based, not a speculative push/pop taxonomy
+- descriptor catalog and proprioception are owned by the Stem physical-state store, not by Loom heuristics
 
-Collect:
-
-- full catalog snapshot on version change
-- patch/drop events
-- catalog version references from signal events when feasible
-
-Visualization:
-
-- current catalog view
-- catalog history by run
-- click from a signal to the descriptor active at that time
-
-## F. Spine Topology And Dispatch
+## D. Cortex Organ And Goal-Forest Surface
 
 Collect:
 
-- adapter lifecycle
-- endpoint lifecycle
-- route registration/drop
-- dispatch binding and terminal outcome
-- dispatch latency when available
+- `cortex.tick`
+- `cortex.organ`
+- `cortex.goal-forest`
 
-Visualization:
+Why:
 
-- which adapters are enabled
-- which body endpoints are currently connected
-- which dispatches went where and how they ended
+- organ summaries alone are insufficient for explanation
+- tick gating and completion status are part of the story, not just the post-hoc result
+- the current runtime owns goal-forest snapshot plus patch/persist semantics, not a fixed biological verb taxonomy
 
-## What Lachesis Should Not Collect As First-Class V1 Scope
+## E. Spine Topology And Dispatch
+
+Collect:
+
+- `spine.adapter`
+- `spine.endpoint`
+- `spine.dispatch`
+
+Why:
+
+- Spine should answer which adapters and endpoints were active and how acts were actually routed
+
+## What Lachesis Should Not Collect As First-Class Scope
 
 - full metrics ingestion
-- full trace ingestion
-- precomputed cross-run analytics
-- heavily curated “health scores” that hide the underlying evidence
+- full trace ingestion outside the tick-anchored log contract
+- precomputed cross-wake analytics
+- curated health scores that hide the underlying evidence
 
 Instead:
 
@@ -148,87 +158,71 @@ Instead:
 - full structured attributes
 - raw body payload
 
-### Derived Tables
+### Derived Tables And Indexes
 
-- First landable slice:
+- baseline:
   - `runs`
   - `ticks`
-- Later only if query pressure proves the need:
-  - `goal_forest_snapshots`
-  - `signals`
-  - `descriptor_catalog_snapshots`
-  - `topology_events`
-  - `dispatch_outcomes`
+- next justified additions:
+  - tick-lane index for Gantt rendering
+  - thread index for conversation browsing
+  - goal-forest snapshots only if raw-first retrieval proves awkward
+  - focused signal or topology projections only if the dedicated views need them
 
-This is the current recommendation, not yet a durable contract. If a derived table does not clearly pay for itself in UI simplicity or query speed, keep the information raw-first.
+If a derived table or index does not clearly pay for itself in UI clarity or query speed, keep the information raw-first.
 
 ## Working Defaults For This Task
 
 - store full raw OTLP log events in DuckDB for the whole task
 - materialize `runs` first
 - materialize `ticks` first
-- reconstruct selected tick detail from raw events before adding subsystem-specific tables
-- snapshot proprioception per tick
-- snapshot goal-forest per tick
-- keep large bodies raw-first, with summary and preview columns in derived tables rather than duplicating full payloads widely
-- treat any event family not explicitly promoted in `L2.md` as debug-only for now
+- add only the extra tick-lane or thread indexes needed to make browsing humane
+- treat raw payload preservation as default
+- keep goal-forest comparison derived from selected ticks
 - do not make retention or compaction a blocker for this task; manual reset is acceptable during early development
 
 ## Visualization Model
 
-## 1. Overview
+## 1. Wake Overview
 
-- current run state
+- current wake state
 - ingest state
-- event-rate timeline
-- recent warnings/errors
-- shortcuts into active tick, active dispatch failures, and topology changes
+- recent active ticks
+- shortcuts into the latest inspectable tick and active conversation thread
 
-The first landable slice may compress this into:
-
-- run list
-- active run state
-- ingest state
-- shortcuts into the latest inspectable tick
-
-## 2. Cortex Tick Explorer
+## 2. Tick Workspace
 
 - left: tick list with summary columns
-- center: selected tick narrative
-- right: raw event inspector
+- center: per-tick Gantt-like chronology grouped by span or stable resource lane
+- right: selected event, thread, or subsystem detail
 
-Selected tick detail should show:
+Selected tick browsing must not depend on raw JSON as the first thing a human sees.
 
-- senses
-- proprioception
-- primary messages
-- primary tools
-- acts
-- linked goal-forest snapshot
+## 3. Conversation Browser
 
-This view is the minimum required Loom detail surface for the first landable slice, even before dedicated Stem and Spine pages exist.
+- authoritative thread snapshots
+- committed turn list and turn details
+- linked AI-gateway request lifecycle for retries or failures
+- provider, model, tool usage, token consumption, thinking payload, and full request/response payloads
+- correlation back to the originating `organ_id`
 
-## 3. Goal-Forest Compare
+## 4. Cortex / Stem / Spine Detail
 
-- choose tick A and tick B
-- render trees side by side
-- derive node changes in UI/query layer
+- Cortex:
+  - organ boundaries
+  - goal-forest snapshots and patch history
+- Stem:
+  - tick, proprioception, descriptor catalog, signal transitions, dispatch transitions, and afferent rules
+- Spine:
+  - adapters
+  - endpoints
+  - dispatch binding and outcome
 
-This directly matches the clarified requirement and avoids baking one diff algorithm into storage too early.
+## 5. Raw Event Inspector
 
-## 4. Stem Signal Timeline
-
-- lane by afferent/efferent
-- filter by endpoint, descriptor, act id, sense id
-- live mode during active runs
-- click-through to raw event detail
-
-## 5. Spine Topology View
-
-- active adapters
-- active endpoints
-- recent connect/disconnect/register/drop events
-- dispatch outcome stream
+- raw OTLP event JSON
+- full body and attributes
+- only after the operator already has a humane browsing path
 
 ## Lachesis Sub-Stages Inside This Task
 
@@ -237,24 +231,47 @@ This directly matches the clarified requirement and avoids baking one diff algor
 - raw OTLP ingest
 - `runs` projection
 - `ticks` projection
-- Loom run list
-- Loom tick timeline
-- Loom selected tick detail with Cortex / Stem / Spine tabs
+- Loom wake list
+- Loom tick list
+- selected tick workspace
 - raw-event inspector
 
 ### Stage 2
 
-- close the Core structured-log gaps exposed by Stage 1 surfaces
-- goal-forest snapshot storage only if raw-first tick detail proves insufficient
-- tighten the selected tick narrative
+- realign the Core event contract around owner-centric logical families:
+  - `ai-gateway.request`
+  - `ai-gateway.turn`
+  - `ai-gateway.thread`
+  - `cortex.tick`
+  - `cortex.organ`
+  - `cortex.goal-forest`
+  - `stem.tick`
+  - `stem.signal`
+  - `stem.dispatch`
+  - `stem.proprioception`
+  - `stem.descriptor.catalog`
+  - `stem.afferent.rule`
+  - `spine.adapter`
+  - `spine.endpoint`
+  - `spine.dispatch`
+- preserve full payloads in raw events
+- stop relying on fuzzy keyword grouping for Stem and Spine
+- keep richer semantics inside `kind`, `status`, and `transition_kind` fields instead of exploding family count
 
 ### Stage 3
 
-- `signals`, `topology_events`, and `dispatch_outcomes` projections
-- Stem and Spine dedicated views
+- tick-lane and thread indexes only where the humane browsing model needs them
+- per-tick Gantt-like chronology
+- conversation browser backed by authoritative thread snapshots and committed turns
 
 ### Stage 4
 
-- storage/retention hardening
+- dedicated Goal-forest compare
+- dedicated Stem pathway view if the tick workspace still feels too compressed
+- dedicated Spine topology and dispatch view if the tick workspace still feels too compressed
+
+### Stage 5
+
+- storage and retention hardening
 - migration policy
 - query-performance tuning

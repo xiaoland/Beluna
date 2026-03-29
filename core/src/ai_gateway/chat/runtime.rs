@@ -3,6 +3,7 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
+use serde_json::{Value, json};
 use tokio::time::sleep;
 
 use crate::{
@@ -18,12 +19,12 @@ use crate::{
             ResolvedCredential,
         },
     },
-    observability::metrics as observability_metrics,
+    observability::{metrics as observability_metrics, runtime as observability_runtime},
 };
 
 use super::{
     capabilities::CapabilityGuard,
-    types::{TurnPayload, TurnResponse},
+    types::{TurnPayload, TurnResponse, UsageStats},
 };
 
 pub(crate) struct ChatRuntime {
@@ -62,12 +63,48 @@ impl ChatRuntime {
         let mut lease = Some(lease);
 
         let request_id = next_request_id(&backend.backend_id, &backend.model);
+        let tick = metadata_tick(&payload.metadata);
+        let parent_span_id_when_present = payload
+            .metadata
+            .get("parent_span_id")
+            .cloned()
+            .or_else(|| payload.metadata.get("request_id").cloned());
+        let organ_id_when_present = payload.metadata.get("organ_id").cloned();
+        let thread_id_when_present = payload.metadata.get("thread_id").cloned();
+        let turn_id_when_present = payload
+            .metadata
+            .get("turn_id")
+            .and_then(|value| value.parse::<u64>().ok());
+        let input_payload = turn_payload_json(payload);
         emit_gateway_event(GatewayTelemetryEvent::RequestStarted {
             request_id: request_id.clone(),
             backend_id: backend.backend_id.clone(),
             model: backend.model.clone(),
             cost_attribution_id: None,
         });
+        observability_runtime::emit_ai_gateway_request(
+            observability_runtime::AiGatewayRequestArgs {
+                tick,
+                request_id: request_id.clone(),
+                span_id: request_id.clone(),
+                parent_span_id_when_present: parent_span_id_when_present.clone(),
+                organ_id_when_present: organ_id_when_present.clone(),
+                thread_id_when_present: thread_id_when_present.clone(),
+                turn_id_when_present,
+                backend_id: backend.backend_id.clone(),
+                model: backend.model.clone(),
+                kind: "start".to_string(),
+                attempt_when_present: None,
+                input_payload: input_payload.clone(),
+                effective_tools_when_present: Some(json!(payload.tools)),
+                limits_when_present: serde_json::to_value(&payload.limits).ok(),
+                enable_thinking: payload.enable_thinking,
+                provider_request_when_present: None,
+                provider_response_when_present: None,
+                usage_when_present: None,
+                error_when_present: None,
+            },
+        );
 
         let mut attempt = 0_u32;
         loop {
@@ -83,8 +120,31 @@ impl ChatRuntime {
                 .await
             {
                 release_lease(&self.resilience, &mut lease);
+                observability_runtime::emit_ai_gateway_request(
+                    observability_runtime::AiGatewayRequestArgs {
+                        tick,
+                        request_id: request_id.clone(),
+                        span_id: request_id.clone(),
+                        parent_span_id_when_present: parent_span_id_when_present.clone(),
+                        organ_id_when_present: organ_id_when_present.clone(),
+                        thread_id_when_present: thread_id_when_present.clone(),
+                        turn_id_when_present,
+                        backend_id: backend.backend_id.clone(),
+                        model: backend.model.clone(),
+                        kind: "failed".to_string(),
+                        attempt_when_present: Some(attempt.saturating_add(1)),
+                        input_payload: input_payload.clone(),
+                        effective_tools_when_present: Some(json!(payload.tools)),
+                        limits_when_present: serde_json::to_value(&payload.limits).ok(),
+                        enable_thinking: payload.enable_thinking,
+                        provider_request_when_present: Some(input_payload.clone()),
+                        provider_response_when_present: None,
+                        usage_when_present: None,
+                        error_when_present: Some(json!(err)),
+                    },
+                );
                 emit_gateway_event(GatewayTelemetryEvent::RequestFailed {
-                    request_id,
+                    request_id: request_id.clone(),
                     attempts: attempt + 1,
                     error_kind: err.kind,
                     cost_attribution_id: None,
@@ -114,11 +174,39 @@ impl ChatRuntime {
                     release_lease(&self.resilience, &mut lease);
 
                     emit_gateway_event(GatewayTelemetryEvent::RequestCompleted {
-                        request_id,
+                        request_id: request_id.clone(),
                         attempts: attempt + 1,
                         usage: complete_response.usage.clone(),
                         cost_attribution_id: None,
                     });
+                    observability_runtime::emit_ai_gateway_request(
+                        observability_runtime::AiGatewayRequestArgs {
+                            tick,
+                            request_id: request_id.clone(),
+                            span_id: request_id.clone(),
+                            parent_span_id_when_present: parent_span_id_when_present.clone(),
+                            organ_id_when_present: organ_id_when_present.clone(),
+                            thread_id_when_present: thread_id_when_present.clone(),
+                            turn_id_when_present,
+                            backend_id: backend.backend_id.clone(),
+                            model: backend.model.clone(),
+                            kind: "succeeded".to_string(),
+                            attempt_when_present: Some(attempt.saturating_add(1)),
+                            input_payload: input_payload.clone(),
+                            effective_tools_when_present: Some(json!(payload.tools)),
+                            limits_when_present: serde_json::to_value(&payload.limits).ok(),
+                            enable_thinking: payload.enable_thinking,
+                            provider_request_when_present: Some(input_payload.clone()),
+                            provider_response_when_present: Some(complete_response_json(
+                                &complete_response.output_text,
+                                &complete_response.tool_calls,
+                                complete_response.usage.as_ref(),
+                                &complete_response.finish_reason,
+                            )),
+                            usage_when_present: usage_json(complete_response.usage.as_ref()),
+                            error_when_present: None,
+                        },
+                    );
 
                     let mut backend_metadata = BTreeMap::new();
                     backend_metadata.insert(
@@ -128,6 +216,10 @@ impl ChatRuntime {
                     backend_metadata.insert(
                         "model".to_string(),
                         serde_json::Value::String(backend.model.clone()),
+                    );
+                    backend_metadata.insert(
+                        "request_id".to_string(),
+                        serde_json::Value::String(request_id.clone()),
                     );
 
                     return Ok(TurnResponse {
@@ -162,6 +254,29 @@ impl ChatRuntime {
                         retryable: err.retryable,
                         cost_attribution_id: None,
                     });
+                    observability_runtime::emit_ai_gateway_request(
+                        observability_runtime::AiGatewayRequestArgs {
+                            tick,
+                            request_id: request_id.clone(),
+                            span_id: request_id.clone(),
+                            parent_span_id_when_present: parent_span_id_when_present.clone(),
+                            organ_id_when_present: organ_id_when_present.clone(),
+                            thread_id_when_present: thread_id_when_present.clone(),
+                            turn_id_when_present,
+                            backend_id: backend.backend_id.clone(),
+                            model: backend.model.clone(),
+                            kind: "attempt_failed".to_string(),
+                            attempt_when_present: Some(attempt.saturating_add(1)),
+                            input_payload: input_payload.clone(),
+                            effective_tools_when_present: Some(json!(payload.tools)),
+                            limits_when_present: serde_json::to_value(&payload.limits).ok(),
+                            enable_thinking: payload.enable_thinking,
+                            provider_request_when_present: None,
+                            provider_response_when_present: None,
+                            usage_when_present: None,
+                            error_when_present: Some(json!(err.clone())),
+                        },
+                    );
 
                     if can_retry {
                         observability_metrics::increment_chat_task_retries_total(
@@ -175,8 +290,31 @@ impl ChatRuntime {
                     }
 
                     release_lease(&self.resilience, &mut lease);
+                    observability_runtime::emit_ai_gateway_request(
+                        observability_runtime::AiGatewayRequestArgs {
+                            tick,
+                            request_id: request_id.clone(),
+                            span_id: request_id.clone(),
+                            parent_span_id_when_present: parent_span_id_when_present.clone(),
+                            organ_id_when_present: organ_id_when_present.clone(),
+                            thread_id_when_present: thread_id_when_present.clone(),
+                            turn_id_when_present,
+                            backend_id: backend.backend_id.clone(),
+                            model: backend.model.clone(),
+                            kind: "failed".to_string(),
+                            attempt_when_present: Some(attempt.saturating_add(1)),
+                            input_payload: input_payload.clone(),
+                            effective_tools_when_present: Some(json!(payload.tools)),
+                            limits_when_present: serde_json::to_value(&payload.limits).ok(),
+                            enable_thinking: payload.enable_thinking,
+                            provider_request_when_present: Some(input_payload.clone()),
+                            provider_response_when_present: None,
+                            usage_when_present: None,
+                            error_when_present: Some(json!(err.clone())),
+                        },
+                    );
                     emit_gateway_event(GatewayTelemetryEvent::RequestFailed {
-                        request_id,
+                        request_id: request_id.clone(),
                         attempts: attempt + 1,
                         error_kind: err.kind,
                         cost_attribution_id: None,
@@ -240,4 +378,40 @@ fn release_lease(resilience: &ResilienceEngine, lease: &mut Option<ResilienceLea
     if let Some(current) = lease.take() {
         resilience.release(current);
     }
+}
+
+fn metadata_tick(metadata: &BTreeMap<String, String>) -> u64 {
+    metadata
+        .get("tick")
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(0)
+}
+
+fn turn_payload_json(payload: &TurnPayload) -> Value {
+    json!({
+        "messages": payload.messages.as_ref(),
+        "tools": payload.tools,
+        "output_mode": payload.output_mode,
+        "limits": payload.limits,
+        "enable_thinking": payload.enable_thinking,
+        "metadata": payload.metadata,
+    })
+}
+
+fn usage_json(usage: Option<&UsageStats>) -> Option<Value> {
+    usage.and_then(|value| serde_json::to_value(value).ok())
+}
+
+fn complete_response_json(
+    output_text: &str,
+    tool_calls: &[super::types::ToolCallResult],
+    usage: Option<&UsageStats>,
+    finish_reason: &super::types::FinishReason,
+) -> Value {
+    json!({
+        "output_text": output_text,
+        "tool_calls": tool_calls,
+        "usage": usage,
+        "finish_reason": finish_reason,
+    })
 }

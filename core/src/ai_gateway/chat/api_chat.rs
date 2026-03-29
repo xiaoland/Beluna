@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     sync::{
         Arc,
         atomic::{AtomicU64, Ordering},
@@ -16,11 +16,15 @@ use crate::ai_gateway::{
     router::BackendRouter,
     types::AIGatewayConfig,
 };
+use crate::observability::runtime as observability_runtime;
 
 use super::{
     capabilities::CapabilityGuard,
     runtime::ChatRuntime,
-    thread::{Thread, ThreadState},
+    thread::{
+        Thread, ThreadState, metadata_parent_span_id, metadata_tick, thread_messages_snapshot,
+        thread_turn_summaries,
+    },
     thread_types::{CloneThreadOptions, ThreadOptions, TurnQuery, TurnSummary},
     turn::Turn,
     types::OutputMode,
@@ -123,6 +127,7 @@ impl Chat {
             state,
         );
         self.threads.write().await.insert(thread_id, thread.clone());
+        emit_thread_snapshot_event(&thread, "cloned", &opts.metadata, Some(ordered_turn_ids)).await;
         Ok(thread)
     }
 
@@ -173,6 +178,7 @@ impl Chat {
             default_limits,
             enable_thinking,
             seed_turns,
+            metadata,
         } = opts;
 
         let thread_id = thread_id.unwrap_or_else(|| {
@@ -204,8 +210,30 @@ impl Chat {
             state,
         );
         self.threads.write().await.insert(thread_id, thread.clone());
+        emit_thread_snapshot_event(&thread, "opened", &metadata, None).await;
         Ok(thread)
     }
+}
+
+async fn emit_thread_snapshot_event(
+    thread: &Thread,
+    kind: &str,
+    metadata: &BTreeMap<String, String>,
+    source_turn_ids: Option<&[u64]>,
+) {
+    let tick = metadata_tick(metadata);
+    let turns = thread.turns().await;
+    observability_runtime::emit_ai_gateway_thread(observability_runtime::AiGatewayThreadArgs {
+        tick,
+        thread_id: thread.thread_id().to_string(),
+        span_id: format!("ai-gateway.thread:{kind}:{}", thread.thread_id()),
+        parent_span_id_when_present: metadata_parent_span_id(metadata),
+        organ_id_when_present: metadata.get("organ_id").cloned(),
+        kind: kind.to_string(),
+        messages: thread_messages_snapshot(&turns),
+        turn_summaries_when_present: Some(thread_turn_summaries(&turns)),
+        source_turn_ids_when_present: source_turn_ids.map(|value| serde_json::json!(value)),
+    });
 }
 
 fn select_turns(

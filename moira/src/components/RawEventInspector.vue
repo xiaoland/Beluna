@@ -48,6 +48,11 @@ function pretty(value: unknown): string {
 
         <div class="payload-grid">
           <article class="payload-card">
+            <h4>Payload</h4>
+            <pre>{{ pretty(event.payload) }}</pre>
+          </article>
+
+          <article class="payload-card">
             <h4>Body</h4>
             <pre>{{ pretty(event.body) }}</pre>
           </article>
@@ -80,10 +85,8 @@ function pretty(value: unknown): string {
 
 .event-card {
   border: 1px solid var(--line-soft);
-  border-radius: 0.95rem;
   background: var(--panel-strong);
   overflow: hidden;
-  box-shadow: var(--shadow-card);
 }
 
 .event-summary {
@@ -121,7 +124,7 @@ function pretty(value: unknown): string {
   justify-content: space-between;
   gap: 1rem;
   padding: 0.5rem 0;
-  border-top: 1px solid rgba(103, 84, 66, 0.08);
+  border-top: 1px solid var(--line-soft);
 }
 
 .label {
@@ -139,9 +142,8 @@ function pretty(value: unknown): string {
 
 .payload-card {
   padding: 0.8rem;
-  border-radius: 0.85rem;
-  background: rgba(255, 249, 242, 0.9);
-  border: 1px solid rgba(103, 84, 66, 0.08);
+  background: var(--panel);
+  border: 1px solid var(--line-soft);
 }
 
 h4 {

@@ -1,4 +1,6 @@
-export type DetailTab = 'cortex' | 'stem' | 'spine' | 'raw'
+export type DetailTab = 'chronology' | 'cortex' | 'stem' | 'spine' | 'raw'
+
+export type ChronologyLaneType = 'tick' | 'organ' | 'thread' | 'sense' | 'act' | 'endpoint' | 'adapter' | 'misc'
 
 export interface ReceiverStatus {
   state: string
@@ -51,11 +53,47 @@ export interface RawEvent {
   scope: Record<string, unknown>
 }
 
+export interface ChronologyEntry {
+  rawEventId: string
+  laneType: ChronologyLaneType
+  laneKey: string
+  title: string
+  subtitle: string | null
+  family: string | null
+  observedAt: string | null
+  severityText: string | null
+  eventIndex: number
+  position: number
+  endPosition: number
+  event: RawEvent
+}
+
+export interface ChronologyLane {
+  id: string
+  laneType: ChronologyLaneType
+  laneKey: string
+  label: string
+  subtitle: string | null
+  eventCount: number
+  entries: ChronologyEntry[]
+}
+
+export interface TickChronology {
+  lanes: ChronologyLane[]
+  eventCount: number
+  firstObservedAt: string | null
+  lastObservedAt: string | null
+  usesObservedTime: boolean
+}
+
 export interface CortexDetail {
   senses: unknown[]
   proprioception: unknown[]
   primaryMessages: unknown[]
   primaryTools: unknown[]
+  gatewayRequests: unknown[]
+  gatewayTurns: unknown[]
+  gatewayThreads: unknown[]
   acts: unknown[]
   goalForest: unknown | null
 }
@@ -64,6 +102,8 @@ export interface StemDetail {
   afferentPathway: unknown[]
   efferentPathway: unknown[]
   descriptorCatalog: unknown[]
+  proprioception: unknown[]
+  afferentRules: unknown[]
 }
 
 export interface SpineDetail {
@@ -75,6 +115,7 @@ export interface SpineDetail {
 export interface TickDetail {
   runId: string
   tick: string
+  chronology: TickChronology
   cortex: CortexDetail
   stem: StemDetail
   spine: SpineDetail

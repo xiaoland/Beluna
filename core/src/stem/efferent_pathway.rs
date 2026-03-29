@@ -74,13 +74,21 @@ impl ActProducerHandle {
     pub async fn enqueue(&self, envelope: EfferentActEnvelope) -> Result<(), EfferentEnqueueError> {
         let cycle_id = envelope.cycle_id;
         let act_id = envelope.act.act_instance_id.clone();
+        let descriptor_id = envelope.act.neural_signal_descriptor_id.clone();
+        let endpoint_id = envelope.act.endpoint_id.clone();
+        let act_payload = envelope.act.payload.clone();
         match self.tx.send(envelope).await {
             Ok(()) => {
                 observability_runtime::emit_stem_dispatch_transition(
                     &act_id,
-                    TransitionKind::Enqueue,
+                    Some(descriptor_id.as_str()),
+                    Some(endpoint_id.as_str()),
+                    "enqueue",
+                    Some(act_payload),
                     json!({ "queue_name": "efferent" }),
                     Some(cycle_id),
+                    None,
+                    None,
                     None,
                 );
                 Ok(())
@@ -245,12 +253,26 @@ async fn process_efferent_dispatch(
         None,
         Some(&act.act_instance_id),
         Some(cycle_id),
+        None,
+        Some(act.payload.clone()),
+        None,
+        Some(json!({
+            "queue_name": "efferent",
+            "status": "dispatching",
+        })),
+        None,
+        None,
     );
     observability_runtime::emit_stem_dispatch_transition(
         &act.act_instance_id,
-        TransitionKind::Dispatch,
+        Some(&act.neural_signal_descriptor_id),
+        Some(&act.endpoint_id),
+        "dispatch",
+        Some(act.payload.clone()),
         json!({ "queue_name": "efferent" }),
         Some(cycle_id),
+        None,
+        None,
         None,
     );
 
@@ -282,10 +304,25 @@ async fn process_efferent_dispatch(
         }
     };
 
+    let continuity_decision = match &continuity_status {
+        Some(ActDispatchResult::Rejected { reason_code, .. })
+            if reason_code == "continuity_break" =>
+        {
+            Some("break")
+        }
+        Some(ActDispatchResult::Lost { reason_code, .. })
+            if reason_code == "continuity_dispatch_failed" =>
+        {
+            Some("error")
+        }
+        Some(_) => Some("continue"),
+        None => Some("continue"),
+    };
+
     let dispatch_result = if let Some(status) = continuity_status {
         status
     } else {
-        match spine.on_act_final(act.clone()).await {
+        match spine.on_act_final(cycle_id, act.clone()).await {
             Ok(result) => result,
             Err(err) => {
                 tracing::warn!(
@@ -306,15 +343,38 @@ async fn process_efferent_dispatch(
 
     let terminal_status = dispatch_terminal_status(&dispatch_result);
     emit_status_patch(stem_control, &status_key, terminal_status).await;
+    observability_runtime::emit_stem_signal_transition(
+        SignalDirection::Efferent,
+        TransitionKind::Result,
+        &act.neural_signal_descriptor_id,
+        Some(&act.endpoint_id),
+        None,
+        Some(&act.act_instance_id),
+        Some(cycle_id),
+        None,
+        Some(act.payload.clone()),
+        None,
+        Some(json!({
+            "queue_name": "efferent",
+            "status": terminal_status,
+        })),
+        None,
+        Some(terminal_status),
+    );
     observability_runtime::emit_stem_dispatch_transition(
         &act.act_instance_id,
-        TransitionKind::Result,
+        Some(&act.neural_signal_descriptor_id),
+        Some(&act.endpoint_id),
+        "result",
+        Some(act.payload.clone()),
         json!({
             "queue_name": "efferent",
             "status": terminal_status,
         }),
         Some(cycle_id),
+        continuity_decision,
         Some(dispatch_outcome_class(&dispatch_result)),
+        Some(dispatch_result_reference(&dispatch_result)),
     );
 
     if let Some(tx) = response_tx {
@@ -346,6 +406,25 @@ fn dispatch_outcome_class(dispatch_result: &ActDispatchResult) -> DispatchOutcom
         ActDispatchResult::Acknowledged { .. } => DispatchOutcomeClass::Acknowledged,
         ActDispatchResult::Rejected { .. } => DispatchOutcomeClass::Rejected,
         ActDispatchResult::Lost { .. } => DispatchOutcomeClass::Lost,
+    }
+}
+
+fn dispatch_result_reference(dispatch_result: &ActDispatchResult) -> serde_json::Value {
+    match dispatch_result {
+        ActDispatchResult::Acknowledged { reference_id } => json!({
+            "reference_id": reference_id,
+        }),
+        ActDispatchResult::Rejected {
+            reason_code,
+            reference_id,
+        }
+        | ActDispatchResult::Lost {
+            reason_code,
+            reference_id,
+        } => json!({
+            "reason_code": reason_code,
+            "reference_id": reference_id,
+        }),
     }
 }
 

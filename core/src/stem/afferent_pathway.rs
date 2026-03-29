@@ -9,6 +9,8 @@ use std::{
 
 use async_trait::async_trait;
 use regex::Regex;
+use serde::{Deserialize, Serialize};
+use serde_json::json;
 use tokio::sync::{Mutex, broadcast, mpsc, oneshot};
 
 use crate::{
@@ -103,14 +105,14 @@ pub struct DeferralRuleAddInput {
     pub fq_sense_id_pattern: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DeferralRuleSnapshot {
     pub rule_id: String,
     pub min_weight: Option<f64>,
     pub fq_sense_id_pattern: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DeferralRuleSetSnapshot {
     pub revision: RuleRevision,
     pub rules: Vec<DeferralRuleSnapshot>,
@@ -349,6 +351,8 @@ impl SenseAfferentPathway {
         let endpoint_id = sense.endpoint_id.clone();
         let descriptor_id = sense.neural_signal_descriptor_id.clone();
         let sense_id = sense.sense_instance_id.clone();
+        let sense_payload = json!(sense.payload.clone());
+        let sense_weight = sense.weight;
         self.ingress_tx
             .send(sense)
             .await
@@ -359,6 +363,14 @@ impl SenseAfferentPathway {
             &descriptor_id,
             Some(&endpoint_id),
             Some(&sense_id),
+            None,
+            None,
+            Some(sense_payload),
+            None,
+            Some(sense_weight),
+            Some(json!({
+                "queue_name": "afferent",
+            })),
             None,
             None,
         );
@@ -490,7 +502,7 @@ async fn handle_ingress_sense(
         sidecar_tx,
         AfferentSidecarEvent::SenseDeferred {
             sense_instance_id,
-            rule_ids: matched_rule_ids,
+            rule_ids: matched_rule_ids.clone(),
             deferred_len: state.deferred_fifo.len(),
         },
     );
@@ -501,6 +513,15 @@ async fn handle_ingress_sense(
         Some(&sense.endpoint_id),
         Some(&sense.sense_instance_id),
         None,
+        None,
+        Some(json!(sense.payload)),
+        None,
+        Some(sense.weight),
+        Some(json!({
+            "queue_name": "afferent",
+            "deferred_len": state.deferred_fifo.len(),
+        })),
+        Some(json!(matched_rule_ids)),
         None,
     );
 
@@ -534,6 +555,7 @@ async fn handle_command(
     match cmd {
         RuleCommand::AddOne { input, reply_tx } => {
             let result = DeferralRuleRuntime::from_input(input).and_then(|runtime_rule| {
+                let rule_snapshot = runtime_rule.snapshot();
                 let rule_id = runtime_rule.rule_id.clone();
                 if state.rules_by_id.contains_key(rule_id.as_str()) {
                     return Err(RuleControlError::invalid_input(format!(
@@ -546,8 +568,20 @@ async fn handle_command(
                     sidecar_tx,
                     AfferentSidecarEvent::RuleAdded {
                         revision: state.revision,
-                        rule_id,
+                        rule_id: rule_id.clone(),
                     },
+                );
+                observability_runtime::emit_stem_afferent_rule(
+                    None,
+                    "add",
+                    state.revision,
+                    &rule_id,
+                    Some(json!({
+                        "rule_id": rule_snapshot.rule_id,
+                        "min_weight": rule_snapshot.min_weight,
+                        "fq_sense_id_pattern": rule_snapshot.fq_sense_id_pattern,
+                    })),
+                    None,
                 );
                 Ok(state.revision)
             });
@@ -559,15 +593,24 @@ async fn handle_command(
             let result = if rule_id.is_empty() {
                 Err(RuleControlError::invalid_input("rule_id cannot be empty"))
             } else {
-                let removed = state.rules_by_id.remove(rule_id.as_str()).is_some();
+                let removed_rule = state.rules_by_id.remove(rule_id.as_str());
+                let removed = removed_rule.is_some();
                 state.revision = state.revision.saturating_add(1);
                 emit_sidecar(
                     sidecar_tx,
                     AfferentSidecarEvent::RuleRemoved {
                         revision: state.revision,
-                        rule_id,
+                        rule_id: rule_id.clone(),
                         removed,
                     },
+                );
+                observability_runtime::emit_stem_afferent_rule(
+                    None,
+                    "remove",
+                    state.revision,
+                    &rule_id,
+                    removed_rule.map(|rule| json!(rule.snapshot())),
+                    Some(removed),
                 );
                 Ok(state.revision)
             };
@@ -610,6 +653,8 @@ async fn release_unblocked_front_fifo(
         let sense_instance_id = released.sense.sense_instance_id.clone();
         let endpoint_id = released.sense.endpoint_id.clone();
         let descriptor_id = released.sense.neural_signal_descriptor_id.clone();
+        let payload = json!(released.sense.payload.clone());
+        let weight = released.sense.weight;
         if egress_tx.send(released.sense).await.is_err() {
             tracing::warn!(target: "stem.afferent", "consumer_channel_closed_drop_released_sense");
             break;
@@ -629,6 +674,15 @@ async fn release_unblocked_front_fifo(
             Some(&endpoint_id),
             Some(&sense_instance_id),
             None,
+            None,
+            Some(payload),
+            None,
+            Some(weight),
+            Some(json!({
+                "queue_name": "afferent",
+                "deferred_len": state.deferred_fifo.len(),
+            })),
+            Some(json!([])),
             None,
         );
     }
