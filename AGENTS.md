@@ -31,8 +31,20 @@ For any non-trivial change:
 5. Promote only stable truths that are reusable, costly to rediscover, and not better enforced mechanically.
 
 For small or obvious changes, go straight to code and tests after step 2.
-Use `docs/task` only when the work is large, ambiguous, or needs temporary coordination notes.
-Open `docs/00-meta/index.md` only when changing the documentation system itself or resolving ownership ambiguity between layers.
+
+For risky or reference-sensitive changes, restate:
+
+- Target.
+- Target path/anchor.
+- State/context.
+- Operation type.
+- Scope boundaries.
+- Invariants that must remain unchanged.
+- Likely affected files.
+- Uncertainty.
+
+> Use `docs/task` only when the work is large, ambiguous, or needs temporary coordination notes.
+> Open `docs/00-meta/index.md` only when changing the documentation system itself or resolving ownership ambiguity between layers.
 
 ## Documentation System
 

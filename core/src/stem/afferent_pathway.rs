@@ -14,9 +14,7 @@ use serde_json::json;
 use tokio::sync::{Mutex, broadcast, mpsc, oneshot};
 
 use crate::{
-    observability::{
-        runtime as observability_runtime,
-    },
+    observability::runtime as observability_runtime,
     types::{Sense, build_fq_neural_signal_id},
 };
 

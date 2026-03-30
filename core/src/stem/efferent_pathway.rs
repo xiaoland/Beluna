@@ -15,10 +15,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     continuity::{ContinuityEngine, DispatchContext as ContinuityDispatchContext},
-    observability::{
-        contract::DispatchOutcomeClass,
-        runtime as observability_runtime,
-    },
+    observability::{contract::DispatchOutcomeClass, runtime as observability_runtime},
     spine::{ActDispatchResult, Spine},
     stem::runtime::StemControlPort,
     types::{Act, DispatchDecision, ProprioceptionDropPatch, ProprioceptionPatch},
