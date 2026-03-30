@@ -15,7 +15,6 @@ use tokio::sync::{Mutex, broadcast, mpsc, oneshot};
 
 use crate::{
     observability::{
-        contract::{SignalDirection, TransitionKind},
         runtime as observability_runtime,
     },
     types::{Sense, build_fq_neural_signal_id},
@@ -357,16 +356,13 @@ impl SenseAfferentPathway {
             .send(sense)
             .await
             .map_err(|_| AfferentPathwayError::queue_closed())?;
-        observability_runtime::emit_stem_signal_transition(
-            SignalDirection::Afferent,
-            TransitionKind::Enqueue,
+        observability_runtime::emit_stem_afferent(
+            "enqueue",
             &descriptor_id,
             Some(&endpoint_id),
             Some(&sense_id),
             None,
-            None,
             Some(sense_payload),
-            None,
             Some(sense_weight),
             Some(json!({
                 "queue_name": "afferent",
@@ -506,16 +502,13 @@ async fn handle_ingress_sense(
             deferred_len: state.deferred_fifo.len(),
         },
     );
-    observability_runtime::emit_stem_signal_transition(
-        SignalDirection::Afferent,
-        TransitionKind::Defer,
+    observability_runtime::emit_stem_afferent(
+        "defer",
         &sense.neural_signal_descriptor_id,
         Some(&sense.endpoint_id),
         Some(&sense.sense_instance_id),
         None,
-        None,
         Some(json!(sense.payload)),
-        None,
         Some(sense.weight),
         Some(json!({
             "queue_name": "afferent",
@@ -527,9 +520,10 @@ async fn handle_ingress_sense(
 
     while state.deferred_fifo.len() > max_deferring_nums {
         if let Some(evicted) = state.deferred_fifo.pop_front() {
+            let evicted_sense_id = evicted.sense.sense_instance_id.clone();
             tracing::warn!(
                 target: "stem.afferent",
-                sense_instance_id = %evicted.sense.sense_instance_id,
+                sense_instance_id = %evicted_sense_id,
                 deferred_len = state.deferred_fifo.len(),
                 max_deferring_nums = max_deferring_nums,
                 "deferred_fifo_overflow_evict_oldest"
@@ -537,10 +531,25 @@ async fn handle_ingress_sense(
             emit_sidecar(
                 sidecar_tx,
                 AfferentSidecarEvent::SenseEvicted {
-                    sense_instance_id: evicted.sense.sense_instance_id,
+                    sense_instance_id: evicted_sense_id.clone(),
                     reason: "deferred_fifo_overflow".to_string(),
                     deferred_len: state.deferred_fifo.len(),
                 },
+            );
+            observability_runtime::emit_stem_afferent(
+                "drop",
+                &evicted.sense.neural_signal_descriptor_id,
+                Some(&evicted.sense.endpoint_id),
+                Some(&evicted_sense_id),
+                None,
+                Some(json!(evicted.sense.payload)),
+                Some(evicted.sense.weight),
+                Some(json!({
+                    "queue_name": "afferent",
+                    "deferred_len": state.deferred_fifo.len(),
+                })),
+                Some(json!(matched_rule_ids.clone())),
+                Some("deferred_fifo_overflow"),
             );
         }
     }
@@ -655,8 +664,23 @@ async fn release_unblocked_front_fifo(
         let descriptor_id = released.sense.neural_signal_descriptor_id.clone();
         let payload = json!(released.sense.payload.clone());
         let weight = released.sense.weight;
-        if egress_tx.send(released.sense).await.is_err() {
+        if egress_tx.send(released.sense.clone()).await.is_err() {
             tracing::warn!(target: "stem.afferent", "consumer_channel_closed_drop_released_sense");
+            observability_runtime::emit_stem_afferent(
+                "drop",
+                &descriptor_id,
+                Some(&endpoint_id),
+                Some(&sense_instance_id),
+                None,
+                Some(payload.clone()),
+                Some(weight),
+                Some(json!({
+                    "queue_name": "afferent",
+                    "deferred_len": state.deferred_fifo.len(),
+                })),
+                Some(json!([])),
+                Some("consumer_channel_closed"),
+            );
             break;
         }
 
@@ -667,16 +691,13 @@ async fn release_unblocked_front_fifo(
                 deferred_len: state.deferred_fifo.len(),
             },
         );
-        observability_runtime::emit_stem_signal_transition(
-            SignalDirection::Afferent,
-            TransitionKind::Release,
+        observability_runtime::emit_stem_afferent(
+            "release",
             &descriptor_id,
             Some(&endpoint_id),
             Some(&sense_instance_id),
             None,
-            None,
             Some(payload),
-            None,
             Some(weight),
             Some(json!({
                 "queue_name": "afferent",

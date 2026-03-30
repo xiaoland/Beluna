@@ -48,6 +48,13 @@ function laneLabel(type: string): string {
   return type.replace(/-/g, ' ')
 }
 
+function entryCountLabel(entry: ChronologyEntry): string {
+  const relatedLabel = entry.relatedEvents.length
+    ? `${entry.relatedEvents.length} related`
+    : 'no linked detail'
+  return `${entry.sourceEvents.length} source · ${relatedLabel}`
+}
+
 function toneClass(entry: ChronologyEntry): string {
   const severity = (entry.severityText ?? '').toLowerCase()
   if (severity.includes('error') || severity.includes('fatal')) {
@@ -113,6 +120,7 @@ function toneClass(entry: ChronologyEntry): string {
                 }"
                 @click="selectEntry(entry)"
               >
+                <span class="entry-kind">{{ entry.entryType === 'interval' ? 'interval' : 'event' }}</span>
                 <span class="entry-title">{{ entry.title }}</span>
                 <span v-if="entry.subtitle" class="entry-subtitle">{{ entry.subtitle }}</span>
               </button>
@@ -124,10 +132,10 @@ function toneClass(entry: ChronologyEntry): string {
       <div v-if="selectedEntry" class="chronology-inspector">
         <div class="inspector-head">
           <div>
-            <h4>{{ rawEventHeadline(selectedEntry.event) }}</h4>
+            <h4>{{ selectedEntry.title }}</h4>
             <p>
               {{ selectedEntry.event.subsystem ?? 'unknown subsystem' }} /
-              {{ selectedEntry.event.family ?? 'unknown family' }}
+              {{ selectedEntry.family ?? 'unknown family' }} · {{ entryCountLabel(selectedEntry) }}
             </p>
           </div>
           <div class="inspector-meta">
@@ -136,15 +144,44 @@ function toneClass(entry: ChronologyEntry): string {
           </div>
         </div>
 
-        <div class="inspector-grid">
+        <div class="inspector-grid inspector-grid-stack">
           <article class="inspector-card">
-            <h5>Payload</h5>
-            <pre>{{ pretty(selectedEntry.event.payload) }}</pre>
+            <h5>Selected Entry</h5>
+            <pre>{{ pretty({
+              title: selectedEntry.title,
+              subtitle: selectedEntry.subtitle,
+              entry_type: selectedEntry.entryType,
+              source_event_ids: selectedEntry.sourceEvents.map((event) => event.rawEventId),
+              related_event_ids: selectedEntry.relatedEvents.map((event) => event.rawEventId),
+            }) }}</pre>
           </article>
 
           <article class="inspector-card">
-            <h5>Body</h5>
-            <pre>{{ pretty(selectedEntry.event.body) }}</pre>
+            <h5>Source Events</h5>
+            <div class="event-stack">
+              <section
+                v-for="sourceEvent in selectedEntry.sourceEvents"
+                :key="sourceEvent.rawEventId"
+                class="event-card"
+              >
+                <header>{{ rawEventHeadline(sourceEvent) }}</header>
+                <pre>{{ pretty(sourceEvent.payload) }}</pre>
+              </section>
+            </div>
+          </article>
+
+          <article v-if="selectedEntry.relatedEvents.length" class="inspector-card">
+            <h5>Related Activity</h5>
+            <div class="event-stack">
+              <section
+                v-for="relatedEvent in selectedEntry.relatedEvents"
+                :key="relatedEvent.rawEventId"
+                class="event-card"
+              >
+                <header>{{ rawEventHeadline(relatedEvent) }}</header>
+                <pre>{{ pretty(relatedEvent.payload) }}</pre>
+              </section>
+            </div>
           </article>
 
           <article class="inspector-card">
@@ -301,6 +338,15 @@ function toneClass(entry: ChronologyEntry): string {
   white-space: nowrap;
 }
 
+.entry-kind {
+  display: block;
+  margin-bottom: 0.08rem;
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
 .entry-title {
   font-size: 0.77rem;
 }
@@ -326,6 +372,10 @@ function toneClass(entry: ChronologyEntry): string {
   margin-top: 0.7rem;
 }
 
+.inspector-grid-stack {
+  grid-template-columns: 1fr;
+}
+
 .inspector-card {
   border: 1px solid var(--line-soft);
   padding: 0.7rem;
@@ -338,6 +388,22 @@ function toneClass(entry: ChronologyEntry): string {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-muted);
+}
+
+.event-stack {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.event-card {
+  padding: 0.68rem;
+  border: 1px solid var(--line-soft);
+  background: var(--panel);
+}
+
+.event-card header {
+  margin-bottom: 0.45rem;
+  font-weight: 600;
 }
 
 @media (max-width: 780px) {

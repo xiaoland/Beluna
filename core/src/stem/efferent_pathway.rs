@@ -16,7 +16,7 @@ use tokio_util::sync::CancellationToken;
 use crate::{
     continuity::{ContinuityEngine, DispatchContext as ContinuityDispatchContext},
     observability::{
-        contract::{DispatchOutcomeClass, SignalDirection, TransitionKind},
+        contract::DispatchOutcomeClass,
         runtime as observability_runtime,
     },
     spine::{ActDispatchResult, Spine},
@@ -79,13 +79,13 @@ impl ActProducerHandle {
         let act_payload = envelope.act.payload.clone();
         match self.tx.send(envelope).await {
             Ok(()) => {
-                observability_runtime::emit_stem_dispatch_transition(
+                observability_runtime::emit_stem_efferent(
+                    "enqueue",
                     &act_id,
                     Some(descriptor_id.as_str()),
                     Some(endpoint_id.as_str()),
-                    "enqueue",
                     Some(act_payload),
-                    json!({ "queue_name": "efferent" }),
+                    Some(json!({ "queue_name": "efferent" })),
                     Some(cycle_id),
                     None,
                     None,
@@ -245,31 +245,16 @@ async fn process_efferent_dispatch(
 
     let status_key = dispatch_status_key(&act.act_instance_id);
     emit_status_patch(stem_control, &status_key, "DISPATCHING").await;
-    observability_runtime::emit_stem_signal_transition(
-        SignalDirection::Efferent,
-        TransitionKind::Dispatch,
-        &act.neural_signal_descriptor_id,
+    observability_runtime::emit_stem_efferent(
+        "dispatch",
+        &act.act_instance_id,
+        Some(&act.neural_signal_descriptor_id),
         Some(&act.endpoint_id),
-        None,
-        Some(&act.act_instance_id),
-        Some(cycle_id),
-        None,
         Some(act.payload.clone()),
-        None,
         Some(json!({
             "queue_name": "efferent",
             "status": "dispatching",
         })),
-        None,
-        None,
-    );
-    observability_runtime::emit_stem_dispatch_transition(
-        &act.act_instance_id,
-        Some(&act.neural_signal_descriptor_id),
-        Some(&act.endpoint_id),
-        "dispatch",
-        Some(act.payload.clone()),
-        json!({ "queue_name": "efferent" }),
         Some(cycle_id),
         None,
         None,
@@ -343,34 +328,16 @@ async fn process_efferent_dispatch(
 
     let terminal_status = dispatch_terminal_status(&dispatch_result);
     emit_status_patch(stem_control, &status_key, terminal_status).await;
-    observability_runtime::emit_stem_signal_transition(
-        SignalDirection::Efferent,
-        TransitionKind::Result,
-        &act.neural_signal_descriptor_id,
+    observability_runtime::emit_stem_efferent(
+        "result",
+        &act.act_instance_id,
+        Some(&act.neural_signal_descriptor_id),
         Some(&act.endpoint_id),
-        None,
-        Some(&act.act_instance_id),
-        Some(cycle_id),
-        None,
         Some(act.payload.clone()),
-        None,
         Some(json!({
             "queue_name": "efferent",
             "status": terminal_status,
         })),
-        None,
-        Some(terminal_status),
-    );
-    observability_runtime::emit_stem_dispatch_transition(
-        &act.act_instance_id,
-        Some(&act.neural_signal_descriptor_id),
-        Some(&act.endpoint_id),
-        "result",
-        Some(act.payload.clone()),
-        json!({
-            "queue_name": "efferent",
-            "status": terminal_status,
-        }),
         Some(cycle_id),
         continuity_decision,
         Some(dispatch_outcome_class(&dispatch_result)),
@@ -390,7 +357,7 @@ async fn process_efferent_dispatch(
 }
 
 fn dispatch_status_key(act_instance_id: &str) -> String {
-    format!("stem.dispatch.{act_instance_id}.status")
+    format!("stem.efferent.{act_instance_id}.status")
 }
 
 fn dispatch_terminal_status(dispatch_result: &ActDispatchResult) -> &'static str {

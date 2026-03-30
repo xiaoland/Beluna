@@ -20,6 +20,41 @@ import {
   toRecord,
 } from './coerce'
 
+const CORTEX_ORGAN_FAMILIES = [
+  'cortex.primary',
+  'cortex.sense-helper',
+  'cortex.goal-forest-helper',
+  'cortex.acts-helper',
+] as const
+
+const LANE_TYPE_ORDER: Record<ChronologyLaneType, number> = {
+  tick: 0,
+  cortex: 1,
+  afferent: 2,
+  efferent: 3,
+  spine: 4,
+  misc: 5,
+}
+
+interface TimelineMetrics {
+  positions: Map<string, number>
+  firstObservedAt: string | null
+  lastObservedAt: string | null
+  usesObservedTime: boolean
+}
+
+interface CortexOrganInterval {
+  family: string
+  label: string
+  laneKey: string
+  requestId: string | null
+  startEvent: RawEvent
+  endEvent: RawEvent | null
+  sourceEvents: RawEvent[]
+  relatedEvents: RawEvent[]
+  firstEventIndex: number
+}
+
 export function normalizeReceiverStatus(value: unknown): ReceiverStatus {
   const record = toRecord(value)
 
@@ -98,69 +133,32 @@ export function normalizeTickDetail(value: unknown): TickDetail {
     rawEvents,
     'spine',
   )
+  const cortexOrganIntervals = buildCortexOrganIntervals(rawEvents, cortexEvents, aiGatewayEvents)
 
   return {
     runId,
     tick,
-    chronology: buildChronology(rawEvents),
+    chronology: buildChronology(rawEvents, cortexOrganIntervals),
     cortex: {
-      senses: collectPayloadArray(cortexEvents, 'cortex.tick', ['drained_senses']),
-      proprioception: [
-        ...collectPayloadSingles(cortexEvents, 'cortex.tick', ['physical_state_snapshot']),
-        ...collectPayloadSingles(stemEvents, 'stem.proprioception', ['entries_or_keys']),
-      ],
-      primaryMessages: collectNarratives(cortexEvents, ['cortex.organ']),
-      primaryTools: collectPathArray(cortexEvents, 'cortex.organ', ['output_payload_when_present', 'tool_calls']),
-      gatewayRequests: collectNarratives(aiGatewayEvents.filter((event) => event.family === 'ai-gateway.request')),
-      gatewayTurns: collectNarratives(aiGatewayEvents.filter((event) => event.family === 'ai-gateway.turn')),
-      gatewayThreads: collectNarratives(aiGatewayEvents.filter((event) => event.family === 'ai-gateway.thread')),
-      acts: [
-        ...collectPayloadSingles(cortexEvents, 'cortex.tick', ['acts_payload_or_summary_when_present']),
-        ...collectPayloadSingles(stemEvents, 'stem.dispatch', ['act_payload_when_present']),
-        ...collectPayloadSingles(
-          stemEvents.filter(
-            (event) =>
-              event.family === 'stem.signal' &&
-              readString(eventPayloadRecord(event), ['direction']) === 'efferent',
-          ),
-          null,
-          ['act_payload_when_present'],
-        ),
-      ],
+      organs: cortexOrganIntervals.map(intervalNarrative),
+      goalForestEvents: collectNarratives(cortexEvents.filter((event) => event.family === 'cortex.goal-forest')),
       goalForest:
-        firstPayloadValue(cortexEvents, 'cortex.goal-forest', ['snapshot_when_present']) ??
-        firstPayloadValue(cortexEvents, 'cortex.goal-forest', ['patch_result_when_present']) ??
-        firstPayloadValue(cortexEvents, 'cortex.tick', ['goal_forest_snapshot_ref_or_payload_when_present']),
+        firstPayloadValue(cortexEvents, 'cortex.goal-forest', ['snapshot']) ??
+        firstPayloadValue(cortexEvents, 'cortex.goal-forest', ['mutation_result']),
     },
     stem: {
-      afferentPathway: collectNarratives(
-        stemEvents.filter(
-          (event) =>
-            (event.family === 'stem.signal' &&
-              readString(eventPayloadRecord(event), ['direction']) === 'afferent') ||
-            event.family === 'stem.afferent.rule',
-        ),
-      ),
-      efferentPathway: collectNarratives([
-        ...stemEvents.filter(
-          (event) =>
-            event.family === 'stem.signal' &&
-            readString(eventPayloadRecord(event), ['direction']) === 'efferent',
-        ),
-        ...stemEvents.filter((event) => event.family === 'stem.dispatch'),
-      ]),
-      descriptorCatalog: collectNarratives(
-        stemEvents.filter(
-          (event) => event.family === 'stem.tick' || event.family === 'stem.descriptor.catalog',
-        ),
-      ),
+      tickAnchor: collectNarratives(stemEvents.filter((event) => event.family === 'stem.tick')),
+      afferent: collectNarratives(stemEvents.filter((event) => event.family === 'stem.afferent')),
+      efferent: collectNarratives(stemEvents.filter((event) => event.family === 'stem.efferent')),
+      nsCatalog: collectNarratives(stemEvents.filter((event) => event.family === 'stem.ns-catalog')),
       proprioception: collectNarratives(stemEvents.filter((event) => event.family === 'stem.proprioception')),
       afferentRules: collectNarratives(stemEvents.filter((event) => event.family === 'stem.afferent.rule')),
     },
     spine: {
       adapters: collectNarratives(spineEvents.filter((event) => event.family === 'spine.adapter')),
-      bodyEndpoints: collectNarratives(spineEvents.filter((event) => event.family === 'spine.endpoint')),
-      topologyEvents: collectNarratives(spineEvents.filter((event) => event.family === 'spine.dispatch')),
+      endpoints: collectNarratives(spineEvents.filter((event) => event.family === 'spine.endpoint')),
+      senses: collectNarratives(spineEvents.filter((event) => event.family === 'spine.sense')),
+      acts: collectNarratives(spineEvents.filter((event) => event.family === 'spine.act')),
     },
     rawEvents,
   }
@@ -220,18 +218,7 @@ function normalizeRawEvent(
   }
 }
 
-const LANE_TYPE_ORDER: Record<ChronologyLaneType, number> = {
-  tick: 0,
-  organ: 1,
-  thread: 2,
-  sense: 3,
-  act: 4,
-  endpoint: 5,
-  adapter: 6,
-  misc: 7,
-}
-
-function buildChronology(rawEvents: RawEvent[]) {
+function buildChronology(rawEvents: RawEvent[], cortexIntervals: CortexOrganInterval[]) {
   const ordered = [...rawEvents].sort(compareChronologyEvents)
   if (!ordered.length) {
     return {
@@ -243,84 +230,94 @@ function buildChronology(rawEvents: RawEvent[]) {
     }
   }
 
-  const firstObservedAt = ordered[0]?.observedAt ?? null
-  const lastObservedAt = ordered[ordered.length - 1]?.observedAt ?? null
-  const observedMs = ordered
-    .map((event) => parseObservedMs(event.observedAt))
-    .filter((value): value is number => value != null)
-  const minObservedMs = observedMs.length ? Math.min(...observedMs) : null
-  const maxObservedMs = observedMs.length ? Math.max(...observedMs) : null
-  const usesObservedTime =
-    minObservedMs != null && maxObservedMs != null && maxObservedMs > minObservedMs
-  const sequenceDenominator = Math.max(ordered.length - 1, 1)
-  const laneMap = new Map<string, Omit<ChronologyLane, 'entries' | 'eventCount'> & { entries: ChronologyEntry[]; firstEventIndex: number }>()
+  const timeline = buildTimelineMetrics(ordered)
+  const laneMap = new Map<
+    string,
+    Omit<ChronologyLane, 'entries' | 'eventCount'> & { entries: ChronologyEntry[]; firstEventIndex: number }
+  >()
+  const hiddenRawEventIds = new Set<string>()
 
-  ordered.forEach((event, eventIndex) => {
-    const payload = eventPayloadRecord(event)
-    const laneType = resolveLaneType(event, payload)
-    const laneKey = resolveLaneKey(laneType, event, payload)
-    const laneId = `${laneType}:${laneKey}`
-    const laneLabel = resolveLaneLabel(laneType, laneKey, payload, event)
-    const laneSubtitle = resolveLaneSubtitle(laneType, payload, event)
-    const timeRatio = usesObservedTime
-      ? ((parseObservedMs(event.observedAt) ?? minObservedMs ?? 0) - (minObservedMs ?? 0)) /
-        ((maxObservedMs ?? 1) - (minObservedMs ?? 0))
-      : null
-    const sequenceRatio = eventIndex / sequenceDenominator
-    const position = clamp01(0.03 + ((timeRatio ?? sequenceRatio) * 0.88 + sequenceRatio * 0.09))
-
-    const entry: ChronologyEntry = {
-      rawEventId: event.rawEventId,
-      laneType,
-      laneKey,
-      title: chronologyTitle(event, payload),
-      subtitle: chronologySubtitle(event, payload),
-      family: event.family,
-      observedAt: event.observedAt,
-      severityText: event.severityText,
-      eventIndex,
-      position,
-      endPosition: position,
-      event,
+  for (const interval of cortexIntervals) {
+    for (const event of interval.sourceEvents) {
+      hiddenRawEventIds.add(event.rawEventId)
+    }
+    for (const event of interval.relatedEvents) {
+      hiddenRawEventIds.add(event.rawEventId)
     }
 
-    const existing = laneMap.get(laneId)
-    if (existing) {
-      existing.entries.push(entry)
+    const startPosition = timeline.positions.get(interval.startEvent.rawEventId) ?? 0.05
+    const endPosition = interval.endEvent
+      ? timeline.positions.get(interval.endEvent.rawEventId) ?? clamp01(startPosition + 0.12)
+      : clamp01(startPosition + 0.1)
+
+    appendChronologyEntry(laneMap, {
+      laneId: `cortex:${interval.laneKey}`,
+      laneType: 'cortex',
+      laneKey: interval.laneKey,
+      laneLabel: interval.label,
+      laneSubtitle: intervalLaneSubtitle(interval),
+      entry: {
+        rawEventId: interval.startEvent.rawEventId,
+        laneType: 'cortex',
+        laneKey: interval.laneKey,
+        entryType: 'interval',
+        title: interval.label,
+        subtitle: chronologySubtitleForInterval(interval),
+        family: interval.family,
+        observedAt: interval.startEvent.observedAt,
+        severityText: interval.endEvent?.severityText ?? interval.startEvent.severityText,
+        eventIndex: interval.firstEventIndex,
+        position: startPosition,
+        endPosition: Math.max(endPosition, Math.min(0.98, startPosition + 0.04)),
+        event: interval.endEvent ?? interval.startEvent,
+        sourceEvents: interval.sourceEvents,
+        relatedEvents: interval.relatedEvents,
+      },
+    })
+  }
+
+  ordered.forEach((event, eventIndex) => {
+    if (hiddenRawEventIds.has(event.rawEventId)) {
       return
     }
 
-    laneMap.set(laneId, {
-      id: laneId,
+    const payload = eventPayloadRecord(event)
+    const laneType = resolveLaneType(event, payload)
+    const laneKey = resolveLaneKey(laneType, event, payload)
+
+    appendChronologyEntry(laneMap, {
+      laneId: `${laneType}:${laneKey}`,
       laneType,
       laneKey,
-      label: laneLabel,
-      subtitle: laneSubtitle,
-      entries: [entry],
-      firstEventIndex: eventIndex,
+      laneLabel: resolveLaneLabel(laneType, laneKey, payload, event),
+      laneSubtitle: resolveLaneSubtitle(laneType, payload, event),
+      entry: {
+        rawEventId: event.rawEventId,
+        laneType,
+        laneKey,
+        entryType: 'point',
+        title: chronologyTitle(event, payload),
+        subtitle: chronologySubtitle(event, payload),
+        family: event.family,
+        observedAt: event.observedAt,
+        severityText: event.severityText,
+        eventIndex,
+        position: timeline.positions.get(event.rawEventId) ?? 0.05,
+        endPosition: clamp01((timeline.positions.get(event.rawEventId) ?? 0.05) + 0.035),
+        event,
+        sourceEvents: [event],
+        relatedEvents: [],
+      },
     })
   })
 
   const lanes = [...laneMap.values()]
     .map((lane) => {
-      const entries = lane.entries.sort((left, right) => {
+      const entries = [...lane.entries].sort((left, right) => {
         if (left.position !== right.position) {
           return left.position - right.position
         }
         return left.eventIndex - right.eventIndex
-      })
-
-      const positioned = entries.map((entry, index) => {
-        const next = entries[index + 1]
-        const fallbackSpan = next ? 0.018 : 0.07
-        const softGap = next ? 0.006 : 0
-        const endPosition = next
-          ? clamp01(Math.max(entry.position + fallbackSpan, next.position - softGap))
-          : clamp01(entry.position + fallbackSpan)
-        return {
-          ...entry,
-          endPosition: Math.max(endPosition, Math.min(0.98, entry.position + 0.028)),
-        }
       })
 
       return {
@@ -329,8 +326,8 @@ function buildChronology(rawEvents: RawEvent[]) {
         laneKey: lane.laneKey,
         label: lane.label,
         subtitle: lane.subtitle,
-        eventCount: positioned.length,
-        entries: positioned,
+        eventCount: entries.length,
+        entries,
         firstEventIndex: lane.firstEventIndex,
       }
     })
@@ -349,22 +346,201 @@ function buildChronology(rawEvents: RawEvent[]) {
   return {
     lanes,
     eventCount: ordered.length,
+    firstObservedAt: timeline.firstObservedAt,
+    lastObservedAt: timeline.lastObservedAt,
+    usesObservedTime: timeline.usesObservedTime,
+  }
+}
+
+function buildCortexOrganIntervals(
+  rawEvents: RawEvent[],
+  cortexEvents: RawEvent[],
+  aiGatewayEvents: RawEvent[],
+): CortexOrganInterval[] {
+  const orderedRaw = [...rawEvents].sort(compareChronologyEvents)
+  const rawEventIndex = new Map(orderedRaw.map((event, index) => [event.rawEventId, index]))
+  const orderedCortex = cortexEvents
+    .filter((event) => isCortexOrganFamily(event.family))
+    .sort(compareChronologyEvents)
+  const openIntervals = new Map<string, RawEvent>()
+  const claimedAiEventIds = new Set<string>()
+  const intervals: CortexOrganInterval[] = []
+
+  for (const event of orderedCortex) {
+    const payload = eventPayloadRecord(event)
+    const phase = readString(payload, ['phase'])
+    const requestId = firstString(payload, ['request_id'])
+    const key = `${event.family ?? 'cortex'}:${requestId ?? event.rawEventId}`
+
+    if (phase === 'start') {
+      openIntervals.set(key, event)
+      continue
+    }
+
+    if (phase === 'end') {
+      const startEvent = openIntervals.get(key)
+      if (!startEvent) {
+        continue
+      }
+
+      openIntervals.delete(key)
+      intervals.push(
+        createCortexInterval(startEvent, event, aiGatewayEvents, rawEventIndex, claimedAiEventIds),
+      )
+    }
+  }
+
+  for (const event of openIntervals.values()) {
+    intervals.push(createCortexInterval(event, null, aiGatewayEvents, rawEventIndex, claimedAiEventIds))
+  }
+
+  return intervals.sort((left, right) => left.firstEventIndex - right.firstEventIndex)
+}
+
+function createCortexInterval(
+  startEvent: RawEvent,
+  endEvent: RawEvent | null,
+  aiGatewayEvents: RawEvent[],
+  rawEventIndex: Map<string, number>,
+  claimedAiEventIds: Set<string>,
+): CortexOrganInterval {
+  const family = startEvent.family ?? endEvent?.family ?? 'cortex.primary'
+  const startPayload = eventPayloadRecord(startEvent)
+  const endPayload = endEvent ? eventPayloadRecord(endEvent) : {}
+  const requestId =
+    firstString(startPayload, ['request_id']) ??
+    firstString(endPayload, ['request_id'])
+  const aiRequestId =
+    firstString(endPayload, ['ai_request_id', 'ai_request_id_when_present']) ??
+    firstString(startPayload, ['ai_request_id', 'ai_request_id_when_present'])
+  const threadId =
+    firstString(endPayload, ['thread_id', 'thread_id_when_present']) ??
+    firstString(startPayload, ['thread_id', 'thread_id_when_present'])
+  const turnId =
+    firstString(endPayload, ['turn_id', 'turn_id_when_present']) ??
+    firstString(startPayload, ['turn_id', 'turn_id_when_present'])
+  const sourceEvents = endEvent ? [startEvent, endEvent] : [startEvent]
+  const relatedEvents = aiGatewayEvents
+    .filter((event) => {
+      if (claimedAiEventIds.has(event.rawEventId)) {
+        return false
+      }
+
+      if (!event.family?.startsWith('ai-gateway.')) {
+        return false
+      }
+
+      return relatesAiEventToInterval(event, requestId, aiRequestId, threadId, turnId)
+    })
+    .sort(compareChronologyEvents)
+
+  relatedEvents.forEach((event) => claimedAiEventIds.add(event.rawEventId))
+
+  return {
+    family,
+    label: organFamilyLabel(family),
+    laneKey: requestId ?? startEvent.rawEventId,
+    requestId,
+    startEvent,
+    endEvent,
+    sourceEvents,
+    relatedEvents,
+    firstEventIndex: rawEventIndex.get(startEvent.rawEventId) ?? 0,
+  }
+}
+
+function relatesAiEventToInterval(
+  event: RawEvent,
+  requestId: string | null,
+  aiRequestId: string | null,
+  threadId: string | null,
+  turnId: string | null,
+): boolean {
+  const payload = eventPayloadRecord(event)
+  const parentSpanId = firstString(payload, ['parent_span_id', 'parent_span_id_when_present'])
+  const eventRequestId = firstString(payload, ['request_id', 'request_id_when_present'])
+  const eventThreadId = firstString(payload, ['thread_id', 'thread_id_when_present'])
+  const eventTurnId = firstString(payload, ['turn_id', 'turn_id_when_present'])
+
+  if (requestId && parentSpanId === requestId) {
+    return true
+  }
+
+  if (aiRequestId && eventRequestId === aiRequestId) {
+    return true
+  }
+
+  if (threadId && eventThreadId === threadId) {
+    return true
+  }
+
+  if (turnId && eventTurnId === turnId) {
+    return true
+  }
+
+  return false
+}
+
+function buildTimelineMetrics(ordered: RawEvent[]): TimelineMetrics {
+  const firstObservedAt = ordered[0]?.observedAt ?? null
+  const lastObservedAt = ordered[ordered.length - 1]?.observedAt ?? null
+  const observedMs = ordered
+    .map((event) => parseObservedMs(event.observedAt))
+    .filter((value): value is number => value != null)
+  const minObservedMs = observedMs.length ? Math.min(...observedMs) : null
+  const maxObservedMs = observedMs.length ? Math.max(...observedMs) : null
+  const usesObservedTime =
+    minObservedMs != null && maxObservedMs != null && maxObservedMs > minObservedMs
+  const sequenceDenominator = Math.max(ordered.length - 1, 1)
+  const positions = new Map<string, number>()
+
+  ordered.forEach((event, eventIndex) => {
+    const timeRatio = usesObservedTime
+      ? ((parseObservedMs(event.observedAt) ?? minObservedMs ?? 0) - (minObservedMs ?? 0)) /
+        ((maxObservedMs ?? 1) - (minObservedMs ?? 0))
+      : null
+    const sequenceRatio = eventIndex / sequenceDenominator
+    const position = clamp01(0.03 + ((timeRatio ?? sequenceRatio) * 0.88 + sequenceRatio * 0.09))
+    positions.set(event.rawEventId, position)
+  })
+
+  return {
+    positions,
     firstObservedAt,
     lastObservedAt,
     usesObservedTime,
   }
 }
 
-function collectPayloadArray(events: RawEvent[], family: string | null, keys: string[]): unknown[] {
-  return events
-    .filter((event) => family == null || event.family === family)
-    .flatMap((event) => {
-      const value = read(eventPayloadRecord(event), keys)
-      if (value == null) {
-        return []
-      }
-      return Array.isArray(value) ? value : [value]
-    })
+function appendChronologyEntry(
+  laneMap: Map<
+    string,
+    Omit<ChronologyLane, 'entries' | 'eventCount'> & { entries: ChronologyEntry[]; firstEventIndex: number }
+  >,
+  input: {
+    laneId: string
+    laneType: ChronologyLaneType
+    laneKey: string
+    laneLabel: string
+    laneSubtitle: string | null
+    entry: ChronologyEntry
+  },
+): void {
+  const existing = laneMap.get(input.laneId)
+  if (existing) {
+    existing.entries.push(input.entry)
+    return
+  }
+
+  laneMap.set(input.laneId, {
+    id: input.laneId,
+    laneType: input.laneType,
+    laneKey: input.laneKey,
+    label: input.laneLabel,
+    subtitle: input.laneSubtitle,
+    entries: [input.entry],
+    firstEventIndex: input.entry.eventIndex,
+  })
 }
 
 function compareChronologyEvents(left: RawEvent, right: RawEvent): number {
@@ -390,27 +566,39 @@ function resolveLaneType(
   payload: Record<string, unknown>,
 ): ChronologyLaneType {
   const family = event.family ?? ''
-  if (family === 'cortex.tick' || family === 'stem.tick') {
+
+  if (family === 'stem.tick') {
     return 'tick'
   }
-  if (family === 'cortex.organ') {
-    return 'organ'
+
+  if (isCortexOrganFamily(family) || family === 'cortex.goal-forest') {
+    return 'cortex'
   }
+
+  if (family === 'stem.afferent') {
+    return 'afferent'
+  }
+
+  if (family === 'stem.efferent') {
+    return 'efferent'
+  }
+
+  if (family.startsWith('spine.')) {
+    return 'spine'
+  }
+
   if (family.startsWith('ai-gateway.')) {
-    return 'thread'
+    return 'misc'
   }
-  if (family === 'stem.signal') {
-    return readString(payload, ['direction']) === 'afferent' ? 'sense' : 'act'
+
+  if (payload.sense_id || payload.endpoint_id) {
+    return 'afferent'
   }
-  if (family === 'stem.dispatch' || family === 'spine.dispatch') {
-    return 'act'
+
+  if (payload.act_id) {
+    return 'efferent'
   }
-  if (family === 'spine.endpoint') {
-    return 'endpoint'
-  }
-  if (family === 'spine.adapter') {
-    return 'adapter'
-  }
+
   return 'misc'
 }
 
@@ -419,37 +607,19 @@ function resolveLaneKey(
   event: RawEvent,
   payload: Record<string, unknown>,
 ): string {
-  const family = event.family ?? 'unknown'
-
   switch (laneType) {
     case 'tick':
-      return firstString(payload, ['span_id']) ?? `${family}:${event.tick ?? '0'}`
-    case 'organ':
-      return firstString(payload, ['organ_id', 'request_id', 'span_id']) ?? event.rawEventId
-    case 'thread':
-      return firstString(
-        payload,
-        ['thread_id', 'turn_id', 'request_id', 'span_id'],
-      ) ?? event.rawEventId
-    case 'sense':
-      return firstString(
-        payload,
-        ['sense_id_when_present', 'sense_id', 'endpoint_id_when_present', 'endpoint_id', 'span_id'],
-      ) ?? event.rawEventId
-    case 'act':
-      return firstString(
-        payload,
-        ['act_id_when_present', 'act_id', 'endpoint_id_when_present', 'endpoint_id', 'span_id'],
-      ) ?? event.rawEventId
-    case 'endpoint':
-      return firstString(
-        payload,
-        ['endpoint_id', 'endpoint_id_when_present', 'adapter_id_when_present', 'adapter_id', 'span_id'],
-      ) ?? event.rawEventId
-    case 'adapter':
-      return firstString(payload, ['adapter_id', 'span_id']) ?? event.rawEventId
+      return `tick:${event.tick ?? '0'}`
+    case 'cortex':
+      return firstString(payload, ['request_id']) ?? event.family ?? event.rawEventId
+    case 'afferent':
+      return firstString(payload, ['sense_id', 'descriptor_id', 'endpoint_id']) ?? event.rawEventId
+    case 'efferent':
+      return firstString(payload, ['act_id', 'descriptor_id', 'endpoint_id']) ?? event.rawEventId
+    case 'spine':
+      return firstString(payload, ['endpoint_id', 'adapter_id', 'act_id', 'sense_id']) ?? event.rawEventId
     case 'misc':
-      return firstString(payload, ['span_id']) ?? event.rawEventId
+      return firstString(payload, ['span_id', 'request_id']) ?? event.rawEventId
   }
 }
 
@@ -461,19 +631,20 @@ function resolveLaneLabel(
 ): string {
   switch (laneType) {
     case 'tick':
-      return event.family === 'stem.tick' ? 'Stem Rhythm' : `Tick ${event.tick ?? laneKey}`
-    case 'organ':
-      return firstString(payload, ['organ_id']) ?? abbreviateId(laneKey)
-    case 'thread':
-      return firstString(payload, ['thread_id']) ?? `turn ${firstString(payload, ['turn_id']) ?? abbreviateId(laneKey)}`
-    case 'sense':
-      return firstString(payload, ['sense_id_when_present', 'sense_id']) ?? abbreviateId(laneKey)
-    case 'act':
-      return firstString(payload, ['act_id_when_present', 'act_id']) ?? abbreviateId(laneKey)
-    case 'endpoint':
-      return firstString(payload, ['endpoint_id', 'endpoint_id_when_present']) ?? abbreviateId(laneKey)
-    case 'adapter':
-      return firstString(payload, ['adapter_id']) ?? abbreviateId(laneKey)
+      return `Tick ${event.tick ?? laneKey}`
+    case 'cortex':
+      return event.family === 'cortex.goal-forest'
+        ? 'Goal Forest'
+        : organFamilyLabel(event.family)
+    case 'afferent':
+      return firstString(payload, ['sense_id']) ?? firstString(payload, ['descriptor_id']) ?? abbreviateId(laneKey)
+    case 'efferent':
+      return firstString(payload, ['act_id']) ?? firstString(payload, ['descriptor_id']) ?? abbreviateId(laneKey)
+    case 'spine':
+      if (event.family === 'spine.adapter') {
+        return firstString(payload, ['adapter_id']) ?? 'Adapter'
+      }
+      return firstString(payload, ['endpoint_id', 'act_id', 'sense_id']) ?? abbreviateId(laneKey)
     case 'misc':
       return event.family ?? abbreviateId(laneKey)
   }
@@ -486,45 +657,61 @@ function resolveLaneSubtitle(
 ): string | null {
   switch (laneType) {
     case 'tick':
-      return firstString(payload, ['kind_or_status', 'status'])
-    case 'organ':
-      return firstString(payload, ['route_or_backend_when_present', 'request_id'])
-    case 'thread':
+      return firstString(payload, ['status'])
+    case 'cortex':
       return [
-        firstString(payload, ['backend_id']),
-        firstString(payload, ['model']),
+        firstString(payload, ['route_or_backend']),
+        firstString(payload, ['request_id']),
       ]
         .filter(Boolean)
-        .join(' · ') || firstString(payload, ['request_id_when_present', 'request_id'])
-    case 'sense':
-    case 'act':
+        .join(' · ') || null
+    case 'afferent':
       return [
-        firstString(payload, ['descriptor_id', 'descriptor_id_when_present']),
-        firstString(payload, ['endpoint_id', 'endpoint_id_when_present']),
+        firstString(payload, ['descriptor_id']),
+        firstString(payload, ['endpoint_id']),
+        firstString(payload, ['kind']),
       ]
         .filter(Boolean)
-        .join(' · ')
-    case 'endpoint':
-      return firstString(payload, ['adapter_id_when_present', 'channel_or_session_when_present'])
-    case 'adapter':
-      return firstString(payload, ['adapter_type'])
+        .join(' · ') || null
+    case 'efferent':
+      return [
+        firstString(payload, ['descriptor_id']),
+        firstString(payload, ['endpoint_id']),
+        firstString(payload, ['kind']),
+      ]
+        .filter(Boolean)
+        .join(' · ') || null
+    case 'spine':
+      return [
+        firstString(payload, ['binding_kind']),
+        firstString(payload, ['channel_or_session']),
+        firstString(payload, ['outcome']),
+        firstString(payload, ['kind']),
+      ]
+        .filter(Boolean)
+        .join(' · ') || event.subsystem
     case 'misc':
       return event.subsystem
   }
 }
 
 function chronologyTitle(event: RawEvent, payload: Record<string, unknown>): string {
+  if (isCortexOrganFamily(event.family)) {
+    return organFamilyLabel(event.family)
+  }
+
   return (
     firstString(
       payload,
       [
-        'phase',
         'kind',
-        'kind_or_status',
-        'kind_or_transition',
-        'kind_or_state',
-        'transition_kind',
+        'phase',
         'status',
+        'change_mode',
+        'descriptor_id',
+        'sense_id',
+        'act_id',
+        'endpoint_id',
       ],
     ) ??
     event.family ??
@@ -535,29 +722,82 @@ function chronologyTitle(event: RawEvent, payload: Record<string, unknown>): str
 function chronologySubtitle(event: RawEvent, payload: Record<string, unknown>): string | null {
   const fragments = [
     event.family,
-    firstString(payload, ['descriptor_id', 'descriptor_id_when_present']),
-    firstString(payload, ['backend_id']),
-    firstString(payload, ['model']),
-    firstString(payload, ['request_id_when_present', 'request_id']),
+    firstString(payload, ['descriptor_id']),
+    firstString(payload, ['request_id']),
+    firstString(payload, ['endpoint_id']),
+    firstString(payload, ['outcome', 'terminal_outcome']),
   ].filter(Boolean)
 
   return fragments.length ? fragments.join(' · ') : null
 }
 
-function firstString(record: Record<string, unknown>, keys: string[]): string | null {
-  return readString(record, keys)
+function chronologySubtitleForInterval(interval: CortexOrganInterval): string | null {
+  return [
+    interval.requestId ? abbreviateId(interval.requestId) : null,
+    interval.relatedEvents.length
+      ? `${interval.relatedEvents.length} linked AI entr${interval.relatedEvents.length === 1 ? 'y' : 'ies'}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(' · ') || null
 }
 
-function abbreviateId(value: string): string {
-  if (value.length <= 22) {
-    return value
+function intervalLaneSubtitle(interval: CortexOrganInterval): string | null {
+  const startPayload = eventPayloadRecord(interval.startEvent)
+  return [
+    firstString(startPayload, ['route_or_backend']),
+    interval.requestId ? abbreviateId(interval.requestId) : null,
+  ]
+    .filter(Boolean)
+    .join(' · ') || null
+}
+
+function organFamilyLabel(family: string | null): string {
+  switch (family) {
+    case 'cortex.primary':
+      return 'Cortex Primary'
+    case 'cortex.sense-helper':
+      return 'Sense Helper'
+    case 'cortex.goal-forest-helper':
+      return 'Goal Forest Helper'
+    case 'cortex.acts-helper':
+      return 'Acts Helper'
+    default:
+      return family ?? 'Cortex'
   }
-
-  return `${value.slice(0, 10)}…${value.slice(-8)}`
 }
 
-function clamp01(value: number): number {
-  return Math.min(0.98, Math.max(0.02, value))
+function intervalNarrative(interval: CortexOrganInterval): unknown {
+  const startPayload = eventPayloadRecord(interval.startEvent)
+  const endPayload = interval.endEvent ? eventPayloadRecord(interval.endEvent) : {}
+
+  return {
+    family: interval.family,
+    organ: interval.label,
+    request_id: interval.requestId,
+    started_at: interval.startEvent.observedAt,
+    ended_at: interval.endEvent?.observedAt ?? null,
+    status:
+      firstString(endPayload, ['status']) ??
+      firstString(startPayload, ['status']) ??
+      (interval.endEvent ? 'ok' : 'open'),
+    route_or_backend: firstString(startPayload, ['route_or_backend']),
+    input_payload: read(startPayload, ['input_payload']),
+    output_payload: read(endPayload, ['output_payload']),
+    error: read(endPayload, ['error']),
+    ai_request_id:
+      firstString(endPayload, ['ai_request_id']) ??
+      firstString(startPayload, ['ai_request_id']),
+    thread_id:
+      firstString(endPayload, ['thread_id']) ??
+      firstString(startPayload, ['thread_id']),
+    turn_id: read(endPayload, ['turn_id']) ?? read(startPayload, ['turn_id']),
+    related_ai: collectNarratives(interval.relatedEvents),
+  }
+}
+
+function isCortexOrganFamily(family: string | null): boolean {
+  return !!family && (CORTEX_ORGAN_FAMILIES as readonly string[]).includes(family)
 }
 
 function collectPayloadSingles(events: RawEvent[], family: string | null, keys: string[]): unknown[] {
@@ -580,18 +820,6 @@ function firstPayloadValue(events: RawEvent[], family: string, keys: string[]): 
   }
 
   return null
-}
-
-function collectPathArray(events: RawEvent[], family: string | null, path: string[]): unknown[] {
-  return events
-    .filter((event) => family == null || event.family === family)
-    .flatMap((event) => {
-      const value = readPath(event.payload, path)
-      if (value == null) {
-        return []
-      }
-      return Array.isArray(value) ? value : [value]
-    })
 }
 
 function collectNarratives(events: RawEvent[], families?: string[]): unknown[] {
@@ -624,18 +852,20 @@ function eventPayloadRecord(event: RawEvent): Record<string, unknown> {
   return toRecord(event.payload)
 }
 
-function readPath(value: unknown, path: string[]): unknown | null {
-  let current: unknown = value
+function firstString(record: Record<string, unknown>, keys: string[]): string | null {
+  return readString(record, keys)
+}
 
-  for (const segment of path) {
-    const record = toRecord(current)
-    if (!(segment in record)) {
-      return null
-    }
-    current = record[segment]
+function abbreviateId(value: string): string {
+  if (value.length <= 22) {
+    return value
   }
 
-  return current ?? null
+  return `${value.slice(0, 10)}…${value.slice(-8)}`
+}
+
+function clamp01(value: number): number {
+  return Math.min(0.98, Math.max(0.02, value))
 }
 
 function eventsForSubsystem(explicit: RawEvent[], rawEvents: RawEvent[], subsystem: string): RawEvent[] {

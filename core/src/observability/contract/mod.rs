@@ -49,30 +49,36 @@ pub enum ContractEvent {
     AiGatewayTurn(AiGatewayTurnEvent),
     #[serde(rename = "ai-gateway.thread")]
     AiGatewayThread(AiGatewayThreadEvent),
-    #[serde(rename = "cortex.tick")]
-    CortexTick(CortexTickEvent),
-    #[serde(rename = "cortex.organ")]
-    CortexOrgan(CortexOrganEvent),
+    #[serde(rename = "cortex.primary")]
+    CortexPrimary(CortexOrganExecutionEvent),
+    #[serde(rename = "cortex.sense-helper")]
+    CortexSenseHelper(CortexOrganExecutionEvent),
+    #[serde(rename = "cortex.goal-forest-helper")]
+    CortexGoalForestHelper(CortexOrganExecutionEvent),
+    #[serde(rename = "cortex.acts-helper")]
+    CortexActsHelper(CortexOrganExecutionEvent),
     #[serde(rename = "cortex.goal-forest")]
     CortexGoalForest(CortexGoalForestEvent),
     #[serde(rename = "stem.tick")]
     StemTick(StemTickEvent),
-    #[serde(rename = "stem.signal")]
-    StemSignal(StemSignalEvent),
-    #[serde(rename = "stem.dispatch")]
-    StemDispatch(StemDispatchEvent),
+    #[serde(rename = "stem.afferent")]
+    StemAfferent(StemAfferentEvent),
+    #[serde(rename = "stem.efferent")]
+    StemEfferent(StemEfferentEvent),
     #[serde(rename = "stem.proprioception")]
     StemProprioception(StemProprioceptionEvent),
-    #[serde(rename = "stem.descriptor.catalog")]
-    StemDescriptorCatalog(StemDescriptorCatalogEvent),
+    #[serde(rename = "stem.ns-catalog")]
+    StemNsCatalog(StemNsCatalogEvent),
     #[serde(rename = "stem.afferent.rule")]
     StemAfferentRule(StemAfferentRuleEvent),
     #[serde(rename = "spine.adapter")]
     SpineAdapter(SpineAdapterEvent),
     #[serde(rename = "spine.endpoint")]
     SpineEndpoint(SpineEndpointEvent),
-    #[serde(rename = "spine.dispatch")]
-    SpineDispatch(SpineDispatchEvent),
+    #[serde(rename = "spine.sense")]
+    SpineSense(SpineSenseEvent),
+    #[serde(rename = "spine.act")]
+    SpineAct(SpineActEvent),
 }
 
 impl ContractEvent {
@@ -81,18 +87,21 @@ impl ContractEvent {
             Self::AiGatewayRequest(_) => "ai-gateway.request",
             Self::AiGatewayTurn(_) => "ai-gateway.turn",
             Self::AiGatewayThread(_) => "ai-gateway.thread",
-            Self::CortexTick(_) => "cortex.tick",
-            Self::CortexOrgan(_) => "cortex.organ",
+            Self::CortexPrimary(_) => "cortex.primary",
+            Self::CortexSenseHelper(_) => "cortex.sense-helper",
+            Self::CortexGoalForestHelper(_) => "cortex.goal-forest-helper",
+            Self::CortexActsHelper(_) => "cortex.acts-helper",
             Self::CortexGoalForest(_) => "cortex.goal-forest",
             Self::StemTick(_) => "stem.tick",
-            Self::StemSignal(_) => "stem.signal",
-            Self::StemDispatch(_) => "stem.dispatch",
+            Self::StemAfferent(_) => "stem.afferent",
+            Self::StemEfferent(_) => "stem.efferent",
             Self::StemProprioception(_) => "stem.proprioception",
-            Self::StemDescriptorCatalog(_) => "stem.descriptor.catalog",
+            Self::StemNsCatalog(_) => "stem.ns-catalog",
             Self::StemAfferentRule(_) => "stem.afferent.rule",
             Self::SpineAdapter(_) => "spine.adapter",
             Self::SpineEndpoint(_) => "spine.endpoint",
-            Self::SpineDispatch(_) => "spine.dispatch",
+            Self::SpineSense(_) => "spine.sense",
+            Self::SpineAct(_) => "spine.act",
         }
     }
 
@@ -101,18 +110,21 @@ impl ContractEvent {
             Self::AiGatewayRequest(_) | Self::AiGatewayTurn(_) | Self::AiGatewayThread(_) => {
                 ObservabilitySubsystem::AiGateway
             }
-            Self::CortexTick(_) | Self::CortexOrgan(_) | Self::CortexGoalForest(_) => {
-                ObservabilitySubsystem::Cortex
-            }
+            Self::CortexPrimary(_)
+            | Self::CortexSenseHelper(_)
+            | Self::CortexGoalForestHelper(_)
+            | Self::CortexActsHelper(_)
+            | Self::CortexGoalForest(_) => ObservabilitySubsystem::Cortex,
             Self::StemTick(_)
-            | Self::StemSignal(_)
-            | Self::StemDispatch(_)
+            | Self::StemAfferent(_)
+            | Self::StemEfferent(_)
             | Self::StemProprioception(_)
-            | Self::StemDescriptorCatalog(_)
+            | Self::StemNsCatalog(_)
             | Self::StemAfferentRule(_) => ObservabilitySubsystem::Stem,
-            Self::SpineAdapter(_) | Self::SpineEndpoint(_) | Self::SpineDispatch(_) => {
-                ObservabilitySubsystem::Spine
-            }
+            Self::SpineAdapter(_)
+            | Self::SpineEndpoint(_)
+            | Self::SpineSense(_)
+            | Self::SpineAct(_) => ObservabilitySubsystem::Spine,
         }
     }
 }
@@ -208,52 +220,30 @@ pub enum OrganResponseStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct CortexTickEvent {
+pub struct CortexOrganExecutionEvent {
     pub run_id: String,
     pub timestamp: String,
     pub tick: u64,
-    pub span_id: String,
-    pub kind_or_status: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tick_seq_when_present: Option<u64>,
-    pub drained_senses: Value,
-    pub physical_state_snapshot: Value,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub control_gate_state_when_present: Option<Value>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub acts_payload_or_summary_when_present: Option<Value>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub goal_forest_snapshot_ref_or_payload_when_present: Option<Value>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub error_when_present: Option<Value>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct CortexOrganEvent {
-    pub run_id: String,
-    pub timestamp: String,
-    pub tick: u64,
-    pub organ_id: String,
     pub request_id: String,
     pub span_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub parent_span_id_when_present: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub route_or_backend_when_present: Option<String>,
+    pub parent_span_id: Option<String>,
     pub phase: String,
     pub status: OrganResponseStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub input_payload_when_present: Option<Value>,
+    pub route_or_backend: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub output_payload_when_present: Option<Value>,
+    pub input_payload: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub error_when_present: Option<Value>,
+    pub output_payload: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ai_gateway_request_id_when_present: Option<String>,
+    pub error: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub thread_id_when_present: Option<String>,
+    pub ai_request_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub turn_id_when_present: Option<u64>,
+    pub thread_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turn_id: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -263,20 +253,20 @@ pub struct CortexGoalForestEvent {
     pub tick: u64,
     pub span_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub parent_span_id_when_present: Option<String>,
+    pub parent_span_id: Option<String>,
     pub kind: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub snapshot_when_present: Option<Value>,
+    pub snapshot: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub patch_request_when_present: Option<Value>,
+    pub mutation_request: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub patch_result_when_present: Option<Value>,
+    pub mutation_result: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cognition_persisted_revision_when_present: Option<u64>,
+    pub persisted_revision: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub reset_context_applied_when_present: Option<bool>,
+    pub reset_context_applied: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub selected_turn_ids_when_present: Option<Vec<u64>>,
+    pub selected_turn_ids: Option<Vec<u64>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -291,54 +281,6 @@ pub struct StemTickEvent {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum SignalDirection {
-    Afferent,
-    Efferent,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum TransitionKind {
-    Enqueue,
-    Defer,
-    Release,
-    Dispatch,
-    Result,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct StemSignalEvent {
-    pub run_id: String,
-    pub timestamp: String,
-    pub tick: u64,
-    pub span_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub parent_span_id_when_present: Option<String>,
-    pub direction: SignalDirection,
-    pub transition_kind: TransitionKind,
-    pub descriptor_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub endpoint_id_when_present: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub sense_id_when_present: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub act_id_when_present: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub sense_payload_when_present: Option<Value>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub act_payload_when_present: Option<Value>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub weight_when_present: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub queue_or_deferred_state_when_present: Option<Value>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub matched_rule_ids_when_present: Option<Value>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub reason_when_present: Option<String>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
 pub enum DispatchOutcomeClass {
     Acknowledged,
     Rejected,
@@ -346,28 +288,55 @@ pub enum DispatchOutcomeClass {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct StemDispatchEvent {
+pub struct StemAfferentEvent {
     pub run_id: String,
     pub timestamp: String,
     pub tick: u64,
     pub span_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub parent_span_id_when_present: Option<String>,
+    pub parent_span_id: Option<String>,
+    pub kind: String,
+    pub descriptor_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub endpoint_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sense_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sense_payload: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub weight: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub queue_state: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub matched_rule_ids: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct StemEfferentEvent {
+    pub run_id: String,
+    pub timestamp: String,
+    pub tick: u64,
+    pub span_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_span_id: Option<String>,
+    pub kind: String,
     pub act_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub descriptor_id_when_present: Option<String>,
+    pub descriptor_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub endpoint_id_when_present: Option<String>,
-    pub kind: String,
+    pub endpoint_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub act_payload_when_present: Option<Value>,
-    pub queue_or_flow_summary: Value,
+    pub act_payload: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub continuity_decision_when_present: Option<String>,
+    pub queue_state: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub terminal_outcome_when_present: Option<DispatchOutcomeClass>,
+    pub continuity_decision: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub reason_or_reference_when_present: Option<Value>,
+    pub terminal_outcome: Option<DispatchOutcomeClass>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -389,7 +358,7 @@ pub enum DescriptorCatalogChangeMode {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct StemDescriptorCatalogEvent {
+pub struct StemNsCatalogEvent {
     pub run_id: String,
     pub timestamp: String,
     pub tick: u64,
@@ -399,7 +368,7 @@ pub struct StemDescriptorCatalogEvent {
     pub accepted_entries_or_routes: Value,
     pub rejected_entries_or_routes: Value,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub catalog_snapshot_when_required: Option<Value>,
+    pub catalog_snapshot: Option<Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -412,9 +381,9 @@ pub struct StemAfferentRuleEvent {
     pub revision: u64,
     pub rule_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub rule_when_present: Option<Value>,
+    pub rule: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub removed_when_present: Option<bool>,
+    pub removed: Option<bool>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -433,9 +402,9 @@ pub struct SpineAdapterEvent {
     pub span_id: String,
     pub adapter_type: String,
     pub adapter_id: String,
-    pub kind_or_state: AdapterLifecycleState,
+    pub kind: AdapterLifecycleState,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub reason_or_error_when_present: Option<String>,
+    pub reason_or_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -454,38 +423,57 @@ pub struct SpineEndpointEvent {
     pub tick: u64,
     pub span_id: String,
     pub endpoint_id: String,
-    pub kind_or_transition: EndpointLifecycleTransition,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub adapter_id_when_present: Option<String>,
+    pub adapter_id: Option<String>,
+    pub kind: EndpointLifecycleTransition,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub channel_or_session_when_present: Option<String>,
+    pub channel_or_session: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub route_summary_when_present: Option<Value>,
+    pub route_summary: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub reason_or_error_when_present: Option<String>,
+    pub reason_or_error: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SpineDispatchEvent {
+pub struct SpineSenseEvent {
     pub run_id: String,
     pub timestamp: String,
     pub tick: u64,
     pub span_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub parent_span_id_when_present: Option<String>,
-    pub act_id: String,
+    pub parent_span_id: Option<String>,
     pub endpoint_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub descriptor_id_when_present: Option<String>,
+    pub descriptor_id: Option<String>,
+    pub sense_id: String,
+    pub kind: String,
+    pub sense_payload: Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SpineActEvent {
+    pub run_id: String,
+    pub timestamp: String,
+    pub tick: u64,
+    pub span_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_span_id: Option<String>,
+    pub act_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub endpoint_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub descriptor_id: Option<String>,
     pub kind: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub binding_kind_when_present: Option<String>,
+    pub binding_kind: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub channel_id_when_present: Option<u64>,
+    pub channel_id: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub outcome_when_present: Option<DispatchOutcomeClass>,
+    pub act_payload: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub reason_code_when_present: Option<String>,
+    pub outcome: Option<DispatchOutcomeClass>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub reference_id_when_present: Option<String>,
+    pub reason_or_reference: Option<Value>,
 }

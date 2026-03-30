@@ -35,24 +35,22 @@ export function stateTone(state: string | null): 'ok' | 'warn' | 'err' | 'idle' 
 export function rawEventHeadline(event: RawEvent): string {
   const payload = toRecord(event.payload)
   const identity = [
-    stringify(payload.organ_id),
+    stringify(payload.request_id),
+    stringify(payload.ai_request_id),
     stringify(payload.thread_id),
     stringify(payload.turn_id),
-    stringify(payload.request_id_when_present ?? payload.request_id),
-    stringify(payload.sense_id_when_present ?? payload.sense_id),
-    stringify(payload.act_id_when_present ?? payload.act_id),
-    stringify(payload.endpoint_id_when_present ?? payload.endpoint_id),
+    stringify(payload.sense_id),
+    stringify(payload.act_id),
+    stringify(payload.endpoint_id),
     stringify(payload.adapter_id),
   ].filter(Boolean)
   const state = [
     stringify(payload.kind),
     stringify(payload.phase),
     stringify(payload.status),
-    stringify(payload.kind_or_status),
-    stringify(payload.transition_kind),
-    stringify(payload.kind_or_transition),
-    stringify(payload.kind_or_state),
-    stringify(payload.outcome_when_present),
+    stringify(payload.change_mode),
+    stringify(payload.outcome),
+    stringify(payload.terminal_outcome),
   ].filter(Boolean)
 
   return (
@@ -94,24 +92,24 @@ export function summarizeEntry(value: unknown): string {
     'message',
     'message_text',
     'messageText',
+    'organ',
+    'family',
     'descriptor',
     'descriptor_id',
     'descriptorId',
-    'signal_id',
-    'signalId',
+    'catalog_version',
+    'change_mode',
     'adapter_id',
     'adapterId',
-    'organ_id',
-    'organId',
+    'request_id',
+    'requestId',
+    'ai_request_id',
     'thread_id',
     'threadId',
     'turn_id',
     'turnId',
     'endpoint_id',
     'endpointId',
-    'request_id',
-    'request_id_when_present',
-    'requestId',
     'act_id',
     'actId',
     'sense_id',
@@ -119,17 +117,12 @@ export function summarizeEntry(value: unknown): string {
     'phase',
     'status',
     'kind',
-    'kind_or_status',
-    'kind_or_transition',
-    'kind_or_state',
-    'transition_kind',
     'binding_kind',
-    'catalog_version',
-    'backend_id',
     'model',
+    'backend_id',
     'tick',
     'outcome',
-    'state_transition',
+    'terminal_outcome',
     'id',
   ]
 
@@ -150,41 +143,19 @@ export function narrativeSections(
 ): Array<{ title: string; hint: string; items: unknown[]; single?: unknown | null }> {
   if (tab === 'cortex') {
     return [
-      { title: 'Senses', hint: 'Inputs noticed during this tick.', items: detail.cortex.senses },
       {
-        title: 'Proprioception',
-        hint: 'Core self-observation and bodily state.',
-        items: detail.cortex.proprioception,
+        title: 'Organ Intervals',
+        hint: 'Paired Cortex boundary records with related AI activity when present.',
+        items: detail.cortex.organs,
       },
       {
-        title: 'Primary Messages',
-        hint: 'Message-level cognition routed into the tick.',
-        items: detail.cortex.primaryMessages,
+        title: 'Goal Forest Events',
+        hint: 'Snapshots and mutation records emitted inside this tick.',
+        items: detail.cortex.goalForestEvents,
       },
       {
-        title: 'Primary Tools',
-        hint: 'Tool selections or calls anchored to this tick.',
-        items: detail.cortex.primaryTools,
-      },
-      {
-        title: 'Gateway Requests',
-        hint: 'LLM backend requests, retries, and usage for this tick.',
-        items: detail.cortex.gatewayRequests,
-      },
-      {
-        title: 'Committed Turns',
-        hint: 'Committed AI-gateway turns with finish reasons and message payloads.',
-        items: detail.cortex.gatewayTurns,
-      },
-      {
-        title: 'Thread Snapshots',
-        hint: 'Authoritative thread snapshots that connect turns without replay heuristics.',
-        items: detail.cortex.gatewayThreads,
-      },
-      { title: 'Acts', hint: 'Actions chosen or attempted.', items: detail.cortex.acts },
-      {
-        title: 'Goal Forest Snapshot',
-        hint: 'Snapshot reference or payload available for later compare.',
+        title: 'Latest Goal Forest',
+        hint: 'Most recent snapshot or mutation result available for this tick.',
         items: [],
         single: detail.cortex.goalForest,
       },
@@ -194,19 +165,24 @@ export function narrativeSections(
   if (tab === 'stem') {
     return [
       {
+        title: 'Tick Anchor',
+        hint: 'Canonical tick-grant records owned by Stem.',
+        items: detail.stem.tickAnchor,
+      },
+      {
         title: 'Afferent Pathway',
         hint: 'Incoming neural signals entering Core.',
-        items: detail.stem.afferentPathway,
+        items: detail.stem.afferent,
       },
       {
         title: 'Efferent Pathway',
-        hint: 'Outgoing neural signals leaving Core.',
-        items: detail.stem.efferentPathway,
+        hint: 'Outgoing neural signals and terminal results owned by Stem.',
+        items: detail.stem.efferent,
       },
       {
-        title: 'Descriptor Catalog',
-        hint: 'Descriptor records observed for this tick.',
-        items: detail.stem.descriptorCatalog,
+        title: 'Neural Signal Catalog',
+        hint: 'Descriptor catalog commits visible during this tick.',
+        items: detail.stem.nsCatalog,
       },
       {
         title: 'Proprioception',
@@ -228,14 +204,19 @@ export function narrativeSections(
       items: detail.spine.adapters,
     },
     {
-      title: 'Body Endpoints',
-      hint: 'Endpoints connected or addressed.',
-      items: detail.spine.bodyEndpoints,
+      title: 'Endpoints',
+      hint: 'Endpoint lifecycle and registration records.',
+      items: detail.spine.endpoints,
     },
     {
-      title: 'Dispatch',
-      hint: 'Dispatch bindings and outcomes observed around this tick.',
-      items: detail.spine.topologyEvents,
+      title: 'Sense Ingress',
+      hint: 'Senses that Spine accepted from body endpoints.',
+      items: detail.spine.senses,
+    },
+    {
+      title: 'Act Routing',
+      hint: 'Act bindings and terminal delivery outcomes owned by Spine.',
+      items: detail.spine.acts,
     },
   ]
 }

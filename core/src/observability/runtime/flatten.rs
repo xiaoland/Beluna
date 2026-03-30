@@ -117,31 +117,10 @@ pub(crate) fn flatten_contract_event(event: &ContractEvent) -> FlatContractEvent
             state: None,
             kind: Some(item.kind.clone()),
         },
-        ContractEvent::CortexTick(item) => FlatContractEvent {
-            level: level_from_optional_error(item.error_when_present.as_ref()),
-            subsystem,
-            family,
-            run_id: item.run_id.clone(),
-            tick: item.tick,
-            organ_id: None,
-            thread_id: None,
-            turn_id: None,
-            request_id: None,
-            endpoint_id: None,
-            descriptor_id: None,
-            act_id: None,
-            sense_id: None,
-            adapter_id: None,
-            adapter_type: None,
-            transition_kind: None,
-            outcome: None,
-            direction: None,
-            binding_kind: None,
-            change_mode: None,
-            state: Some(item.kind_or_status.clone()),
-            kind: Some(item.kind_or_status.clone()),
-        },
-        ContractEvent::CortexOrgan(item) => FlatContractEvent {
+        ContractEvent::CortexPrimary(item)
+        | ContractEvent::CortexSenseHelper(item)
+        | ContractEvent::CortexGoalForestHelper(item)
+        | ContractEvent::CortexActsHelper(item) => FlatContractEvent {
             level: match item.status {
                 OrganResponseStatus::Error => EventLevel::Warn,
                 OrganResponseStatus::Ok => EventLevel::Info,
@@ -150,9 +129,9 @@ pub(crate) fn flatten_contract_event(event: &ContractEvent) -> FlatContractEvent
             family,
             run_id: item.run_id.clone(),
             tick: item.tick,
-            organ_id: Some(item.organ_id.clone()),
-            thread_id: item.thread_id_when_present.clone(),
-            turn_id: item.turn_id_when_present.map(|value| value.to_string()),
+            organ_id: None,
+            thread_id: item.thread_id.clone(),
+            turn_id: item.turn_id.map(|value| value.to_string()),
             request_id: Some(item.request_id.clone()),
             endpoint_id: None,
             descriptor_id: None,
@@ -216,8 +195,8 @@ pub(crate) fn flatten_contract_event(event: &ContractEvent) -> FlatContractEvent
             state: Some(item.status.clone()),
             kind: Some(item.status.clone()),
         },
-        ContractEvent::StemSignal(item) => FlatContractEvent {
-            level: if item.reason_when_present.is_some() {
+        ContractEvent::StemAfferent(item) => FlatContractEvent {
+            level: if item.reason.is_some() {
                 EventLevel::Warn
             } else {
                 EventLevel::Info
@@ -230,22 +209,22 @@ pub(crate) fn flatten_contract_event(event: &ContractEvent) -> FlatContractEvent
             thread_id: None,
             turn_id: None,
             request_id: None,
-            endpoint_id: item.endpoint_id_when_present.clone(),
+            endpoint_id: item.endpoint_id.clone(),
             descriptor_id: Some(item.descriptor_id.clone()),
-            act_id: item.act_id_when_present.clone(),
-            sense_id: item.sense_id_when_present.clone(),
+            act_id: None,
+            sense_id: item.sense_id.clone(),
             adapter_id: None,
             adapter_type: None,
-            transition_kind: Some(enum_label(item.transition_kind)),
+            transition_kind: Some(item.kind.clone()),
             outcome: None,
-            direction: Some(enum_label(item.direction)),
+            direction: Some("afferent".to_string()),
             binding_kind: None,
             change_mode: None,
             state: None,
-            kind: None,
+            kind: Some(item.kind.clone()),
         },
-        ContractEvent::StemDispatch(item) => FlatContractEvent {
-            level: match item.terminal_outcome_when_present {
+        ContractEvent::StemEfferent(item) => FlatContractEvent {
+            level: match item.terminal_outcome {
                 Some(DispatchOutcomeClass::Rejected | DispatchOutcomeClass::Lost) => {
                     EventLevel::Warn
                 }
@@ -259,18 +238,18 @@ pub(crate) fn flatten_contract_event(event: &ContractEvent) -> FlatContractEvent
             thread_id: None,
             turn_id: None,
             request_id: None,
-            endpoint_id: item.endpoint_id_when_present.clone(),
-            descriptor_id: item.descriptor_id_when_present.clone(),
+            endpoint_id: item.endpoint_id.clone(),
+            descriptor_id: item.descriptor_id.clone(),
             act_id: Some(item.act_id.clone()),
             sense_id: None,
             adapter_id: None,
             adapter_type: None,
-            transition_kind: None,
-            outcome: item.terminal_outcome_when_present.map(enum_label),
-            direction: None,
+            transition_kind: Some(item.kind.clone()),
+            outcome: item.terminal_outcome.map(enum_label),
+            direction: Some("efferent".to_string()),
             binding_kind: None,
             change_mode: None,
-            state: None,
+            state: item.continuity_decision.clone(),
             kind: Some(item.kind.clone()),
         },
         ContractEvent::StemProprioception(item) => FlatContractEvent {
@@ -297,7 +276,7 @@ pub(crate) fn flatten_contract_event(event: &ContractEvent) -> FlatContractEvent
             state: None,
             kind: Some(item.kind.clone()),
         },
-        ContractEvent::StemDescriptorCatalog(item) => FlatContractEvent {
+        ContractEvent::StemNsCatalog(item) => FlatContractEvent {
             level: EventLevel::Info,
             subsystem,
             family,
@@ -318,7 +297,7 @@ pub(crate) fn flatten_contract_event(event: &ContractEvent) -> FlatContractEvent
             direction: None,
             binding_kind: None,
             change_mode: Some(enum_label(item.change_mode)),
-            state: Some(item.catalog_version.clone()),
+            state: None,
             kind: None,
         },
         ContractEvent::StemAfferentRule(item) => FlatContractEvent {
@@ -342,13 +321,15 @@ pub(crate) fn flatten_contract_event(event: &ContractEvent) -> FlatContractEvent
             direction: None,
             binding_kind: None,
             change_mode: None,
-            state: Some(item.rule_id.clone()),
+            state: Some(item.revision.to_string()),
             kind: Some(item.kind.clone()),
         },
         ContractEvent::SpineAdapter(item) => FlatContractEvent {
-            level: match item.kind_or_state {
+            level: match item.kind {
                 AdapterLifecycleState::Faulted => EventLevel::Warn,
-                _ => EventLevel::Info,
+                AdapterLifecycleState::Enabled | AdapterLifecycleState::Disabled => {
+                    EventLevel::Info
+                }
             },
             subsystem,
             family,
@@ -369,8 +350,8 @@ pub(crate) fn flatten_contract_event(event: &ContractEvent) -> FlatContractEvent
             direction: None,
             binding_kind: None,
             change_mode: None,
-            state: Some(enum_label(item.kind_or_state)),
-            kind: None,
+            state: Some(enum_label(item.kind)),
+            kind: Some(enum_label(item.kind)),
         },
         ContractEvent::SpineEndpoint(item) => FlatContractEvent {
             level: EventLevel::Info,
@@ -386,18 +367,46 @@ pub(crate) fn flatten_contract_event(event: &ContractEvent) -> FlatContractEvent
             descriptor_id: None,
             act_id: None,
             sense_id: None,
-            adapter_id: item.adapter_id_when_present.clone(),
+            adapter_id: item.adapter_id.clone(),
             adapter_type: None,
-            transition_kind: Some(enum_label(item.kind_or_transition)),
+            transition_kind: None,
             outcome: None,
             direction: None,
             binding_kind: None,
             change_mode: None,
-            state: None,
-            kind: None,
+            state: Some(enum_label(item.kind)),
+            kind: Some(enum_label(item.kind)),
         },
-        ContractEvent::SpineDispatch(item) => FlatContractEvent {
-            level: match item.outcome_when_present {
+        ContractEvent::SpineSense(item) => FlatContractEvent {
+            level: if item.reason.is_some() {
+                EventLevel::Warn
+            } else {
+                EventLevel::Info
+            },
+            subsystem,
+            family,
+            run_id: item.run_id.clone(),
+            tick: item.tick,
+            organ_id: None,
+            thread_id: None,
+            turn_id: None,
+            request_id: None,
+            endpoint_id: Some(item.endpoint_id.clone()),
+            descriptor_id: item.descriptor_id.clone(),
+            act_id: None,
+            sense_id: Some(item.sense_id.clone()),
+            adapter_id: None,
+            adapter_type: None,
+            transition_kind: Some(item.kind.clone()),
+            outcome: None,
+            direction: Some("afferent".to_string()),
+            binding_kind: None,
+            change_mode: None,
+            state: None,
+            kind: Some(item.kind.clone()),
+        },
+        ContractEvent::SpineAct(item) => FlatContractEvent {
+            level: match item.outcome {
                 Some(DispatchOutcomeClass::Rejected | DispatchOutcomeClass::Lost) => {
                     EventLevel::Warn
                 }
@@ -411,28 +420,20 @@ pub(crate) fn flatten_contract_event(event: &ContractEvent) -> FlatContractEvent
             thread_id: None,
             turn_id: None,
             request_id: None,
-            endpoint_id: Some(item.endpoint_id.clone()),
-            descriptor_id: item.descriptor_id_when_present.clone(),
+            endpoint_id: item.endpoint_id.clone(),
+            descriptor_id: item.descriptor_id.clone(),
             act_id: Some(item.act_id.clone()),
             sense_id: None,
             adapter_id: None,
             adapter_type: None,
-            transition_kind: None,
-            outcome: item.outcome_when_present.map(enum_label),
-            direction: None,
-            binding_kind: item.binding_kind_when_present.clone(),
+            transition_kind: Some(item.kind.clone()),
+            outcome: item.outcome.map(enum_label),
+            direction: Some("efferent".to_string()),
+            binding_kind: item.binding_kind.clone(),
             change_mode: None,
             state: None,
             kind: Some(item.kind.clone()),
         },
-    }
-}
-
-fn level_from_optional_error(value: Option<&serde_json::Value>) -> EventLevel {
-    if value.is_some() {
-        EventLevel::Warn
-    } else {
-        EventLevel::Info
     }
 }
 
@@ -443,5 +444,13 @@ where
     serde_json::to_value(value)
         .ok()
         .and_then(|value| value.as_str().map(str::to_string))
-        .unwrap_or_default()
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+fn level_from_optional_error(error: Option<&serde_json::Value>) -> EventLevel {
+    if error.is_some() {
+        EventLevel::Warn
+    } else {
+        EventLevel::Info
+    }
 }

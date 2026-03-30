@@ -131,7 +131,7 @@ impl StemPhysicalStateStore {
         if let Some((change_mode, catalog_version, catalog_entries)) = catalog_event {
             let snapshot = matches!(change_mode, DescriptorCatalogChangeMode::Snapshot)
                 .then(|| json!({ "entries": catalog_entries }));
-            observability_runtime::emit_stem_descriptor_catalog(
+            observability_runtime::emit_stem_ns_catalog(
                 None,
                 &catalog_version,
                 change_mode,
@@ -204,7 +204,7 @@ impl StemPhysicalStateStore {
         drop(state);
 
         if let Some(catalog_version) = catalog_event {
-            observability_runtime::emit_stem_descriptor_catalog(
+            observability_runtime::emit_stem_ns_catalog(
                 None,
                 &catalog_version,
                 DescriptorCatalogChangeMode::Drop,

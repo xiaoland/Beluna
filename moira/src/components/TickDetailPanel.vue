@@ -51,7 +51,7 @@ function pretty(value: unknown): string {
         </p>
       </div>
       <div class="detail-meta">
-        <span v-if="detail">Last observed {{ formatWhen(detail.rawEvents[0]?.observedAt ?? null) }}</span>
+        <span v-if="detail">Last observed {{ formatWhen(detail.rawEvents[detail.rawEvents.length - 1]?.observedAt ?? null) }}</span>
       </div>
     </div>
 

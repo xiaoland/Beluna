@@ -17,15 +17,15 @@ pub use ai_gateway::{
 };
 pub use cortex::{
     emit_cortex_goal_forest_patch, emit_cortex_goal_forest_snapshot, emit_cortex_organ_end,
-    emit_cortex_organ_start, emit_cortex_tick,
+    emit_cortex_organ_start,
 };
 pub use spine::{
-    emit_spine_adapter_lifecycle, emit_spine_dispatch_bind, emit_spine_dispatch_outcome,
-    emit_spine_endpoint_lifecycle,
+    emit_spine_act_bind, emit_spine_act_outcome, emit_spine_adapter_lifecycle,
+    emit_spine_endpoint_lifecycle, emit_spine_sense_ingress,
 };
 pub use stem::{
-    emit_stem_afferent_rule, emit_stem_descriptor_catalog, emit_stem_dispatch_transition,
-    emit_stem_proprioception, emit_stem_signal_transition, emit_stem_tick,
+    emit_stem_afferent, emit_stem_afferent_rule, emit_stem_efferent, emit_stem_ns_catalog,
+    emit_stem_proprioception, emit_stem_tick,
 };
 
 pub(crate) use emit::emit_contract_event;

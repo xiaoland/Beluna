@@ -1,107 +1,138 @@
 # Core Observability
 
-This file defines Core's Stage 2 local OTLP log model and the logical fixture contract used by Core-side event-shape checks.
+This file defines Core's target local OTLP log model after the observability reset and the logical fixture contract used by Core-side event-shape checks.
 
 Cross-unit reconstruction guarantees belong in `docs/20-product-tdd/observability-contract.md`.
-Loom composition and operator-facing inspection surfaces belong in `docs/30-unit-tdd/moira/*`.
+Loom composition and operator-facing investigation flows belong in `docs/30-unit-tdd/moira/*`.
+
+Current code may still emit the older coarse Stage 2 family catalog in places until the synchronized refactor lands.
+This file is the target lattice for that refactor.
+AI families remain explicitly provisional until the AI-gateway observability redesign settles their final ownership split.
 
 ## Local Rules
 
-1. OTLP family naming is Core-owned and grouped by the runtime owners that actually mutate or observe the state: `ai-gateway`, `cortex`, `stem`, and `spine`.
-2. Stage 2 favors fewer owner-centric logical families with richer `kind`, `status`, and `transition_kind` fields over a large per-verb family lattice.
-3. Every canonical emitted event includes `family`, `run_id`, and `timestamp`. `tick` is required for tick-scoped runtime activity; bootstrap or pre-first-grant activity is normalized to `tick = 0`.
-4. Events that participate in within-tick causality include `span_id`. `parent_span_id` is required whenever the event is nested under another within-tick operation rather than being a root span.
-5. Family naming and lane identity are separate concerns. Owner-centric families such as `spine.dispatch` or `ai-gateway.request` are valid event families, but lane typing must remain entity-centric.
-6. Stronger runtime anchors such as `request_id`, `thread_id`, `turn_id`, `organ_id`, `sense_id`, `act_id`, `endpoint_id`, and `channel_id` are preferred over opaque span-only grouping whenever the runtime naturally owns them.
-7. Tick-bound canonical export fields use `tick`, not `cycle_id`. Internal Core names may remain `cycle_id` until broader refactors justify churn.
-8. During Beluna's early development phase, Core preserves full request, response, signal, and topology payloads in raw OTLP events by default. Summary fields may supplement these payloads but must not replace them.
-9. When Cortex invokes the AI gateway, the originating `organ_id` is required on the related AI-gateway events so Moira can align LLM activity with Cortex lanes inside one tick.
-10. Goal-forest observability must reflect the mutation semantics the runtime actually owns today. The stable Stage 2 mutation surface is patch/persist-oriented, not a speculative botanical verb catalog.
-11. Golden fixture bundles live under `core/tests/fixtures/observability/` and are refreshed only after the family catalog stabilizes enough to justify the maintenance cost.
+1. Core's native telemetry carrier is OpenTelemetry semantic context plus structured log body.
+2. Every canonical emitted record is attributed to one `tick`. Bootstrap or pre-first-grant activity uses `tick = 0`.
+3. `tick` is the operator-facing trace anchor. Tick-scoped runtime work should remain in one stable trace context per admitted tick and stay unique within one wake.
+4. Literal OpenTelemetry `span_id` values are opaque operation-instance identifiers. They are not human-friendly domain labels.
+5. Domain identifiers such as `organ_id`, `thread_id`, `turn_id`, `endpoint_id`, and similar fields remain structured-body fields by default. Promote them into broader telemetry context only when cross-record pairing or cross-module correlation requires it.
+6. Resource- or process-level identity belongs in OpenTelemetry resource attributes, not duplicated in every event body field set.
+7. Core should prefer domain-honest families over coarse catch-all families. Do not merge asymmetrical state machines only because one struct could make many fields optional.
+8. `cortex.tick` is removed from the target model. The canonical tick anchor is `stem.tick`.
+9. `stem.signal` and `stem.dispatch` are removed from the target model. Their semantics split into `stem.afferent` and `stem.efferent`.
+10. Stable Cortex execution families are one family per stable organ rather than one coarse `cortex.organ` family.
+11. `spine.endpoint` owns endpoint attachment and lifecycle semantics such as new, register, and drop. `spine.sense` means Spine received one sense from a body endpoint.
+12. The outbound Spine act family is `spine.act`.
+13. The current `ai-gateway.*` family set is transitional and not part of the target-stable lattice unless a surviving generic gateway family is strictly capability-neutral.
+14. Goal-forest observability remains grounded in the mutation semantics the runtime actually owns today. The stable target surface is snapshot plus mutation, not speculative botanical diff verbs.
+15. During Beluna's early development phase, Core preserves full request, response, signal, topology, and other diagnostic payloads in raw OTLP records by default.
+16. Golden fixture bundles live under `core/tests/fixtures/observability/` and should be refreshed only after the family catalog stabilizes enough to justify the maintenance cost.
 
-## Logical Family Table
+## Field Notation
 
-These are the logical families Moira may rely on. During implementation, a logical family may temporarily appear as one coarse family with `kind` fields or as a small suffix split such as `request/response`, as long as the same owner-centric semantics and required fields remain intact.
+In the tables below:
+
+1. ``?`` marks an optional field.
+2. Listed fields are structured event-body fields unless stated otherwise.
+3. OpenTelemetry context and resource attributes are still required where the Product TDD contract says they matter, even when they are not repeated in every family row below.
+
+## Target Family Lattice
+
+### Stable Non-AI Families
 
 | Logical family | Runtime owner / emit point | Required logical fields | Supports |
 |---|---|---|---|
-| `ai-gateway.request` | `ChatRuntime::dispatch_complete()` and its retry/resilience loop | `run_id`; `tick`; `request_id`; `span_id`; `parent_span_id_when_present`; `organ_id_when_present`; `thread_id_when_present`; `turn_id_when_present`; `backend_id`; `model`; `kind`; `attempt_when_present`; `input_payload`; `effective_tools_when_present`; `limits_when_present`; `enable_thinking`; `provider_request_when_present`; `provider_response_when_present`; `usage_when_present`; `error_when_present`; `resource_kind`; `resource_id` | backend request and retry inspection |
-| `ai-gateway.turn` | `Thread::complete()` at committed-turn or terminal-failure boundary | `run_id`; `tick`; `thread_id`; `turn_id`; `span_id`; `parent_span_id_when_present`; `organ_id_when_present`; `request_id_when_present`; `status`; `messages_when_committed`; `metadata`; `finish_reason_when_present`; `usage_when_present`; `backend_metadata_when_present`; `error_when_present`; `resource_kind`; `resource_id` | committed conversation inspection |
-| `ai-gateway.thread` | `Chat::open_thread()`, `Chat::clone_thread_with_turns()`, and persisted thread rewrites after completed turns | `run_id`; `tick`; `thread_id`; `span_id`; `parent_span_id_when_present`; `organ_id_when_present`; `kind`; `messages`; `turn_summaries_when_present`; `source_turn_ids_when_present`; `resource_kind`; `resource_id` | authoritative thread reconstruction |
-| `cortex.tick` | `CortexRuntime::on_tick()` plus post-primary settlement | `run_id`; `tick`; `span_id`; `kind_or_status`; `tick_seq_when_present`; `drained_senses`; `physical_state_snapshot`; `control_gate_state_when_present`; `acts_payload_or_summary_when_present`; `goal_forest_snapshot_ref_or_payload_when_present`; `error_when_present`; `resource_kind`; `resource_id` | admitted, skipped, and completed tick narrative |
-| `cortex.organ` | `run_primary_turn()` and `run_organ()` | `run_id`; `tick`; `organ_id`; `request_id`; `span_id`; `parent_span_id_when_present`; `route_or_backend_when_present`; `phase`; `input_payload_when_present`; `output_payload_when_present`; `status`; `error_when_present`; `ai_gateway_request_id_when_present`; `thread_id_when_present`; `turn_id_when_present`; `resource_kind`; `resource_id` | organ boundary inspection |
-| `cortex.goal-forest` | tick snapshot emission and primary goal-forest patch/persist path | `run_id`; `tick`; `span_id`; `parent_span_id_when_present`; `kind`; `snapshot_when_present`; `patch_request_when_present`; `patch_result_when_present`; `cognition_persisted_revision_when_present`; `reset_context_applied_when_present`; `selected_turn_ids_when_present`; `resource_kind`; `resource_id` | goal-forest state and mutation narrative |
-| `stem.tick` | `StemTickRuntime` grant loop | `run_id`; `tick`; `span_id`; `status`; `tick_seq`; `resource_kind`; `resource_id` | Stem rhythm and bootstrap anchor |
-| `stem.signal` | afferent and efferent signal transition emit points | `run_id`; `tick`; `span_id`; `parent_span_id_when_present`; `direction`; `transition_kind`; `descriptor_id`; `endpoint_id_when_present`; `sense_id_when_present`; `act_id_when_present`; `sense_payload_when_present`; `act_payload_when_present`; `weight_when_present`; `queue_or_deferred_state_when_present`; `matched_rule_ids_when_present`; `reason_when_present`; `resource_kind`; `resource_id` | signal movement and loss inspection |
-| `stem.dispatch` | efferent queue admission, dispatch, and terminal result | `run_id`; `tick`; `span_id`; `parent_span_id_when_present`; `act_id`; `descriptor_id_when_present`; `endpoint_id_when_present`; `kind`; `act_payload`; `queue_or_flow_summary`; `continuity_decision_when_present`; `terminal_outcome_when_present`; `reason_or_reference_when_present`; `resource_kind`; `resource_id` | dispatch queue and terminal outcome inspection |
-| `stem.proprioception` | `StemPhysicalStateStore` patch/drop mutation boundary | `run_id`; `tick`; `span_id`; `kind`; `entries_or_keys`; `resource_kind`; `resource_id` | proprioception history |
-| `stem.descriptor.catalog` | `StemPhysicalStateStore` catalog snapshot/update/drop commit | `run_id`; `tick`; `span_id`; `catalog_version`; `change_mode`; `accepted_entries_or_routes`; `rejected_entries_or_routes`; `catalog_snapshot_when_required`; `resource_kind`; `resource_id` | descriptor catalog history |
-| `stem.afferent.rule` | afferent scheduler rule add/remove boundary | `run_id`; `tick`; `span_id`; `kind`; `revision`; `rule_id`; `rule_when_present`; `removed_when_present`; `resource_kind`; `resource_id` | deferral-rule lifecycle |
-| `spine.adapter` | adapter startup and fault handling | `run_id`; `tick`; `span_id`; `adapter_type`; `adapter_id`; `kind_or_state`; `reason_or_error_when_present`; `resource_kind`; `resource_id` | adapter topology reconstruction |
-| `spine.endpoint` | endpoint connect/drop and equivalent lifecycle changes | `run_id`; `tick`; `span_id`; `endpoint_id`; `kind_or_transition`; `channel_or_session_when_present`; `route_summary_when_present`; `reason_or_error_when_present`; `resource_kind`; `resource_id` | endpoint topology reconstruction |
-| `spine.dispatch` | dispatch resolution and terminal outcome logging | `run_id`; `tick`; `span_id`; `parent_span_id_when_present`; `act_id`; `endpoint_id`; `descriptor_id_when_present`; `kind`; `binding_kind_when_present`; `channel_id_when_present`; `outcome_when_present`; `reason_code_when_present`; `reference_id_when_present`; `resource_kind`; `resource_id` | dispatch binding and outcome reconstruction |
+| `stem.tick` | Stem tick grant loop | `run_id`; `tick`; `span_id`; `status`; `tick_seq` | canonical tick anchor and grant narrative |
+| `stem.afferent` | afferent enqueue / defer / release / drop boundaries | `run_id`; `tick`; `span_id`; `parent_span_id?`; `kind`; `descriptor_id`; `endpoint_id?`; `sense_id?`; `sense_payload?`; `weight?`; `queue_state?`; `matched_rule_ids?`; `reason?` | afferent pathway inspection |
+| `stem.efferent` | efferent enqueue / route / outcome boundaries owned by Stem | `run_id`; `tick`; `span_id`; `parent_span_id?`; `kind`; `act_id`; `descriptor_id?`; `endpoint_id?`; `act_payload?`; `queue_state?`; `continuity_decision?`; `terminal_outcome?`; `reason?` | efferent pathway inspection |
+| `stem.proprioception` | physical-state patch / drop mutation boundary | `run_id`; `tick`; `span_id`; `kind`; `entries_or_keys` | proprioception history |
+| `stem.ns-catalog` | neural-signal catalog snapshot / update / drop commit | `run_id`; `tick`; `span_id`; `catalog_version`; `change_mode`; `accepted_entries_or_routes`; `rejected_entries_or_routes`; `catalog_snapshot?` | neural-signal catalog history |
+| `stem.afferent.rule` | afferent scheduler rule add / remove boundary when explicit in runtime | `run_id`; `tick`; `span_id`; `kind`; `revision`; `rule_id`; `rule?`; `removed?` | afferent-rule lifecycle |
+| `cortex.goal-forest` | goal-forest snapshot and mutation path | `run_id`; `tick`; `span_id`; `parent_span_id?`; `kind`; `snapshot?`; `mutation_request?`; `mutation_result?`; `persisted_revision?`; `reset_context_applied?`; `selected_turn_ids?` | goal-forest state and mutation narrative |
+| `spine.adapter` | adapter startup / lifecycle / fault handling | `run_id`; `tick`; `span_id`; `adapter_type`; `adapter_id`; `kind`; `reason_or_error?` | adapter topology reconstruction |
+| `spine.endpoint` | endpoint connect / drop / lifecycle changes | `run_id`; `tick`; `span_id`; `endpoint_id`; `adapter_id?`; `kind`; `channel_or_session?`; `route_summary?`; `reason_or_error?` | endpoint topology reconstruction |
+| `spine.sense` | body-endpoint ingress into Core | `run_id`; `tick`; `span_id`; `parent_span_id?`; `endpoint_id`; `descriptor_id?`; `sense_id`; `kind`; `sense_payload`; `reason?` | sense ingress and endpoint-origin reconstruction |
+| `spine.act` | act routing / binding / delivery path owned by Spine | `run_id`; `tick`; `span_id`; `parent_span_id?`; `act_id`; `endpoint_id?`; `descriptor_id?`; `kind`; `binding_kind?`; `channel_id?`; `act_payload?`; `outcome?`; `reason_or_reference?` | act routing and delivery reconstruction |
 
-## Lane Resolution Contract
+### Stable Per-Organ Cortex Families
 
-Loom resolves chronology lanes in two steps:
+All stable per-organ Cortex execution families share one common event-body shape:
 
-1. Choose an entity-centric `lane_type` from the event family group.
-2. Choose a `lane_key` using the highest-priority stable identity that the event exposes.
+`run_id`; `tick`; `request_id`; `span_id`; `parent_span_id?`; `phase`; `status`; `route_or_backend?`; `input_payload?`; `output_payload?`; `error?`; `ai_request_id?`; `thread_id?`; `turn_id?`
 
-Family names are not lane types. For example, `spine.dispatch` remains a valid family name, but its primary lane type is `act`, not `spine.dispatch`.
-
-| Event family group | Lane type | Lane-key priority |
+| Logical family | Runtime owner / emit point | Supports |
 |---|---|---|
-| `cortex.organ` | `organ` | `organ_id` > `request_id` > `span_id` |
-| `ai-gateway.request`, `ai-gateway.turn`, `ai-gateway.thread` | `thread` | `thread_id` > `turn_id` > `request_id` > `span_id` |
-| afferent `stem.signal` | `sense` | `sense_id` > `endpoint_id` > `span_id` |
-| efferent `stem.signal`, `stem.dispatch` | `act` | `act_id` > `endpoint_id` > `span_id` |
-| `spine.endpoint` | `endpoint` | `endpoint_id` > `adapter_id` > `span_id` |
-| `spine.dispatch` | `act` | `act_id` > `endpoint_id` > `span_id` |
+| `cortex.primary` | primary cognition turn boundaries | primary-organ execution and interval pairing |
+| `cortex.sense-helper` | sense helper execution boundaries | helper-organ execution and interval pairing |
+| `cortex.goal-forest-helper` | goal-forest helper execution boundaries | helper-organ execution and interval pairing |
+| `cortex.acts-helper` | acts helper execution boundaries | helper-organ execution and interval pairing |
 
-Implementation note:
+### Deferred AI Family Lattice
 
-1. `ai-gateway.request` is the correct logical family name for the backend-governed request and retry lifecycle. Reliability, adapter behavior, and retry detail belong in `kind`, `attempt`, `error`, and related payload fields rather than in a more specific family name.
-2. Stage 2 guarantees `provider_request_when_present` on terminal `ai-gateway.request` kinds when an adapter cannot expose clean intermediate bodies. Adapters may emit the same payload on earlier kinds when that is cheap and semantically honest.
-3. If a future view needs a secondary grouping inside one lane, that is a Loom concern layered on top of this primary lane contract rather than a reason to make families less readable.
+AI observability remains under active redesign.
+The authoritative position for now is:
+
+1. current `ai-gateway.request`, `ai-gateway.turn`, and `ai-gateway.thread` emissions are transitional rather than target-stable family names
+2. if a generic gateway transport family survives, it must be capability-neutral
+3. thread, turn, message, tool, and similar capability-specific semantics must not be hidden inside a supposedly generic transport family
+4. the final AI family lattice will be defined in the dedicated AI-gateway observability redesign
+
+## Correlation Requirements
+
+Moira owns chronology grouping and interval rendering.
+Core's responsibility is to expose enough stable correlation that Moira can investigate one tick without parsing prose or inventing missing semantics.
+
+1. `stem.tick` provides the canonical tick anchor.
+2. Per-organ Cortex start and end records must share one stable operation key such as `request_id` so Moira can pair them into one interval.
+3. Nested work inside one tick must carry stable `span_id` and `parent_span_id` where one operation is causally under another.
+4. Domain identifiers such as `thread_id`, `turn_id`, and `endpoint_id` remain available for inspection and targeted correlation, but they do not need to be elevated into first-class chronology keys by default.
+5. If one future Loom surface requires a domain identifier to become a first-class grouping key, that requirement should be added from Moira Unit TDD rather than guessed here.
+
+Implementation notes:
+
+1. Literal OpenTelemetry `span_id` remains an opaque instance id even when a family also exposes domain identifiers for inspection.
+2. This section defines the minimum correlation Core must support. It does not freeze Moira's final lane decomposition.
+3. If one future operator context needs a richer grouping key, that is a Moira concern layered on top of this minimum contract.
 
 ## Minimum Fixture Set
 
-When the logical family catalog is refreshed into fixtures, the minimum coverage should include:
+When the target family catalog is refreshed into fixtures, the minimum coverage should include:
 
-1. `ai-gateway.*`
-- request success with full request/response payloads
-- request retry or failure with attempt metadata
+1. transitional `ai-gateway.*`
+- one request success with full request / response payloads
+- one request retry or failure with attempt metadata
 - one committed turn with user, assistant, tool-call, and tool-result messages
 - one thread snapshot after a completed turn
 - one thread snapshot after thread clone or reset-style rewrite
 
 2. `cortex.*`
-- one skipped or gated tick
-- one admitted and completed tick with full senses plus physical snapshot
-- one organ boundary with full input and output
+- one `cortex.primary` start / end pair with full input and output
+- one helper-organ start / end pair
+- one per-organ error termination
 - one goal-forest snapshot
-- one goal-forest patch/persist event with context-reset details when applicable
+- one goal-forest mutation / persist event with reset-context details when applicable
 
 3. `stem.*`
 - one `stem.tick`
-- one afferent signal transition with full sense payload
-- one afferent deferral or release path
-- one efferent queue/dispatch/result path with full act payload
-- one proprioception patch and one drop
-- one descriptor catalog update or drop
-- one afferent-rule add or remove
+- one `stem.afferent` enqueue or accept event with full sense payload
+- one `stem.afferent` defer or release path
+- one `stem.efferent` queue admission
+- one `stem.efferent` terminal outcome with full act payload
+- one `stem.proprioception` patch and one drop
+- one `stem.ns-catalog` update or drop
+- one `stem.afferent.rule` add or remove when that lifecycle remains explicit
 
 4. `spine.*`
 - one adapter lifecycle change
 - one endpoint lifecycle change
-- one dispatch bind
-- one terminal dispatch outcome
+- one `spine.sense` ingress event
+- one `spine.act` bind / route event
+- one `spine.act` terminal outcome
 
 ## Change Discipline
 
 1. Renaming a logical family or changing its required logical field set requires updating this file and the corresponding Core emit points in the same change.
-2. If one logical family is emitted through temporary suffix splits such as `request/response` or `bind/outcome`, the split must still preserve the same owner-centric semantics and required correlation fields.
+2. When a family is marked provisional in this file, later naming churn is acceptable only inside the explicitly provisional scope.
 3. If a change affects only Core-local debug decoration and not the canonical reconstruction fields, keep it in Core Unit TDD unless it changes a cross-unit guarantee.
-4. If a new field or family is required so Moira can reconstruct a new surface, update Product TDD first and then update this file.
-5. Do not split one logical family into more poetic or more granular verb families unless the runtime already owns and emits those semantics. Fewer honest families with richer payloads are preferred.
+4. If a new field or family is required so Moira can reconstruct a new domain guaranteed by Product TDD, update Product TDD first and then update this file.
+5. Do not collapse separate pathway or lifecycle families back into one coarse catch-all family unless the runtime genuinely owns one uniform state machine.

@@ -24,12 +24,12 @@
   - wake list
   - tick list
   - selected tick workspace
-  - human-friendly per-tick chronology grouped by span or stable resource lane
-  - AI-gateway thread/turn inspection plus linked request lifecycle
-  - Cortex organ and goal-forest inspection
+  - human-friendly per-tick chronology anchored by `tick`, including interval work when reconstructable
+  - expanded interval inspection for nested AI-capability activity when present
+  - Cortex per-organ and goal-forest inspection
   - Stem state and pathway inspection
-  - Spine topology and dispatch inspection
-  - raw event inspector as a secondary drilldown surface
+  - Spine adapter, endpoint, sense-ingress, and act-routing inspection
+  - raw event inspector as the source-grounded inspection surface
 - Metrics/traces exporter-status surfaces and handoff links only.
 
 ## Consumed Contract

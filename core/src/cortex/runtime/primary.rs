@@ -912,25 +912,10 @@ impl Cortex {
                 return Ok(self.noop_output(physical_state.cycle_id, "primary_timeout"));
             }
         };
-        let emit_tick_observation = |status: &'static str| {
-            let goal_forest_snapshot = observability_runtime::emit_cortex_goal_forest_snapshot(
+        let emit_goal_forest_snapshot = || {
+            observability_runtime::emit_cortex_goal_forest_snapshot(
                 physical_state.cycle_id,
                 &primary_output.goal_forest_nodes,
-            );
-            observability_runtime::emit_cortex_tick(
-                physical_state.cycle_id,
-                status,
-                None,
-                senses,
-                physical_state,
-                Some(serde_json::json!({
-                    "kind": if senses.is_empty() { "idle" } else { "sense" },
-                    "pending_sense_count": senses.len(),
-                    "pending_continuation": primary_output.pending_continuation,
-                    "dispatched_act_count": primary_output.dispatched_act_count,
-                })),
-                Some(goal_forest_snapshot),
-                None,
             );
         };
 
@@ -948,7 +933,7 @@ impl Cortex {
                         error = %err,
                         "primary_contract_failed_noop"
                     );
-                    emit_tick_observation("primary_contract_error");
+                    emit_goal_forest_snapshot();
                     return Ok(self.noop_output(physical_state.cycle_id, "primary_contract"));
                 }
             };
@@ -964,7 +949,7 @@ impl Cortex {
             cycle_id: physical_state.cycle_id,
             act_count: primary_output.dispatched_act_count,
         });
-        emit_tick_observation("ok");
+        emit_goal_forest_snapshot();
 
         Ok(CortexOutput {
             control: primary_output.control,

@@ -8,6 +8,7 @@ use std::{
 
 use anyhow::Result;
 use async_trait::async_trait;
+use serde_json::json;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::Instrument;
@@ -259,7 +260,7 @@ impl Spine {
 
     #[tracing::instrument(
         name = "spine_on_act_final",
-        target = "spine.dispatch",
+        target = "spine.act",
         skip(self, act),
         fields(
             act_instance_id = %act.act_instance_id,
@@ -310,7 +311,7 @@ impl Spine {
 
     #[tracing::instrument(
         name = "spine_dispatch_act",
-        target = "spine.dispatch",
+        target = "spine.act",
         skip(self, act),
         fields(
             act_instance_id = %act.act_instance_id,
@@ -321,7 +322,7 @@ impl Spine {
     pub async fn dispatch_act(&self, tick: u64, act: Act) -> Result<ActDispatchResult, SpineError> {
         if act.act_instance_id.trim().is_empty() || act.endpoint_id.trim().is_empty() {
             tracing::warn!(
-                target: "spine.dispatch",
+                target: "spine.act",
                 "act_dispatch_invalid_input"
             );
             return Err(invalid_batch(
@@ -340,16 +341,17 @@ impl Spine {
 
         match dispatch {
             EndpointDispatch::Inline(endpoint) => {
-                observability_runtime::emit_spine_dispatch_bind(
+                observability_runtime::emit_spine_act_bind(
                     tick,
                     &act.act_instance_id,
-                    &act.endpoint_id,
+                    Some(&act.endpoint_id),
                     Some(&act.neural_signal_descriptor_id),
                     Some("inline"),
                     None,
+                    Some(act.payload.clone()),
                 );
                 tracing::debug!(
-                    target: "spine.dispatch",
+                    target: "spine.act",
                     dispatch_binding = "inline",
                     "dispatching_act_to_inline_endpoint"
                 );
@@ -361,7 +363,7 @@ impl Spine {
                     }
                     Err(err) => {
                         tracing::warn!(
-                            target: "spine.dispatch",
+                            target: "spine.act",
                             dispatch_binding = "inline",
                             error = %err,
                             "inline_endpoint_invoke_failed"
@@ -376,16 +378,17 @@ impl Spine {
                 }
             }
             EndpointDispatch::AdapterChannel(channel_id) => {
-                observability_runtime::emit_spine_dispatch_bind(
+                observability_runtime::emit_spine_act_bind(
                     tick,
                     &act.act_instance_id,
-                    &act.endpoint_id,
+                    Some(&act.endpoint_id),
                     Some(&act.neural_signal_descriptor_id),
                     Some("adapter"),
                     Some(channel_id),
+                    Some(act.payload.clone()),
                 );
                 tracing::debug!(
-                    target: "spine.dispatch",
+                    target: "spine.act",
                     dispatch_binding = "adapter",
                     adapter_channel_id = channel_id,
                     "dispatching_act_to_adapter_channel"
@@ -403,7 +406,7 @@ impl Spine {
                     }
                     Err(err) => {
                         tracing::warn!(
-                            target: "spine.dispatch",
+                            target: "spine.act",
                             dispatch_binding = "adapter",
                             adapter_channel_id = channel_id,
                             error = %err,
@@ -445,7 +448,7 @@ impl Spine {
         };
         if let Err(err) = self.afferent_pathway.send(sense).await {
             tracing::warn!(
-                target: "spine.dispatch",
+                target: "spine.act",
                 act_instance_id = %act.act_instance_id,
                 error = %err,
                 "failed_to_emit_dispatch_failure_sense"
@@ -498,8 +501,10 @@ impl Spine {
 
         observability_runtime::emit_spine_endpoint_lifecycle(
             &body_endpoint_id,
+            adapter_id_from_dispatch(self, &dispatch).as_deref(),
             EndpointLifecycleTransition::Connected,
             channel_or_session,
+            None,
             None,
         );
 
@@ -611,6 +616,15 @@ impl Spine {
             return Err(anyhow::anyhow!(err.to_string()));
         }
 
+        observability_runtime::emit_spine_endpoint_lifecycle(
+            body_endpoint_id,
+            adapter_id_from_dispatch(self, &dispatch).as_deref(),
+            EndpointLifecycleTransition::Registered,
+            endpoint_channel_or_session(&dispatch),
+            Some(route_summary_from_routes(&accepted_routes)),
+            None,
+        );
+
         Ok(accepted_entries)
     }
 
@@ -632,10 +646,13 @@ impl Spine {
 
             endpoint
         };
+        let endpoint_routes = endpoint.route_keys.iter().cloned().collect::<Vec<_>>();
         observability_runtime::emit_spine_endpoint_lifecycle(
             body_endpoint_id,
+            adapter_id_from_dispatch(self, &endpoint.dispatch).as_deref(),
             EndpointLifecycleTransition::Dropped,
             endpoint_channel_or_session(&endpoint.dispatch),
+            Some(route_summary_from_routes(&endpoint_routes)),
             None,
         );
         let endpoint_routes = endpoint.route_keys.into_iter().collect::<Vec<_>>();
@@ -779,7 +796,7 @@ impl Spine {
 
         if tx.send(act.clone()).is_err() {
             tracing::warn!(
-                target: "spine.dispatch",
+                target: "spine.act",
                 dispatch_binding = "adapter",
                 adapter_channel_id = channel_id,
                 act_instance_id = %act.act_instance_id,
@@ -792,7 +809,7 @@ impl Spine {
         }
 
         tracing::debug!(
-            target: "spine.dispatch",
+            target: "spine.act",
             dispatch_binding = "adapter",
             adapter_channel_id = channel_id,
             act_instance_id = %act.act_instance_id,
@@ -810,21 +827,21 @@ impl Spine {
         channel_id: Option<u64>,
         outcome: &ActDispatchResult,
     ) {
-        observability_runtime::emit_spine_dispatch_outcome(
+        observability_runtime::emit_spine_act_outcome(
             tick,
             &act.act_instance_id,
-            &act.endpoint_id,
+            Some(&act.endpoint_id),
             Some(&act.neural_signal_descriptor_id),
             Some(dispatch_binding),
             channel_id,
+            Some(act.payload.clone()),
             dispatch_outcome_class(outcome),
-            dispatch_reason_code(outcome),
-            dispatch_reference_id(outcome),
+            dispatch_reason_or_reference(outcome),
         );
         match (outcome, channel_id) {
             (ActDispatchResult::Acknowledged { reference_id }, Some(channel_id)) => {
                 tracing::info!(
-                    target: "spine.dispatch",
+                    target: "spine.act",
                     act_instance_id = %act.act_instance_id,
                     endpoint_id = %act.endpoint_id,
                     neural_signal_descriptor_id = %act.neural_signal_descriptor_id,
@@ -836,7 +853,7 @@ impl Spine {
             }
             (ActDispatchResult::Acknowledged { reference_id }, None) => {
                 tracing::info!(
-                    target: "spine.dispatch",
+                    target: "spine.act",
                     act_instance_id = %act.act_instance_id,
                     endpoint_id = %act.endpoint_id,
                     neural_signal_descriptor_id = %act.neural_signal_descriptor_id,
@@ -853,7 +870,7 @@ impl Spine {
                 Some(channel_id),
             ) => {
                 tracing::warn!(
-                    target: "spine.dispatch",
+                    target: "spine.act",
                     act_instance_id = %act.act_instance_id,
                     endpoint_id = %act.endpoint_id,
                     neural_signal_descriptor_id = %act.neural_signal_descriptor_id,
@@ -872,7 +889,7 @@ impl Spine {
                 None,
             ) => {
                 tracing::warn!(
-                    target: "spine.dispatch",
+                    target: "spine.act",
                     act_instance_id = %act.act_instance_id,
                     endpoint_id = %act.endpoint_id,
                     neural_signal_descriptor_id = %act.neural_signal_descriptor_id,
@@ -890,7 +907,7 @@ impl Spine {
                 Some(channel_id),
             ) => {
                 tracing::warn!(
-                    target: "spine.dispatch",
+                    target: "spine.act",
                     act_instance_id = %act.act_instance_id,
                     endpoint_id = %act.endpoint_id,
                     neural_signal_descriptor_id = %act.neural_signal_descriptor_id,
@@ -909,7 +926,7 @@ impl Spine {
                 None,
             ) => {
                 tracing::warn!(
-                    target: "spine.dispatch",
+                    target: "spine.act",
                     act_instance_id = %act.act_instance_id,
                     endpoint_id = %act.endpoint_id,
                     neural_signal_descriptor_id = %act.neural_signal_descriptor_id,
@@ -991,6 +1008,35 @@ fn endpoint_channel_or_session(dispatch: &EndpointDispatch) -> Option<String> {
     }
 }
 
+fn adapter_id_from_dispatch(spine: &Spine, dispatch: &EndpointDispatch) -> Option<String> {
+    match dispatch {
+        EndpointDispatch::Inline(_) => spine
+            .inline_adapter
+            .get()
+            .map(|adapter| adapter.adapter_id().to_string()),
+        EndpointDispatch::AdapterChannel(channel_id) => Some(adapter_id_from_channel(*channel_id)),
+    }
+}
+
+fn adapter_id_from_channel(channel_id: u64) -> String {
+    (channel_id >> 32).to_string()
+}
+
+fn route_summary_from_routes(routes: &[NeuralSignalDescriptorRouteKey]) -> serde_json::Value {
+    json!({
+        "routes": routes
+            .iter()
+            .map(|route| {
+                json!({
+                    "type": route.r#type,
+                    "endpoint_id": route.endpoint_id,
+                    "descriptor_id": route.neural_signal_descriptor_id,
+                })
+            })
+            .collect::<Vec<_>>(),
+    })
+}
+
 fn dispatch_outcome_class(outcome: &ActDispatchResult) -> DispatchOutcomeClass {
     match outcome {
         ActDispatchResult::Acknowledged { .. } => DispatchOutcomeClass::Acknowledged,
@@ -999,25 +1045,37 @@ fn dispatch_outcome_class(outcome: &ActDispatchResult) -> DispatchOutcomeClass {
     }
 }
 
-fn dispatch_reason_code(outcome: &ActDispatchResult) -> Option<&str> {
+fn dispatch_reason_or_reference(outcome: &ActDispatchResult) -> Option<serde_json::Value> {
     match outcome {
-        ActDispatchResult::Acknowledged { .. } => None,
-        ActDispatchResult::Rejected { reason_code, .. }
-        | ActDispatchResult::Lost { reason_code, .. } => Some(reason_code.as_str()),
-    }
-}
-
-fn dispatch_reference_id(outcome: &ActDispatchResult) -> Option<&str> {
-    match outcome {
-        ActDispatchResult::Acknowledged { reference_id }
-        | ActDispatchResult::Rejected { reference_id, .. }
-        | ActDispatchResult::Lost { reference_id, .. } => Some(reference_id.as_str()),
+        ActDispatchResult::Acknowledged { reference_id } => Some(json!({
+            "reference_id": reference_id,
+        })),
+        ActDispatchResult::Rejected {
+            reason_code,
+            reference_id,
+        }
+        | ActDispatchResult::Lost {
+            reason_code,
+            reference_id,
+        } => Some(json!({
+            "reason_code": reason_code,
+            "reference_id": reference_id,
+        })),
     }
 }
 
 #[async_trait]
 impl SpineControlPort for Spine {
     async fn publish_sense(&self, sense: Sense) {
+        observability_runtime::emit_spine_sense_ingress(
+            0,
+            &sense.endpoint_id,
+            Some(&sense.neural_signal_descriptor_id),
+            &sense.sense_instance_id,
+            json!(sense.payload.clone()),
+            None,
+        );
+
         if let Err(err) = self.afferent_pathway.send(sense).await {
             tracing::warn!(
                 target = "spine.control",

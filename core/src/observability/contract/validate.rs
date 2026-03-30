@@ -93,14 +93,11 @@ impl ContractEvent {
                 require_non_empty(&event.span_id, fixture_id, "span_id")?;
                 require_non_empty(&event.kind, fixture_id, "kind")
             }
-            Self::CortexTick(event) => {
+            Self::CortexPrimary(event)
+            | Self::CortexSenseHelper(event)
+            | Self::CortexGoalForestHelper(event)
+            | Self::CortexActsHelper(event) => {
                 validate_common(&event.run_id, &event.timestamp, fixture_id)?;
-                require_non_empty(&event.span_id, fixture_id, "span_id")?;
-                require_non_empty(&event.kind_or_status, fixture_id, "kind_or_status")
-            }
-            Self::CortexOrgan(event) => {
-                validate_common(&event.run_id, &event.timestamp, fixture_id)?;
-                require_non_empty(&event.organ_id, fixture_id, "organ_id")?;
                 require_non_empty(&event.request_id, fixture_id, "request_id")?;
                 require_non_empty(&event.span_id, fixture_id, "span_id")?;
                 require_non_empty(&event.phase, fixture_id, "phase")
@@ -115,23 +112,24 @@ impl ContractEvent {
                 require_non_empty(&event.span_id, fixture_id, "span_id")?;
                 require_non_empty(&event.status, fixture_id, "status")
             }
-            Self::StemSignal(event) => {
+            Self::StemAfferent(event) => {
                 validate_common(&event.run_id, &event.timestamp, fixture_id)?;
                 require_non_empty(&event.span_id, fixture_id, "span_id")?;
+                require_non_empty(&event.kind, fixture_id, "kind")?;
                 require_non_empty(&event.descriptor_id, fixture_id, "descriptor_id")
             }
-            Self::StemDispatch(event) => {
+            Self::StemEfferent(event) => {
                 validate_common(&event.run_id, &event.timestamp, fixture_id)?;
                 require_non_empty(&event.span_id, fixture_id, "span_id")?;
-                require_non_empty(&event.act_id, fixture_id, "act_id")?;
-                require_non_empty(&event.kind, fixture_id, "kind")
+                require_non_empty(&event.kind, fixture_id, "kind")?;
+                require_non_empty(&event.act_id, fixture_id, "act_id")
             }
             Self::StemProprioception(event) => {
                 validate_common(&event.run_id, &event.timestamp, fixture_id)?;
                 require_non_empty(&event.span_id, fixture_id, "span_id")?;
                 require_non_empty(&event.kind, fixture_id, "kind")
             }
-            Self::StemDescriptorCatalog(event) => {
+            Self::StemNsCatalog(event) => {
                 validate_common(&event.run_id, &event.timestamp, fixture_id)?;
                 require_non_empty(&event.span_id, fixture_id, "span_id")?;
                 require_non_empty(&event.catalog_version, fixture_id, "catalog_version")
@@ -153,11 +151,17 @@ impl ContractEvent {
                 require_non_empty(&event.span_id, fixture_id, "span_id")?;
                 require_non_empty(&event.endpoint_id, fixture_id, "endpoint_id")
             }
-            Self::SpineDispatch(event) => {
+            Self::SpineSense(event) => {
+                validate_common(&event.run_id, &event.timestamp, fixture_id)?;
+                require_non_empty(&event.span_id, fixture_id, "span_id")?;
+                require_non_empty(&event.endpoint_id, fixture_id, "endpoint_id")?;
+                require_non_empty(&event.sense_id, fixture_id, "sense_id")?;
+                require_non_empty(&event.kind, fixture_id, "kind")
+            }
+            Self::SpineAct(event) => {
                 validate_common(&event.run_id, &event.timestamp, fixture_id)?;
                 require_non_empty(&event.span_id, fixture_id, "span_id")?;
                 require_non_empty(&event.act_id, fixture_id, "act_id")?;
-                require_non_empty(&event.endpoint_id, fixture_id, "endpoint_id")?;
                 require_non_empty(&event.kind, fixture_id, "kind")
             }
         }

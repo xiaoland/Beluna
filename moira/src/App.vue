@@ -38,11 +38,11 @@ let refreshTimer: number | null = null
 
 const selectionHint = computed(() => {
   if (!selectedTickDetail.value) {
-    return 'Select a wake session and tick to inspect its lane-based chronology.'
+    return 'Select a wake session and tick to inspect its chronology, intervals, and source-grounded detail.'
   }
 
   return `Tick ${selectedTickDetail.value.tick} from wake ${selectedTickDetail.value.runId} · ${selectedTickDetail.value.chronology.lanes.length} lanes · ${selectedTickDetail.value.rawEvents.length} raw events · updated ${formatWhen(
-    selectedTickDetail.value.rawEvents[0]?.observedAt ?? null,
+    selectedTickDetail.value.rawEvents[selectedTickDetail.value.rawEvents.length - 1]?.observedAt ?? null,
   )}`
 })
 
