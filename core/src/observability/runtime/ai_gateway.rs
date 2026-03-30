@@ -1,7 +1,7 @@
 use serde_json::Value;
 
 use crate::observability::contract::{
-    AiGatewayRequestEvent, AiGatewayThreadEvent, AiGatewayTurnEvent, ContractEvent,
+    AiGatewayChatThreadEvent, AiGatewayChatTurnEvent, AiGatewayRequestEvent, ContractEvent,
 };
 
 use super::{current_run_id, emit_contract_event, timestamp_now};
@@ -10,22 +10,18 @@ pub struct AiGatewayRequestArgs {
     pub tick: u64,
     pub request_id: String,
     pub span_id: String,
-    pub parent_span_id_when_present: Option<String>,
-    pub organ_id_when_present: Option<String>,
-    pub thread_id_when_present: Option<String>,
-    pub turn_id_when_present: Option<u64>,
+    pub parent_span_id: Option<String>,
+    pub organ_id: Option<String>,
+    pub capability: String,
     pub backend_id: String,
     pub model: String,
     pub kind: String,
-    pub attempt_when_present: Option<u32>,
-    pub input_payload: Value,
-    pub effective_tools_when_present: Option<Value>,
-    pub limits_when_present: Option<Value>,
-    pub enable_thinking: bool,
-    pub provider_request_when_present: Option<Value>,
-    pub provider_response_when_present: Option<Value>,
-    pub usage_when_present: Option<Value>,
-    pub error_when_present: Option<Value>,
+    pub attempt: Option<u32>,
+    pub retryable: Option<bool>,
+    pub provider_request: Option<Value>,
+    pub provider_response: Option<Value>,
+    pub usage: Option<Value>,
+    pub error: Option<Value>,
 }
 
 pub fn emit_ai_gateway_request(args: AiGatewayRequestArgs) {
@@ -35,87 +31,89 @@ pub fn emit_ai_gateway_request(args: AiGatewayRequestArgs) {
         tick: args.tick,
         request_id: args.request_id,
         span_id: args.span_id,
-        parent_span_id_when_present: args.parent_span_id_when_present,
-        organ_id_when_present: args.organ_id_when_present,
-        thread_id_when_present: args.thread_id_when_present,
-        turn_id_when_present: args.turn_id_when_present,
+        parent_span_id: args.parent_span_id,
+        organ_id: args.organ_id,
+        capability: args.capability,
         backend_id: args.backend_id,
         model: args.model,
         kind: args.kind,
-        attempt_when_present: args.attempt_when_present,
-        input_payload: args.input_payload,
-        effective_tools_when_present: args.effective_tools_when_present,
-        limits_when_present: args.limits_when_present,
-        enable_thinking: args.enable_thinking,
-        provider_request_when_present: args.provider_request_when_present,
-        provider_response_when_present: args.provider_response_when_present,
-        usage_when_present: args.usage_when_present,
-        error_when_present: args.error_when_present,
+        attempt: args.attempt,
+        retryable: args.retryable,
+        provider_request: args.provider_request,
+        provider_response: args.provider_response,
+        usage: args.usage,
+        error: args.error,
     }));
 }
 
-pub struct AiGatewayTurnArgs {
+pub struct AiGatewayChatTurnArgs {
     pub tick: u64,
     pub thread_id: String,
     pub turn_id: u64,
     pub span_id: String,
-    pub parent_span_id_when_present: Option<String>,
-    pub organ_id_when_present: Option<String>,
-    pub request_id_when_present: Option<String>,
+    pub parent_span_id: Option<String>,
+    pub organ_id: Option<String>,
+    pub request_id: Option<String>,
     pub status: String,
+    pub dispatch_payload: Value,
     pub messages_when_committed: Option<Value>,
     pub metadata: Value,
-    pub finish_reason_when_present: Option<Value>,
-    pub usage_when_present: Option<Value>,
-    pub backend_metadata_when_present: Option<Value>,
-    pub error_when_present: Option<Value>,
+    pub finish_reason: Option<Value>,
+    pub usage: Option<Value>,
+    pub backend_metadata: Option<Value>,
+    pub error: Option<Value>,
 }
 
-pub fn emit_ai_gateway_turn(args: AiGatewayTurnArgs) {
-    emit_contract_event(ContractEvent::AiGatewayTurn(AiGatewayTurnEvent {
+pub fn emit_ai_gateway_chat_turn(args: AiGatewayChatTurnArgs) {
+    emit_contract_event(ContractEvent::AiGatewayChatTurn(AiGatewayChatTurnEvent {
         run_id: current_run_id().to_string(),
         timestamp: timestamp_now(),
         tick: args.tick,
         thread_id: args.thread_id,
         turn_id: args.turn_id,
         span_id: args.span_id,
-        parent_span_id_when_present: args.parent_span_id_when_present,
-        organ_id_when_present: args.organ_id_when_present,
-        request_id_when_present: args.request_id_when_present,
+        parent_span_id: args.parent_span_id,
+        organ_id: args.organ_id,
+        request_id: args.request_id,
         status: args.status,
+        dispatch_payload: args.dispatch_payload,
         messages_when_committed: args.messages_when_committed,
         metadata: args.metadata,
-        finish_reason_when_present: args.finish_reason_when_present,
-        usage_when_present: args.usage_when_present,
-        backend_metadata_when_present: args.backend_metadata_when_present,
-        error_when_present: args.error_when_present,
+        finish_reason: args.finish_reason,
+        usage: args.usage,
+        backend_metadata: args.backend_metadata,
+        error: args.error,
     }));
 }
 
-pub struct AiGatewayThreadArgs {
+pub struct AiGatewayChatThreadArgs {
     pub tick: u64,
     pub thread_id: String,
     pub span_id: String,
-    pub parent_span_id_when_present: Option<String>,
-    pub organ_id_when_present: Option<String>,
+    pub parent_span_id: Option<String>,
+    pub organ_id: Option<String>,
+    pub request_id: Option<String>,
     pub kind: String,
     pub messages: Value,
-    pub turn_summaries_when_present: Option<Value>,
-    pub source_turn_ids_when_present: Option<Value>,
+    pub turn_summaries: Option<Value>,
+    pub source_turn_ids: Option<Value>,
 }
 
-pub fn emit_ai_gateway_thread(args: AiGatewayThreadArgs) {
-    emit_contract_event(ContractEvent::AiGatewayThread(AiGatewayThreadEvent {
-        run_id: current_run_id().to_string(),
-        timestamp: timestamp_now(),
-        tick: args.tick,
-        thread_id: args.thread_id,
-        span_id: args.span_id,
-        parent_span_id_when_present: args.parent_span_id_when_present,
-        organ_id_when_present: args.organ_id_when_present,
-        kind: args.kind,
-        messages: args.messages,
-        turn_summaries_when_present: args.turn_summaries_when_present,
-        source_turn_ids_when_present: args.source_turn_ids_when_present,
-    }));
+pub fn emit_ai_gateway_chat_thread(args: AiGatewayChatThreadArgs) {
+    emit_contract_event(ContractEvent::AiGatewayChatThread(
+        AiGatewayChatThreadEvent {
+            run_id: current_run_id().to_string(),
+            timestamp: timestamp_now(),
+            tick: args.tick,
+            thread_id: args.thread_id,
+            span_id: args.span_id,
+            parent_span_id: args.parent_span_id,
+            organ_id: args.organ_id,
+            request_id: args.request_id,
+            kind: args.kind,
+            messages: args.messages,
+            turn_summaries: args.turn_summaries,
+            source_turn_ids: args.source_turn_ids,
+        },
+    ));
 }

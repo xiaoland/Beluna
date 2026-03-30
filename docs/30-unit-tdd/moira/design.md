@@ -28,5 +28,5 @@ Moira provides Beluna's first-party local control plane for:
 7. Selected tick inspection is organized around tick-scoped chronology and interval work rather than one flat event list.
 8. Goal-forest comparison is derived between two ticks rather than stored as a precomputed diff artifact.
 9. Clotho and Atropos must reuse the same Moira-owned wake and query surfaces rather than introducing parallel state models.
-10. AI-capability investigation is normally entered from tick chronology or expanded Cortex intervals rather than through one separate first-class AI browsing mode.
+10. AI transport and chat-capability investigation are normally entered from tick chronology or expanded Cortex intervals rather than through one separate first-class AI browsing mode.
 11. Source-grounded inspection means every human-friendly interpretation in Loom can be traced back to the supporting raw OTLP records without leaving the selected wake or tick context.

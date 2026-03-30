@@ -27,6 +27,9 @@ const CORTEX_ORGAN_FAMILIES = [
   'cortex.acts-helper',
 ] as const
 
+const AI_TRANSPORT_FAMILIES = ['ai-gateway.request'] as const
+const AI_CHAT_FAMILIES = ['ai-gateway.chat.turn', 'ai-gateway.chat.thread'] as const
+
 const LANE_TYPE_ORDER: Record<ChronologyLaneType, number> = {
   tick: 0,
   cortex: 1,
@@ -113,10 +116,12 @@ export function normalizeTickDetail(value: unknown): TickDetail {
   const rawEvents = readArray(record, ['raw', 'rawEvents', 'raw_events', 'events']).map((item) =>
     normalizeRawEvent(item, runId, tick),
   )
-  const aiGatewayEvents = eventsForSubsystem(
-    readArray(record, ['aiGateway', 'ai_gateway']).map((item) => normalizeRawEvent(item, runId, tick)),
+  const aiEvents = eventsForFamilies(
+    readArray(record, ['aiGateway', 'ai_gateway', 'aiChat', 'ai_chat']).map((item) =>
+      normalizeRawEvent(item, runId, tick),
+    ),
     rawEvents,
-    'ai-gateway',
+    isAiFamily,
   )
   const cortexEvents = eventsForSubsystem(
     readArray(record, ['cortex']).map((item) => normalizeRawEvent(item, runId, tick)),
@@ -133,7 +138,7 @@ export function normalizeTickDetail(value: unknown): TickDetail {
     rawEvents,
     'spine',
   )
-  const cortexOrganIntervals = buildCortexOrganIntervals(rawEvents, cortexEvents, aiGatewayEvents)
+  const cortexOrganIntervals = buildCortexOrganIntervals(rawEvents, cortexEvents, aiEvents)
 
   return {
     runId,
@@ -426,7 +431,7 @@ function createCortexInterval(
         return false
       }
 
-      if (!event.family?.startsWith('ai-gateway.')) {
+      if (!isAiFamily(event.family)) {
         return false
       }
 
@@ -464,6 +469,14 @@ function relatesAiEventToInterval(
 
   if (requestId && parentSpanId === requestId) {
     return true
+  }
+
+  if (isAiTransportFamily(event.family)) {
+    return !!aiRequestId && eventRequestId === aiRequestId
+  }
+
+  if (!isAiChatFamily(event.family)) {
+    return false
   }
 
   if (aiRequestId && eventRequestId === aiRequestId) {
@@ -587,7 +600,7 @@ function resolveLaneType(
     return 'spine'
   }
 
-  if (family.startsWith('ai-gateway.')) {
+  if (isAiFamily(family)) {
     return 'misc'
   }
 
@@ -800,6 +813,18 @@ function isCortexOrganFamily(family: string | null): boolean {
   return !!family && (CORTEX_ORGAN_FAMILIES as readonly string[]).includes(family)
 }
 
+function isAiTransportFamily(family: string | null): boolean {
+  return !!family && (AI_TRANSPORT_FAMILIES as readonly string[]).includes(family)
+}
+
+function isAiChatFamily(family: string | null): boolean {
+  return !!family && (AI_CHAT_FAMILIES as readonly string[]).includes(family)
+}
+
+function isAiFamily(family: string | null): boolean {
+  return isAiTransportFamily(family) || isAiChatFamily(family)
+}
+
 function collectPayloadSingles(events: RawEvent[], family: string | null, keys: string[]): unknown[] {
   return events
     .filter((event) => family == null || event.family === family)
@@ -874,6 +899,18 @@ function eventsForSubsystem(explicit: RawEvent[], rawEvents: RawEvent[], subsyst
   }
 
   return rawEvents.filter((event) => event.subsystem === subsystem)
+}
+
+function eventsForFamilies(
+  explicit: RawEvent[],
+  rawEvents: RawEvent[],
+  predicate: (family: string | null) => boolean,
+): RawEvent[] {
+  if (explicit.length > 0) {
+    return explicit
+  }
+
+  return rawEvents.filter((event) => predicate(event.family))
 }
 
 function parseEventPayload(attributes: Record<string, unknown>, body: unknown): unknown | null {

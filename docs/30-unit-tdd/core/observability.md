@@ -7,7 +7,7 @@ Loom composition and operator-facing investigation flows belong in `docs/30-unit
 
 Current code may still emit the older coarse Stage 2 family catalog in places until the synchronized refactor lands.
 This file is the target lattice for that refactor.
-AI families remain explicitly provisional until the AI-gateway observability redesign settles their final ownership split.
+AI observability is split into one capability-neutral gateway transport family plus chat-owned capability families under the gateway namespace.
 
 ## Local Rules
 
@@ -23,10 +23,11 @@ AI families remain explicitly provisional until the AI-gateway observability red
 10. Stable Cortex execution families are one family per stable organ rather than one coarse `cortex.organ` family.
 11. `spine.endpoint` owns endpoint attachment and lifecycle semantics such as new, register, and drop. `spine.sense` means Spine received one sense from a body endpoint.
 12. The outbound Spine act family is `spine.act`.
-13. The current `ai-gateway.*` family set is transitional and not part of the target-stable lattice unless a surviving generic gateway family is strictly capability-neutral.
+13. `ai-gateway.request` is the stable capability-neutral gateway transport family. It must not own thread, turn, message, or tool semantics.
 14. Goal-forest observability remains grounded in the mutation semantics the runtime actually owns today. The stable target surface is snapshot plus mutation, not speculative botanical diff verbs.
 15. During Beluna's early development phase, Core preserves full request, response, signal, topology, and other diagnostic payloads in raw OTLP records by default.
 16. Golden fixture bundles live under `core/tests/fixtures/observability/` and should be refreshed only after the family catalog stabilizes enough to justify the maintenance cost.
+17. Chat capability observability lives under `ai-gateway.chat.*`. Chat turn and thread semantics must not be hidden inside `ai-gateway.request`.
 
 ## Field Notation
 
@@ -67,15 +68,13 @@ All stable per-organ Cortex execution families share one common event-body shape
 | `cortex.goal-forest-helper` | goal-forest helper execution boundaries | helper-organ execution and interval pairing |
 | `cortex.acts-helper` | acts helper execution boundaries | helper-organ execution and interval pairing |
 
-### Deferred AI Family Lattice
+### Stable AI Families
 
-AI observability remains under active redesign.
-The authoritative position for now is:
-
-1. current `ai-gateway.request`, `ai-gateway.turn`, and `ai-gateway.thread` emissions are transitional rather than target-stable family names
-2. if a generic gateway transport family survives, it must be capability-neutral
-3. thread, turn, message, tool, and similar capability-specific semantics must not be hidden inside a supposedly generic transport family
-4. the final AI family lattice will be defined in the dedicated AI-gateway observability redesign
+| Logical family | Runtime owner / emit point | Required logical fields | Supports |
+|---|---|---|---|
+| `ai-gateway.request` | gateway transport request lifecycle around one backend call | `run_id`; `tick`; `request_id`; `span_id`; `parent_span_id?`; `organ_id?`; `capability`; `backend_id`; `model`; `kind`; `attempt?`; `retryable?`; `provider_request?`; `provider_response?`; `usage?`; `error?` | capability-neutral provider/backend call narrative |
+| `ai-gateway.chat.turn` | chat turn commit / failure boundary | `run_id`; `tick`; `thread_id`; `turn_id`; `span_id`; `parent_span_id?`; `organ_id?`; `request_id?`; `status`; `dispatch_payload`; `messages_when_committed?`; `metadata`; `finish_reason?`; `usage?`; `backend_metadata?`; `error?` | turn lifecycle, message/tool inspection, and linked transport drilldown |
+| `ai-gateway.chat.thread` | chat thread snapshot on open / clone / turn commit | `run_id`; `tick`; `thread_id`; `span_id`; `parent_span_id?`; `organ_id?`; `request_id?`; `kind`; `messages`; `turn_summaries?`; `source_turn_ids?` | authoritative thread snapshot and thread-level reconstruction |
 
 ## Correlation Requirements
 
@@ -85,8 +84,10 @@ Core's responsibility is to expose enough stable correlation that Moira can inve
 1. `stem.tick` provides the canonical tick anchor.
 2. Per-organ Cortex start and end records must share one stable operation key such as `request_id` so Moira can pair them into one interval.
 3. Nested work inside one tick must carry stable `span_id` and `parent_span_id` where one operation is causally under another.
-4. Domain identifiers such as `thread_id`, `turn_id`, and `endpoint_id` remain available for inspection and targeted correlation, but they do not need to be elevated into first-class chronology keys by default.
-5. If one future Loom surface requires a domain identifier to become a first-class grouping key, that requirement should be added from Moira Unit TDD rather than guessed here.
+4. `ai-gateway.request` records must correlate to the invoking Cortex interval through `parent_span_id` and the request identity exposed by Cortex as `ai_request_id` when that bridge is available.
+5. `ai-gateway.chat.turn` and `ai-gateway.chat.thread` records may additionally expose `thread_id`, `turn_id`, and optional linked `request_id` for targeted drilldown, but those identifiers do not need to become first-class chronology keys by default.
+6. Domain identifiers such as `endpoint_id` remain available for inspection and targeted correlation without being promoted automatically into first-class chronology keys.
+7. If one future Loom surface requires a domain identifier to become a first-class grouping key, that requirement should be added from Moira Unit TDD rather than guessed here.
 
 Implementation notes:
 
@@ -98,10 +99,11 @@ Implementation notes:
 
 When the target family catalog is refreshed into fixtures, the minimum coverage should include:
 
-1. transitional `ai-gateway.*`
-- one request success with full request / response payloads
-- one request retry or failure with attempt metadata
-- one committed turn with user, assistant, tool-call, and tool-result messages
+1. `ai-gateway.request` and `ai-gateway.chat.*`
+- one gateway request success with provider request / response payloads
+- one gateway request retry or failure with attempt metadata
+- one committed chat turn with user, assistant, tool-call, and tool-result messages
+- one failed chat turn with input payload and terminal error
 - one thread snapshot after a completed turn
 - one thread snapshot after thread clone or reset-style rewrite
 

@@ -223,17 +223,20 @@ async fn emit_thread_snapshot_event(
 ) {
     let tick = metadata_tick(metadata);
     let turns = thread.turns().await;
-    observability_runtime::emit_ai_gateway_thread(observability_runtime::AiGatewayThreadArgs {
-        tick,
-        thread_id: thread.thread_id().to_string(),
-        span_id: format!("ai-gateway.thread:{kind}:{}", thread.thread_id()),
-        parent_span_id_when_present: metadata_parent_span_id(metadata),
-        organ_id_when_present: metadata.get("organ_id").cloned(),
-        kind: kind.to_string(),
-        messages: thread_messages_snapshot(&turns),
-        turn_summaries_when_present: Some(thread_turn_summaries(&turns)),
-        source_turn_ids_when_present: source_turn_ids.map(|value| serde_json::json!(value)),
-    });
+    observability_runtime::emit_ai_gateway_chat_thread(
+        observability_runtime::AiGatewayChatThreadArgs {
+            tick,
+            thread_id: thread.thread_id().to_string(),
+            span_id: format!("ai-gateway.chat.thread:{kind}:{}", thread.thread_id()),
+            parent_span_id: metadata_parent_span_id(metadata),
+            organ_id: metadata.get("organ_id").cloned(),
+            request_id: None,
+            kind: kind.to_string(),
+            messages: thread_messages_snapshot(&turns),
+            turn_summaries: Some(thread_turn_summaries(&turns)),
+            source_turn_ids: source_turn_ids.map(|value| serde_json::json!(value)),
+        },
+    );
 }
 
 fn select_turns(

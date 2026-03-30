@@ -21,11 +21,11 @@
 1. Moira stores full raw OTLP log events locally for the current target design, including full request, response, signal, and topology payloads by default.
 2. Raw-event acceptance precedes read-model projection; projections are derived, not alternative sources of truth.
 3. `runs` and `ticks` remain the baseline read models. Moira may add lightweight chronology, interval-pairing, or targeted lookup indexes where humane browsing would otherwise require reparsing raw payload blobs in the view layer.
-4. Selected tick detail, per-tick chronology, nested AI investigation, and source-grounded inspection remain reconstructable from raw events plus Moira-owned indexes.
+4. Selected tick detail, per-tick chronology, nested AI transport investigation, nested chat-capability investigation, and source-grounded inspection remain reconstructable from raw events plus Moira-owned indexes.
 5. The selected-tick workspace projects a primary tick chronology from raw events before falling back to sectional Cortex/Stem/Spine inspections.
 6. Tick is the canonical operator-facing anchor for explainability and the primary trace selector in Loom.
 7. Cortex interval pairing is a Moira-owned projection responsibility built from Core boundary records and stable operation keys such as `request_id`.
-8. Domain identifiers such as `thread_id`, `turn_id`, and `endpoint_id` remain inspectable in event bodies and query results without becoming first-class chronology keys by default.
+8. AI request ids, `thread_id`, `turn_id`, and `endpoint_id` remain inspectable in event bodies and query results without becoming first-class chronology keys by default.
 9. Metrics and traces are not persisted as first-class local observability datasets in the current target design.
 10. Goal-forest snapshots are stored or referenced per tick; comparisons are derived later between selected ticks.
 11. A supervised wake is either explicitly running, explicitly stopping, or explicitly terminal; hidden supervision state is disallowed.

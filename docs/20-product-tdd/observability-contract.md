@@ -45,9 +45,11 @@ This file defines the reconstructable operator domains and correlations that bot
 
 3. Cortex domain
 - Core logs must expose structured organ-boundary records with full inputs and outputs, organ identity, and correlation to related AI-capability records.
-- Related AI-capability request and response lifecycle records, committed conversation state, and authoritative conversation snapshots must remain reconstructable in the context of tick chronology and organ investigation when chat capability is in use.
-- These records must carry provider, model, tool activity, token consumption, retry or failure detail when present, thinking payload when present, and full request and response payloads.
-- The contract intentionally does not yet freeze the final split between generic gateway transport events and capability-specific chat events.
+- When chat capability is in use, related AI records must remain reconstructable as two distinct layers:
+  - one generic gateway transport layer for provider/backend request lifecycle
+  - one chat-capability layer for turn, message, tool, and thread semantics
+- Generic gateway transport records must remain capability-neutral. They may carry backend target, model, attempt or retry detail, provider request or response payloads, token consumption, and terminal error detail when present, but they must not become the sole owner of thread, turn, message, or tool semantics.
+- Chat-capability records must own committed conversation state, authoritative thread snapshots, tool activity, thinking payload when present, and the full chat payloads needed for source-grounded investigation.
 - Core logs must expose goal-forest snapshot records and runtime-grounded mutation records sufficient to explain what changed within a tick and to compare two ticks later.
 - The current contract does not require pre-classified botanical diff verbs. It requires the structured mutation records that Core naturally owns at the current runtime boundary.
 - When Cortex invokes an AI capability, the originating organ identity must remain available on the related records.
@@ -77,7 +79,7 @@ This file defines the reconstructable operator domains and correlations that bot
 1. First-party local metrics dashboards or trace explorers beyond exporter-status and handoff surfaces.
 2. Universal causality among all events that share one `tick`.
 3. Canonical precomputed goal-forest diff storage.
-4. The final split between generic AI-gateway transport events and capability-specific AI events.
+4. The future family lattice for non-chat AI capabilities beyond the current generic transport plus chat split.
 5. Cross-wake analytics or fleet-wide aggregation.
 6. One fixed UI decomposition for Loom.
 

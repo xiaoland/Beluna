@@ -42,14 +42,14 @@ pub(crate) fn flatten_contract_event(event: &ContractEvent) -> FlatContractEvent
 
     match event {
         ContractEvent::AiGatewayRequest(item) => FlatContractEvent {
-            level: level_from_optional_error(item.error_when_present.as_ref()),
+            level: level_from_optional_error(item.error.as_ref()),
             subsystem,
             family,
             run_id: item.run_id.clone(),
             tick: item.tick,
-            organ_id: item.organ_id_when_present.clone(),
-            thread_id: item.thread_id_when_present.clone(),
-            turn_id: item.turn_id_when_present.map(|value| value.to_string()),
+            organ_id: item.organ_id.clone(),
+            thread_id: None,
+            turn_id: None,
             request_id: Some(item.request_id.clone()),
             endpoint_id: None,
             descriptor_id: None,
@@ -65,7 +65,7 @@ pub(crate) fn flatten_contract_event(event: &ContractEvent) -> FlatContractEvent
             state: None,
             kind: Some(item.kind.clone()),
         },
-        ContractEvent::AiGatewayTurn(item) => FlatContractEvent {
+        ContractEvent::AiGatewayChatTurn(item) => FlatContractEvent {
             level: if item.status == "error" {
                 EventLevel::Warn
             } else {
@@ -75,10 +75,10 @@ pub(crate) fn flatten_contract_event(event: &ContractEvent) -> FlatContractEvent
             family,
             run_id: item.run_id.clone(),
             tick: item.tick,
-            organ_id: item.organ_id_when_present.clone(),
+            organ_id: item.organ_id.clone(),
             thread_id: Some(item.thread_id.clone()),
             turn_id: Some(item.turn_id.to_string()),
-            request_id: item.request_id_when_present.clone(),
+            request_id: item.request_id.clone(),
             endpoint_id: None,
             descriptor_id: None,
             act_id: None,
@@ -93,16 +93,16 @@ pub(crate) fn flatten_contract_event(event: &ContractEvent) -> FlatContractEvent
             state: None,
             kind: None,
         },
-        ContractEvent::AiGatewayThread(item) => FlatContractEvent {
+        ContractEvent::AiGatewayChatThread(item) => FlatContractEvent {
             level: EventLevel::Info,
             subsystem,
             family,
             run_id: item.run_id.clone(),
             tick: item.tick,
-            organ_id: item.organ_id_when_present.clone(),
+            organ_id: item.organ_id.clone(),
             thread_id: Some(item.thread_id.clone()),
             turn_id: None,
-            request_id: None,
+            request_id: item.request_id.clone(),
             endpoint_id: None,
             descriptor_id: None,
             act_id: None,

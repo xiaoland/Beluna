@@ -45,10 +45,10 @@ pub struct FixtureCase {
 pub enum ContractEvent {
     #[serde(rename = "ai-gateway.request")]
     AiGatewayRequest(AiGatewayRequestEvent),
-    #[serde(rename = "ai-gateway.turn")]
-    AiGatewayTurn(AiGatewayTurnEvent),
-    #[serde(rename = "ai-gateway.thread")]
-    AiGatewayThread(AiGatewayThreadEvent),
+    #[serde(rename = "ai-gateway.chat.turn")]
+    AiGatewayChatTurn(AiGatewayChatTurnEvent),
+    #[serde(rename = "ai-gateway.chat.thread")]
+    AiGatewayChatThread(AiGatewayChatThreadEvent),
     #[serde(rename = "cortex.primary")]
     CortexPrimary(CortexOrganExecutionEvent),
     #[serde(rename = "cortex.sense-helper")]
@@ -85,8 +85,8 @@ impl ContractEvent {
     pub fn family(&self) -> &'static str {
         match self {
             Self::AiGatewayRequest(_) => "ai-gateway.request",
-            Self::AiGatewayTurn(_) => "ai-gateway.turn",
-            Self::AiGatewayThread(_) => "ai-gateway.thread",
+            Self::AiGatewayChatTurn(_) => "ai-gateway.chat.turn",
+            Self::AiGatewayChatThread(_) => "ai-gateway.chat.thread",
             Self::CortexPrimary(_) => "cortex.primary",
             Self::CortexSenseHelper(_) => "cortex.sense-helper",
             Self::CortexGoalForestHelper(_) => "cortex.goal-forest-helper",
@@ -107,9 +107,9 @@ impl ContractEvent {
 
     pub(crate) fn subsystem(&self) -> ObservabilitySubsystem {
         match self {
-            Self::AiGatewayRequest(_) | Self::AiGatewayTurn(_) | Self::AiGatewayThread(_) => {
-                ObservabilitySubsystem::AiGateway
-            }
+            Self::AiGatewayRequest(_)
+            | Self::AiGatewayChatTurn(_)
+            | Self::AiGatewayChatThread(_) => ObservabilitySubsystem::AiGateway,
             Self::CortexPrimary(_)
             | Self::CortexSenseHelper(_)
             | Self::CortexGoalForestHelper(_)
@@ -137,36 +137,29 @@ pub struct AiGatewayRequestEvent {
     pub request_id: String,
     pub span_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub parent_span_id_when_present: Option<String>,
+    pub parent_span_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub organ_id_when_present: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub thread_id_when_present: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub turn_id_when_present: Option<u64>,
+    pub organ_id: Option<String>,
+    pub capability: String,
     pub backend_id: String,
     pub model: String,
     pub kind: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub attempt_when_present: Option<u32>,
-    pub input_payload: Value,
+    pub attempt: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub effective_tools_when_present: Option<Value>,
+    pub retryable: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub limits_when_present: Option<Value>,
-    pub enable_thinking: bool,
+    pub provider_request: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub provider_request_when_present: Option<Value>,
+    pub provider_response: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub provider_response_when_present: Option<Value>,
+    pub usage: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub usage_when_present: Option<Value>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub error_when_present: Option<Value>,
+    pub error: Option<Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct AiGatewayTurnEvent {
+pub struct AiGatewayChatTurnEvent {
     pub run_id: String,
     pub timestamp: String,
     pub tick: u64,
@@ -174,42 +167,45 @@ pub struct AiGatewayTurnEvent {
     pub turn_id: u64,
     pub span_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub parent_span_id_when_present: Option<String>,
+    pub parent_span_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub organ_id_when_present: Option<String>,
+    pub organ_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub request_id_when_present: Option<String>,
+    pub request_id: Option<String>,
     pub status: String,
+    pub dispatch_payload: Value,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub messages_when_committed: Option<Value>,
     pub metadata: Value,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub finish_reason_when_present: Option<Value>,
+    pub finish_reason: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub usage_when_present: Option<Value>,
+    pub usage: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub backend_metadata_when_present: Option<Value>,
+    pub backend_metadata: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub error_when_present: Option<Value>,
+    pub error: Option<Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct AiGatewayThreadEvent {
+pub struct AiGatewayChatThreadEvent {
     pub run_id: String,
     pub timestamp: String,
     pub tick: u64,
     pub thread_id: String,
     pub span_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub parent_span_id_when_present: Option<String>,
+    pub parent_span_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub organ_id_when_present: Option<String>,
+    pub organ_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
     pub kind: String,
     pub messages: Value,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub turn_summaries_when_present: Option<Value>,
+    pub turn_summaries: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source_turn_ids_when_present: Option<Value>,
+    pub source_turn_ids: Option<Value>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

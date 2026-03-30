@@ -25,7 +25,7 @@
   - tick list
   - selected tick workspace
   - human-friendly per-tick chronology anchored by `tick`, including interval work when reconstructable
-  - expanded interval inspection for nested AI-capability activity when present
+  - expanded interval inspection for nested AI transport activity and chat-owned activity when present
   - Cortex per-organ and goal-forest inspection
   - Stem state and pathway inspection
   - Spine adapter, endpoint, sense-ingress, and act-routing inspection

@@ -12,8 +12,8 @@ use std::sync::OnceLock;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 pub use ai_gateway::{
-    AiGatewayRequestArgs, AiGatewayThreadArgs, AiGatewayTurnArgs, emit_ai_gateway_request,
-    emit_ai_gateway_thread, emit_ai_gateway_turn,
+    AiGatewayChatThreadArgs, AiGatewayChatTurnArgs, AiGatewayRequestArgs,
+    emit_ai_gateway_chat_thread, emit_ai_gateway_chat_turn, emit_ai_gateway_request,
 };
 pub use cortex::{
     emit_cortex_goal_forest_patch, emit_cortex_goal_forest_snapshot, emit_cortex_organ_end,

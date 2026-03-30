@@ -51,6 +51,7 @@ impl ChatRuntime {
     pub(crate) async fn dispatch_complete(
         &self,
         backend: &BoundBackend,
+        request_id: String,
         payload: &TurnPayload,
     ) -> Result<TurnResponse, GatewayError> {
         self.capability_guard
@@ -62,20 +63,13 @@ impl ChatRuntime {
             .await?;
         let mut lease = Some(lease);
 
-        let request_id = next_request_id(&backend.backend_id, &backend.model);
         let tick = metadata_tick(&payload.metadata);
-        let parent_span_id_when_present = payload
+        let parent_span_id = payload
             .metadata
             .get("parent_span_id")
             .cloned()
             .or_else(|| payload.metadata.get("request_id").cloned());
-        let organ_id_when_present = payload.metadata.get("organ_id").cloned();
-        let thread_id_when_present = payload.metadata.get("thread_id").cloned();
-        let turn_id_when_present = payload
-            .metadata
-            .get("turn_id")
-            .and_then(|value| value.parse::<u64>().ok());
-        let input_payload = turn_payload_json(payload);
+        let organ_id = payload.metadata.get("organ_id").cloned();
         emit_gateway_event(GatewayTelemetryEvent::RequestStarted {
             request_id: request_id.clone(),
             backend_id: backend.backend_id.clone(),
@@ -87,22 +81,18 @@ impl ChatRuntime {
                 tick,
                 request_id: request_id.clone(),
                 span_id: request_id.clone(),
-                parent_span_id_when_present: parent_span_id_when_present.clone(),
-                organ_id_when_present: organ_id_when_present.clone(),
-                thread_id_when_present: thread_id_when_present.clone(),
-                turn_id_when_present,
+                parent_span_id: parent_span_id.clone(),
+                organ_id: organ_id.clone(),
+                capability: "chat.complete".to_string(),
                 backend_id: backend.backend_id.clone(),
                 model: backend.model.clone(),
                 kind: "start".to_string(),
-                attempt_when_present: None,
-                input_payload: input_payload.clone(),
-                effective_tools_when_present: Some(json!(payload.tools)),
-                limits_when_present: serde_json::to_value(&payload.limits).ok(),
-                enable_thinking: payload.enable_thinking,
-                provider_request_when_present: None,
-                provider_response_when_present: None,
-                usage_when_present: None,
-                error_when_present: None,
+                attempt: None,
+                retryable: None,
+                provider_request: None,
+                provider_response: None,
+                usage: None,
+                error: None,
             },
         );
 
@@ -125,22 +115,18 @@ impl ChatRuntime {
                         tick,
                         request_id: request_id.clone(),
                         span_id: request_id.clone(),
-                        parent_span_id_when_present: parent_span_id_when_present.clone(),
-                        organ_id_when_present: organ_id_when_present.clone(),
-                        thread_id_when_present: thread_id_when_present.clone(),
-                        turn_id_when_present,
+                        parent_span_id: parent_span_id.clone(),
+                        organ_id: organ_id.clone(),
+                        capability: "chat.complete".to_string(),
                         backend_id: backend.backend_id.clone(),
                         model: backend.model.clone(),
                         kind: "failed".to_string(),
-                        attempt_when_present: Some(attempt.saturating_add(1)),
-                        input_payload: input_payload.clone(),
-                        effective_tools_when_present: Some(json!(payload.tools)),
-                        limits_when_present: serde_json::to_value(&payload.limits).ok(),
-                        enable_thinking: payload.enable_thinking,
-                        provider_request_when_present: Some(input_payload.clone()),
-                        provider_response_when_present: None,
-                        usage_when_present: None,
-                        error_when_present: Some(json!(err)),
+                        attempt: Some(attempt.saturating_add(1)),
+                        retryable: Some(err.retryable),
+                        provider_request: None,
+                        provider_response: None,
+                        usage: None,
+                        error: Some(json!(err)),
                     },
                 );
                 emit_gateway_event(GatewayTelemetryEvent::RequestFailed {
@@ -184,27 +170,18 @@ impl ChatRuntime {
                             tick,
                             request_id: request_id.clone(),
                             span_id: request_id.clone(),
-                            parent_span_id_when_present: parent_span_id_when_present.clone(),
-                            organ_id_when_present: organ_id_when_present.clone(),
-                            thread_id_when_present: thread_id_when_present.clone(),
-                            turn_id_when_present,
+                            parent_span_id: parent_span_id.clone(),
+                            organ_id: organ_id.clone(),
+                            capability: "chat.complete".to_string(),
                             backend_id: backend.backend_id.clone(),
                             model: backend.model.clone(),
                             kind: "succeeded".to_string(),
-                            attempt_when_present: Some(attempt.saturating_add(1)),
-                            input_payload: input_payload.clone(),
-                            effective_tools_when_present: Some(json!(payload.tools)),
-                            limits_when_present: serde_json::to_value(&payload.limits).ok(),
-                            enable_thinking: payload.enable_thinking,
-                            provider_request_when_present: Some(input_payload.clone()),
-                            provider_response_when_present: Some(complete_response_json(
-                                &complete_response.output_text,
-                                &complete_response.tool_calls,
-                                complete_response.usage.as_ref(),
-                                &complete_response.finish_reason,
-                            )),
-                            usage_when_present: usage_json(complete_response.usage.as_ref()),
-                            error_when_present: None,
+                            attempt: Some(attempt.saturating_add(1)),
+                            retryable: None,
+                            provider_request: None,
+                            provider_response: None,
+                            usage: usage_json(complete_response.usage.as_ref()),
+                            error: None,
                         },
                     );
 
@@ -259,22 +236,18 @@ impl ChatRuntime {
                             tick,
                             request_id: request_id.clone(),
                             span_id: request_id.clone(),
-                            parent_span_id_when_present: parent_span_id_when_present.clone(),
-                            organ_id_when_present: organ_id_when_present.clone(),
-                            thread_id_when_present: thread_id_when_present.clone(),
-                            turn_id_when_present,
+                            parent_span_id: parent_span_id.clone(),
+                            organ_id: organ_id.clone(),
+                            capability: "chat.complete".to_string(),
                             backend_id: backend.backend_id.clone(),
                             model: backend.model.clone(),
                             kind: "attempt_failed".to_string(),
-                            attempt_when_present: Some(attempt.saturating_add(1)),
-                            input_payload: input_payload.clone(),
-                            effective_tools_when_present: Some(json!(payload.tools)),
-                            limits_when_present: serde_json::to_value(&payload.limits).ok(),
-                            enable_thinking: payload.enable_thinking,
-                            provider_request_when_present: None,
-                            provider_response_when_present: None,
-                            usage_when_present: None,
-                            error_when_present: Some(json!(err.clone())),
+                            attempt: Some(attempt.saturating_add(1)),
+                            retryable: Some(err.retryable),
+                            provider_request: None,
+                            provider_response: None,
+                            usage: None,
+                            error: Some(json!(err.clone())),
                         },
                     );
 
@@ -295,22 +268,18 @@ impl ChatRuntime {
                             tick,
                             request_id: request_id.clone(),
                             span_id: request_id.clone(),
-                            parent_span_id_when_present: parent_span_id_when_present.clone(),
-                            organ_id_when_present: organ_id_when_present.clone(),
-                            thread_id_when_present: thread_id_when_present.clone(),
-                            turn_id_when_present,
+                            parent_span_id: parent_span_id.clone(),
+                            organ_id: organ_id.clone(),
+                            capability: "chat.complete".to_string(),
                             backend_id: backend.backend_id.clone(),
                             model: backend.model.clone(),
                             kind: "failed".to_string(),
-                            attempt_when_present: Some(attempt.saturating_add(1)),
-                            input_payload: input_payload.clone(),
-                            effective_tools_when_present: Some(json!(payload.tools)),
-                            limits_when_present: serde_json::to_value(&payload.limits).ok(),
-                            enable_thinking: payload.enable_thinking,
-                            provider_request_when_present: Some(input_payload.clone()),
-                            provider_response_when_present: None,
-                            usage_when_present: None,
-                            error_when_present: Some(json!(err.clone())),
+                            attempt: Some(attempt.saturating_add(1)),
+                            retryable: Some(err.retryable),
+                            provider_request: None,
+                            provider_response: None,
+                            usage: None,
+                            error: Some(json!(err.clone())),
                         },
                     );
                     emit_gateway_event(GatewayTelemetryEvent::RequestFailed {
@@ -368,7 +337,7 @@ impl ChatRuntime {
     }
 }
 
-fn next_request_id(backend_id: &str, model: &str) -> String {
+pub(crate) fn next_request_id(backend_id: &str, model: &str) -> String {
     static SEQ: AtomicU64 = AtomicU64::new(1);
     let seq = SEQ.fetch_add(1, Ordering::Relaxed);
     format!("{}-{}-{}", backend_id, model, seq)
@@ -387,7 +356,7 @@ fn metadata_tick(metadata: &BTreeMap<String, String>) -> u64 {
         .unwrap_or(0)
 }
 
-fn turn_payload_json(payload: &TurnPayload) -> Value {
+pub(crate) fn turn_payload_json(payload: &TurnPayload) -> Value {
     json!({
         "messages": payload.messages.as_ref(),
         "tools": payload.tools,
@@ -400,18 +369,4 @@ fn turn_payload_json(payload: &TurnPayload) -> Value {
 
 fn usage_json(usage: Option<&UsageStats>) -> Option<Value> {
     usage.and_then(|value| serde_json::to_value(value).ok())
-}
-
-fn complete_response_json(
-    output_text: &str,
-    tool_calls: &[super::types::ToolCallResult],
-    usage: Option<&UsageStats>,
-    finish_reason: &super::types::FinishReason,
-) -> Value {
-    json!({
-        "output_text": output_text,
-        "tool_calls": tool_calls,
-        "usage": usage,
-        "finish_reason": finish_reason,
-    })
 }

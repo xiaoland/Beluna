@@ -77,17 +77,18 @@ impl ContractEvent {
                 validate_common(&event.run_id, &event.timestamp, fixture_id)?;
                 require_non_empty(&event.request_id, fixture_id, "request_id")?;
                 require_non_empty(&event.span_id, fixture_id, "span_id")?;
+                require_non_empty(&event.capability, fixture_id, "capability")?;
                 require_non_empty(&event.backend_id, fixture_id, "backend_id")?;
                 require_non_empty(&event.model, fixture_id, "model")?;
                 require_non_empty(&event.kind, fixture_id, "kind")
             }
-            Self::AiGatewayTurn(event) => {
+            Self::AiGatewayChatTurn(event) => {
                 validate_common(&event.run_id, &event.timestamp, fixture_id)?;
                 require_non_empty(&event.thread_id, fixture_id, "thread_id")?;
                 require_non_empty(&event.span_id, fixture_id, "span_id")?;
                 require_non_empty(&event.status, fixture_id, "status")
             }
-            Self::AiGatewayThread(event) => {
+            Self::AiGatewayChatThread(event) => {
                 validate_common(&event.run_id, &event.timestamp, fixture_id)?;
                 require_non_empty(&event.thread_id, fixture_id, "thread_id")?;
                 require_non_empty(&event.span_id, fixture_id, "span_id")?;
