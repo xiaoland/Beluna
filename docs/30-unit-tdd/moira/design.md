@@ -17,6 +17,46 @@ Moira provides Beluna's first-party local control plane for:
 4. Moira does not replace `apple-universal` or other body endpoint UX as endpoint authorities.
 5. Moira does not make metrics or traces first-class locally stored signals in the current target design.
 
+## Current Realization Boundary
+
+1. Current code primarily realizes Lachesis local ingestion, storage, query, and Loom inspection for one wake and one selected tick.
+2. Clotho artifact and profile preparation, plus Atropos supervision, remain part of Moira's target responsibility but are not yet fully realized in code.
+3. The next internal cleanup stage is behavior-preserving. Its purpose is to establish maintainable internal boundaries before those additional responsibilities expand.
+
+## Internal Split
+
+### Tauri Backend Modules
+
+1. `clotho`
+- Owns wake-input preparation before Core starts.
+- Owns published artifact discovery, checksum trust policy, version isolation, local source-build orchestration, JSONC profile documents, active profile selection, and schema-validation interactions with Core authority.
+- Internal Clotho submodules should stay functionally named where that improves readability, for example `artifacts` and `profiles`.
+
+2. `lachesis`
+- Owns OTLP receiver lifecycle, raw-event persistence, projections, query surfaces, and ingest-to-Loom event pulses.
+
+3. `atropos`
+- Owns `wake`, graceful stop, force-kill, supervised process state, readiness gating, and terminal reason tracking.
+
+4. `app`
+- Owns module composition, Tauri command exposure, and app-wide event wiring.
+- It is a transport and composition layer, not the owner of Clotho, Lachesis, or Atropos behavior.
+
+### Loom Frontend Layers
+
+1. `bridge`
+- Owns Tauri invoke and event subscription bindings only.
+
+2. `query state`
+- Owns wake selection, tick selection, refresh orchestration, loading state, and cross-view app state.
+
+3. `projection`
+- Owns normalization, chronology reconstruction, interval pairing, AI drilldown linking, and narrative shaping.
+
+4. `presentation`
+- Owns Vue view composition, interaction widgets, and JSON inspectors.
+- It should consume normalized projections rather than reinterpret OTLP family semantics inline.
+
 ## Local Design Invariants
 
 1. Core remains authoritative after launch; Moira supervises but does not become runtime owner.
@@ -30,3 +70,7 @@ Moira provides Beluna's first-party local control plane for:
 9. Clotho and Atropos must reuse the same Moira-owned wake and query surfaces rather than introducing parallel state models.
 10. AI transport and chat-capability investigation are normally entered from tick chronology or expanded Cortex intervals rather than through one separate first-class AI browsing mode.
 11. Source-grounded inspection means every human-friendly interpretation in Loom can be traced back to the supporting raw OTLP records without leaving the selected wake or tick context.
+12. Tauri commands are transport façades over internal backend owners; they must not become catch-all owners of process, preparation, or projection logic.
+13. Loom root views and presentational components must not become the primary owners of OTLP interpretation; projection logic belongs in the dedicated query/projection layer.
+14. Lachesis modules and Lachesis storage must not become a catch-all home for Clotho or Atropos state merely because they already persist data.
+15. Mythic names belong at the top-level backend boundary only. Inside those modules, functional names remain preferred where they improve readability and grep-ability.

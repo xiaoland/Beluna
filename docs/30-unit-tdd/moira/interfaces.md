@@ -37,3 +37,8 @@
 1. Core typed config boundary remains the schema authority.
 2. Core OTLP logs satisfy the cross-unit reconstruction rules defined in `docs/20-product-tdd/observability-contract.md` and the current exported family catalog described in `docs/30-unit-tdd/core/observability.md`.
 3. Core startup/shutdown semantics remain Core-owned even when Moira supervises the process locally.
+
+## Cleanup-Stage Constraint
+
+1. The cleanup stage may restructure internal backend modules, state containers, and frontend layers without changing the current log-backed Loom surfaces or current Tauri observability command names.
+2. New Clotho and Atropos command surfaces should land only after the internal backend split `app / clotho / lachesis / atropos` is established well enough that those features do not extend the current Lachesis-heavy modules as catch-all owners.

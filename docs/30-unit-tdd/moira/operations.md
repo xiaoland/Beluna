@@ -2,7 +2,7 @@
 
 ## Startup
 
-1. Load local artifact/profile/supervision state.
+1. Load local Clotho preparation state and Atropos supervision state.
 2. Initialize the local OTLP logs receiver and storage backend.
 3. Expose Loom UI only after local control-plane state is ready.
 
@@ -34,3 +34,17 @@
 2. Local source build failure blocks wake and surfaces explicit failure state.
 3. OTLP receiver/storage readiness failure blocks supervised wake.
 4. Unexpected Core exit becomes explicit terminal supervision state visible in Loom.
+
+## Cleanup Stage Before Next Feature Wave
+
+1. Preserve the current Lachesis and Loom operator behavior while restructuring internal boundaries.
+2. Extract the Tauri backend toward explicit `app`, `clotho`, `lachesis`, and `atropos` modules.
+3. Keep the Tauri command layer thin while moving durable behavior into those backend owners.
+4. Split the Loom frontend toward `bridge`, `query state`, `projection`, and `presentation` layers.
+5. Introduce an explicit migration/version path for future Clotho and Atropos persistence rather than extending the current Lachesis-only store ad hoc.
+6. Use the first post-cleanup cross-slice feature to validate the new split: local source-folder build plus wake and graceful stop.
+7. Cleanup-stage non-goals:
+- no full GitHub Releases artifact-management UX
+- no broad new supervision UI
+- no first-party endpoint-app launch flow
+- no operator-facing feature expansion that obscures whether the refactor preserved current Lachesis behavior

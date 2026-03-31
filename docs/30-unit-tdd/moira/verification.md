@@ -23,6 +23,13 @@
 
 ## Evidence Homes
 
-1. Moira artifact/build and supervision logic in the `moira/` app container.
+1. Moira Clotho preparation and Atropos supervision logic in the `moira/` app container.
 2. Core OTLP event-shape tests, [Core Observability](../core/observability.md), contract fixtures, and config validation guardrails.
 3. Early evidence should prefer live end-to-end operator walkthroughs for ingest and inspection flows; broader automation is added only after the new read models and browsing surfaces stabilize.
+
+## Cleanup Stage Exit Intent
+
+1. Current wake list, tick list, selected-tick chronology, and raw-event inspection remain operator-equivalent after the internal split.
+2. Tauri command handlers delegate to explicit backend owners rather than continuing to accumulate ownership directly.
+3. Frontend root views no longer combine bridge, async query orchestration, and OTLP projection logic inside one catch-all file or module.
+4. Lachesis persistence and Lachesis projections remain the owner of Lachesis state only; Clotho and Atropos state have prepared homes that do not require reusing Lachesis tables as a shortcut.

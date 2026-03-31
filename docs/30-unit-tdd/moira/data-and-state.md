@@ -16,6 +16,21 @@
 3. Core OTLP log events and Core exporter status signals.
 4. Core schema output used to validate selected JSONC profiles.
 
+## State Ownership By Internal Backend Module
+
+1. `clotho`
+- Owns local artifact catalog, trusted checksum metadata, install isolation metadata, local source-build outputs or references, JSONC profile documents, active selection, and validation result state cached for operator workflows.
+- Within Clotho, artifact state and profile state remain distinct internal concerns even though they share one top-level owner.
+
+2. `lachesis`
+- Owns raw OTLP events, `runs` and `ticks`, chronology or interval-pairing indexes, and any future goal-forest comparison materialization that remains Moira-owned.
+
+3. `atropos`
+- Owns supervised wake state, process handles or identifiers, explicit stop intent, and terminal reason state.
+
+4. `loom`
+- Owns ephemeral UI state such as selected wake, selected tick, active tab, popup state, and refresh coordination.
+
 ## Local Invariants
 
 1. Moira stores full raw OTLP log events locally for the current target design, including full request, response, signal, and topology payloads by default.
@@ -29,3 +44,6 @@
 9. Metrics and traces are not persisted as first-class local observability datasets in the current target design.
 10. Goal-forest snapshots are stored or referenced per tick; comparisons are derived later between selected ticks.
 11. A supervised wake is either explicitly running, explicitly stopping, or explicitly terminal; hidden supervision state is disallowed.
+12. Module-owned state must remain writable only through the owning boundary, even when multiple modules share one local database or app-state container.
+13. Future Clotho and Atropos persistence must not be folded into Lachesis projections or Lachesis tables as a convenience shortcut.
+14. Clotho may own both artifact and profile preparation, but those persisted concerns must remain internally separable rather than collapsing into one undifferentiated preparation blob.

@@ -47,7 +47,9 @@
 - [x] goal forest remains revision 1
 - [ ] 进一步解除 cortex runtime 和 cortex 与 primary 的边界
 - [ ] GoalForest 与 context reset 依然不工作
+- [ ] goal-forest 不应该重复 system-prompt
 - [ ] Cortex 当前的设计存在系统性的问题，导致 "spinning in an idle “self-talk” loop with no new external input, generating high-volume repetitive logs."
+- [ ] act dispatch 情况不是本体感的一部分（但 afferent/efferent pathway 的负载水平可以是）
 
 ### Continuity
 
