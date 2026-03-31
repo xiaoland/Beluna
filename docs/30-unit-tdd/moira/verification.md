@@ -30,6 +30,9 @@
 ## Cleanup Stage Exit Intent
 
 1. Current wake list, tick list, selected-tick chronology, and raw-event inspection remain operator-equivalent after the internal split.
-2. Tauri command handlers delegate to explicit backend owners rather than continuing to accumulate ownership directly.
-3. Frontend root views no longer combine bridge, async query orchestration, and OTLP projection logic inside one catch-all file or module.
+2. The backend cleanup slice is concrete in code: Tauri command handlers delegate through `app` into explicit backend owners rather than continuing to accumulate ownership directly.
+3. The first frontend cleanup slice is concrete in code: root views no longer own live refresh wiring and selection-state orchestration directly, and bridge transport no longer owns normalization or sorting.
 4. Lachesis persistence and Lachesis projections remain the owner of Lachesis state only; Clotho and Atropos state have prepared homes that do not require reusing Lachesis tables as a shortcut.
+5. The second frontend cleanup slice is concrete in code: `normalize.ts` is replaced by explicit `projection/lachesis/*` owners, and presentation-facing helpers no longer mix source-grounded event interpretation with display-only formatting.
+6. Current wake list, tick timeline, chronology popup inspection, sectional tick detail views, and raw-event drilldown remain operator-equivalent after the projection/presentation split.
+7. The cleanup integration pass is concrete in code: bridge calls no longer expose only `unknown`, backend-shaped transport contracts are separated from normalized Loom-facing models, and the former shared frontend type bucket no longer acts as a cross-layer dumping ground.

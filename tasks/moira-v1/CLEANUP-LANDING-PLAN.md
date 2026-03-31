@@ -224,6 +224,9 @@ Make the backend and frontend cleanup meet cleanly before new feature work resum
 - remove transitional duplication left by slices 1 to 3
 - align naming and file ownership
 - trim any abstractions that survived cleanup without earning their keep
+- separate raw Tauri DTOs under `bridge/contracts/*` from normalized Loom-facing models under `projection/*/models.ts`
+- move query-owned UI state types out of any shared cross-layer bucket
+- let `App.vue` become a thin root shell once `app/LoomApp.vue` is the real frontend composition owner
 
 ### Authoritative TDD Touchpoints
 

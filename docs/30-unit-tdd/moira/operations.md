@@ -38,12 +38,13 @@
 ## Cleanup Stage Before Next Feature Wave
 
 1. Preserve the current Lachesis and Loom operator behavior while restructuring internal boundaries.
-2. Extract the Tauri backend toward explicit `app`, `clotho`, `lachesis`, and `atropos` modules.
-3. Keep the Tauri command layer thin while moving durable behavior into those backend owners.
-4. Split the Loom frontend toward `bridge`, `query state`, `projection`, and `presentation` layers.
-5. Introduce an explicit migration/version path for future Clotho and Atropos persistence rather than extending the current Lachesis-only store ad hoc.
-6. Use the first post-cleanup cross-slice feature to validate the new split: local source-folder build plus wake and graceful stop.
-7. Cleanup-stage non-goals:
+2. The backend extraction lands first: explicit `app`, `clotho`, `lachesis`, and `atropos` modules with thin Tauri command handlers.
+3. The first frontend cleanup slice extracts `bridge` and `query state` ownership next while preserving the existing Loom surface.
+4. The second frontend cleanup slice then makes `projection` and `presentation` concrete through explicit `projection/lachesis/*` and `presentation/*` owners while preserving the existing Loom surface.
+5. The cleanup integration pass then removes transitional glue by separating backend-shaped bridge contracts from normalized Loom-facing projection models, and by keeping query-owned UI state out of any revived catch-all type bucket.
+6. Introduce an explicit migration/version path for future Clotho and Atropos persistence rather than extending the current Lachesis-only store ad hoc.
+7. Use the first post-cleanup cross-slice feature to validate the new split: local source-folder build plus wake and graceful stop.
+8. Cleanup-stage non-goals:
 - no full GitHub Releases artifact-management UX
 - no broad new supervision UI
 - no first-party endpoint-app launch flow

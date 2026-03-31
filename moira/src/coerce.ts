@@ -1,4 +1,4 @@
-import type { RawEvent } from './types'
+import type { RawEvent } from './projection/lachesis/models'
 
 export type JsonRecord = Record<string, unknown>
 

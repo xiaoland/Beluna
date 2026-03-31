@@ -8,6 +8,7 @@
 4. Local OTLP raw-event storage.
 5. Local observability read models for `runs` and `ticks`, plus any Moira-owned chronology, interval-pairing, or targeted lookup indexes needed for human-friendly browsing.
 6. Local control-plane UI state.
+7. Frontend backend-shaped transport contracts and frontend Loom-facing normalized models, each under their owning layer rather than inside one shared bucket.
 
 ## Consumed State
 
@@ -47,3 +48,4 @@
 12. Module-owned state must remain writable only through the owning boundary, even when multiple modules share one local database or app-state container.
 13. Future Clotho and Atropos persistence must not be folded into Lachesis projections or Lachesis tables as a convenience shortcut.
 14. Clotho may own both artifact and profile preparation, but those persisted concerns must remain internally separable rather than collapsing into one undifferentiated preparation blob.
+15. Frontend raw transport contracts, normalized Loom-facing models, and query-owned UI state must remain distinct concerns even when they currently describe the same Lachesis operator flow.

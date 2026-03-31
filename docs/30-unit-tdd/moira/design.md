@@ -20,8 +20,10 @@ Moira provides Beluna's first-party local control plane for:
 ## Current Realization Boundary
 
 1. Current code primarily realizes Lachesis local ingestion, storage, query, and Loom inspection for one wake and one selected tick.
-2. Clotho artifact and profile preparation, plus Atropos supervision, remain part of Moira's target responsibility but are not yet fully realized in code.
-3. The next internal cleanup stage is behavior-preserving. Its purpose is to establish maintainable internal boundaries before those additional responsibilities expand.
+2. The backend cleanup split is now explicit in code: `app` composes `clotho`, `lachesis`, and `atropos`, while Lachesis remains the only substantially realized backend owner today.
+3. The frontend cleanup and integration pass are now explicit in code: `app/LoomApp.vue` composes the Lachesis workspace, `bridge` owns backend-shaped contracts, `query` owns Lachesis UI state, and the former catch-all helper files are replaced by explicit `projection/lachesis/*` and `presentation/*` owners.
+4. Clotho artifact and profile preparation, plus Atropos supervision, remain part of Moira's target responsibility but are not yet fully realized in operator-facing code.
+5. The cleanup stage remains behavior-preserving. Its purpose is to finish establishing maintainable frontend and cross-slice boundaries before those additional responsibilities expand.
 
 ## Internal Split
 
@@ -46,16 +48,23 @@ Moira provides Beluna's first-party local control plane for:
 
 1. `bridge`
 - Owns Tauri invoke and event subscription bindings only.
+- Owns raw Tauri command and event payload contracts for the backend surfaces it calls.
+- It should return backend-shaped payloads rather than normalized Loom-facing models.
 
 2. `query state`
 - Owns wake selection, tick selection, refresh orchestration, loading state, and cross-view app state.
 
 3. `projection`
 - Owns normalization, chronology reconstruction, interval pairing, AI drilldown linking, and narrative shaping.
+- Owns Lachesis-specific event labeling, raw-event headlines, narrative section assembly, and JSON drilldown section assembly because those remain source-grounded observability interpretation rather than pure visual formatting.
+- During the current cleanup stage, `projection/lachesis/*` is the preferred landing shape for those responsibilities instead of one catch-all helper file.
+- Owns normalized Loom-facing models. Raw bridge contracts must not become the de facto model type used by presentation.
 
 4. `presentation`
 - Owns Vue view composition, interaction widgets, and JSON inspectors.
+- Owns display-only formatting such as time rendering, count rendering, and tone mapping.
 - It should consume normalized projections rather than reinterpret OTLP family semantics inline.
+- During the current cleanup stage, presentation should stay organized around Loom chrome plus Lachesis operator tasks such as workspace, chronology, narratives, and inspectors, while future Clotho and Atropos views remain separate feature namespaces when they arrive.
 
 ## Local Design Invariants
 
@@ -73,4 +82,7 @@ Moira provides Beluna's first-party local control plane for:
 12. Tauri commands are transport façades over internal backend owners; they must not become catch-all owners of process, preparation, or projection logic.
 13. Loom root views and presentational components must not become the primary owners of OTLP interpretation; projection logic belongs in the dedicated query/projection layer.
 14. Lachesis modules and Lachesis storage must not become a catch-all home for Clotho or Atropos state merely because they already persist data.
-15. Mythic names belong at the top-level backend boundary only. Inside those modules, functional names remain preferred where they improve readability and grep-ability.
+15. Mythic names may appear as stable feature namespaces in both backend and frontend code, but ownership must still remain explicit through backend modules and frontend layers.
+16. Inside those backend modules and frontend layers, functional names remain preferred where they improve readability and grep-ability.
+17. Frontend helper boundaries follow meaning rather than file history: source-grounded event interpretation belongs in `projection`, while locale formatting and visual tone helpers belong in `presentation`.
+18. Frontend contract boundaries follow ownership, not convenience: backend-shaped payload contracts belong in `bridge`, Loom-facing normalized models belong in `projection`, and query-owned UI state must not collapse back into one shared catch-all type bucket.
