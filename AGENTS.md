@@ -1,6 +1,7 @@
 # AGENTS.md of Beluna
 
 Beluna is organized as a multi-component repository.
+Documentation is selective memory, not a parallel runtime.
 
 ## Repository Layout
 
@@ -10,16 +11,30 @@ Beluna is organized as a multi-component repository.
 ├── cli/                # Beluna body endpoint - CLI client (Rust)
 ├── apple-universal/    # Beluna body endpoint - Apple Universal app (Swift)
 ├── monitor/            # Beluna local observability monitor (Web)
-└── docs/               # Authoritative layered docs + task workspace
+├── docs/               # Authoritative layered docs
+└── tasks/              # Volatile task workspace
 ```
 
-Documentation is selective memory, not a parallel runtime.
+## Operating Model
 
-## Default Workflow
+- Read the nearest relevant `AGENTS.md`.
+- Keep authoritative truth in `docs/` and code/tests/CI.
+- Keep volatile exploration and coordination in `tasks/`.
+- Open `docs/00-meta/index.md` only when changing the documentation system itself or resolving ownership ambiguity between layers.
 
-For any non-trivial change:
+### Execution Protocol
 
-1. Read the nearest relevant `AGENTS.md`.
+For any non-trivial change, use this sequence:
+
+1. Assess volatility and choose an operating mode:
+   - `Mode A / Exploration`: vague idea, fuzzy requirement, or open-ended problem.
+     - Default to `tasks/` when exploration needs persisted context or temporary coordination.
+     - Short clarification-only exchanges may bypass a task note.
+   - `Mode B / Solidification`: clear but unrecorded product or technical truth.
+     - Durable-doc updates are confirmation-gated.
+   - `Mode C / Execution`: clear, localized implementation work.
+     - Straightforward low-risk changes may proceed directly.
+     - Risky, reference-sensitive, or logic-altering changes are confirmation-gated.
 2. Pick the owner of the decision you are changing:
    - `docs/10-prd`: product what/why, user-visible behavior, scope, glossary.
    - `docs/20-product-tdd`: cross-unit design, authority, contracts.
@@ -27,10 +42,15 @@ For any non-trivial change:
    - `docs/40-deployment`: environments, rollout, observability, recovery.
    - code/tests/CI: mechanically enforced truth.
 3. Read the smallest relevant slice.
-4. Implement and verify.
-5. Promote only stable truths that are reusable, costly to rediscover, and not better enforced mechanically.
+4. Apply the mode-specific gate:
+   - `Mode A / Exploration`: do not update durable docs or production code yet.
+   - `Mode B / Solidification`: execute the pre-execution restatement and await human confirmation before updating durable docs.
+   - `Mode C / Execution`: if the change is risky, reference-sensitive, or logic-altering, execute the pre-execution restatement and await human confirmation before coding.
+5. Implement and verify once the gate is satisfied.
+6. Promote only stable truths that are reusable, costly to rediscover, and not better enforced mechanically.
+7. When work used a task note, ask whether it should be archived after completion.
 
-For small or obvious changes, go straight to code and tests after step 2.
+### Restatement Rule
 
 For risky or reference-sensitive changes, restate:
 
@@ -43,25 +63,23 @@ For risky or reference-sensitive changes, restate:
 - Likely affected files.
 - Uncertainty.
 
-> Use `docs/task` only when the work is large, ambiguous, or needs temporary coordination notes.
-> Open `docs/00-meta/index.md` only when changing the documentation system itself or resolving ownership ambiguity between layers.
-
-## Documentation System
+## Documentation Index
 
 - [PRD](./docs/10-prd/index.md): product intent, scope, workflows, rules, glossary.
 - [Product TDD](./docs/20-product-tdd/index.md): cross-unit technical realization.
 - [Unit TDD](./docs/30-unit-tdd/index.md): unit-local contracts and verification.
 - [Deployment](./docs/40-deployment/index.md): runtime and operational truth.
 - [Docs Policy](./docs/00-meta/index.md): optional notes for doc-system ownership and promotion rules.
+- [Tasks](./tasks/README.md): volatile planning, investigation, and result workspace.
 - [Core AGENTS](./core/AGENTS.md)
 - [Apple Universal AGENTS](./apple-universal/AGENTS.md)
 - [Monitor AGENTS](./monitor/AGENTS.md)
 
 > Add local `AGENTS.md` under complex modules when local constraints are needed.
+> `tasks/` is procedural and non-authoritative.
 > When implementation reveals reusable knowledge, promote it into durable docs.
-> `docs/task` is procedural and non-authoritative.
 
-## Development Workflow
+## Engineering Constraints
 
 - Less is more: quality over quantity; high cohesion and low coupling.
 - No backward compatibility is required unless explicitly requested.
@@ -74,7 +92,7 @@ For risky or reference-sensitive changes, restate:
 - Prefer abstraction only when duplication or patterns become clear.
 - Source files should stay under 300 lines where practical.
 
-## Naming Conventions
+### Naming Conventions
 
 - Omit `Beluna` prefix in directory names, file names, and internal docs.
 - Keep `Beluna` in user-facing package names/documentation for discoverability.

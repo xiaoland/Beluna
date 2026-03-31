@@ -1,10 +1,5 @@
 # AGENTS.md for moira
 
-## Local Use
-
-- Follow [`../AGENTS.md`](../AGENTS.md) for default workflow and layer routing.
-- Use this file only for Moira-local boundaries and constraints.
-
 ## Design Sources
 
 - `docs/20-product-tdd/observability-contract.md`

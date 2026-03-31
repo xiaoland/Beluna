@@ -2,6 +2,7 @@
 
 `docs/00-meta` is a small Beluna-local note about the documentation system itself.
 It is optional. Most work should start from `AGENTS.md` and the owning layer, not here.
+Beluna keeps authoritative memory in `docs/` and volatile work in `tasks/`.
 
 ## Use This Folder Only When
 
@@ -15,7 +16,7 @@ It is optional. Most work should start from `AGENTS.md` and the owning layer, no
 - Cross-unit technical truth: `docs/20-product-tdd`
 - Hard-unit local design memory: `docs/30-unit-tdd`
 - Runtime and operational truth: `docs/40-deployment`
-- Volatile reasoning and plans: `docs/task`
+- Volatile reasoning and plans: `tasks/`
 - Mechanically enforced truth: code/tests/CI
 
 ## Promotion

@@ -8,7 +8,7 @@
 - PRD governs product behavior.
 - TDD/deployment governs implementation and runtime mechanisms.
 4. Body endpoints must not duplicate core runtime authority responsibilities.
-5. Task workspace (`docs/task`) remains non-authoritative.
+5. Task workspace (`tasks/`) remains non-authoritative and separate from authoritative docs.
 
 ## Delivery Constraints
 

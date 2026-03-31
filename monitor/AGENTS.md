@@ -1,17 +1,5 @@
 # AGENTS.md for monitor
 
-## Local Use
-
-- Follow [`../AGENTS.md`](../AGENTS.md) for the default workflow and layer routing.
-- Use this file only for monitor-local boundaries and constraints.
-
-## Design Sources
-
-- `docs/20-product-tdd/unit-topology.md`
-- `docs/20-product-tdd/cross-unit-contracts.md`
-- `docs/30-unit-tdd/monitor/*`
-- `core/src/logging.rs`
-
 ## Boundaries
 
 1. Monitor is a read-only consumer of local core logs.
