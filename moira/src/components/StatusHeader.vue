@@ -122,9 +122,9 @@ h1 {
   align-items: center;
   min-height: 2rem;
   padding: 0.2rem 0.75rem;
-  background: rgba(164, 63, 47, 0.12);
+  background: rgba(162, 77, 68, 0.08);
   color: var(--err);
-  border: 1px solid rgba(164, 63, 47, 0.22);
+  border: 1px solid rgba(162, 77, 68, 0.16);
   font-size: 0.82rem;
 }
 
@@ -138,7 +138,7 @@ h1 {
 .metric-card {
   min-width: 0;
   padding: 0.78rem;
-  background: var(--panel-strong);
+  background: var(--surface-subtle);
   border: 1px solid var(--line-soft);
 }
 

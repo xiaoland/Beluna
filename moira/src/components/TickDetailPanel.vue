@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import JsonSectionGroup from '@/components/JsonSectionGroup.vue'
 import TickChronology from '@/components/TickChronology.vue'
 import RawEventInspector from '@/components/RawEventInspector.vue'
 import { formatWhen, narrativeSections, summarizeEntry } from '@/presenters'
@@ -30,10 +31,6 @@ const sections = computed(() => {
 
   return narrativeSections(props.detail, props.tab)
 })
-
-function pretty(value: unknown): string {
-  return JSON.stringify(value, null, 2) ?? 'null'
-}
 </script>
 
 <template>
@@ -95,13 +92,31 @@ function pretty(value: unknown): string {
 
         <article v-if="section.single" class="entry-card">
           <header>{{ summarizeEntry(section.single) }}</header>
-          <pre>{{ pretty(section.single) }}</pre>
+          <JsonSectionGroup
+            :sections="[
+              {
+                key: `${section.title}-single`,
+                title: 'Structured payload',
+                value: section.single,
+                defaultOpen: true,
+              },
+            ]"
+          />
         </article>
 
         <div v-else-if="section.items.length" class="entry-stack">
           <article v-for="(entry, index) in section.items" :key="index" class="entry-card">
             <header>{{ summarizeEntry(entry) }}</header>
-            <pre>{{ pretty(entry) }}</pre>
+            <JsonSectionGroup
+              :sections="[
+                {
+                  key: `${section.title}-${index}`,
+                  title: 'Structured payload',
+                  value: entry,
+                  defaultOpen: index === 0,
+                },
+              ]"
+            />
           </article>
         </div>
 
@@ -140,8 +155,8 @@ function pretty(value: unknown): string {
 
 .tab.active {
   color: var(--text-strong);
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 18%, var(--panel-strong));
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--line-strong));
+  background: color-mix(in srgb, var(--accent) 6%, white);
 }
 
 .detail-body {
@@ -152,7 +167,7 @@ function pretty(value: unknown): string {
 
 .narrative-section {
   padding: 0.78rem;
-  background: var(--panel-strong);
+  background: var(--surface-subtle);
   border: 1px solid var(--line-soft);
 }
 
@@ -187,6 +202,8 @@ function pretty(value: unknown): string {
 }
 
 .entry-card {
+  display: grid;
+  gap: 0.6rem;
   padding: 0.72rem;
   border: 1px solid var(--line-soft);
   background: var(--panel);

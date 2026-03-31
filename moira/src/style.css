@@ -1,20 +1,23 @@
 :root {
-  --bg: #08121f;
-  --bg-deep: #040b14;
-  --panel: rgba(10, 21, 36, 0.9);
-  --panel-strong: rgba(13, 27, 45, 0.96);
-  --line-soft: rgba(122, 153, 194, 0.18);
-  --line-strong: rgba(122, 153, 194, 0.34);
-  --text-strong: #dfe9f7;
-  --text-muted: #8ea3c4;
-  --accent: #5c8fd0;
-  --accent-soft: #9fc0ea;
-  --ok: #72b89c;
-  --warn: #d2b16a;
-  --err: #cf7f7f;
-  --idle: #7389a7;
-  --shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.12);
-  --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --bg: #f4f7fb;
+  --bg-deep: #edf2f8;
+  --panel: rgba(255, 255, 255, 0.94);
+  --panel-strong: #ffffff;
+  --surface-subtle: #f7f9fc;
+  --json-bg: #fbfcfe;
+  --overlay: rgba(20, 30, 48, 0.26);
+  --line-soft: #d8e0ea;
+  --line-strong: #b7c5d5;
+  --text-strong: #182236;
+  --text-muted: #56667d;
+  --accent: #315c86;
+  --accent-soft: #dce8f4;
+  --ok: #2d7b60;
+  --warn: #8c6618;
+  --err: #a24d44;
+  --idle: #687789;
+  --shadow-soft: 0 10px 24px rgba(24, 34, 54, 0.08);
+  --shadow-card: 0 4px 12px rgba(24, 34, 54, 0.05);
   --font-body: "Avenir Next", "Segoe UI Variable Text", "Noto Sans", sans-serif;
   --font-display: "Iowan Old Style", "Baskerville", "Palatino Linotype", serif;
 }
@@ -36,9 +39,9 @@ body {
   font-family: var(--font-body);
   color: var(--text-strong);
   background:
-    radial-gradient(circle at 14% 10%, rgba(71, 106, 154, 0.18), transparent 28%),
-    radial-gradient(circle at 82% 12%, rgba(40, 72, 117, 0.18), transparent 22%),
-    linear-gradient(180deg, #0a1524 0%, var(--bg) 44%, var(--bg-deep) 100%);
+    radial-gradient(circle at 14% 10%, rgba(84, 124, 170, 0.1), transparent 28%),
+    radial-gradient(circle at 82% 12%, rgba(150, 180, 214, 0.12), transparent 22%),
+    linear-gradient(180deg, #fcfdff 0%, var(--bg) 44%, var(--bg-deep) 100%);
 }
 
 button,
@@ -50,6 +53,13 @@ textarea {
 
 button {
   cursor: pointer;
+  border-radius: 0.3rem;
+}
+
+button:focus-visible,
+summary:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 72%, transparent);
+  outline-offset: 2px;
 }
 
 pre {
@@ -84,7 +94,7 @@ code,
 .panel-shell {
   background: var(--panel);
   border: 1px solid var(--line-soft);
-  border-radius: 0.55rem;
+  border-radius: 0.32rem;
 }
 
 .panel-head {
@@ -134,26 +144,26 @@ code,
 
 .status-ok {
   color: var(--ok);
-  background: rgba(46, 125, 85, 0.1);
-  border-color: rgba(46, 125, 85, 0.2);
+  background: rgba(45, 123, 96, 0.1);
+  border-color: rgba(45, 123, 96, 0.18);
 }
 
 .status-warn {
   color: var(--warn);
-  background: rgba(174, 122, 31, 0.12);
-  border-color: rgba(174, 122, 31, 0.2);
+  background: rgba(140, 102, 24, 0.1);
+  border-color: rgba(140, 102, 24, 0.18);
 }
 
 .status-err {
   color: var(--err);
-  background: rgba(164, 63, 47, 0.12);
-  border-color: rgba(164, 63, 47, 0.2);
+  background: rgba(162, 77, 68, 0.1);
+  border-color: rgba(162, 77, 68, 0.18);
 }
 
 .status-idle {
   color: var(--idle);
-  background: rgba(139, 120, 104, 0.14);
-  border-color: rgba(139, 120, 104, 0.2);
+  background: rgba(104, 119, 137, 0.08);
+  border-color: rgba(104, 119, 137, 0.15);
 }
 
 .button-primary,
@@ -171,19 +181,20 @@ code,
 }
 
 .button-primary {
-  color: #eaf3ff;
-  background: linear-gradient(135deg, #4f7fbf, var(--accent));
+  color: #f8fbff;
+  background: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 80%, white);
 }
 
 .button-secondary {
   color: var(--text-strong);
-  background: var(--panel);
+  background: var(--panel-strong);
   border-color: var(--line-strong);
 }
 
 .button-primary:hover,
 .button-secondary:hover {
-  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 44%, transparent);
 }
 
 .button-primary:disabled,
@@ -205,20 +216,20 @@ code,
   height: 34rem;
   border-radius: 999px;
   filter: blur(88px);
-  opacity: 0.16;
+  opacity: 0.1;
   pointer-events: none;
 }
 
 .orb-a {
   left: -10rem;
   top: -8rem;
-  background: #4f7fbf;
+  background: #a8c1dc;
 }
 
 .orb-b {
   right: -12rem;
   bottom: -12rem;
-  background: #27507e;
+  background: #d3e0ef;
 }
 
 @media (max-width: 780px) {

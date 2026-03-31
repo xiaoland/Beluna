@@ -1,14 +1,12 @@
 <script setup lang="ts">
+import JsonSectionGroup from '@/components/JsonSectionGroup.vue'
+import { jsonSectionsForEvent } from '@/json-sections'
 import { formatWhen, rawEventHeadline } from '@/presenters'
 import type { RawEvent } from '@/types'
 
 defineProps<{
   rawEvents: RawEvent[]
 }>()
-
-function pretty(value: unknown): string {
-  return JSON.stringify(value, null, 2) ?? 'null'
-}
 </script>
 
 <template>
@@ -32,49 +30,24 @@ function pretty(value: unknown): string {
         </div>
       </summary>
 
-      <div class="event-detail">
-        <div class="kv">
-          <span class="label">run_id</span>
-          <span class="mono">{{ event.runId ?? '—' }}</span>
+        <div class="event-detail">
+          <div class="kv">
+            <span class="label">run_id</span>
+            <span class="mono">{{ event.runId ?? '—' }}</span>
+          </div>
+          <div class="kv">
+            <span class="label">tick</span>
+            <span>{{ event.tick ?? '—' }}</span>
+          </div>
+          <div class="kv">
+            <span class="label">target</span>
+            <span>{{ event.target ?? '—' }}</span>
+          </div>
+
+          <JsonSectionGroup :sections="jsonSectionsForEvent(event, { openPayload: true })" />
         </div>
-        <div class="kv">
-          <span class="label">tick</span>
-          <span>{{ event.tick ?? '—' }}</span>
-        </div>
-        <div class="kv">
-          <span class="label">target</span>
-          <span>{{ event.target ?? '—' }}</span>
-        </div>
-
-        <div class="payload-grid">
-          <article class="payload-card">
-            <h4>Payload</h4>
-            <pre>{{ pretty(event.payload) }}</pre>
-          </article>
-
-          <article class="payload-card">
-            <h4>Body</h4>
-            <pre>{{ pretty(event.body) }}</pre>
-          </article>
-
-          <article class="payload-card">
-            <h4>Attributes</h4>
-            <pre>{{ pretty(event.attributes) }}</pre>
-          </article>
-
-          <article class="payload-card">
-            <h4>Resource</h4>
-            <pre>{{ pretty(event.resource) }}</pre>
-          </article>
-
-          <article class="payload-card">
-            <h4>Scope</h4>
-            <pre>{{ pretty(event.scope) }}</pre>
-          </article>
-        </div>
-      </div>
-    </details>
-  </div>
+      </details>
+    </div>
 </template>
 
 <style scoped>
@@ -134,20 +107,7 @@ function pretty(value: unknown): string {
   font-size: 0.74rem;
 }
 
-.payload-grid {
-  display: grid;
-  gap: 0.75rem;
+.event-detail > :last-child {
   margin-top: 0.85rem;
-}
-
-.payload-card {
-  padding: 0.8rem;
-  background: var(--panel);
-  border: 1px solid var(--line-soft);
-}
-
-h4 {
-  margin: 0 0 0.55rem;
-  font-size: 0.88rem;
 }
 </style>

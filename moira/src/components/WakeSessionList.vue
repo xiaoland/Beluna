@@ -76,9 +76,9 @@ defineEmits<{
   min-width: 2rem;
   height: 2rem;
   padding: 0 0.65rem;
-  background: color-mix(in srgb, var(--accent) 18%, var(--panel));
+  background: color-mix(in srgb, var(--accent) 10%, white);
   color: var(--accent);
-  border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line-strong));
   font-weight: 600;
 }
 
@@ -97,7 +97,7 @@ defineEmits<{
   padding: 0.78rem;
   transition:
     border-color 140ms ease,
-    transform 140ms ease;
+    background-color 140ms ease;
 }
 
 .session-card:hover {
@@ -105,8 +105,8 @@ defineEmits<{
 }
 
 .session-card.selected {
-  border-color: color-mix(in srgb, var(--accent) 62%, transparent);
-  background: color-mix(in srgb, var(--accent) 10%, var(--panel-strong));
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--line-strong));
+  background: color-mix(in srgb, var(--accent) 5%, white);
 }
 
 .card-head {

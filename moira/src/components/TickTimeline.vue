@@ -89,8 +89,8 @@ defineEmits<{
 }
 
 .timeline-row.selected {
-  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
-  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+  background: color-mix(in srgb, var(--accent) 6%, white);
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--line-strong));
 }
 
 .rail {
@@ -114,8 +114,8 @@ defineEmits<{
   width: 0.82rem;
   height: 0.82rem;
   margin-top: 0.12rem;
-  background: linear-gradient(180deg, var(--accent-soft), var(--accent));
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent);
+  border: 2px solid var(--accent);
+  background: var(--panel-strong);
 }
 
 .timeline-head {

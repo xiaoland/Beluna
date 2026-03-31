@@ -263,7 +263,7 @@ function errorMessage(error: unknown): string {
   margin: 0 0 1rem;
   padding: 0.72rem 0.9rem;
   border: 1px solid var(--line-soft);
-  background: var(--panel);
+  background: var(--panel-strong);
   color: var(--text-muted);
 }
 
