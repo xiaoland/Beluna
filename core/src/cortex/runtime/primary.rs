@@ -14,11 +14,13 @@ use tokio::time::{Duration, timeout};
 
 use crate::{
     ai_gateway::chat::{
-        Chat, ChatMessage, ChatRole, ChatToolDefinition, CloneThreadOptions, ContentPart,
-        FinishReason, OutputMode, Thread, ThreadOptions, ToolCallResult, ToolExecutionRequest,
+        Chat, ChatMessage, ChatRole, ChatToolDefinition, ContentPart, ContextControlReason,
+        DeriveContextOptions, FinishReason, OutputMode, SystemPromptAction, Thread,
+        ThreadContextRequest, ThreadOptions, ToolCallResult, ToolExecutionRequest,
         ToolExecutionResult, ToolExecutor, ToolOverride, TurnInput, TurnLimits, TurnQuery,
-        TurnResponse,
+        TurnResponse, TurnRetentionPolicy,
     },
+    ai_gateway::types::{CHAT_CAPABILITY_ID, ChatRouteAlias, ChatRouteRef},
     config::CortexHelperRoutesConfig,
     continuity::ContinuityEngine,
     cortex::{
@@ -1174,15 +1176,15 @@ impl Cortex {
                 "AI Gateway is not configured for this Cortex instance",
             )
         })?;
-        let route = self.resolve_route(CognitionOrgan::Primary);
-        let mut options = ThreadOptions {
+        let route_ref = alias_route_ref(self.resolve_route(CognitionOrgan::Primary));
+        let options = ThreadOptions {
             thread_id: Some("cortex-primary-thread".to_string()),
+            route_ref,
             tools: primary_internal_tools(),
             system_prompt: Some(prompts::primary_system_prompt()),
             metadata: organ_thread_metadata(cycle_id, CognitionOrgan::Primary.stage()),
             ..ThreadOptions::default()
         };
-        options.route_or_alias = route;
         let thread = gateway
             .open_thread(ThreadOptions { ..options })
             .await
@@ -1223,19 +1225,27 @@ impl Cortex {
                 "AI Gateway is not configured for this Cortex instance",
             )
         })?;
-        let route_or_alias = self.resolve_route(CognitionOrgan::Primary);
+        let route_ref = alias_route_ref(self.resolve_route(CognitionOrgan::Primary));
         let mut metadata = organ_thread_metadata(cycle_id, CognitionOrgan::Primary.stage());
         if let Some(parent_span_id) = parent_span_id_when_present {
             metadata.insert("parent_span_id".to_string(), parent_span_id);
         }
-        let cloned = chat
-            .clone_thread_with_turns(
+        let (derived, _) = chat
+            .derive_context(
                 source_thread,
-                selected_turn_ids,
-                CloneThreadOptions {
+                ThreadContextRequest {
+                    retention: TurnRetentionPolicy::KeepSelectedTurnIds {
+                        turn_ids: selected_turn_ids.to_vec(),
+                    },
+                    system_prompt: SystemPromptAction::Replace {
+                        prompt: system_prompt,
+                    },
+                    drop_unfinished_continuation: true,
+                    reason: ContextControlReason::CortexReset,
+                },
+                DeriveContextOptions {
                     thread_id: Some("cortex-primary-thread".to_string()),
-                    route_or_alias,
-                    system_prompt: Some(system_prompt),
+                    route_ref,
                     metadata,
                 },
             )
@@ -1248,7 +1258,7 @@ impl Cortex {
         }
         {
             let mut thread_guard = self.primary_thread_state.lock().await;
-            *thread_guard = Some(PrimaryThreadState { thread: cloned });
+            *thread_guard = Some(PrimaryThreadState { thread: derived });
         }
         Ok(())
     }
@@ -1415,7 +1425,7 @@ impl Cortex {
         let thread = match chat
             .open_thread(ThreadOptions {
                 thread_id: Some(format!("cortex-{stage}-{cycle_id}-thread")),
-                route_or_alias: route,
+                route_ref: alias_route_ref(route),
                 system_prompt: Some(system_prompt),
                 metadata: {
                     let mut metadata = organ_thread_metadata(cycle_id, stage);
@@ -1671,6 +1681,15 @@ fn organ_thread_metadata(cycle_id: u64, organ_id: &'static str) -> BTreeMap<Stri
     metadata.insert("tick".to_string(), cycle_id.to_string());
     metadata.insert("organ_id".to_string(), organ_id.to_string());
     metadata
+}
+
+fn alias_route_ref(route_alias: Option<String>) -> Option<ChatRouteRef> {
+    route_alias.map(|alias| {
+        ChatRouteRef::Alias(ChatRouteAlias {
+            capability: CHAT_CAPABILITY_ID.to_string(),
+            alias,
+        })
+    })
 }
 
 fn map_organ_gateway_error(organ: CognitionOrgan, message: String) -> CortexError {

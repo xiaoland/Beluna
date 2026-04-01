@@ -2,7 +2,11 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use beluna::ai_gateway::{
-    chat::{Chat, CloneThreadOptions, ContentPart, Message, ThreadOptions, Turn, UserMessage},
+    chat::{
+        Chat, ContentPart, ContextControlReason, DeriveContextOptions, Message,
+        RewriteContextOptions, SystemPromptAction, ThreadContextRequest, ThreadOptions, Turn,
+        TurnRetentionPolicy, UserMessage,
+    },
     credentials::CredentialProvider,
     error::GatewayError,
     types::{
@@ -62,7 +66,7 @@ async fn seed_turn(turn_id: u64, text: &str) -> Turn {
 }
 
 #[tokio::test]
-async fn clone_thread_with_turns_reorders_turns_and_reindexes_ids() {
+async fn derive_context_keeps_selected_turn_ids_in_source_order() {
     let chat = Chat::new(&gateway_config(), Arc::new(StaticCredentialProvider))
         .expect("chat should build");
     let source = chat
@@ -77,37 +81,123 @@ async fn clone_thread_with_turns_reorders_turns_and_reindexes_ids() {
         .append_turn(seed_turn(2, "second").await)
         .await
         .expect("second turn should append");
-
-    let cloned = chat
-        .clone_thread_with_turns(&source, &[2, 1], CloneThreadOptions::default())
+    source
+        .append_turn(seed_turn(3, "third").await)
         .await
-        .expect("clone should succeed");
-    let turns = cloned.turns().await;
+        .expect("third turn should append");
 
-    assert_eq!(turns.len(), 2);
-    assert_eq!(turns[0].turn_id(), 1);
-    assert_eq!(turns[1].turn_id(), 2);
-    assert_eq!(
-        turns[0]
-            .metadata()
-            .get("source_turn_id")
-            .map(String::as_str),
-        Some("2")
-    );
-    assert_eq!(
-        turns[1]
-            .metadata()
-            .get("source_turn_id")
-            .map(String::as_str),
-        Some("1")
-    );
+    let (derived, result) = chat
+        .derive_context(
+            &source,
+            ThreadContextRequest {
+                retention: TurnRetentionPolicy::KeepSelectedTurnIds {
+                    turn_ids: vec![3, 1],
+                },
+                system_prompt: SystemPromptAction::Keep,
+                drop_unfinished_continuation: false,
+                reason: ContextControlReason::Manual,
+            },
+            DeriveContextOptions::default(),
+        )
+        .await
+        .expect("derive should succeed");
 
-    let first_message_text = match &turns[0].messages()[0] {
-        Message::User(message) => match &message.parts[0] {
-            ContentPart::Text { text } => text.as_str(),
-            other => panic!("expected text part, got {other:?}"),
-        },
-        other => panic!("expected user message, got {other:?}"),
-    };
-    assert_eq!(first_message_text, "second");
+    let derived_turns = derived.turns().await;
+    assert_eq!(derived_turns.len(), 2);
+    assert_eq!(derived_turns[0].turn_id(), 1);
+    assert_eq!(derived_turns[1].turn_id(), 3);
+    assert_eq!(result.kept_turn_ids, vec![1, 3]);
+    assert_eq!(result.dropped_turn_ids, vec![2]);
+    assert!(!result.continuation_dropped);
+
+    derived
+        .append_turn(seed_turn(4, "after-derive").await)
+        .await
+        .expect("append should continue from max(turn_id)+1");
+    let derived_after_append = derived.turns().await;
+    assert_eq!(derived_after_append[2].turn_id(), 4);
+}
+
+#[tokio::test]
+async fn rewrite_context_keeps_last_turns_and_preserves_ids() {
+    let chat = Chat::new(&gateway_config(), Arc::new(StaticCredentialProvider))
+        .expect("chat should build");
+    let thread = chat
+        .open_thread(ThreadOptions::default())
+        .await
+        .expect("thread should open");
+    thread
+        .append_turn(seed_turn(1, "first").await)
+        .await
+        .expect("first turn should append");
+    thread
+        .append_turn(seed_turn(2, "second").await)
+        .await
+        .expect("second turn should append");
+    thread
+        .append_turn(seed_turn(3, "third").await)
+        .await
+        .expect("third turn should append");
+
+    let result = chat
+        .rewrite_context(
+            &thread,
+            ThreadContextRequest {
+                retention: TurnRetentionPolicy::KeepLastTurns { count: 2 },
+                system_prompt: SystemPromptAction::Clear,
+                drop_unfinished_continuation: true,
+                reason: ContextControlReason::CortexReset,
+            },
+            RewriteContextOptions::default(),
+        )
+        .await
+        .expect("rewrite should succeed");
+
+    let rewritten_turns = thread.turns().await;
+    assert_eq!(rewritten_turns.len(), 2);
+    assert_eq!(rewritten_turns[0].turn_id(), 2);
+    assert_eq!(rewritten_turns[1].turn_id(), 3);
+    assert_eq!(result.kept_turn_ids, vec![2, 3]);
+    assert_eq!(result.dropped_turn_ids, vec![1]);
+    assert!(result.continuation_dropped);
+
+    thread
+        .append_turn(seed_turn(4, "after-rewrite").await)
+        .await
+        .expect("append should continue from max(turn_id)+1");
+    let turns_after_append = thread.turns().await;
+    assert_eq!(turns_after_append[2].turn_id(), 4);
+}
+
+#[tokio::test]
+async fn derive_context_rejects_duplicate_selected_turn_ids() {
+    let chat = Chat::new(&gateway_config(), Arc::new(StaticCredentialProvider))
+        .expect("chat should build");
+    let source = chat
+        .open_thread(ThreadOptions::default())
+        .await
+        .expect("thread should open");
+    source
+        .append_turn(seed_turn(1, "first").await)
+        .await
+        .expect("first turn should append");
+
+    let result = chat
+        .derive_context(
+            &source,
+            ThreadContextRequest {
+                retention: TurnRetentionPolicy::KeepSelectedTurnIds {
+                    turn_ids: vec![1, 1],
+                },
+                system_prompt: SystemPromptAction::Keep,
+                drop_unfinished_continuation: false,
+                reason: ContextControlReason::Manual,
+            },
+            DeriveContextOptions::default(),
+        )
+        .await;
+    match result {
+        Ok(_) => panic!("duplicate selected ids should fail"),
+        Err(err) => assert!(err.message.contains("duplicate turn_id")),
+    }
 }

@@ -8,6 +8,41 @@ pub type BackendId = String;
 pub type ModelId = String;
 pub type RequestId = String;
 pub const DEFAULT_ROUTE_ALIAS: &str = "default";
+pub const CHAT_CAPABILITY_ID: &str = "chat";
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, Validate, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ChatRouteAlias {
+    #[validate(custom(function = "validate_non_blank"))]
+    pub capability: String,
+    #[validate(custom(function = "validate_non_blank"))]
+    pub alias: String,
+}
+
+impl ChatRouteAlias {
+    pub fn default_chat() -> Self {
+        Self {
+            capability: CHAT_CAPABILITY_ID.to_string(),
+            alias: DEFAULT_ROUTE_ALIAS.to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, Validate, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ChatRouteKey {
+    #[validate(custom(function = "validate_non_blank"))]
+    pub capability: String,
+    #[validate(custom(function = "validate_non_blank"))]
+    pub binding_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ChatRouteRef {
+    Alias(ChatRouteAlias),
+    Key(ChatRouteKey),
+}
 
 fn validate_non_blank(value: &str) -> Result<(), ValidationError> {
     if value.trim().is_empty() {
@@ -179,8 +214,8 @@ impl Default for ResilienceConfig {
     }
 }
 
-fn default_chat_default_route() -> Option<String> {
-    Some(DEFAULT_ROUTE_ALIAS.to_string())
+fn default_chat_default_route() -> Option<ChatRouteRef> {
+    Some(ChatRouteRef::Alias(ChatRouteAlias::default_chat()))
 }
 
 fn default_chat_default_max_tool_rounds() -> u32 {
@@ -203,8 +238,7 @@ fn default_chat_default_turn_timeout_ms() -> u64 {
 #[serde(deny_unknown_fields)]
 pub struct ChatConfig {
     #[serde(default = "default_chat_default_route")]
-    #[validate(custom(function = "validate_non_blank"))]
-    pub default_route: Option<String>,
+    pub default_route: Option<ChatRouteRef>,
     #[serde(default = "default_chat_default_max_tool_rounds")]
     #[validate(range(min = 1))]
     pub default_max_tool_rounds: u32,

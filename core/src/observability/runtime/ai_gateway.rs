@@ -96,7 +96,12 @@ pub struct AiGatewayChatThreadArgs {
     pub kind: String,
     pub messages: Value,
     pub turn_summaries: Option<Value>,
+    pub source_thread_id: Option<String>,
     pub source_turn_ids: Option<Value>,
+    pub kept_turn_ids: Option<Value>,
+    pub dropped_turn_ids: Option<Value>,
+    pub continuation_dropped: Option<bool>,
+    pub context_reason: Option<String>,
 }
 
 pub fn emit_ai_gateway_chat_thread(args: AiGatewayChatThreadArgs) {
@@ -113,7 +118,12 @@ pub fn emit_ai_gateway_chat_thread(args: AiGatewayChatThreadArgs) {
             kind: args.kind,
             messages: args.messages,
             turn_summaries: args.turn_summaries,
+            source_thread_id: args.source_thread_id,
             source_turn_ids: args.source_turn_ids,
+            kept_turn_ids: args.kept_turn_ids,
+            dropped_turn_ids: args.dropped_turn_ids,
+            continuation_dropped: args.continuation_dropped,
+            context_reason: args.context_reason,
         },
     ));
 }

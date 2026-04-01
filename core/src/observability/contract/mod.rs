@@ -205,7 +205,17 @@ pub struct AiGatewayChatThreadEvent {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub turn_summaries: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_thread_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_turn_ids: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kept_turn_ids: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dropped_turn_ids: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub continuation_dropped: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

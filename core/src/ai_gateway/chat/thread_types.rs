@@ -2,6 +2,8 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 
+use crate::ai_gateway::types::ChatRouteRef;
+
 use super::{
     executor::ToolExecutor,
     tool::{ChatToolDefinition, ToolOverride},
@@ -31,10 +33,62 @@ pub struct TurnSummary {
     pub completed: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TurnRetentionPolicy {
+    KeepAll,
+    KeepLastTurns { count: usize },
+    KeepSelectedTurnIds { turn_ids: Vec<u64> },
+    DropAll,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SystemPromptAction {
+    Keep,
+    Clear,
+    Replace { prompt: String },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ContextControlReason {
+    Manual,
+    CortexReset,
+    ContinuationCleanup,
+    Recovery,
+}
+
+impl ContextControlReason {
+    pub fn as_label(&self) -> &'static str {
+        match self {
+            Self::Manual => "manual",
+            Self::CortexReset => "cortex_reset",
+            Self::ContinuationCleanup => "continuation_cleanup",
+            Self::Recovery => "recovery",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ThreadContextRequest {
+    pub retention: TurnRetentionPolicy,
+    pub system_prompt: SystemPromptAction,
+    pub drop_unfinished_continuation: bool,
+    pub reason: ContextControlReason,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ThreadContextResult {
+    pub kept_turn_ids: Vec<u64>,
+    pub dropped_turn_ids: Vec<u64>,
+    pub continuation_dropped: bool,
+}
+
 #[derive(Default)]
 pub struct ThreadOptions {
     pub thread_id: Option<String>,
-    pub route_or_alias: Option<String>,
+    pub route_ref: Option<ChatRouteRef>,
     pub tools: Vec<ChatToolDefinition>,
     pub system_prompt: Option<String>,
     pub default_output_mode: Option<OutputMode>,
@@ -44,22 +98,25 @@ pub struct ThreadOptions {
     pub metadata: BTreeMap<String, String>,
 }
 
-pub struct CloneThreadOptions {
+pub struct DeriveContextOptions {
     pub thread_id: Option<String>,
-    pub route_or_alias: Option<String>,
-    pub system_prompt: Option<String>,
+    pub route_ref: Option<ChatRouteRef>,
     pub metadata: BTreeMap<String, String>,
 }
 
-impl Default for CloneThreadOptions {
+impl Default for DeriveContextOptions {
     fn default() -> Self {
         Self {
             thread_id: None,
-            route_or_alias: None,
-            system_prompt: None,
+            route_ref: None,
             metadata: BTreeMap::new(),
         }
     }
+}
+
+#[derive(Default)]
+pub struct RewriteContextOptions {
+    pub metadata: BTreeMap<String, String>,
 }
 
 pub struct TurnInput {

@@ -287,7 +287,15 @@ impl Thread {
                 kind: "turn_committed".to_string(),
                 messages: thread_messages_snapshot(&guard.turns),
                 turn_summaries: Some(turn_summaries_value(&guard.turns)),
+                source_thread_id: None,
                 source_turn_ids: None,
+                kept_turn_ids: None,
+                dropped_turn_ids: None,
+                continuation_dropped: None,
+                context_reason: metadata
+                    .get("context_reason")
+                    .cloned()
+                    .or_else(|| Some("turn_committed".to_string())),
             },
         );
 

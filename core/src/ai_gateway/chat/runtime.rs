@@ -16,7 +16,7 @@ use crate::{
         telemetry::{GatewayTelemetryEvent, emit_gateway_event},
         types::{
             AdapterContext, BackendCapabilities, BackendDialect, BackendId, BackendProfile,
-            ResolvedCredential,
+            ChatRouteRef, ResolvedCredential,
         },
     },
     observability::{metrics as observability_metrics, runtime as observability_runtime},
@@ -33,7 +33,7 @@ pub(crate) struct ChatRuntime {
     pub adapters: std::collections::HashMap<BackendDialect, std::sync::Arc<dyn BackendAdapter>>,
     pub capability_guard: CapabilityGuard,
     pub resilience: ResilienceEngine,
-    pub default_route: Option<String>,
+    pub default_route_ref: Option<ChatRouteRef>,
     pub default_turn_timeout_ms: u64,
 }
 
@@ -294,11 +294,18 @@ impl ChatRuntime {
         }
     }
 
-    pub(crate) async fn resolve_backend(
+    pub(crate) async fn resolve_backend_route_ref(
         &self,
-        route: Option<&str>,
+        route_ref: Option<&ChatRouteRef>,
     ) -> Result<BoundBackend, GatewayError> {
-        let selected = self.router.select(route)?;
+        let selected = self.router.select_route_ref(route_ref)?;
+        self.bound_backend_from_selected(selected).await
+    }
+
+    async fn bound_backend_from_selected(
+        &self,
+        selected: crate::ai_gateway::router::SelectedBackend,
+    ) -> Result<BoundBackend, GatewayError> {
         let credential = self
             .credential_provider
             .resolve(&selected.profile.credential, &selected.profile)

@@ -74,7 +74,7 @@ All stable per-organ Cortex execution families share one common event-body shape
 |---|---|---|---|
 | `ai-gateway.request` | gateway transport request lifecycle around one backend call | `run_id`; `tick`; `request_id`; `span_id`; `parent_span_id?`; `organ_id?`; `capability`; `backend_id`; `model`; `kind`; `attempt?`; `retryable?`; `provider_request?`; `provider_response?`; `usage?`; `error?` | capability-neutral provider/backend call narrative |
 | `ai-gateway.chat.turn` | chat turn commit / failure boundary | `run_id`; `tick`; `thread_id`; `turn_id`; `span_id`; `parent_span_id?`; `organ_id?`; `request_id?`; `status`; `dispatch_payload`; `messages_when_committed?`; `metadata`; `finish_reason?`; `usage?`; `backend_metadata?`; `error?` | turn lifecycle, message/tool inspection, and linked transport drilldown |
-| `ai-gateway.chat.thread` | chat thread snapshot on open / clone / turn commit | `run_id`; `tick`; `thread_id`; `span_id`; `parent_span_id?`; `organ_id?`; `request_id?`; `kind`; `messages`; `turn_summaries?`; `source_turn_ids?` | authoritative thread snapshot and thread-level reconstruction |
+| `ai-gateway.chat.thread` | chat thread snapshot on open / clone / derive / rewrite / turn commit | `run_id`; `tick`; `thread_id`; `span_id`; `parent_span_id?`; `organ_id?`; `request_id?`; `kind`; `messages`; `turn_summaries?`; `source_thread_id?`; `source_turn_ids?`; `kept_turn_ids?`; `dropped_turn_ids?`; `continuation_dropped?`; `context_reason?` | authoritative thread snapshot and thread-level reconstruction |
 
 ## Correlation Requirements
 

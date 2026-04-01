@@ -2,7 +2,10 @@ use std::collections::HashMap;
 
 use crate::ai_gateway::{
     error::{GatewayError, invalid_request},
-    types::{AIGatewayConfig, BackendId, BackendProfile, DEFAULT_ROUTE_ALIAS, ModelTarget},
+    types::{
+        AIGatewayConfig, BackendId, BackendProfile, CHAT_CAPABILITY_ID, ChatRouteAlias,
+        ChatRouteKey, ChatRouteRef, DEFAULT_ROUTE_ALIAS, ModelTarget,
+    },
 };
 
 #[derive(Clone)]
@@ -99,10 +102,19 @@ impl BackendRouter {
         })
     }
 
-    pub fn select(&self, route: Option<&str>) -> Result<SelectedBackend, GatewayError> {
-        let route_ref = route.unwrap_or(DEFAULT_ROUTE_ALIAS);
+    pub fn select_route_ref(
+        &self,
+        route_ref: Option<&ChatRouteRef>,
+    ) -> Result<SelectedBackend, GatewayError> {
+        let target = match route_ref {
+            Some(ChatRouteRef::Alias(alias)) => self.resolve_chat_alias(alias)?,
+            Some(ChatRouteRef::Key(key)) => self.resolve_chat_key(key)?,
+            None => self.resolve_chat_alias(&ChatRouteAlias::default_chat())?,
+        };
+        self.selected_from_target(target)
+    }
 
-        let target = self.resolve_route_ref(route_ref)?;
+    fn selected_from_target(&self, target: ModelTarget) -> Result<SelectedBackend, GatewayError> {
         let profile = self
             .backends
             .get(&target.backend_id)
@@ -132,28 +144,43 @@ impl BackendRouter {
         })
     }
 
-    fn resolve_route_ref(&self, route_ref: &str) -> Result<ModelTarget, GatewayError> {
-        let trimmed = route_ref.trim();
-        if trimmed.is_empty() {
-            return Err(invalid_request("route reference cannot be empty"));
+    fn resolve_chat_alias(&self, alias: &ChatRouteAlias) -> Result<ModelTarget, GatewayError> {
+        if alias.capability != CHAT_CAPABILITY_ID {
+            return Err(invalid_request(format!(
+                "unsupported capability '{}' in route alias; expected '{}'",
+                alias.capability, CHAT_CAPABILITY_ID
+            )));
         }
-
-        if let Some((backend_id, model_id)) = trimmed.split_once('/') {
-            if backend_id.trim().is_empty() || model_id.trim().is_empty() {
-                return Err(invalid_request(format!(
-                    "invalid route '{}', expected '<backend-id>/<model-id>'",
-                    route_ref
-                )));
-            }
-            return Ok(ModelTarget {
-                backend_id: backend_id.trim().to_string(),
-                model_id: model_id.trim().to_string(),
-            });
+        let trimmed = alias.alias.trim();
+        if trimmed.is_empty() {
+            return Err(invalid_request("route alias cannot be empty"));
         }
 
         self.route_aliases.get(trimmed).cloned().ok_or_else(|| {
             invalid_request(format!(
-                "unknown route alias '{}'; expected alias or '<backend-id>/<model-id>'",
+                "unknown route alias '{}'; expected one configured chat alias",
+                trimmed
+            ))
+        })
+    }
+
+    fn resolve_chat_key(&self, key: &ChatRouteKey) -> Result<ModelTarget, GatewayError> {
+        if key.capability != CHAT_CAPABILITY_ID {
+            return Err(invalid_request(format!(
+                "unsupported capability '{}' in route key; expected '{}'",
+                key.capability, CHAT_CAPABILITY_ID
+            )));
+        }
+        let trimmed = key.binding_id.trim();
+        if trimmed.is_empty() {
+            return Err(invalid_request("route key binding_id cannot be empty"));
+        }
+
+        // Current config only defines alias-based model targets.
+        // Treat binding_id as the configured chat binding selector until chat bindings are explicit.
+        self.route_aliases.get(trimmed).cloned().ok_or_else(|| {
+            invalid_request(format!(
+                "unknown route key binding_id '{}'; expected one configured chat binding selector",
                 trimmed
             ))
         })

@@ -19,7 +19,9 @@ pub use message::{
 };
 pub use thread::Thread;
 pub use thread_types::{
-    CloneThreadOptions, ThreadOptions, TurnInput, TurnOutput, TurnQuery, TurnRef, TurnSummary,
+    ContextControlReason, DeriveContextOptions, RewriteContextOptions, SystemPromptAction,
+    ThreadContextRequest, ThreadContextResult, ThreadOptions, TurnInput, TurnOutput, TurnQuery,
+    TurnRef, TurnRetentionPolicy, TurnSummary,
 };
 pub use tool::{ChatToolDefinition, ToolOverride};
 pub use turn::Turn;
