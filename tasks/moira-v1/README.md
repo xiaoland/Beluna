@@ -30,6 +30,7 @@ This packet is the non-authoritative workspace for decomposing the Moira upgrade
 - `L1.md`: scope split, workstream map, and sequencing strategy.
 - `L2.md`: architecture seams, candidate module boundaries, and event-model expectations.
 - `L3.md`: execution slices designed for incremental landing.
+- `STATUS.md`: current implementation snapshot and session handoff anchor.
 - `BACKEND-REFACTOR-TARGET.md`: cleanup-stage backend landing target for the Moira Unit TDD backend module split.
 - `FRONTEND-REFACTOR-TARGET.md`: cleanup-stage frontend landing target for the Loom layer split.
 - `CLEANUP-LANDING-PLAN.md`: concrete cleanup slices, authoritative TDD touchpoints, and local AGENTS guidance.

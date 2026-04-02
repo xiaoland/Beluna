@@ -20,10 +20,11 @@ Moira provides Beluna's first-party local control plane for:
 ## Current Realization Boundary
 
 1. Current code primarily realizes Lachesis local ingestion, storage, query, and Loom inspection for one wake and one selected tick.
-2. The backend cleanup split is now explicit in code: `app` composes `clotho`, `lachesis`, and `atropos`, while Lachesis remains the only substantially realized backend owner today.
+2. The backend cleanup split is now explicit in code: `app` composes `clotho`, `lachesis`, and `atropos`, while Lachesis remains the most mature backend owner and Clotho/Atropos now also own operator-facing control-plane behavior.
 3. The frontend cleanup and integration pass are now explicit in code: `app/LoomApp.vue` composes the Lachesis workspace, `bridge` owns backend-shaped contracts, `query` owns Lachesis UI state, and the former catch-all helper files are replaced by explicit `projection/lachesis/*` and `presentation/*` owners.
-4. Clotho artifact and profile preparation, plus Atropos supervision, remain part of Moira's target responsibility but are not yet fully realized in operator-facing code.
-5. The cleanup stage remains behavior-preserving. Its purpose is to finish establishing maintainable frontend and cross-slice boundaries before those additional responsibilities expand.
+4. Clotho now has operator-facing known local build registration plus app-local JSONC profile document management in Loom; Atropos now has operator-facing runtime status, wake, graceful stop, and force-kill with second confirmation.
+5. Published artifact discovery, checksum verification, local source-folder compile, and schema-validation interactions with Core authority remain later Clotho slices rather than current realization.
+6. The cleanup stage remains behavior-preserving. Its purpose is to finish establishing maintainable frontend and cross-slice boundaries while those additional responsibilities expand.
 
 ## Internal Split
 

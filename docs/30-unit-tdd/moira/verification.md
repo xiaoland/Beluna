@@ -2,11 +2,12 @@
 
 ## Behavioral Checks
 
-1. Moira can validate a selected JSONC profile against the Core schema authority before wake.
-2. Moira can compile a local Core source folder for development wake flow.
-3. Moira can verify a published Core artifact against `SHA256SUMS` before activation.
-4. Quitting Moira stops the supervised Core.
-5. Force-kill requires a second confirmation step and is not the default stop path.
+1. Moira can create, edit, persist, and reselect multiple local JSONC profile documents through Loom.
+2. Moira can validate a selected JSONC profile against the Core schema authority before wake.
+3. Moira can compile a local Core source folder for development wake flow.
+4. Moira can verify a published Core artifact against `SHA256SUMS` before activation.
+5. Quitting Moira stops the supervised Core.
+6. Force-kill requires a second confirmation step and is not the default stop path.
 
 ## Observability Checks
 

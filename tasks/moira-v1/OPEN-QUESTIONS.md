@@ -30,13 +30,33 @@ This file tracks unresolved decisions that are large enough to change design or 
 - The first humane chronology view remains raw-first in the query layer.
 - Family naming and lane identity are separate concerns: event families stay owner-centric, while lane types stay entity-centric.
 - Current Core observability event mess is migration input, not target contract truth for Stage 2.
+- Current canonical Stage 2 names in code are:
+  - `ai-gateway.request`
+  - `ai-gateway.chat.turn`
+  - `ai-gateway.chat.thread`
+  - `cortex.primary`
+  - `cortex.sense-helper`
+  - `cortex.goal-forest-helper`
+  - `cortex.acts-helper`
+  - `cortex.goal-forest`
+  - `stem.tick`
+  - `stem.afferent`
+  - `stem.efferent`
+  - `stem.proprioception`
+  - `stem.ns-catalog`
+  - `stem.afferent.rule`
+  - `spine.adapter`
+  - `spine.endpoint`
+  - `spine.sense`
+  - `spine.act`
+- Older task-buffer names such as `ai-gateway.turn`, `cortex.organ`, `stem.signal`, `stem.dispatch`, `stem.descriptor.catalog`, and `spine.dispatch` are historical draft vocabulary only.
+- Some Core fixture ids still retain older scenario labels. Those fixture ids are not the canonical family names consumed by Moira.
 - Preferred primary lane resolution matrix:
-  - `cortex.organ` -> lane type `organ`; key `organ_id > request_id > span_id`
-  - `ai-gateway.request|turn|thread` -> lane type `thread`; key `thread_id > turn_id > request_id > span_id`
-  - afferent `stem.signal` -> lane type `sense`; key `sense_id > endpoint_id > span_id`
-  - efferent `stem.signal` and `stem.dispatch` -> lane type `act`; key `act_id > endpoint_id > span_id`
-  - `spine.endpoint` -> lane type `endpoint`; key `endpoint_id > adapter_id > span_id`
-  - `spine.dispatch` -> lane type `act`; key `act_id > endpoint_id > span_id`
+  - `cortex.primary|cortex.sense-helper|cortex.goal-forest-helper|cortex.acts-helper|cortex.goal-forest` -> lane type `cortex`; key `request_id > family > raw_event_id`
+  - `ai-gateway.request|ai-gateway.chat.turn|ai-gateway.chat.thread` -> lane type `misc` in the current projection, with interval attachment via `request_id|ai_request_id|thread_id|turn_id` when a related Cortex interval exists
+  - `stem.afferent` -> lane type `afferent`; key `sense_id > descriptor_id > endpoint_id > raw_event_id`
+  - `stem.efferent` -> lane type `efferent`; key `act_id > descriptor_id > endpoint_id > raw_event_id`
+  - `spine.endpoint|spine.adapter|spine.sense|spine.act` -> lane type `spine`; key `endpoint_id > adapter_id > act_id > sense_id > raw_event_id`
 
 ## Next Stage Working Defaults
 
@@ -47,22 +67,25 @@ These defaults should be used for the next stages unless implementation pressure
 - replace the current summary-first AI-gateway and Cortex organ events with full-payload owner-centric families
 - keep the Stage 2 logical catalog coarse-grained:
   - `ai-gateway.request`
-  - `ai-gateway.turn`
-  - `ai-gateway.thread`
-  - `cortex.tick`
-  - `cortex.organ`
+  - `ai-gateway.chat.turn`
+  - `ai-gateway.chat.thread`
+  - `cortex.primary`
+  - `cortex.sense-helper`
+  - `cortex.goal-forest-helper`
+  - `cortex.acts-helper`
   - `cortex.goal-forest`
   - `stem.tick`
-  - `stem.signal`
-  - `stem.dispatch`
+  - `stem.afferent`
+  - `stem.efferent`
   - `stem.proprioception`
-  - `stem.descriptor.catalog`
+  - `stem.ns-catalog`
   - `stem.afferent.rule`
   - `spine.adapter`
   - `spine.endpoint`
-  - `spine.dispatch`
+  - `spine.sense`
+  - `spine.act`
 - require `tick` on every Core event consumed by Moira
-- use `tick = 0` for bootstrap or pre-first-grant events rather than leaving them outside the model
+- use `tick = 0` for startup or pre-first-grant events rather than leaving them outside the model
 - require lane keys sufficient for a per-tick gantt or lane chronology
 - keep `runs` and `ticks`
 - keep raw OTLP events authoritative
@@ -84,7 +107,7 @@ These defaults should be used for the next stages unless implementation pressure
 
 ## Narrow Questions To Resolve Right Before Stage 2 Code
 
-1. Should `ai-gateway.request` expose `provider_request_when_present` on every request-lifecycle kind when the adapter can produce it cheaply, or only on terminal kinds by default?
+1. Should `ai-gateway.request` expose `provider_request` on every request-lifecycle kind when the adapter can produce it cheaply, or only on terminal kinds by default?
 
 2. Do any Stage 2 Loom views need a documented secondary grouping inside one primary lane, or is the current primary lane matrix sufficient for the first humane chronology?
 

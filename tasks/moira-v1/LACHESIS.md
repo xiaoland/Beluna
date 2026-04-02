@@ -12,6 +12,10 @@ Lachesis should make Beluna explainable during early development. The collection
 - preserving enough raw evidence that Loom does not become a lossy summary layer
 - keeping the Stage 2 event catalog owner-centric and coarse-grained enough that it matches the actual Core runtime boundaries
 
+This note originally used an older Stage 2 draft vocabulary.
+Current code truth now lives in the Core contract and Moira projection, so names such as `ai-gateway.turn`, `cortex.organ`, `stem.signal`, `stem.dispatch`, `stem.descriptor.catalog`, and `spine.dispatch` should be treated as historical task-buffer language only.
+Older fixture ids may still preserve that vocabulary as scenario labels.
+
 ## Collection Principles
 
 ### 1. Collect raw first, project second
@@ -36,7 +40,7 @@ Lachesis should make Beluna explainable during early development. The collection
 - Every event belongs to one `tick`.
 - Within a tick, chronology is reconstructed by timestamp plus span or lane identity.
 - Loom should be able to render a per-tick Gantt-like chronology where the vertical axis is span or stable resource lane.
-- Events that happen before the first live tick grant should remain inspectable under bootstrap `tick = 0` rather than falling outside the model.
+- Events that happen before the first live tick grant should remain inspectable under startup `tick = 0` rather than falling outside the model.
 
 ## What Lachesis Should Collect In This Task
 
@@ -60,8 +64,8 @@ Why:
 Collect:
 
 - `ai-gateway.request`
-- `ai-gateway.turn`
-- `ai-gateway.thread`
+- `ai-gateway.chat.turn`
+- `ai-gateway.chat.thread`
 
 Each conversation record should preserve:
 
@@ -88,10 +92,10 @@ Why:
 Collect:
 
 - `stem.tick`
-- `stem.signal`
-- `stem.dispatch`
+- `stem.afferent`
+- `stem.efferent`
 - `stem.proprioception`
-- `stem.descriptor.catalog`
+- `stem.ns-catalog`
 - `stem.afferent.rule`
 
 Each pathway record should preserve:
@@ -115,15 +119,17 @@ Why:
 
 Collect:
 
-- `cortex.tick`
-- `cortex.organ`
+- `cortex.primary`
+- `cortex.sense-helper`
+- `cortex.goal-forest-helper`
+- `cortex.acts-helper`
 - `cortex.goal-forest`
 
 Why:
 
-- organ summaries alone are insufficient for explanation
-- tick gating and completion status are part of the story, not just the post-hoc result
+- helper-scoped execution intervals carry the current Cortex request and AI-correlation story
 - the current runtime owns goal-forest snapshot plus patch/persist semantics, not a fixed biological verb taxonomy
+- the older `cortex.organ` and `cortex.tick` draft names are not the current canonical family names in code
 
 ## E. Spine Topology And Dispatch
 
@@ -131,7 +137,8 @@ Collect:
 
 - `spine.adapter`
 - `spine.endpoint`
-- `spine.dispatch`
+- `spine.sense`
+- `spine.act`
 
 Why:
 
@@ -240,20 +247,23 @@ Selected tick browsing must not depend on raw JSON as the first thing a human se
 
 - realign the Core event contract around owner-centric logical families:
   - `ai-gateway.request`
-  - `ai-gateway.turn`
-  - `ai-gateway.thread`
-  - `cortex.tick`
-  - `cortex.organ`
+  - `ai-gateway.chat.turn`
+  - `ai-gateway.chat.thread`
+  - `cortex.primary`
+  - `cortex.sense-helper`
+  - `cortex.goal-forest-helper`
+  - `cortex.acts-helper`
   - `cortex.goal-forest`
   - `stem.tick`
-  - `stem.signal`
-  - `stem.dispatch`
+  - `stem.afferent`
+  - `stem.efferent`
   - `stem.proprioception`
-  - `stem.descriptor.catalog`
+  - `stem.ns-catalog`
   - `stem.afferent.rule`
   - `spine.adapter`
   - `spine.endpoint`
-  - `spine.dispatch`
+  - `spine.sense`
+  - `spine.act`
 - preserve full payloads in raw events
 - stop relying on fuzzy keyword grouping for Stem and Spine
 - keep richer semantics inside `kind`, `status`, and `transition_kind` fields instead of exploding family count

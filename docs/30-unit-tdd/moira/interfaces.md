@@ -11,6 +11,7 @@
 - Trusted Core archive pattern: `beluna-core-<rust-target-triple>.tar.gz`.
 - Current macOS-first expected asset: `beluna-core-aarch64-apple-darwin.tar.gz`.
 - Local source-folder input for development builds compiled before launch.
+- App-local JSONC profile documents managed under Clotho-owned profile ids.
 
 3. Lifecycle supervision interface:
 - Wake local Core with a selected artifact/build and JSONC profile.
