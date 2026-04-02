@@ -167,7 +167,8 @@ code,
 }
 
 .button-primary,
-.button-secondary {
+.button-secondary,
+.button-danger {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -192,13 +193,21 @@ code,
   border-color: var(--line-strong);
 }
 
+.button-danger {
+  color: #fff7f5;
+  background: var(--err);
+  border-color: color-mix(in srgb, var(--err) 80%, white);
+}
+
 .button-primary:hover,
-.button-secondary:hover {
+.button-secondary:hover,
+.button-danger:hover {
   border-color: color-mix(in srgb, var(--accent) 44%, transparent);
 }
 
 .button-primary:disabled,
-.button-secondary:disabled {
+.button-secondary:disabled,
+.button-danger:disabled {
   cursor: default;
   opacity: 0.55;
   transform: none;

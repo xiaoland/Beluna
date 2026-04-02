@@ -22,7 +22,7 @@ export function stateTone(state: string | null): 'ok' | 'warn' | 'err' | 'idle' 
     return 'warn'
   }
 
-  if (['error', 'failed', 'fault', 'faulted', 'stopped', 'terminal'].some((token) => normalized.includes(token))) {
+  if (['error', 'failed', 'fault', 'faulted', 'stopped', 'terminal', 'terminated'].some((token) => normalized.includes(token))) {
     return 'err'
   }
 

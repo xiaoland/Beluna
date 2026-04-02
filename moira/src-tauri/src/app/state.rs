@@ -21,8 +21,17 @@ impl AppPaths {
         self.root.join("artifacts")
     }
 
+    pub fn known_local_builds_dir(&self) -> PathBuf {
+        self.artifacts_dir().join("known-local-builds")
+    }
+
     pub fn profiles_dir(&self) -> PathBuf {
         self.root.join("profiles")
+    }
+
+    #[allow(dead_code)]
+    pub fn profile_document_path(&self, profile_id: &str) -> PathBuf {
+        self.profiles_dir().join(format!("{profile_id}.jsonc"))
     }
 
     pub fn runtime_dir(&self) -> PathBuf {
@@ -45,6 +54,7 @@ impl AppPaths {
         for path in [
             self.root().to_path_buf(),
             self.artifacts_dir(),
+            self.known_local_builds_dir(),
             self.profiles_dir(),
             self.runtime_dir(),
             self.cache_dir(),

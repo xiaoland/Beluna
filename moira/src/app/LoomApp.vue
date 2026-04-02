@@ -1,12 +1,50 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import WakeControlPanel from '@/presentation/atropos/control/WakeControlPanel.vue'
 import TickDetailPanel from '@/presentation/lachesis/workspace/TickDetailPanel.vue'
 import TickTimeline from '@/presentation/lachesis/workspace/TickTimeline.vue'
 import WakeSessionList from '@/presentation/lachesis/workspace/WakeSessionList.vue'
 import StatusHeader from '@/presentation/loom/chrome/StatusHeader.vue'
 import { formatWhen } from '@/presentation/format'
+import { useProfileControl } from '@/query/control/profiles'
+import { useWakeControl } from '@/query/control/wake'
 import { useLachesisWorkspace } from '@/query/lachesis/workspace'
 
+const {
+  canForceKill,
+  canRegister,
+  canStop,
+  canWake,
+  cancelForceKillConfirmation,
+  confirmForceKill,
+  draft: buildDraft,
+  forceKillConfirmOpen,
+  issue: wakeIssue,
+  loading: wakeLoading,
+  refreshRuntimeStatus,
+  registerBuild,
+  requestForceKillConfirmation,
+  runtime,
+  selectedBuildId,
+  stopRuntime,
+  updateDraftField,
+  wakeSelectedBuild,
+} = useWakeControl()
+const {
+  canSave: canSaveProfile,
+  draft: profileDraft,
+  issue: profileIssue,
+  loading: profileLoading,
+  openProfile,
+  pathHint: profilePathHint,
+  profiles,
+  refreshProfiles,
+  saveCurrentProfile,
+  selectNoProfile,
+  selectedProfileId,
+  startNewProfile,
+  updateDraftField: updateProfileDraftField,
+} = useProfileControl()
 const {
   activeTab,
   issue,
@@ -21,6 +59,21 @@ const {
   wakeSessions,
   tickTimeline,
 } = useLachesisWorkspace()
+
+async function wakeSelectedProfileBuild(): Promise<void> {
+  await wakeSelectedBuild(selectedProfileId.value)
+}
+
+const controlLoading = computed(() => ({
+  forceKill: wakeLoading.forceKill,
+  profileList: profileLoading.list,
+  profileLoad: profileLoading.load,
+  profileSave: profileLoading.save,
+  register: wakeLoading.register,
+  runtime: wakeLoading.runtime,
+  wake: wakeLoading.wake,
+  stop: wakeLoading.stop,
+}))
 
 const selectionHint = computed(() => {
   if (!selectedTickDetail.value) {
@@ -43,6 +96,39 @@ const selectionHint = computed(() => {
       :loading="loading.status"
       :issue="issue"
       @refresh="refreshVisibleState"
+    />
+
+    <WakeControlPanel
+      :build-draft="buildDraft"
+      :can-force-kill="canForceKill"
+      :can-register="canRegister"
+      :can-save-profile="canSaveProfile"
+      :can-stop="canStop"
+      :can-wake="canWake"
+      :issue="wakeIssue"
+      :loading="controlLoading"
+      :profile-draft="profileDraft"
+      :profile-issue="profileIssue"
+      :profile-path-hint="profilePathHint"
+      :profiles="profiles"
+      :runtime="runtime"
+      :selected-build-id="selectedBuildId"
+      :selected-profile-id="selectedProfileId"
+      :show-force-kill-confirm="forceKillConfirmOpen"
+      @cancel-force-kill="cancelForceKillConfirmation"
+      @confirm-force-kill="confirmForceKill"
+      @open-profile="openProfile"
+      @refresh="refreshRuntimeStatus"
+      @refresh-profiles="refreshProfiles"
+      @register="registerBuild"
+      @request-force-kill="requestForceKillConfirmation"
+      @save-profile="saveCurrentProfile"
+      @select-no-profile="selectNoProfile"
+      @start-new-profile="startNewProfile"
+      @stop="stopRuntime"
+      @update-build-field="updateDraftField"
+      @update-profile-field="updateProfileDraftField"
+      @wake="wakeSelectedProfileBuild"
     />
 
     <p v-if="selectionHint" class="selection-hint">{{ selectionHint }}</p>

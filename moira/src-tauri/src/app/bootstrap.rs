@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, RunEvent};
 
 use crate::{
     app::state::{AppPaths, AppState},
@@ -39,13 +39,30 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            crate::app::commands::clotho::register_known_local_build,
+            crate::app::commands::clotho::prepare_wake_input,
+            crate::app::commands::clotho::list_profile_documents,
+            crate::app::commands::clotho::load_profile_document,
+            crate::app::commands::clotho::save_profile_document,
+            crate::app::commands::atropos::runtime_status,
+            crate::app::commands::atropos::wake,
+            crate::app::commands::atropos::stop,
+            crate::app::commands::atropos::force_kill,
             crate::app::commands::lachesis::receiver_status,
             crate::app::commands::lachesis::list_runs,
             crate::app::commands::lachesis::list_ticks,
             crate::app::commands::lachesis::tick_detail
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Moira");
+        .build(tauri::generate_context!())
+        .expect("error while building Moira")
+        .run(|app_handle, event| {
+            if let RunEvent::ExitRequested { .. } = event {
+                let managed = app_handle.state::<AppState>();
+                if let Err(err) = tauri::async_runtime::block_on(managed.atropos.stop_if_running()) {
+                    tracing::warn!(target: "moira::atropos", error = %err, "failed_to_request_stop_on_app_exit");
+                }
+            }
+        });
 }
 
 async fn initialize_state(app: &AppHandle) -> Result<AppState, String> {
@@ -59,7 +76,7 @@ async fn initialize_state(app: &AppHandle) -> Result<AppState, String> {
     let clotho = Arc::new(ClothoService::new(paths.clone()));
     let lachesis =
         LachesisService::open(paths.telemetry_db_path(), OTLP_ENDPOINT.to_string()).await?;
-    let atropos = Arc::new(AtroposService::new(paths));
+    let atropos = Arc::new(AtroposService::new(paths, clotho.clone(), lachesis.clone()));
 
     Ok(AppState::new(clotho, lachesis, atropos))
 }
