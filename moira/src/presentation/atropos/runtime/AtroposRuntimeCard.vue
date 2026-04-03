@@ -14,6 +14,7 @@ const props = defineProps<{
   }
   runtime: RuntimeStatus | null
   selectedBuildId: string | null
+  selectedProfileId: string | null
 }>()
 
 defineEmits<{
@@ -46,10 +47,21 @@ const runtimeSummary = computed(() => {
       <span class="runtime-summary">{{ runtimeSummary }}</span>
     </div>
 
+    <div class="runtime-grid runtime-grid-next">
+      <div class="runtime-item">
+        <span class="runtime-label">Next Wake Build</span>
+        <strong class="mono">{{ selectedBuildId ?? 'Choose in Clotho' }}</strong>
+      </div>
+      <div class="runtime-item">
+        <span class="runtime-label">Next Wake Profile</span>
+        <strong class="mono">{{ selectedProfileId ?? 'Optional / wake without --config' }}</strong>
+      </div>
+    </div>
+
     <div class="runtime-grid">
       <div class="runtime-item">
-        <span class="runtime-label">Build</span>
-        <strong class="mono">{{ runtime?.buildId ?? selectedBuildId ?? '—' }}</strong>
+        <span class="runtime-label">Running Build</span>
+        <strong class="mono">{{ runtime?.buildId ?? '—' }}</strong>
       </div>
       <div class="runtime-item">
         <span class="runtime-label">PID</span>
@@ -75,7 +87,7 @@ const runtimeSummary = computed(() => {
 
     <div class="action-row runtime-actions">
       <button class="button-primary" type="button" :disabled="!canWake" @click="$emit('wake')">
-        {{ loading.wake ? 'Waking…' : 'Wake Registered Build' }}
+        {{ loading.wake ? 'Waking…' : 'Wake Selected Build' }}
       </button>
       <button class="button-secondary" type="button" :disabled="!canStop" @click="$emit('stop')">
         {{ loading.stop ? 'Stopping…' : 'Graceful Stop' }}
@@ -85,7 +97,9 @@ const runtimeSummary = computed(() => {
       </button>
     </div>
 
-    <p v-if="runtime?.terminalReason" class="field-note">Terminal reason is retained until the next successful wake.</p>
+    <p class="field-note">
+      Wake uses the current Clotho selection shown above. Terminal reason remains visible until the next successful wake.
+    </p>
   </article>
 </template>
 
@@ -122,7 +136,10 @@ const runtimeSummary = computed(() => {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem;
-  margin-bottom: 1rem;
+}
+
+.runtime-grid-next {
+  margin-bottom: 0.75rem;
 }
 
 .runtime-item {
@@ -157,7 +174,7 @@ const runtimeSummary = computed(() => {
 }
 
 .runtime-actions {
-  margin-bottom: 0.7rem;
+  margin: 1rem 0 0.7rem;
 }
 
 .field-note {

@@ -14,9 +14,10 @@ const DEFAULT_PROFILE_TEMPLATE = `{
 }
 `
 
-export function useProfileControl() {
+export function useClothoProfileControl() {
   const usingTauri = hasTauriBridge()
   const issue = ref<string | null>(null)
+  const profileDialogOpen = ref(false)
   const profiles = ref<ProfileDocumentSummary[]>([])
   const selectedProfileId = ref<string | null>(null)
   const loadedProfilePath = ref<string | null>(null)
@@ -68,9 +69,7 @@ export function useProfileControl() {
     loading.list = true
     try {
       const payload = await listProfileDocuments()
-      const nextProfiles = payload
-        .map(normalizeProfileDocumentSummary)
-        .sort(compareProfileDocumentSummary)
+      const nextProfiles = payload.map(normalizeProfileDocumentSummary).sort(compareProfileDocumentSummary)
       profiles.value = nextProfiles
 
       if (
@@ -86,7 +85,7 @@ export function useProfileControl() {
     }
   }
 
-  async function openProfile(profileId: string): Promise<void> {
+  async function openProfileEditor(profileId: string): Promise<void> {
     if (!usingTauri) {
       return
     }
@@ -100,6 +99,7 @@ export function useProfileControl() {
       loadedProfilePath.value = document.profilePath
       draft.profileId = document.profileId
       draft.contents = document.contents
+      profileDialogOpen.value = true
     } catch (error) {
       issue.value = `Unable to load profile document: ${errorMessage(error)}`
     } finally {
@@ -108,10 +108,25 @@ export function useProfileControl() {
   }
 
   function startNewProfile(): void {
+    if (!usingTauri) {
+      issue.value =
+        'Profile management requires the Tauri bridge. Start Moira through the desktop shell to create or edit local profile documents.'
+      return
+    }
+
     issue.value = null
     loadedProfilePath.value = null
     draft.profileId = ''
     draft.contents = DEFAULT_PROFILE_TEMPLATE
+    profileDialogOpen.value = true
+  }
+
+  function closeProfileDialog(): void {
+    if (loading.load || loading.save) {
+      return
+    }
+
+    profileDialogOpen.value = false
   }
 
   function selectNoProfile(): void {
@@ -143,6 +158,7 @@ export function useProfileControl() {
       draft.profileId = document.profileId
       draft.contents = document.contents
       await refreshProfiles()
+      profileDialogOpen.value = false
     } catch (error) {
       issue.value = `Unable to save profile document: ${errorMessage(error)}`
     } finally {
@@ -152,11 +168,13 @@ export function useProfileControl() {
 
   return {
     canSave,
+    closeProfileDialog,
     draft,
     issue,
     loading,
-    openProfile,
+    openProfileEditor,
     pathHint,
+    profileDialogOpen,
     profiles,
     refreshProfiles,
     saveCurrentProfile,

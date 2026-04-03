@@ -1,7 +1,6 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 
 import { fetchRuntimeStatus, forceKillCore, stopCore, wakeCore } from '@/bridge/atropos'
-import { registerKnownLocalBuild } from '@/bridge/clotho'
 import { hasTauriBridge } from '@/bridge/env'
 import { normalizeRuntimeStatus, type RuntimeStatus } from '@/projection/atropos'
 
@@ -9,21 +8,13 @@ const ACTIVE_PHASES = new Set(['waking', 'running', 'stopping'])
 const FORCE_KILL_PHASES = new Set(['running', 'stopping'])
 const POLL_INTERVAL_MS = 800
 
-export function useWakeControl() {
+export function useAtroposRuntime(selectedBuildId: { value: string | null }) {
   const usingTauri = hasTauriBridge()
   const issue = ref<string | null>(null)
   const runtime = ref<RuntimeStatus | null>(null)
-  const selectedBuildId = ref<string | null>(null)
-
-  const draft = reactive({
-    buildId: '',
-    executablePath: '',
-    workingDir: '',
-    sourceDir: '',
-  })
+  const forceKillConfirmOpen = ref(false)
 
   const loading = reactive({
-    register: false,
     runtime: false,
     wake: false,
     stop: false,
@@ -31,12 +22,11 @@ export function useWakeControl() {
   })
 
   let pollTimer: number | null = null
-  const forceKillConfirmOpen = ref(false)
 
   onMounted(async () => {
     if (!usingTauri) {
       issue.value =
-        'Wake control requires the Tauri bridge. Start Moira through the desktop shell to register builds and supervise Core.'
+        'Atropos supervision requires the Tauri bridge. Start Moira through the desktop shell to wake and supervise Core.'
       return
     }
 
@@ -47,20 +37,15 @@ export function useWakeControl() {
     stopPolling()
   })
 
-  const canRegister = computed(
-    () => draft.buildId.trim().length > 0 && draft.executablePath.trim().length > 0 && !loading.register,
-  )
   const canWake = computed(
     () =>
       usingTauri &&
+      !loading.runtime &&
       !loading.wake &&
-      !loading.register &&
       selectedBuildId.value != null &&
       !ACTIVE_PHASES.has(runtime.value?.phase ?? 'idle'),
   )
-  const canStop = computed(
-    () => usingTauri && !loading.stop && ACTIVE_PHASES.has(runtime.value?.phase ?? 'idle'),
-  )
+  const canStop = computed(() => usingTauri && !loading.stop && ACTIVE_PHASES.has(runtime.value?.phase ?? 'idle'))
   const canForceKill = computed(
     () =>
       usingTauri &&
@@ -68,13 +53,6 @@ export function useWakeControl() {
       runtime.value?.pid != null &&
       FORCE_KILL_PHASES.has(runtime.value.phase),
   )
-
-  function updateDraftField(
-    field: 'buildId' | 'executablePath' | 'workingDir' | 'sourceDir',
-    value: string,
-  ) {
-    draft[field] = value
-  }
 
   async function refreshRuntimeStatus(): Promise<void> {
     if (!usingTauri) {
@@ -91,29 +69,6 @@ export function useWakeControl() {
       stopPolling()
     } finally {
       loading.runtime = false
-    }
-  }
-
-  async function registerBuild(): Promise<void> {
-    if (!canRegister.value) {
-      return
-    }
-
-    issue.value = null
-    loading.register = true
-
-    try {
-      const payload = await registerKnownLocalBuild({
-        buildId: draft.buildId.trim(),
-        executablePath: draft.executablePath.trim(),
-        workingDir: normalizeOptionalField(draft.workingDir),
-        sourceDir: normalizeOptionalField(draft.sourceDir),
-      })
-      selectedBuildId.value = payload.buildId
-    } catch (error) {
-      issue.value = `Unable to register known local build: ${errorMessage(error)}`
-    } finally {
-      loading.register = false
     }
   }
 
@@ -193,7 +148,7 @@ export function useWakeControl() {
     }
   }
 
-  function syncPolling() {
+  function syncPolling(): void {
     if (!canForceKill.value) {
       forceKillConfirmOpen.value = false
     }
@@ -206,7 +161,7 @@ export function useWakeControl() {
     stopPolling()
   }
 
-  function startPolling() {
+  function startPolling(): void {
     if (pollTimer) {
       return
     }
@@ -216,7 +171,7 @@ export function useWakeControl() {
     }, POLL_INTERVAL_MS)
   }
 
-  function stopPolling() {
+  function stopPolling(): void {
     if (!pollTimer) {
       return
     }
@@ -226,31 +181,21 @@ export function useWakeControl() {
   }
 
   return {
-    canRegister,
     cancelForceKillConfirmation,
     canForceKill,
     canStop,
     canWake,
     confirmForceKill,
-    draft,
     forceKillConfirmOpen,
     issue,
     loading,
     refreshRuntimeStatus,
-    registerBuild,
     requestForceKillConfirmation,
     runtime,
-    selectedBuildId,
     stopRuntime,
-    updateDraftField,
     usingTauri,
     wakeSelectedBuild,
   }
-}
-
-function normalizeOptionalField(value: string): string | null {
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : null
 }
 
 function toProfileRef(profileId: string | null): { profileId: string } | null {

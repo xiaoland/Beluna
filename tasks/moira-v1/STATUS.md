@@ -72,20 +72,30 @@ It is procedural, not authoritative.
 
 ### Frontend Control Plane
 
-- The first control-plane UI is now present in Loom:
-  - register known local build
+- Loom now exposes the first tabbed operator shell instead of piling control plus browse into one long page:
+  - `Lachesis` tab for wake list, tick timeline, and selected tick drilldown
+  - `Atropos` tab for wake / stop / force-kill plus runtime inspection
+  - `Clotho` tab for dual-column build registration and profile library management
+- Dialog-backed operators are now present for the high-density editing paths:
+  - register or replace known local build
   - create and edit multiple local profile documents
+  - second confirmation before `force_kill`
+- Current control-plane capability set:
   - select one saved profile id or wake without profile
-  - wake registered build
+  - wake the selected build from Atropos using current Clotho selection
   - graceful stop
-  - force-kill behind a second confirmation dialog
   - refresh / polling runtime status
 - Data flow follows the intended split:
-  - `bridge -> query -> presentation`
+  - `bridge -> query -> projection -> presentation`
 - New frontend anchors:
   - `moira/src/bridge/{clotho,atropos}.ts`
-  - `moira/src/query/control/wake.ts`
-  - `moira/src/presentation/atropos/control/*`
+  - `moira/src/query/loom/navigation.ts`
+  - `moira/src/query/atropos/runtime.ts`
+  - `moira/src/query/clotho/{builds,profiles}.ts`
+  - `moira/src/presentation/loom/chrome/{StatusHeader,LoomFeatureTabs,LoomDialogShell}.vue`
+  - `moira/src/presentation/atropos/runtime/*`
+  - `moira/src/presentation/clotho/{dialogs,workshop}/*`
+  - `moira/src/presentation/lachesis/workspace/LachesisWorkspacePanel.vue`
 
 ## Verified In This Turn
 
@@ -118,12 +128,12 @@ It is procedural, not authoritative.
 
 ## Suggested Next Step
 
-Turn the now-proven minimal wake/stop loop into a clearer operator surface:
+Use the clearer operator shell to close the remaining `#21` evidence gaps:
 
-1. update `tasks/moira-v1/LACHESIS-WALKTHROUGH-STATUS.md` and issue bodies to reflect the live walkthrough evidence already obtained
-2. validate the new Clotho profile-document workflow against a real Core config
-3. optionally follow with one explicit browse-surface walkthrough for selected tick detail and one explicit app-exit-stop walkthrough
-4. negotiate whether the next runtime-quality slice should be a supervision event stream or persistence for selected build/profile refs
+1. validate the new Clotho profile-document workflow against a real Core config
+2. perform one explicit browse-surface walkthrough for selected tick detail (`chronology / cortex / stem / spine / raw`)
+3. verify app-exit stop behavior against a real supervised Core process
+4. only after those acceptance notes land, negotiate whether the next quality slice should be supervision events or persistence for selected build/profile refs
 
 ## Handoff File Anchors
 
@@ -136,9 +146,14 @@ Turn the now-proven minimal wake/stop loop into a clearer operator surface:
   - `moira/src/app/LoomApp.vue`
   - `moira/src/bridge/contracts/{clotho,atropos}.ts`
   - `moira/src/bridge/{clotho,atropos}.ts`
-  - `moira/src/query/control/{wake,profiles}.ts`
+  - `moira/src/query/loom/navigation.ts`
+  - `moira/src/query/atropos/runtime.ts`
+  - `moira/src/query/clotho/{builds,profiles}.ts`
   - `moira/src/projection/clotho/*`
-  - `moira/src/presentation/atropos/control/*`
+  - `moira/src/presentation/loom/chrome/{StatusHeader,LoomFeatureTabs,LoomDialogShell}.vue`
+  - `moira/src/presentation/atropos/runtime/*`
+  - `moira/src/presentation/clotho/{dialogs,workshop}/*`
+  - `moira/src/presentation/lachesis/workspace/LachesisWorkspacePanel.vue`
 - task-buffer context:
   - `tasks/moira-v1/L2.md`
   - `tasks/moira-v1/L3.md`

@@ -1,50 +1,48 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import WakeControlPanel from '@/presentation/atropos/control/WakeControlPanel.vue'
-import TickDetailPanel from '@/presentation/lachesis/workspace/TickDetailPanel.vue'
-import TickTimeline from '@/presentation/lachesis/workspace/TickTimeline.vue'
-import WakeSessionList from '@/presentation/lachesis/workspace/WakeSessionList.vue'
-import StatusHeader from '@/presentation/loom/chrome/StatusHeader.vue'
-import { formatWhen } from '@/presentation/format'
-import { useProfileControl } from '@/query/control/profiles'
-import { useWakeControl } from '@/query/control/wake'
-import { useLachesisWorkspace } from '@/query/lachesis/workspace'
 
+import AtroposRuntimePanel from '@/presentation/atropos/runtime/AtroposRuntimePanel.vue'
+import ClothoWorkshopPanel from '@/presentation/clotho/workshop/ClothoWorkshopPanel.vue'
+import LachesisWorkspacePanel from '@/presentation/lachesis/workspace/LachesisWorkspacePanel.vue'
+import LoomFeatureTabs from '@/presentation/loom/chrome/LoomFeatureTabs.vue'
+import StatusHeader from '@/presentation/loom/chrome/StatusHeader.vue'
+import { useAtroposRuntime } from '@/query/atropos/runtime'
+import { useClothoBuildControl } from '@/query/clotho/builds'
+import { useClothoProfileControl } from '@/query/clotho/profiles'
+import { useLachesisWorkspace } from '@/query/lachesis/workspace'
+import { useLoomNavigation } from '@/query/loom/navigation'
+
+const { activeFeature, selectFeature } = useLoomNavigation()
 const {
-  canForceKill,
   canRegister,
-  canStop,
-  canWake,
-  cancelForceKillConfirmation,
-  confirmForceKill,
+  closeRegisterDialog,
   draft: buildDraft,
-  forceKillConfirmOpen,
-  issue: wakeIssue,
-  loading: wakeLoading,
-  refreshRuntimeStatus,
+  issue: buildIssue,
+  loading: buildLoading,
+  openRegisterDialog,
   registerBuild,
-  requestForceKillConfirmation,
-  runtime,
+  registerDialogOpen,
+  selectedBuild,
   selectedBuildId,
-  stopRuntime,
-  updateDraftField,
-  wakeSelectedBuild,
-} = useWakeControl()
+  updateDraftField: updateBuildField,
+} = useClothoBuildControl()
 const {
-  canSave: canSaveProfile,
+  canSave,
+  closeProfileDialog,
   draft: profileDraft,
   issue: profileIssue,
   loading: profileLoading,
-  openProfile,
+  openProfileEditor,
   pathHint: profilePathHint,
+  profileDialogOpen,
   profiles,
   refreshProfiles,
   saveCurrentProfile,
   selectNoProfile,
   selectedProfileId,
   startNewProfile,
-  updateDraftField: updateProfileDraftField,
-} = useProfileControl()
+  updateDraftField: updateProfileField,
+} = useClothoProfileControl()
 const {
   activeTab,
   issue,
@@ -56,34 +54,30 @@ const {
   selectedTick,
   selectedTickDetail,
   status,
-  wakeSessions,
   tickTimeline,
+  wakeSessions,
 } = useLachesisWorkspace()
+const {
+  cancelForceKillConfirmation,
+  canForceKill,
+  canStop,
+  canWake,
+  confirmForceKill,
+  forceKillConfirmOpen,
+  issue: runtimeIssue,
+  loading: runtimeLoading,
+  refreshRuntimeStatus,
+  requestForceKillConfirmation,
+  runtime,
+  stopRuntime,
+  wakeSelectedBuild: wakeRuntime,
+} = useAtroposRuntime(selectedBuildId)
 
-async function wakeSelectedProfileBuild(): Promise<void> {
-  await wakeSelectedBuild(selectedProfileId.value)
+const wakeCount = computed(() => wakeSessions.value.length)
+
+async function wakeSelectedBuild(): Promise<void> {
+  await wakeRuntime(selectedProfileId.value)
 }
-
-const controlLoading = computed(() => ({
-  forceKill: wakeLoading.forceKill,
-  profileList: profileLoading.list,
-  profileLoad: profileLoading.load,
-  profileSave: profileLoading.save,
-  register: wakeLoading.register,
-  runtime: wakeLoading.runtime,
-  wake: wakeLoading.wake,
-  stop: wakeLoading.stop,
-}))
-
-const selectionHint = computed(() => {
-  if (!selectedTickDetail.value) {
-    return 'Select a wake session and tick to inspect its chronology, intervals, and source-grounded detail.'
-  }
-
-  return `Tick ${selectedTickDetail.value.tick} from wake ${selectedTickDetail.value.runId} · ${selectedTickDetail.value.chronology.lanes.length} lanes · ${selectedTickDetail.value.rawEvents.length} raw events · updated ${formatWhen(
-    selectedTickDetail.value.rawEvents[selectedTickDetail.value.rawEvents.length - 1]?.observedAt ?? null,
-  )}`
-})
 </script>
 
 <template>
@@ -98,107 +92,88 @@ const selectionHint = computed(() => {
       @refresh="refreshVisibleState"
     />
 
-    <WakeControlPanel
-      :build-draft="buildDraft"
-      :can-force-kill="canForceKill"
-      :can-register="canRegister"
-      :can-save-profile="canSaveProfile"
-      :can-stop="canStop"
-      :can-wake="canWake"
-      :issue="wakeIssue"
-      :loading="controlLoading"
-      :profile-draft="profileDraft"
-      :profile-issue="profileIssue"
-      :profile-path-hint="profilePathHint"
-      :profiles="profiles"
-      :runtime="runtime"
+    <LoomFeatureTabs
+      :active-tab="activeFeature"
+      :runtime-phase="runtime?.phase ?? null"
       :selected-build-id="selectedBuildId"
       :selected-profile-id="selectedProfileId"
-      :show-force-kill-confirm="forceKillConfirmOpen"
-      @cancel-force-kill="cancelForceKillConfirmation"
-      @confirm-force-kill="confirmForceKill"
-      @open-profile="openProfile"
-      @refresh="refreshRuntimeStatus"
-      @refresh-profiles="refreshProfiles"
-      @register="registerBuild"
-      @request-force-kill="requestForceKillConfirmation"
-      @save-profile="saveCurrentProfile"
-      @select-no-profile="selectNoProfile"
-      @start-new-profile="startNewProfile"
-      @stop="stopRuntime"
-      @update-build-field="updateDraftField"
-      @update-profile-field="updateProfileDraftField"
-      @wake="wakeSelectedProfileBuild"
+      :wake-count="wakeCount"
+      @select="selectFeature"
     />
 
-    <p v-if="selectionHint" class="selection-hint">{{ selectionHint }}</p>
+    <main class="feature-stack">
+      <LachesisWorkspacePanel
+        v-show="activeFeature === 'lachesis'"
+        :active-tab="activeTab"
+        :loading="{
+          detail: loading.detail,
+          ticks: loading.ticks,
+          wakes: loading.wakes,
+        }"
+        :selected-run-id="selectedRunId"
+        :selected-tick="selectedTick"
+        :selected-tick-detail="selectedTickDetail"
+        :tick-timeline="tickTimeline"
+        :wake-sessions="wakeSessions"
+        @select-tick="selectTick"
+        @select-wake="selectWake"
+        @update:tab="activeTab = $event"
+      />
 
-    <main class="workspace-shell">
-      <section class="workspace-row">
-        <WakeSessionList
-          class="pane wake-pane"
-          :runs="wakeSessions"
-          :selected-run-id="selectedRunId"
-          :loading="loading.wakes"
-          @select="selectWake"
-        />
-      </section>
+      <AtroposRuntimePanel
+        v-show="activeFeature === 'atropos'"
+        :can-force-kill="canForceKill"
+        :can-stop="canStop"
+        :can-wake="canWake"
+        :issue="runtimeIssue"
+        :loading="runtimeLoading"
+        :runtime="runtime"
+        :selected-build-id="selectedBuildId"
+        :selected-profile-id="selectedProfileId"
+        :show-force-kill-confirm="forceKillConfirmOpen"
+        @cancel-force-kill="cancelForceKillConfirmation"
+        @confirm-force-kill="confirmForceKill"
+        @refresh="refreshRuntimeStatus"
+        @request-force-kill="requestForceKillConfirmation"
+        @stop="stopRuntime"
+        @wake="wakeSelectedBuild"
+      />
 
-      <section class="workspace-row workspace-focus">
-        <TickTimeline
-          class="pane timeline-pane"
-          :run-id="selectedRunId"
-          :ticks="tickTimeline"
-          :selected-tick="selectedTick"
-          :loading="loading.ticks"
-          @select="selectTick"
-        />
-
-        <TickDetailPanel
-          class="pane detail-pane"
-          v-model:tab="activeTab"
-          :detail="selectedTickDetail"
-          :loading="loading.detail"
-        />
-      </section>
+      <ClothoWorkshopPanel
+        v-show="activeFeature === 'clotho'"
+        :build-draft="buildDraft"
+        :build-issue="buildIssue"
+        :build-loading="buildLoading"
+        :can-register="canRegister"
+        :can-save-profile="canSave"
+        :profile-dialog-open="profileDialogOpen"
+        :profile-draft="profileDraft"
+        :profile-issue="profileIssue"
+        :profile-loading="profileLoading"
+        :profile-path-hint="profilePathHint"
+        :profiles="profiles"
+        :register-dialog-open="registerDialogOpen"
+        :selected-build="selectedBuild"
+        :selected-profile-id="selectedProfileId"
+        @close-profile-dialog="closeProfileDialog"
+        @close-register-dialog="closeRegisterDialog"
+        @open-profile="openProfileEditor"
+        @open-register-dialog="openRegisterDialog"
+        @refresh-profiles="refreshProfiles"
+        @register="registerBuild"
+        @save-profile="saveCurrentProfile"
+        @select-no-profile="selectNoProfile"
+        @start-new-profile="startNewProfile"
+        @update-build-field="updateBuildField"
+        @update-profile-field="updateProfileField"
+      />
     </main>
   </div>
 </template>
 
 <style scoped>
-.selection-hint {
-  margin: 0 0 1rem;
-  padding: 0.72rem 0.9rem;
-  border: 1px solid var(--line-soft);
-  background: var(--panel-strong);
-  color: var(--text-muted);
-}
-
-.workspace-shell {
-  position: relative;
-  z-index: 1;
+.feature-stack {
   display: grid;
   gap: 1rem;
-}
-
-.workspace-row {
-  min-width: 0;
-}
-
-.workspace-focus {
-  display: grid;
-  grid-template-columns: minmax(17rem, 2fr) minmax(0, 8fr);
-  gap: 1rem;
-  align-items: start;
-}
-
-.detail-pane {
-  min-height: 34rem;
-}
-
-@media (max-width: 980px) {
-  .workspace-focus {
-    grid-template-columns: 1fr;
-  }
 }
 </style>

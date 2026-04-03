@@ -20,9 +20,10 @@ const tone = computed(() => stateTone(props.status?.state ?? null))
   <header class="hero panel-shell">
     <div class="hero-copy">
       <p class="eyebrow">Moira / Loom</p>
-      <h1>Wake Inspection Control Plane</h1>
+      <h1>Mythic Wake Control Plane</h1>
       <p class="hero-text">
-        Stage 2 Lachesis view over local OTLP ingest, wake sessions, humane tick chronology, and raw drilldown.
+        Three stations share one local operator surface: Lachesis observes, Atropos supervises, and Clotho prepares
+        builds plus profile documents without piling every action into a single page.
       </p>
       <div class="hero-tags">
         <span class="status-badge" :class="`status-${tone}`">
