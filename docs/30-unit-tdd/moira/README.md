@@ -4,8 +4,13 @@ Moira is Beluna's local control-plane and observability unit.
 
 It prepares local Core artifacts and profiles, supervises local Core lifecycle, ingests OTLP logs, and provides the human-facing control plane through Loom.
 
-Current code primarily realizes the Lachesis observability slice plus the Loom inspection surface.
-Clotho preparation and Atropos supervised wake control remain authoritative Moira responsibilities, but they still require the cleanup stage defined in the unit docs below before broader feature growth lands.
+Current code realizes the first explicit multi-owner Moira shell:
+
+1. `Lachesis` for receiver status, wake browse, tick browse, and selected-tick inspection.
+2. `Atropos` for supervised runtime status, wake, graceful stop, and force-kill.
+3. `Clotho` for known local build registration plus app-local JSONC profile documents.
+
+Published artifact discovery, checksum trust, local source-folder compile, and schema-validation interactions with Core authority remain later Clotho slices rather than current realization.
 
 - [Design](./design.md)
 - [Interfaces](./interfaces.md)

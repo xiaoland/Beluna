@@ -2,12 +2,12 @@
 
 ## Owned State
 
-1. Local Core artifact catalog, install isolation, and checksum verification state.
-2. JSONC profile documents and active profile selection.
+1. Known local build manifests today, plus later local artifact catalog, install isolation, and checksum-verification state.
+2. JSONC profile documents keyed by logical `profile_id`, plus later schema-validation result state cached for operator workflows.
 3. Supervised Core wake state, including wake/stop status and terminal reason.
 4. Local OTLP raw-event storage.
 5. Local observability read models for `runs` and `ticks`, plus any Moira-owned chronology, interval-pairing, or targeted lookup indexes needed for human-friendly browsing.
-6. Local control-plane UI state.
+6. Session-local Loom query state such as active feature tab, selected wake, selected tick, active Lachesis detail tab, open dialogs, and current selected build/profile refs.
 7. Frontend backend-shaped transport contracts and frontend Loom-facing normalized models, each under their owning layer rather than inside one shared bucket.
 
 ## Consumed State
@@ -20,7 +20,8 @@
 ## State Ownership By Internal Backend Module
 
 1. `clotho`
-- Owns local artifact catalog, trusted checksum metadata, install isolation metadata, local source-build outputs or references, JSONC profile documents, active selection, and validation result state cached for operator workflows.
+- Owns known local build manifests, local artifact catalog, trusted checksum metadata, install isolation metadata, local source-build outputs or references, JSONC profile documents, and validation result state cached for operator workflows.
+- Clotho owns durable preparation truth, not the current session-local UI selection for the next wake.
 - Within Clotho, artifact state and profile state remain distinct internal concerns even though they share one top-level owner.
 
 2. `lachesis`
@@ -30,7 +31,7 @@
 - Owns supervised wake state, process handles or identifiers, explicit stop intent, and terminal reason state.
 
 4. `loom`
-- Owns ephemeral UI state such as selected wake, selected tick, active tab, popup state, and refresh coordination.
+- Owns ephemeral UI state such as active feature tab, selected wake, selected tick, active Lachesis detail tab, popup or dialog state, refresh coordination, and current selected build/profile refs.
 
 ## Local Invariants
 
@@ -49,3 +50,5 @@
 13. Future Clotho and Atropos persistence must not be folded into Lachesis projections or Lachesis tables as a convenience shortcut.
 14. Clotho may own both artifact and profile preparation, but those persisted concerns must remain internally separable rather than collapsing into one undifferentiated preparation blob.
 15. Frontend raw transport contracts, normalized Loom-facing models, and query-owned UI state must remain distinct concerns even when they currently describe the same Lachesis operator flow.
+16. `profile_id` remains the durable operator-facing key for profile documents; app-local profile path is derived from that key rather than stored as an independent operator input.
+17. Current selected build/profile refs remain session-local query state until an explicit persistence slice lands; they must not be mistaken for durable Clotho truth.

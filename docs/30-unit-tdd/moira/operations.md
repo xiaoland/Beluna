@@ -8,10 +8,12 @@
 
 ## Wake Flow
 
-1. Resolve the selected Core artifact or local source build target.
-2. Validate the selected JSONC profile against the Core schema authority.
-3. Ensure the OTLP logs receiver is ready before starting supervised Core.
-4. Launch Core and begin supervised wake tracking.
+1. Loom query state provides the current selected known local build ref plus the optional selected profile id for the next wake.
+2. Clotho resolves the selected build manifest and derives the optional profile path from `profile_id`.
+3. Atropos ensures the OTLP logs receiver is ready before starting supervised Core.
+4. Atropos launches Core and records supervised wake tracking.
+5. Loom refreshes runtime status through Atropos query orchestration while Lachesis reacts to ingest updates for wake and tick browsing.
+6. Profile schema validation, local source-folder compile, and published artifact activation remain later wake-flow extensions rather than current required steps.
 
 ## Observability Flow
 
@@ -24,7 +26,7 @@
 
 ## Shutdown
 
-1. When operator quits Moira, initiate supervised Core stop.
+1. When operator quits Moira, the app exit hook initiates supervised Core graceful stop.
 2. Offer explicit force-kill only through a second confirmation path.
 3. Flush local observability state and close control-plane resources.
 
@@ -34,18 +36,12 @@
 2. Local source build failure blocks wake and surfaces explicit failure state.
 3. OTLP receiver/storage readiness failure blocks supervised wake.
 4. Unexpected Core exit becomes explicit terminal supervision state visible in Loom.
+5. Missing selected build input, or an explicitly selected but unresolved profile input, blocks wake rather than letting Atropos invent a fallback path.
 
-## Cleanup Stage Before Next Feature Wave
+## Current Extension Boundary
 
-1. Preserve the current Lachesis and Loom operator behavior while restructuring internal boundaries.
-2. The backend extraction lands first: explicit `app`, `clotho`, `lachesis`, and `atropos` modules with thin Tauri command handlers.
-3. The first frontend cleanup slice extracts `bridge` and `query state` ownership next while preserving the existing Loom surface.
-4. The second frontend cleanup slice then makes `projection` and `presentation` concrete through explicit `projection/lachesis/*` and `presentation/*` owners while preserving the existing Loom surface.
-5. The cleanup integration pass then removes transitional glue by separating backend-shaped bridge contracts from normalized Loom-facing projection models, and by keeping query-owned UI state out of any revived catch-all type bucket.
-6. Introduce an explicit migration/version path for future Clotho and Atropos persistence rather than extending the current Lachesis-only store ad hoc.
-7. Use the first post-cleanup cross-slice feature to validate the new split: local source-folder build plus wake and graceful stop.
-8. Cleanup-stage non-goals:
-- no full GitHub Releases artifact-management UX
-- no broad new supervision UI
-- no first-party endpoint-app launch flow
-- no operator-facing feature expansion that obscures whether the refactor preserved current Lachesis behavior
+1. Extend explicit owners rather than reviving catch-all helpers such as one shared control query module or one stacked control-plane page.
+2. New preparation flows land under `clotho` backend ownership plus `query/clotho` and `presentation/clotho` frontend owners.
+3. New supervision flows land under `atropos` backend ownership plus `query/atropos` and `presentation/atropos` frontend owners.
+4. Shared shell affordances such as feature tabs and dialog scaffolding belong in `query/loom` and `presentation/loom/chrome`, but feature-specific semantics remain inside the corresponding mythic namespace.
+5. Future persistence must choose an explicit owner before choosing filesystem, database, or app-state storage shape.

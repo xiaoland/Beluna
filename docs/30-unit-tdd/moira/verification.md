@@ -2,12 +2,17 @@
 
 ## Behavioral Checks
 
-1. Moira can create, edit, persist, and reselect multiple local JSONC profile documents through Loom.
-2. Moira can validate a selected JSONC profile against the Core schema authority before wake.
-3. Moira can compile a local Core source folder for development wake flow.
-4. Moira can verify a published Core artifact against `SHA256SUMS` before activation.
-5. Quitting Moira stops the supervised Core.
-6. Force-kill requires a second confirmation step and is not the default stop path.
+1. Moira can register a known local build and use that selected build for the next wake through Loom.
+2. Moira can create, edit, persist, and reselect multiple local JSONC profile documents through Loom.
+3. Moira can wake the selected build with the selected profile, or wake without profile and omit `--config`.
+4. Atropos exposes runtime status, graceful stop, explicit force-kill with second confirmation, and app-exit stop behavior.
+5. Loom exposes separate `Lachesis`, `Atropos`, and `Clotho` stations without collapsing feature ownership back into one permanently stacked control page.
+
+## Later Behavioral Slices
+
+1. Moira can validate a selected JSONC profile against the Core schema authority before wake.
+2. Moira can compile a local Core source folder for development wake flow.
+3. Moira can verify a published Core artifact against `SHA256SUMS` before activation.
 
 ## Observability Checks
 
@@ -26,14 +31,14 @@
 
 1. Moira Clotho preparation and Atropos supervision logic in the `moira/` app container.
 2. Core OTLP event-shape tests, [Core Observability](../core/observability.md), contract fixtures, and config validation guardrails.
-3. Early evidence should prefer live end-to-end operator walkthroughs for ingest and inspection flows; broader automation is added only after the new read models and browsing surfaces stabilize.
+3. Live end-to-end operator walkthroughs remain valid evidence for wake/stop and browse-surface checks while the current local read models and control-plane slices continue to stabilize.
 
-## Cleanup Stage Exit Intent
+## Current Architecture Checks
 
-1. Current wake list, tick list, selected-tick chronology, and raw-event inspection remain operator-equivalent after the internal split.
-2. The backend cleanup slice is concrete in code: Tauri command handlers delegate through `app` into explicit backend owners rather than continuing to accumulate ownership directly.
-3. The first frontend cleanup slice is concrete in code: root views no longer own live refresh wiring and selection-state orchestration directly, and bridge transport no longer owns normalization or sorting.
-4. Lachesis persistence and Lachesis projections remain the owner of Lachesis state only; Clotho and Atropos state have prepared homes that do not require reusing Lachesis tables as a shortcut.
-5. The second frontend cleanup slice is concrete in code: `normalize.ts` is replaced by explicit `projection/lachesis/*` owners, and presentation-facing helpers no longer mix source-grounded event interpretation with display-only formatting.
-6. Current wake list, tick timeline, chronology popup inspection, sectional tick detail views, and raw-event drilldown remain operator-equivalent after the projection/presentation split.
-7. The cleanup integration pass is concrete in code: bridge calls no longer expose only `unknown`, backend-shaped transport contracts are separated from normalized Loom-facing models, and the former shared frontend type bucket no longer acts as a cross-layer dumping ground.
+1. Current wake list, tick list, selected-tick chronology, and raw-event inspection remain operator-equivalent after the internal split and tabbed shell refactor.
+2. Tauri command handlers delegate through `app` into explicit backend owners rather than accumulating ownership directly.
+3. Loom root views no longer own live refresh wiring and selection-state orchestration directly; bridge transport does not own normalization or sorting.
+4. Bridge contracts, normalized Loom-facing models, and query-owned UI state remain distinct layers rather than collapsing back into one shared frontend type bucket.
+5. Lachesis persistence and Lachesis projections remain the owner of Lachesis state only; Clotho and Atropos state do not reuse Lachesis tables as a shortcut.
+6. Clotho durable manifests and profile documents remain app-local preparation truth, while current selected build/profile refs remain query-owned session state until an explicit persistence slice lands.
+7. Shared shell chrome such as feature tabs and dialog scaffolding remains reusable without becoming the owner of feature-specific preparation, supervision, or observability semantics.
