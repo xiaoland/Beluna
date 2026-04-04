@@ -23,10 +23,16 @@ Moira provides Beluna's first-party local control plane for:
 2. The backend owner split is explicit in code: `app` composes `clotho`, `lachesis`, and `atropos`, while each backend owner now has operator-facing responsibilities in the current shell.
 3. The frontend owner split is explicit in code: `app/LoomApp.vue` is a thin root shell, `bridge` owns backend-shaped contracts, `query` owns station-local orchestration, `projection` owns normalization, and `presentation` owns shell chrome plus feature panels and dialogs.
 4. Loom now exposes three mythic operator stations instead of one stacked control page: `Lachesis`, `Atropos`, and `Clotho`.
-5. Clotho currently owns known local build registration plus app-local JSONC profile-document list/load/save. `profile_id` is a logical Clotho key that maps to app-local `profiles/<profile-id>.jsonc`.
+5. Clotho currently owns launch-target preparation plus app-local JSONC profile-document list/load/save. `profile_id` is a logical Clotho key that maps to app-local `profiles/<profile-id>.jsonc`.
 6. Atropos currently owns runtime status, wake, graceful stop, force-kill, and app-exit stop wiring for the supervised Core process.
-7. Published artifact discovery, checksum verification, local source-folder compile, and schema-validation interactions with Core authority remain later Clotho slices rather than current realization.
-8. Future growth should extend these explicit owners rather than reviving catch-all backend modules, catch-all query state, or one permanently stacked Loom control surface.
+7. Current Clotho realization now includes:
+   - known local build registration
+   - explicit forge from a local Beluna repo root or `core/` crate root
+   - published release discovery for the current supported target
+   - checksum verification against `SHA256SUMS`
+   - version-isolated install directories for installed artifacts
+8. Schema-validation interactions with Core authority remain deferred rather than current realization.
+9. Future growth should extend these explicit owners rather than reviving catch-all backend modules, catch-all query state, or one permanently stacked Loom control surface.
 
 ## Internal Split
 
@@ -89,7 +95,9 @@ Moira provides Beluna's first-party local control plane for:
 14. Lachesis modules and Lachesis storage must not become a catch-all home for Clotho or Atropos state merely because they already persist data.
 15. Mythic names may appear as stable feature namespaces in both backend and frontend code, but ownership must still remain explicit through backend modules and frontend layers.
 16. Inside those backend modules and frontend layers, functional names remain preferred where they improve readability and grep-ability.
-17. Frontend helper boundaries follow meaning rather than file history: source-grounded event interpretation belongs in `projection`, while locale formatting and visual tone helpers belong in `presentation`.
-18. Frontend contract boundaries follow ownership, not convenience: backend-shaped payload contracts belong in `bridge`, Loom-facing normalized models belong in `projection`, and query-owned UI state must not collapse back into one shared catch-all type bucket.
-19. `profile_id` is a logical Clotho identifier, not a raw filesystem path; Loom may show the derived path, but path derivation remains Clotho-owned behavior.
-20. Current selected build and selected profile refs are session-local query state until an explicit persistence slice lands; app-local Clotho documents and manifests remain the durable preparation truth.
+17. Clotho wake preparation is anchored on a launch-target ref that may resolve to a registered local build or an installed release artifact; Atropos still consumes only Clotho-prepared wake input.
+18. Explicit forge is a preparation action owned by Clotho, not an implicit wake-time side effect owned by Atropos.
+19. Frontend helper boundaries follow meaning rather than file history: source-grounded event interpretation belongs in `projection`, while locale formatting and visual tone helpers belong in `presentation`.
+20. Frontend contract boundaries follow ownership, not convenience: backend-shaped payload contracts belong in `bridge`, Loom-facing normalized models belong in `projection`, and query-owned UI state must not collapse back into one shared catch-all type bucket.
+21. `profile_id` is a logical Clotho identifier, not a raw filesystem path; Loom may show the derived path, but path derivation remains Clotho-owned behavior.
+22. Current selected launch target and selected profile refs are session-local query state until an explicit persistence slice lands; app-local Clotho documents and manifests remain the durable preparation truth.

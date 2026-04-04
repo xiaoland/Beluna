@@ -10,11 +10,12 @@
 - Trusted checksum file: `SHA256SUMS`.
 - Trusted Core archive pattern: `beluna-core-<rust-target-triple>.tar.gz`.
 - Current macOS-first expected asset: `beluna-core-aarch64-apple-darwin.tar.gz`.
-- Local source-folder input for development builds compiled before launch.
+- The published archive may contain executable `beluna`; archive basename and embedded executable basename are not required to match exactly.
+- Local source-folder input accepts a Beluna repo root or `core/` crate root for explicit development forge before launch.
 - App-local JSONC profile documents managed under Clotho-owned profile ids.
 
 3. Lifecycle supervision interface:
-- Wake local Core with a selected artifact/build and JSONC profile.
+- Wake local Core with a selected Clotho launch target and JSONC profile.
 - Graceful stop for supervised Core.
 - Explicit force-kill behind second confirmation.
 

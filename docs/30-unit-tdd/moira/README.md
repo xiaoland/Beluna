@@ -8,9 +8,9 @@ Current code realizes the first explicit multi-owner Moira shell:
 
 1. `Lachesis` for receiver status, wake browse, tick browse, and selected-tick inspection.
 2. `Atropos` for supervised runtime status, wake, graceful stop, and force-kill.
-3. `Clotho` for known local build registration plus app-local JSONC profile documents.
+3. `Clotho` for launch-target preparation and profile curation, including known local build registration, explicit local forge, published release intake, and app-local JSONC profile documents.
 
-Published artifact discovery, checksum trust, local source-folder compile, and schema-validation interactions with Core authority remain later Clotho slices rather than current realization.
+Schema-validation interactions with Core authority remain deferred to a later Clotho slice rather than current realization.
 
 - [Design](./design.md)
 - [Interfaces](./interfaces.md)

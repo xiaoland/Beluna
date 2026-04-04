@@ -2,17 +2,18 @@
 
 ## Behavioral Checks
 
-1. Moira can register a known local build and use that selected build for the next wake through Loom.
+1. Moira can register a known local build and use that selected launch target for the next wake through Loom.
 2. Moira can create, edit, persist, and reselect multiple local JSONC profile documents through Loom.
-3. Moira can wake the selected build with the selected profile, or wake without profile and omit `--config`.
+3. Moira can wake the selected launch target with the selected profile, or wake without profile and omit `--config`.
 4. Atropos exposes runtime status, graceful stop, explicit force-kill with second confirmation, and app-exit stop behavior.
 5. Loom exposes separate `Lachesis`, `Atropos`, and `Clotho` stations without collapsing feature ownership back into one permanently stacked control page.
 
-## Later Behavioral Slices
+## Current Clotho Follow-On Checks
 
-1. Moira can validate a selected JSONC profile against the Core schema authority before wake.
-2. Moira can compile a local Core source folder for development wake flow.
-3. Moira can verify a published Core artifact against `SHA256SUMS` before activation.
+1. Moira can forge a local launch target from a Beluna repo root or `core/` crate root before wake.
+2. Moira can discover a published Core release for the current supported target and verify it against `SHA256SUMS` before activation.
+3. Moira can install the verified release into a version-isolated local directory and expose it as a launch target.
+4. Moira still defers selected JSONC profile validation against the Core schema authority to a later slice.
 
 ## Observability Checks
 
@@ -40,5 +41,5 @@
 3. Loom root views no longer own live refresh wiring and selection-state orchestration directly; bridge transport does not own normalization or sorting.
 4. Bridge contracts, normalized Loom-facing models, and query-owned UI state remain distinct layers rather than collapsing back into one shared frontend type bucket.
 5. Lachesis persistence and Lachesis projections remain the owner of Lachesis state only; Clotho and Atropos state do not reuse Lachesis tables as a shortcut.
-6. Clotho durable manifests and profile documents remain app-local preparation truth, while current selected build/profile refs remain query-owned session state until an explicit persistence slice lands.
+6. Clotho durable manifests and profile documents remain app-local preparation truth, while current selected launch-target/profile refs remain query-owned session state until an explicit persistence slice lands.
 7. Shared shell chrome such as feature tabs and dialog scaffolding remains reusable without becoming the owner of feature-specific preparation, supervision, or observability semantics.

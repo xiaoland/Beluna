@@ -2,7 +2,7 @@
 
 ## Owned State
 
-1. Known local build manifests today, plus later local artifact catalog, install isolation, and checksum-verification state.
+1. Known local build manifests, installed artifact manifests, install isolation directories, and checksum-verification state.
 2. JSONC profile documents keyed by logical `profile_id`, plus later schema-validation result state cached for operator workflows.
 3. Supervised Core wake state, including wake/stop status and terminal reason.
 4. Local OTLP raw-event storage.
@@ -20,7 +20,7 @@
 ## State Ownership By Internal Backend Module
 
 1. `clotho`
-- Owns known local build manifests, local artifact catalog, trusted checksum metadata, install isolation metadata, local source-build outputs or references, JSONC profile documents, and validation result state cached for operator workflows.
+- Owns known local build manifests, installed artifact manifests, trusted checksum metadata, install isolation metadata, local source-build outputs or references, JSONC profile documents, and validation result state cached for operator workflows.
 - Clotho owns durable preparation truth, not the current session-local UI selection for the next wake.
 - Within Clotho, artifact state and profile state remain distinct internal concerns even though they share one top-level owner.
 
@@ -51,4 +51,4 @@
 14. Clotho may own both artifact and profile preparation, but those persisted concerns must remain internally separable rather than collapsing into one undifferentiated preparation blob.
 15. Frontend raw transport contracts, normalized Loom-facing models, and query-owned UI state must remain distinct concerns even when they currently describe the same Lachesis operator flow.
 16. `profile_id` remains the durable operator-facing key for profile documents; app-local profile path is derived from that key rather than stored as an independent operator input.
-17. Current selected build/profile refs remain session-local query state until an explicit persistence slice lands; they must not be mistaken for durable Clotho truth.
+17. Current selected launch-target/profile refs remain session-local query state until an explicit persistence slice lands; they must not be mistaken for durable Clotho truth.

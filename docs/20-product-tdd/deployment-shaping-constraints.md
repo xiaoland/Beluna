@@ -25,6 +25,14 @@ These constraints shape system design choices and unit contracts.
 - Local first-party storage/query targets logs as the primary signal.
 - Metrics and traces may surface exporter status and handoff destinations without becoming first-party locally stored datasets.
 
+6. Release packaging constraints
+- Release workflow output must follow the cross-unit packaging contract before Moira release-consumer automation is considered correct.
+- Workflow implementation may not redefine archive naming, checksum naming, or the first supported target matrix ad hoc.
+- The initial producer contract is:
+  - `beluna-core-<rust-target-triple>.tar.gz`
+  - release-level `SHA256SUMS`
+  - current first supported Moira consumer target `aarch64-apple-darwin`
+
 ## Boundary To Deployment Docs
 
 Product TDD defines deployment-shaping design constraints.

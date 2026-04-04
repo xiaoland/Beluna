@@ -31,7 +31,14 @@ System-level contracts between units are authoritative here.
 - `moira` may ingest and query Core OTLP logs as a local observability consumer/storage surface, but log semantics and export policy remain core-owned.
 - Metrics and traces may be surfaced through exporter status and handoff links without making Moira the authority for those signals.
 
-7. Log inspection contract
+7. Core release packaging contract
+- `#8` is the producer-side release workflow that publishes GitHub Release assets for Moira consumption.
+- The minimum archive naming contract is `beluna-core-<rust-target-triple>.tar.gz`.
+- The minimum checksum contract is a release-level `SHA256SUMS` file covering the published archives.
+- The archive may contain an executable named `beluna`; archive basename and embedded binary basename are not required to match exactly.
+- The current first consumer contract is locked to `aarch64-apple-darwin` before broader target expansion.
+
+8. Log inspection contract
 - Required cross-unit structured observability surfaces and reconstruction guarantees are defined in `docs/20-product-tdd/observability-contract.md`.
 - Core-owned event-family naming and Moira-owned Loom composition remain unit-local as long as those guarantees remain intact.
 

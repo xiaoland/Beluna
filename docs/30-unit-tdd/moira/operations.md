@@ -8,12 +8,20 @@
 
 ## Wake Flow
 
-1. Loom query state provides the current selected known local build ref plus the optional selected profile id for the next wake.
-2. Clotho resolves the selected build manifest and derives the optional profile path from `profile_id`.
+1. Loom query state provides the current selected Clotho launch-target ref plus the optional selected profile id for the next wake.
+2. Clotho resolves the selected launch target, derives the optional profile path from `profile_id`, and returns prepared wake input to Atropos.
 3. Atropos ensures the OTLP logs receiver is ready before starting supervised Core.
 4. Atropos launches Core and records supervised wake tracking.
 5. Loom refreshes runtime status through Atropos query orchestration while Lachesis reacts to ingest updates for wake and tick browsing.
-6. Profile schema validation, local source-folder compile, and published artifact activation remain later wake-flow extensions rather than current required steps.
+6. Schema validation against Core authority remains deferred rather than a required wake-time gate.
+
+## Clotho Preparation Flow
+
+1. Registering a known local build writes or updates a durable manifest under Clotho ownership.
+2. Explicit forge resolves a Beluna repo root or `core/` crate root, runs a development build, and writes or updates the resulting known local build manifest.
+3. Published release discovery reads the current GitHub Release catalog for the supported artifact contract.
+4. Installing a published release downloads the target archive plus `SHA256SUMS`, verifies the checksum, extracts the executable into a version-isolated install directory, and writes the installed artifact manifest.
+5. Loom may browse launch targets, but the current selected launch target remains query-owned session state until a later persistence slice lands.
 
 ## Observability Flow
 
@@ -33,10 +41,11 @@
 ## Failure Handling
 
 1. Checksum mismatch blocks published artifact activation.
-2. Local source build failure blocks wake and surfaces explicit failure state.
-3. OTLP receiver/storage readiness failure blocks supervised wake.
-4. Unexpected Core exit becomes explicit terminal supervision state visible in Loom.
-5. Missing selected build input, or an explicitly selected but unresolved profile input, blocks wake rather than letting Atropos invent a fallback path.
+2. Missing target asset or broken archive blocks published artifact activation.
+3. Local source build failure blocks wake and surfaces explicit failure state.
+4. OTLP receiver/storage readiness failure blocks supervised wake.
+5. Unexpected Core exit becomes explicit terminal supervision state visible in Loom.
+6. Missing selected launch target input, or an explicitly selected but unresolved profile input, blocks wake rather than letting Atropos invent a fallback path.
 
 ## Current Extension Boundary
 
