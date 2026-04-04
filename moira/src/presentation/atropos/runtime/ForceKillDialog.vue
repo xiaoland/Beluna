@@ -42,8 +42,8 @@ const dialogTitleId = computed(() =>
         <h4>Current Target</h4>
         <dl class="confirm-grid">
           <div>
-            <dt>Build</dt>
-            <dd class="mono">{{ runtime?.buildId ?? '—' }}</dd>
+            <dt>Target</dt>
+            <dd class="mono">{{ runtime?.targetLabel ?? '—' }}</dd>
           </div>
           <div>
             <dt>PID</dt>

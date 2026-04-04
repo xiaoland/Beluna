@@ -18,7 +18,7 @@ const props = defineProps<{
     wake: boolean
   }
   runtime: RuntimeStatus | null
-  selectedBuildId: string | null
+  selectedTargetLabel: string | null
   selectedProfileId: string | null
   showForceKillConfirm: boolean
 }>()
@@ -66,7 +66,7 @@ const runtimeTone = computed(() => stateTone(props.runtime?.phase ?? null))
         :can-wake="canWake"
         :loading="{ forceKill: loading.forceKill, stop: loading.stop, wake: loading.wake }"
         :runtime="runtime"
-        :selected-build-id="selectedBuildId"
+        :selected-target-label="selectedTargetLabel"
         :selected-profile-id="selectedProfileId"
         @request-force-kill="emit('requestForceKill')"
         @stop="emit('stop')"

@@ -3,8 +3,10 @@ use tauri::State;
 use crate::{
     app::state::AppState,
     clotho::model::{
-        KnownLocalBuildRef, KnownLocalBuildRegistration, PreparedWakeInput, ProfileDocument,
-        ProfileDocumentSummary, ProfileRef, SaveProfileDocumentRequest, WakeInputRequest,
+        ForgeLocalBuildRequest, InstallPublishedReleaseRequest, KnownLocalBuildRegistration,
+        LaunchTargetRef, LaunchTargetSummary, PreparedWakeInput, ProfileDocument,
+        ProfileDocumentSummary, ProfileRef, PublishedReleaseSummary, SaveProfileDocumentRequest,
+        WakeInputRequest,
     },
 };
 
@@ -12,7 +14,7 @@ use crate::{
 pub async fn register_known_local_build(
     registration: KnownLocalBuildRegistration,
     state: State<'_, AppState>,
-) -> Result<KnownLocalBuildRef, String> {
+) -> Result<LaunchTargetRef, String> {
     state.clotho.register_known_local_build(registration)
 }
 
@@ -22,6 +24,36 @@ pub async fn prepare_wake_input(
     state: State<'_, AppState>,
 ) -> Result<PreparedWakeInput, String> {
     state.clotho.prepare_wake_input(&request)
+}
+
+#[tauri::command]
+pub async fn forge_local_build(
+    request: ForgeLocalBuildRequest,
+    state: State<'_, AppState>,
+) -> Result<LaunchTargetRef, String> {
+    state.clotho.forge_local_build(request).await
+}
+
+#[tauri::command]
+pub async fn list_launch_targets(
+    state: State<'_, AppState>,
+) -> Result<Vec<LaunchTargetSummary>, String> {
+    state.clotho.list_launch_targets()
+}
+
+#[tauri::command]
+pub async fn list_published_releases(
+    state: State<'_, AppState>,
+) -> Result<Vec<PublishedReleaseSummary>, String> {
+    state.clotho.list_published_releases().await
+}
+
+#[tauri::command]
+pub async fn install_published_release(
+    request: InstallPublishedReleaseRequest,
+    state: State<'_, AppState>,
+) -> Result<LaunchTargetRef, String> {
+    state.clotho.install_published_release(request).await
 }
 
 #[tauri::command]

@@ -8,7 +8,7 @@ export function normalizeRuntimeStatus(payload: RuntimeStatusPayload): RuntimeSt
 
   return {
     phase,
-    buildId: normalizeString(payload.buildId),
+    targetLabel: normalizeString(payload.targetLabel),
     executablePath: normalizeString(payload.executablePath),
     workingDir: normalizeString(payload.workingDir),
     profilePath: normalizeString(payload.profilePath),

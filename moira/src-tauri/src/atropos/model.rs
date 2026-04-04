@@ -17,7 +17,7 @@ pub enum SupervisionPhase {
 pub struct RuntimeStatus {
     pub phase: SupervisionPhase,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub build_id: Option<String>,
+    pub target_label: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub executable_path: Option<PathBuf>,
     #[serde(skip_serializing_if = "Option::is_none")]

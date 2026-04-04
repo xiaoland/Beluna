@@ -1,18 +1,42 @@
 import { invoke } from '@tauri-apps/api/core'
 
 import type {
-  KnownLocalBuildRefPayload,
+  ForgeLocalBuildRequestPayload,
+  InstallPublishedReleaseRequestPayload,
   KnownLocalBuildRegistrationPayload,
+  LaunchTargetRefPayload,
+  LaunchTargetSummaryPayload,
   ProfileDocumentPayload,
   ProfileDocumentSummaryPayload,
   ProfileRefPayload,
+  PublishedReleaseSummaryPayload,
   SaveProfileDocumentRequestPayload,
 } from '@/bridge/contracts/clotho'
 
+export async function listLaunchTargets(): Promise<LaunchTargetSummaryPayload[]> {
+  return invoke<LaunchTargetSummaryPayload[]>('list_launch_targets')
+}
+
 export async function registerKnownLocalBuild(
   registration: KnownLocalBuildRegistrationPayload,
-): Promise<KnownLocalBuildRefPayload> {
-  return invoke<KnownLocalBuildRefPayload>('register_known_local_build', { registration })
+): Promise<LaunchTargetRefPayload> {
+  return invoke<LaunchTargetRefPayload>('register_known_local_build', { registration })
+}
+
+export async function forgeLocalBuild(
+  request: ForgeLocalBuildRequestPayload,
+): Promise<LaunchTargetRefPayload> {
+  return invoke<LaunchTargetRefPayload>('forge_local_build', { request })
+}
+
+export async function listPublishedReleases(): Promise<PublishedReleaseSummaryPayload[]> {
+  return invoke<PublishedReleaseSummaryPayload[]>('list_published_releases')
+}
+
+export async function installPublishedRelease(
+  request: InstallPublishedReleaseRequestPayload,
+): Promise<LaunchTargetRefPayload> {
+  return invoke<LaunchTargetRefPayload>('install_published_release', { request })
 }
 
 export async function listProfileDocuments(): Promise<ProfileDocumentSummaryPayload[]> {

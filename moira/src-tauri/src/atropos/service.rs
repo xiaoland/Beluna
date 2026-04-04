@@ -65,9 +65,9 @@ impl RuntimeState {
 
         RuntimeStatus {
             phase: self.phase,
-            build_id: wake_input.map(|value| value.build.build_id.clone()),
-            executable_path: wake_input.map(|value| value.build.executable_path.clone()),
-            working_dir: wake_input.map(|value| value.build.working_dir.clone()),
+            target_label: wake_input.map(|value| value.target.target_label.clone()),
+            executable_path: wake_input.map(|value| value.target.executable_path.clone()),
+            working_dir: wake_input.map(|value| value.target.working_dir.clone()),
             profile_path: wake_input.and_then(|value| value.profile_path.clone()),
             pid: self.running.as_ref().map(|running| running.pid),
             terminal_reason: self.terminal_reason.clone(),
@@ -191,12 +191,12 @@ impl AtroposService {
         ensure_receiver_ready(self.lachesis.as_ref()).await?;
         let wake_input = self.clotho.prepare_wake_input(&request)?;
 
-        let mut command = Command::new(&wake_input.build.executable_path);
+        let mut command = Command::new(&wake_input.target.executable_path);
         if let Some(profile_path) = wake_input.profile_path.as_ref() {
             command.arg("--config").arg(profile_path);
         }
         command
-            .current_dir(&wake_input.build.working_dir)
+            .current_dir(&wake_input.target.working_dir)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
@@ -204,7 +204,7 @@ impl AtroposService {
         let mut child = command.spawn().map_err(|err| {
             format!(
                 "failed to wake Core from `{}`: {err}",
-                wake_input.build.executable_path.display()
+                wake_input.target.executable_path.display()
             )
         })?;
         let pid = child.id().ok_or_else(|| {

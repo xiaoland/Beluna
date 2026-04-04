@@ -2,13 +2,14 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 
 import { fetchRuntimeStatus, forceKillCore, stopCore, wakeCore } from '@/bridge/atropos'
 import { hasTauriBridge } from '@/bridge/env'
+import type { LaunchTargetRef } from '@/projection/clotho'
 import { normalizeRuntimeStatus, type RuntimeStatus } from '@/projection/atropos'
 
 const ACTIVE_PHASES = new Set(['waking', 'running', 'stopping'])
 const FORCE_KILL_PHASES = new Set(['running', 'stopping'])
 const POLL_INTERVAL_MS = 800
 
-export function useAtroposRuntime(selectedBuildId: { value: string | null }) {
+export function useAtroposRuntime(selectedTarget: { value: LaunchTargetRef | null }) {
   const usingTauri = hasTauriBridge()
   const issue = ref<string | null>(null)
   const runtime = ref<RuntimeStatus | null>(null)
@@ -42,7 +43,7 @@ export function useAtroposRuntime(selectedBuildId: { value: string | null }) {
       usingTauri &&
       !loading.runtime &&
       !loading.wake &&
-      selectedBuildId.value != null &&
+      selectedTarget.value != null &&
       !ACTIVE_PHASES.has(runtime.value?.phase ?? 'idle'),
   )
   const canStop = computed(() => usingTauri && !loading.stop && ACTIVE_PHASES.has(runtime.value?.phase ?? 'idle'))
@@ -72,8 +73,8 @@ export function useAtroposRuntime(selectedBuildId: { value: string | null }) {
     }
   }
 
-  async function wakeSelectedBuild(profileId: string | null): Promise<void> {
-    if (!canWake.value || !selectedBuildId.value) {
+  async function wakeSelectedTarget(profileId: string | null): Promise<void> {
+    if (!canWake.value || !selectedTarget.value) {
       return
     }
 
@@ -82,9 +83,7 @@ export function useAtroposRuntime(selectedBuildId: { value: string | null }) {
 
     try {
       const payload = await wakeCore({
-        build: {
-          buildId: selectedBuildId.value,
-        },
+        target: selectedTarget.value,
         profile: toProfileRef(profileId),
       })
       runtime.value = normalizeRuntimeStatus(payload)
@@ -194,7 +193,7 @@ export function useAtroposRuntime(selectedBuildId: { value: string | null }) {
     runtime,
     stopRuntime,
     usingTauri,
-    wakeSelectedBuild,
+    wakeSelectedTarget,
   }
 }
 

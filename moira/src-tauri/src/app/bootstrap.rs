@@ -41,6 +41,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             crate::app::commands::clotho::register_known_local_build,
             crate::app::commands::clotho::prepare_wake_input,
+            crate::app::commands::clotho::forge_local_build,
+            crate::app::commands::clotho::list_launch_targets,
+            crate::app::commands::clotho::list_published_releases,
+            crate::app::commands::clotho::install_published_release,
             crate::app::commands::clotho::list_profile_documents,
             crate::app::commands::clotho::load_profile_document,
             crate::app::commands::clotho::save_profile_document,

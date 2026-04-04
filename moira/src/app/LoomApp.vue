@@ -14,17 +14,37 @@ import { useLoomNavigation } from '@/query/loom/navigation'
 
 const { activeFeature, selectFeature } = useLoomNavigation()
 const {
+  canForge,
+  canInstall,
   canRegister,
+  closeForgeDialog,
+  closeInstallDialog,
   closeRegisterDialog,
-  draft: buildDraft,
+  forgeBuild,
+  forgeDialogOpen,
+  forgeDraft,
+  installDialogOpen,
+  installRelease,
   issue: buildIssue,
+  launchTargets,
   loading: buildLoading,
+  openForgeDialog,
+  openInstallDialog,
   openRegisterDialog,
+  publishedReleases,
+  refreshLaunchTargets,
+  refreshPublishedReleases,
   registerBuild,
   registerDialogOpen,
-  selectedBuild,
-  selectedBuildId,
-  updateDraftField: updateBuildField,
+  registerDraft,
+  selectPublishedRelease,
+  selectTarget,
+  selectedReleaseKey,
+  selectedTargetKey,
+  selectedTargetLabel,
+  selectedTargetRef,
+  updateForgeDraftField,
+  updateRegisterDraftField,
 } = useClothoBuildControl()
 const {
   canSave,
@@ -70,12 +90,12 @@ const {
   requestForceKillConfirmation,
   runtime,
   stopRuntime,
-  wakeSelectedBuild: wakeRuntime,
-} = useAtroposRuntime(selectedBuildId)
+  wakeSelectedTarget: wakeRuntime,
+} = useAtroposRuntime(selectedTargetRef)
 
 const wakeCount = computed(() => wakeSessions.value.length)
 
-async function wakeSelectedBuild(): Promise<void> {
+async function wakeSelectedTarget(): Promise<void> {
   await wakeRuntime(selectedProfileId.value)
 }
 </script>
@@ -95,7 +115,7 @@ async function wakeSelectedBuild(): Promise<void> {
     <LoomFeatureTabs
       :active-tab="activeFeature"
       :runtime-phase="runtime?.phase ?? null"
-      :selected-build-id="selectedBuildId"
+      :selected-target-label="selectedTargetLabel"
       :selected-profile-id="selectedProfileId"
       :wake-count="wakeCount"
       @select="selectFeature"
@@ -128,7 +148,7 @@ async function wakeSelectedBuild(): Promise<void> {
         :issue="runtimeIssue"
         :loading="runtimeLoading"
         :runtime="runtime"
-        :selected-build-id="selectedBuildId"
+        :selected-target-label="selectedTargetLabel"
         :selected-profile-id="selectedProfileId"
         :show-force-kill-confirm="forceKillConfirmOpen"
         @cancel-force-kill="cancelForceKillConfirmation"
@@ -136,35 +156,54 @@ async function wakeSelectedBuild(): Promise<void> {
         @refresh="refreshRuntimeStatus"
         @request-force-kill="requestForceKillConfirmation"
         @stop="stopRuntime"
-        @wake="wakeSelectedBuild"
+        @wake="wakeSelectedTarget"
       />
 
       <ClothoWorkshopPanel
         v-show="activeFeature === 'clotho'"
-        :build-draft="buildDraft"
         :build-issue="buildIssue"
         :build-loading="buildLoading"
+        :can-forge="canForge"
+        :can-install="canInstall"
         :can-register="canRegister"
         :can-save-profile="canSave"
+        :forge-dialog-open="forgeDialogOpen"
+        :forge-draft="forgeDraft"
+        :install-dialog-open="installDialogOpen"
+        :launch-targets="launchTargets"
         :profile-dialog-open="profileDialogOpen"
         :profile-draft="profileDraft"
         :profile-issue="profileIssue"
         :profile-loading="profileLoading"
         :profile-path-hint="profilePathHint"
         :profiles="profiles"
+        :published-releases="publishedReleases"
         :register-dialog-open="registerDialogOpen"
-        :selected-build="selectedBuild"
+        :register-draft="registerDraft"
         :selected-profile-id="selectedProfileId"
+        :selected-release-key="selectedReleaseKey"
+        :selected-target-key="selectedTargetKey"
+        @close-forge-dialog="closeForgeDialog"
+        @close-install-dialog="closeInstallDialog"
         @close-profile-dialog="closeProfileDialog"
         @close-register-dialog="closeRegisterDialog"
+        @forge="forgeBuild"
+        @install-release="installRelease"
+        @open-forge-dialog="openForgeDialog"
+        @open-install-dialog="openInstallDialog"
         @open-profile="openProfileEditor"
         @open-register-dialog="openRegisterDialog"
         @refresh-profiles="refreshProfiles"
+        @refresh-published-releases="refreshPublishedReleases"
+        @refresh-targets="refreshLaunchTargets"
         @register="registerBuild"
         @save-profile="saveCurrentProfile"
         @select-no-profile="selectNoProfile"
+        @select-published-release="selectPublishedRelease"
+        @select-target="selectTarget"
         @start-new-profile="startNewProfile"
-        @update-build-field="updateBuildField"
+        @update-forge-field="updateForgeDraftField"
+        @update-register-field="updateRegisterDraftField"
         @update-profile-field="updateProfileField"
       />
     </main>

@@ -1,6 +1,23 @@
 export {
+  compareLaunchTargetSummary,
+  launchTargetKey,
+  normalizeLaunchTargetRef,
+  normalizeLaunchTargetSummary,
+} from './targets'
+export {
   compareProfileDocumentSummary,
   normalizeProfileDocument,
   normalizeProfileDocumentSummary,
 } from './profiles'
-export type { ProfileDocument, ProfileDocumentSummary } from './models'
+export {
+  comparePublishedReleaseSummary,
+  normalizePublishedReleaseSummary,
+} from './releases'
+export type {
+  LaunchTargetReadiness,
+  LaunchTargetRef,
+  LaunchTargetSummary,
+  ProfileDocument,
+  ProfileDocumentSummary,
+  PublishedReleaseSummary,
+} from './models'

@@ -4,7 +4,7 @@ type LoomFeatureTab = 'lachesis' | 'atropos' | 'clotho'
 const props = defineProps<{
   activeTab: LoomFeatureTab
   runtimePhase: string | null
-  selectedBuildId: string | null
+  selectedTargetLabel: string | null
   selectedProfileId: string | null
   wakeCount: number
 }>()
@@ -35,7 +35,7 @@ const tabMeta: Array<{
     id: 'clotho',
     kicker: 'Prepare',
     name: 'Clotho',
-    description: 'Register local builds and curate reusable profile documents.',
+    description: 'Forge, install, and curate launch targets plus reusable profile documents.',
   },
 ]
 
@@ -48,13 +48,13 @@ function tabSummary(tab: LoomFeatureTab): string {
     return `Runtime ${props.runtimePhase ?? 'idle'}`
   }
 
-  if (!props.selectedBuildId) {
-    return 'No build selected yet'
+  if (!props.selectedTargetLabel) {
+    return 'No launch target selected yet'
   }
 
   return props.selectedProfileId
-    ? `Build ${props.selectedBuildId} + profile ${props.selectedProfileId}`
-    : `Build ${props.selectedBuildId} + profile optional`
+    ? `Target ${props.selectedTargetLabel} + profile ${props.selectedProfileId}`
+    : `Target ${props.selectedTargetLabel} + profile optional`
 }
 </script>
 

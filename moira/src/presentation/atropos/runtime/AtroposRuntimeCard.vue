@@ -13,7 +13,7 @@ const props = defineProps<{
     wake: boolean
   }
   runtime: RuntimeStatus | null
-  selectedBuildId: string | null
+  selectedTargetLabel: string | null
   selectedProfileId: string | null
 }>()
 
@@ -32,8 +32,8 @@ const runtimeSummary = computed(() => {
   if (props.runtime.pid != null) {
     parts.push(`pid=${props.runtime.pid}`)
   }
-  if (props.runtime.buildId) {
-    parts.push(`build=${props.runtime.buildId}`)
+  if (props.runtime.targetLabel) {
+    parts.push(`target=${props.runtime.targetLabel}`)
   }
 
   return parts.join(' · ')
@@ -49,8 +49,8 @@ const runtimeSummary = computed(() => {
 
     <div class="runtime-grid runtime-grid-next">
       <div class="runtime-item">
-        <span class="runtime-label">Next Wake Build</span>
-        <strong class="mono">{{ selectedBuildId ?? 'Choose in Clotho' }}</strong>
+        <span class="runtime-label">Wake Target (Clotho)</span>
+        <strong class="mono">{{ selectedTargetLabel ?? 'Select exactly one target in Clotho' }}</strong>
       </div>
       <div class="runtime-item">
         <span class="runtime-label">Next Wake Profile</span>
@@ -60,8 +60,8 @@ const runtimeSummary = computed(() => {
 
     <div class="runtime-grid">
       <div class="runtime-item">
-        <span class="runtime-label">Running Build</span>
-        <strong class="mono">{{ runtime?.buildId ?? '—' }}</strong>
+        <span class="runtime-label">Running Target</span>
+        <strong class="mono">{{ runtime?.targetLabel ?? '—' }}</strong>
       </div>
       <div class="runtime-item">
         <span class="runtime-label">PID</span>
@@ -87,7 +87,7 @@ const runtimeSummary = computed(() => {
 
     <div class="action-row runtime-actions">
       <button class="button-primary" type="button" :disabled="!canWake" @click="$emit('wake')">
-        {{ loading.wake ? 'Waking…' : 'Wake Selected Build' }}
+        {{ loading.wake ? 'Waking…' : 'Wake Selected Target' }}
       </button>
       <button class="button-secondary" type="button" :disabled="!canStop" @click="$emit('stop')">
         {{ loading.stop ? 'Stopping…' : 'Graceful Stop' }}
@@ -98,7 +98,7 @@ const runtimeSummary = computed(() => {
     </div>
 
     <p class="field-note">
-      Wake uses the current Clotho selection shown above. Terminal reason remains visible until the next successful wake.
+      Wake uses the single current Clotho selection shown above. Terminal reason remains visible until the next successful wake.
     </p>
   </article>
 </template>

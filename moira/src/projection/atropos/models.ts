@@ -2,7 +2,7 @@ export type SupervisionPhase = 'idle' | 'waking' | 'running' | 'stopping' | 'ter
 
 export interface RuntimeStatus {
   phase: SupervisionPhase
-  buildId: string | null
+  targetLabel: string | null
   executablePath: string | null
   workingDir: string | null
   profilePath: string | null
