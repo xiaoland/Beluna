@@ -37,3 +37,23 @@ run a live walkthrough against a real GitHub Release.
 - `#8` issue body can point to the working set, workflow, and packaging script.
 - The current full `core` test baseline is not yet a release gate for this minimal slice;
   that gap should stay explicit rather than silently blocking artifact publication.
+
+## Execution Evidence
+
+- `main` now carries the producer slice plus two workflow-only hotfix commits that made
+  GitHub Actions validation-safe:
+  - `03c077a` `fix(release): make workflow metadata event-safe`
+  - `4b0c85d` `fix(release): use workspace dist path in workflow`
+- A real GitHub release now exists:
+  - tag: `v0.0.9`
+  - release URL: `https://github.com/xiaoland/Beluna/releases/tag/v0.0.9`
+  - successful workflow run: `23975642824`
+- Published release assets now match the Moira consumer contract:
+  - `beluna-core-aarch64-apple-darwin.tar.gz`
+  - `SHA256SUMS`
+- Operator evidence confirms the real release-consumer path is now closed end to end:
+  1. Moira discovered the published release
+  2. downloaded the archive
+  3. verified `SHA256SUMS`
+  4. installed the artifact into Clotho isolation
+  5. woke Core successfully from the installed target

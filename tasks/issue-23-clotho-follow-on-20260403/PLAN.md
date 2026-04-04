@@ -42,9 +42,23 @@ It intentionally does **not** absorb all of `#8`.
 - Rust tests cover source-root normalization, forge manifest update, installed artifact resolution, checksum mismatch, broken archive, and install-isolation paths.
 - Frontend verification covers launch-target selection plus forge/install dialogs.
 - Atropos still wakes through prepared wake input only; Lachesis remains isolated from Clotho/Atropos state.
+- Real operator evidence now exists against a published GitHub release (`v0.0.9`):
+  - Clotho discovered the release
+  - verified `SHA256SUMS`
+  - installed the artifact into app-local isolation
+  - selected the installed launch target
+  - woke Core successfully
 
 ## Promotion
 
 - Cross-unit release contract truth belongs in `docs/20-product-tdd`.
 - Runtime rollout and recovery truth belongs in `docs/40-deployment`.
 - Moira-local preparation, UI, and verification truth belongs in `docs/30-unit-tdd/moira`.
+
+## Execution Evidence
+
+- The release-intake consumer path has now been exercised against a real published release:
+  - release tag: `v0.0.9`
+  - archive asset: `beluna-core-aarch64-apple-darwin.tar.gz`
+  - checksum asset: `SHA256SUMS`
+- This closes the previous gap between fixture-backed install tests and a true live operator walkthrough.

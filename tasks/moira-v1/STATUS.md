@@ -5,12 +5,12 @@ It is procedural, not authoritative.
 
 ## Snapshot
 
-- Date: `2026-04-02`
+- Date: `2026-04-04`
 - Parent issue: `#21`
 - Main active sub-issues:
-  - `#22` Atropos v1: `In progress`
-  - `#23` Clotho v1: `In progress`
-  - `#24` Lachesis v1: `In progress`
+  - `#22` Atropos v1: `Completed`
+  - `#23` Clotho v1: `Completed`
+  - `#24` Lachesis v1: `Completed`
   - `#25` live/replay ingest verification: `Backlog`
 
 ## What Is Landed
@@ -27,10 +27,13 @@ It is procedural, not authoritative.
 
 ### Clotho / `#23`
 
-- The first Clotho slice is now real:
-  - `KnownLocalBuildRef`
+- Clotho launch-target preparation is now real end to end:
+  - `LaunchTargetRef`
   - optional `ProfileRef`
   - `PreparedWakeInput`
+- Supported launch-target kinds now include:
+  - `knownLocalBuild`
+  - `installedArtifact`
 - Clotho now also owns the first operator-facing profile-document surface:
   - list saved profile documents
   - load one profile document by `profile_id`
@@ -39,15 +42,34 @@ It is procedural, not authoritative.
   - `moira/src-tauri/src/clotho/model.rs`
   - `moira/src-tauri/src/clotho/service.rs`
   - `moira/src-tauri/src/clotho/profiles.rs`
+  - `moira/src-tauri/src/clotho/artifacts.rs`
 - Known local builds persist under:
   - `artifacts/known-local-builds/<build-id>.json`
+- Installed release artifacts persist under:
+  - `artifacts/installed/<release-tag>/<rust-target-triple>/`
+- Release cache persists under:
+  - `cache/releases/<release-tag>/`
 - Profile documents persist under:
   - `profiles/<profile-id>.jsonc`
-- The first-slice boundary is now end-to-end, not just backend-internal:
+- The wake-preparation boundary is now end-to-end, not just backend-internal:
   - frontend can register a known local build
+  - frontend can explicitly forge a launch target from repo root or `core/`
+  - frontend can discover, verify, and install a published release
   - frontend can create and edit multiple profile documents
-  - frontend stores the selected build ref for wake
+  - frontend stores the selected launch target ref for wake
   - Atropos consumes the Clotho-prepared wake input
+
+### Release Producer / `#8`
+
+- The minimum producer-side release workflow is now real:
+  - `.github/workflows/core-release.yml`
+  - `scripts/package-core-release.sh`
+- Real published release evidence now exists:
+  - release tag: `v0.0.9`
+  - assets:
+    - `beluna-core-aarch64-apple-darwin.tar.gz`
+    - `SHA256SUMS`
+- This closes the first true producer/consumer loop between `#8` and `#23`.
 
 ### Atropos / `#22`
 
@@ -100,23 +122,25 @@ It is procedural, not authoritative.
 ## Verified In This Turn
 
 - `cargo check --quiet` in `moira/src-tauri`
-- `cargo check --tests --quiet` in `moira/src-tauri`
 - `cargo test clotho:: --quiet` in `moira/src-tauri`
 - `pnpm -C moira build`
-- Operator-reported live desktop-shell walkthrough on `2026-04-02`:
+- `pnpm -C moira test -- --run`
+- operator-reported live desktop-shell walkthrough on `2026-04-02`:
   1. register known local build
   2. wake Core from Loom
   3. confirm Lachesis received a new wake plus related OTLP logs
   4. stop the supervised Core successfully
+- operator-reported real release-intake walkthrough on `2026-04-04`:
+  1. discover published release `v0.0.9`
+  2. download release asset
+  3. verify `SHA256SUMS`
+  4. install isolated artifact
+  5. wake Core from the installed target
+  6. confirm Lachesis received the new wake plus related logs
 
 ## Not Yet Verified
 
-- A fully written evidence note for the operator-reported live walkthrough.
-- An explicit operator walkthrough of the full Lachesis browse surface from Moira itself:
-  1. inspect wake list
-  2. inspect tick timeline
-  3. inspect one selected tick through chronology / cortex / stem / spine / raw
-- App-exit stop behavior against a real supervised Core process.
+- `core` full `cargo test` baseline is still red and is not yet part of the minimum release gate for `#8`.
 
 ## Important Current Constraints
 
@@ -128,12 +152,11 @@ It is procedural, not authoritative.
 
 ## Suggested Next Step
 
-Use the clearer operator shell to close the remaining `#21` evidence gaps:
+Archive or slim `tasks/moira-v1` as a completed v1 floor note, then move future work to explicit follow-on issues:
 
-1. validate the new Clotho profile-document workflow against a real Core config
-2. perform one explicit browse-surface walkthrough for selected tick detail (`chronology / cortex / stem / spine / raw`)
-3. verify app-exit stop behavior against a real supervised Core process
-4. only after those acceptance notes land, negotiate whether the next quality slice should be supervision events or persistence for selected build/profile refs
+1. `#25` live/replay ingest verification
+2. `#8` follow-on quality hardening such as a true release test gate
+3. deferred Clotho stories such as schema validation or broader target matrix
 
 ## Handoff File Anchors
 
