@@ -23,7 +23,7 @@ jobs:
   publish-core-release:
     runs-on: macos-14
     env:
-      DIST_DIR: ${{ runner.temp }}/core-release-dist
+      DIST_DIR: ${{ github.workspace }}/.tmp/core-release-dist
       TARGET_TRIPLE: aarch64-apple-darwin
     steps:
       - name: Check out repository
