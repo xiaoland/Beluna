@@ -1,0 +1,110 @@
+name: Core Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to create or update"
+        required: true
+        type: string
+      prerelease:
+        description: "Publish as prerelease"
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  publish-core-release:
+    runs-on: macos-14
+    env:
+      DIST_DIR: ${{ runner.temp }}/core-release-dist
+      TARGET_TRIPLE: aarch64-apple-darwin
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        shell: bash
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup target add "$TARGET_TRIPLE"
+
+      - name: Package release assets
+        shell: bash
+        run: scripts/package-core-release.sh "$TARGET_TRIPLE" "$DIST_DIR"
+
+      - name: Resolve release metadata
+        id: release_meta
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
+          INPUT_PRERELEASE: ${{ inputs.prerelease }}
+          REF_NAME: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            tag="$INPUT_RELEASE_TAG"
+            prerelease="$INPUT_PRERELEASE"
+            target_sha="$SHA"
+          else
+            tag="$REF_NAME"
+            if [[ "$tag" == *-* ]]; then
+              prerelease="true"
+            else
+              prerelease="false"
+            fi
+            target_sha=""
+          fi
+
+          if [[ -z "$tag" ]]; then
+            echo "release tag must not be empty" >&2
+            exit 1
+          fi
+
+          {
+            echo "tag=$tag"
+            echo "prerelease=$prerelease"
+            echo "target_sha=$target_sha"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Publish release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release_meta.outputs.tag }}
+          RELEASE_PRERELEASE: ${{ steps.release_meta.outputs.prerelease }}
+          RELEASE_TARGET_SHA: ${{ steps.release_meta.outputs.target_sha }}
+        run: |
+          archive_path="$DIST_DIR/beluna-core-${TARGET_TRIPLE}.tar.gz"
+          checksum_path="$DIST_DIR/SHA256SUMS"
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$archive_path" "$checksum_path" --clobber
+            exit 0
+          fi
+
+          create_args=(
+            "$RELEASE_TAG"
+            "$archive_path"
+            "$checksum_path"
+            --title "$RELEASE_TAG"
+            --generate-notes
+          )
+
+          if [[ "$RELEASE_PRERELEASE" == "true" ]]; then
+            create_args+=(--prerelease)
+          fi
+
+          if [[ -n "$RELEASE_TARGET_SHA" ]]; then
+            create_args+=(--target "$RELEASE_TARGET_SHA")
+          fi
+
+          gh release create "${create_args[@]}"
