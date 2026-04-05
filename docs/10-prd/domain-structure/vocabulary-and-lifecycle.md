@@ -1,5 +1,9 @@
 # Vocabulary And Lifecycle
 
+This file is derived from [`../glossary.md`](../glossary.md) and `behavior/*`.
+It groups already-defined PRD terms by lifecycle context.
+It does not own the canonical definition of those terms.
+
 ## Cognition Continuity
 
 Vocabulary:
@@ -25,8 +29,8 @@ Vocabulary:
 
 Lifecycle concerns:
 
-- endpoint connect/register
-- request/action exchange
+- endpoint connect and register
+- request and action exchange
 - terminal outcome and feedback
 
 ## Operational Trust
@@ -41,4 +45,4 @@ Lifecycle concerns:
 
 - startup readiness
 - degraded operation
-- controlled shutdown/recovery
+- controlled shutdown and recovery

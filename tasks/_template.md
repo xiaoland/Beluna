@@ -1,18 +1,26 @@
-# Task Note Template
+# Task Packet Template
 
 Delete sections you do not need.
 
-## Context
-What problem, request, or observation this task is addressing.
+## MVT Core
 
-## Intended Change
-What should be different when the task is done.
+- Objective & Hypothesis: <one sentence for the goal and expected result>
+- Guardrails Touched: <1-2 rules or boundaries that must not be broken>
+- Verification: <objective proof such as tests, logs, structured output, or diff criteria>
 
-## Working Notes
-Only the temporary reasoning needed to execute the task.
+## Exploration Scaffold (Optional)
 
-## Verification
-What evidence will be used to confirm the change.
+- Perturbation: <what signal started this task>
+- Input Type: <Intent | Constraint | Reality | Artifact>
+- Active Mode or Transition Note: <current mode or why the task changed posture>
+- Governing Anchors: <existing PRD / TDD / AGENTS / deployment docs>
+- Impact Hypothesis: <likely downstream effects>
+- Temporary Assumptions: <assumptions to validate later>
+- Negotiation Triggers: <when to stop and ask for human input>
+- Promotion Candidates: <knowledge worth persisting after the task ends>
 
-## Promotion
-Stable truths worth moving into durable docs or code/tests.
+## Execution Notes
+
+- key findings:
+- decisions made:
+- final outcome:

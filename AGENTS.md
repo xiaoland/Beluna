@@ -15,62 +15,96 @@ Documentation is selective memory, not a parallel runtime.
 └── tasks/              # Volatile task workspace
 ```
 
+## Minimal Cheat Sheet
+
+- Unit: a logical technical boundary, not the same thing as a folder.
+- PRD (`docs/10-prd/`): owns product intent, user-visible behavior, scope, and glossary.
+- Product TDD (`docs/20-product-tdd/`): owns cross-unit technical contracts, topology, and authority boundaries.
+- Unit TDD (`docs/30-unit-tdd/`): owns hard-unit local design memory and verification.
+- Local `AGENTS.md`: owns tactical hazards and recurrence tripwires closest to code.
+- `tasks/`: owns volatile exploration, diagnostics, and tactical artifacts.
+
+## Documentation
+
+- Start with this root `AGENTS.md`.
+- Before changing files in a subtree, recursively inspect local `AGENTS.md` files from the target directory upward to the repo root.
+- Use `docs/00-meta/` only when you need typed input protocols, mode SOPs, or framework ontology.
+- Read `docs/00-meta/concepts.md` only when boundary language is unclear.
+- Read only the owning slice of `docs/10-prd/`, `docs/20-product-tdd/`, `docs/30-unit-tdd/`, or `docs/40-deployment/`.
+- Treat `tasks/` as procedural and non-authoritative.
+- When implementation reveals reusable knowledge, promote it into durable docs.
+
 ## Operating Model
 
-- Read the nearest relevant `AGENTS.md`.
-- Keep authoritative truth in `docs/` and code/tests/CI.
-- Keep volatile exploration and coordination in `tasks/`.
-- Open `docs/00-meta/index.md` only when changing the documentation system itself or resolving ownership ambiguity between layers.
+1. Classify the incoming request as `Intent`, `Constraint`, `Reality`, or `Artifact`.
+2. Identify the durable owner and likely blast radius before acting.
+3. For non-trivial work, open a task packet with the three MVT anchors:
+   - `Objective & Hypothesis`
+   - `Guardrails Touched`
+   - `Verification`
+4. Choose the active mode for the current slice of work: `Explore`, `Solidify`, `Execute`, or `Diagnose`.
+5. Load only the matching route doc, mode SOP, and governing anchors needed for this step.
+6. Execute and verify.
+7. Switch modes when evidence or uncertainty changes.
+8. Promote only stable truths after verification.
 
-### Execution Protocol
+### Typed Input Guide
 
-For any non-trivial change, use this sequence:
+- `Intent`: the business wants new behavior, scope, or policy. Update PRD first.
+- `Constraint`: product behavior stays the same, but technical or environment boundaries changed. Update Product TDD, Unit TDD, or Deployment docs as appropriate.
+- `Reality`: observed behavior diverges from expectation. Collect evidence first, then fix the cause and add recurrence tripwires near code when warranted.
+- `Artifact`: produce a bounded intermediate deliverable. Keep it tactical unless reuse is proven.
 
-1. Assess volatility and choose an operating mode:
-   - `Mode A / Exploration`: vague idea, fuzzy requirement, or open-ended problem.
-     - Default to `tasks/` when exploration needs persisted context or temporary coordination.
-     - Short clarification-only exchanges may bypass a task note.
-   - `Mode B / Solidification`: clear but unrecorded product or technical truth.
-     - Durable-doc updates are confirmation-gated.
-   - `Mode C / Execution`: clear, localized implementation work.
-     - Straightforward low-risk changes may proceed directly.
-     - Risky, reference-sensitive, or logic-altering changes are confirmation-gated.
-2. Pick the owner of the decision you are changing:
-   - `docs/10-prd`: product what/why, user-visible behavior, scope, glossary.
-   - `docs/20-product-tdd`: cross-unit design, authority, contracts.
-   - `docs/30-unit-tdd`: hard-unit local design memory and verification.
-   - `docs/40-deployment`: environments, rollout, observability, recovery.
-   - code/tests/CI: mechanically enforced truth.
-3. Read the smallest relevant slice.
-4. Apply the mode-specific gate:
-   - `Mode A / Exploration`: do not update durable docs or production code yet.
-   - `Mode B / Solidification`: execute the pre-execution restatement and await human confirmation before updating durable docs.
-   - `Mode C / Execution`: if the change is risky, reference-sensitive, or logic-altering, execute the pre-execution restatement and await human confirmation before coding.
-5. Implement and verify once the gate is satisfied.
-6. Promote only stable truths that are reusable, costly to rediscover, and not better enforced mechanically.
-7. When work used a task note, ask whether it should be archived after completion.
+### Mode Guide
+
+- `Explore`: map unknowns, alternatives, and assumptions.
+- `Solidify`: restate findings into explicit claims, contracts, or decisions.
+- `Execute`: implement a clear, verified change.
+- `Diagnose`: investigate mismatches between expected and observed reality.
+
+Mode guidance:
+
+- do not assume one task equals one mode
+- switch modes when evidence or clarity changes
+- mode selection never overrides durable ownership
+
+### Beluna Gates
+
+- `Explore`: do not update durable docs or production code during open-ended exploration.
+- `Solidify`: durable-doc updates are confirmation-gated; perform the restatement first and await human confirmation.
+- `Execute`: straightforward low-risk localized changes may proceed directly; risky, reference-sensitive, or logic-altering changes are confirmation-gated.
+- `Diagnose`: no evidence, no modification.
 
 ### Restatement Rule
 
 For risky or reference-sensitive changes, restate:
 
 - Target.
-- Target path/anchor.
-- State/context.
+- Target path or anchor.
+- State and context.
 - Operation type.
 - Scope boundaries.
 - Invariants that must remain unchanged.
 - Likely affected files.
 - Uncertainty.
 
+### Negotiation Triggers
+
+Pause and ask the human when any of these happen:
+
+- the requested change conflicts with an existing product claim or technical contract
+- blast radius crosses multiple durable owners and the correct owner is unclear
+- a shortcut would damage readability, maintainability, or an explicit guardrail
+- evidence is insufficient for a bug fix or architectural decision
+
 ## Documentation Index
 
-- [PRD](./docs/10-prd/index.md): product intent, scope, workflows, rules, glossary.
+- [Meta Engine](./docs/00-meta/index.md): typed routes, mode SOPs, and framework ontology.
+- [PRD](./docs/10-prd/index.md): product intent, behavior, scope, and glossary.
 - [Product TDD](./docs/20-product-tdd/index.md): cross-unit technical realization.
 - [Unit TDD](./docs/30-unit-tdd/index.md): unit-local contracts and verification.
 - [Deployment](./docs/40-deployment/index.md): runtime and operational truth.
-- [Docs Policy](./docs/00-meta/index.md): optional notes for doc-system ownership and promotion rules.
-- [Tasks](./tasks/README.md): volatile planning, investigation, and result workspace.
+- [Tasks](./tasks/README.md): volatile planning, diagnostics, and artifact workspace.
 - [Core AGENTS](./core/AGENTS.md)
 - [Apple Universal AGENTS](./apple-universal/AGENTS.md)
 - [Monitor AGENTS](./monitor/AGENTS.md)
@@ -95,4 +129,4 @@ For risky or reference-sensitive changes, restate:
 ### Naming Conventions
 
 - Omit `Beluna` prefix in directory names, file names, and internal docs.
-- Keep `Beluna` in user-facing package names/documentation for discoverability.
+- Keep `Beluna` in user-facing package names and documentation for discoverability.
