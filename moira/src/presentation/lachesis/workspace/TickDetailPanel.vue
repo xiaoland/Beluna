@@ -7,20 +7,21 @@ import { formatWhen } from '@/presentation/format'
 import { summarizeEntry } from '@/projection/lachesis/labels'
 import { narrativeSections } from '@/projection/lachesis/narratives'
 import type { TickDetail } from '@/projection/lachesis/models'
-import type { LachesisDetailTab } from '@/query/lachesis/state'
+import type { CortexViewMode, LachesisDetailTab } from '@/query/lachesis/state'
 
 const props = defineProps<{
+  cortexMode: CortexViewMode
   detail: TickDetail | null
   loading: boolean
   tab: LachesisDetailTab
 }>()
 
 const emit = defineEmits<{
+  'update:cortexMode': [mode: CortexViewMode]
   'update:tab': [tab: LachesisDetailTab]
 }>()
 
 const tabs: Array<{ key: LachesisDetailTab; label: string }> = [
-  { key: 'chronology', label: 'Chronology' },
   { key: 'cortex', label: 'Cortex' },
   { key: 'stem', label: 'Stem' },
   { key: 'spine', label: 'Spine' },
@@ -28,12 +29,17 @@ const tabs: Array<{ key: LachesisDetailTab; label: string }> = [
 ]
 
 const sections = computed(() => {
-  if (!props.detail || props.tab === 'raw' || props.tab === 'chronology') {
+  if (!props.detail || props.tab === 'raw') {
     return []
   }
 
   return narrativeSections(props.detail, props.tab)
 })
+
+const cortexModes: Array<{ key: CortexViewMode; label: string }> = [
+  { key: 'timeline', label: 'Timeline' },
+  { key: 'narrative', label: 'Narrative' },
+]
 </script>
 
 <template>
@@ -70,15 +76,81 @@ const sections = computed(() => {
 
     <div v-if="loading && !detail" class="empty-state">Loading tick detail…</div>
     <div v-else-if="!detail" class="empty-state">
-      Select a tick from the timeline to inspect its chronology, narrative, and raw events.
-    </div>
-
-    <div v-else-if="tab === 'chronology'" class="detail-body">
-      <TickChronology :chronology="detail.chronology" />
+      Select a tick from the timeline to inspect Cortex, subsystem narratives, and raw events.
     </div>
 
     <div v-else-if="tab === 'raw'" class="detail-body">
       <RawEventInspector :raw-events="detail.rawEvents" />
+    </div>
+
+    <div v-else-if="tab === 'cortex'" class="detail-body">
+      <div class="mode-tabs">
+        <button
+          v-for="mode in cortexModes"
+          :key="mode.key"
+          type="button"
+          class="mode-tab"
+          :class="{ active: mode.key === cortexMode }"
+          @click="emit('update:cortexMode', mode.key)"
+        >
+          {{ mode.label }}
+        </button>
+      </div>
+
+      <p class="section-note">
+        Cortex View only includes ticks with reconstructable `cortex.*` evidence; switch to Stem, Spine, or Raw to inspect
+        unhandled ticks.
+      </p>
+
+      <TickChronology v-if="cortexMode === 'timeline'" :chronology="detail.chronology" />
+
+      <template v-else>
+        <section v-for="section in sections" :key="section.title" class="narrative-section">
+          <div class="section-head">
+            <div>
+              <h3>{{ section.title }}</h3>
+              <p>{{ section.hint }}</p>
+            </div>
+            <span class="section-count">
+              {{ section.single ? '1 snapshot' : `${section.items.length} entr${section.items.length === 1 ? 'y' : 'ies'}` }}
+            </span>
+          </div>
+
+          <article v-if="section.single" class="entry-card">
+            <header>{{ summarizeEntry(section.single) }}</header>
+            <JsonSectionGroup
+              :sections="[
+                {
+                  key: `${section.title}-single`,
+                  title: 'Structured payload',
+                  value: section.single,
+                  defaultOpen: true,
+                },
+              ]"
+            />
+          </article>
+
+          <div v-else-if="section.items.length" class="entry-stack">
+            <article v-for="(entry, index) in section.items" :key="index" class="entry-card">
+              <header>{{ summarizeEntry(entry) }}</header>
+              <JsonSectionGroup
+                :sections="[
+                  {
+                    key: `${section.title}-${index}`,
+                    title: 'Structured payload',
+                    value: entry,
+                    defaultOpen: index === 0,
+                  },
+                ]"
+              />
+            </article>
+          </div>
+
+          <div v-else class="section-empty">
+            No entries for this section were reconstructed from the current tick detail response.
+          </div>
+        </section>
+      </template>
     </div>
 
     <div v-else class="detail-body">
@@ -162,10 +234,37 @@ const sections = computed(() => {
   background: color-mix(in srgb, var(--accent) 6%, white);
 }
 
+.mode-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.mode-tab {
+  min-height: 2.1rem;
+  padding: 0.34rem 0.68rem;
+  border: 1px solid var(--line-soft);
+  background: var(--panel);
+  color: var(--text-muted);
+}
+
+.mode-tab.active {
+  color: var(--text-strong);
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--line-strong));
+  background: color-mix(in srgb, var(--accent) 5%, white);
+}
+
 .detail-body {
   display: grid;
   gap: 0.7rem;
   padding: 0 0.9rem 0.9rem;
+}
+
+.section-note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
 }
 
 .narrative-section {

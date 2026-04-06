@@ -29,7 +29,7 @@
 2. Persist raw events before updating any derived read model.
 3. Project the baseline read models needed for Loom wake list and tick timeline.
 4. Project any additional chronology, interval-pairing, or targeted lookup indexes that materially improve operator-facing browsing without becoming alternate sources of truth.
-5. Resolve the selected tick through tick chronology first, then expanded interval inspection, then sectional Cortex / Stem / Spine investigation, and finally source-grounded raw-event inspection.
+5. Resolve the selected tick through Cortex View first, using timeline or narrative mode for handled ticks, then sectional Stem / Spine investigation, and finally source-grounded raw-event inspection.
 6. Surface metrics/traces exporter status and handoff links without taking ownership of those signals.
 
 ## Shutdown

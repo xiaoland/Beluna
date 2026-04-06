@@ -27,6 +27,7 @@ export interface TickSummaryPayload {
   eventCount: number
   warningCount: number
   errorCount: number
+  cortexHandled: boolean
 }
 
 export interface EventRecordPayload {

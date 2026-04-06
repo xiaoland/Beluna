@@ -1,4 +1,4 @@
-import { onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 
 import { listenLachesisUpdated } from '@/bridge/events'
 import { hasTauriBridge } from '@/bridge/env'
@@ -22,20 +22,28 @@ import type {
   TickSummary,
   WakeSessionSummary,
 } from '@/projection/lachesis/models'
-import type { LachesisDetailTab } from './state'
+import {
+  defaultDetailTabForTicks,
+  visibleTicksForDetailTab,
+  type CortexViewMode,
+  type LachesisDetailTab,
+} from './state'
 
 type StopListening = () => void | Promise<void>
 
 export function useLachesisWorkspace() {
   const status = ref<ReceiverStatus | null>(null)
   const wakeSessions = ref<WakeSessionSummary[]>([])
-  const tickTimeline = ref<TickSummary[]>([])
+  const allTicks = ref<TickSummary[]>([])
   const selectedRunId = ref<string | null>(null)
   const selectedTick = ref<number | null>(null)
   const selectedTickDetail = ref<TickDetail | null>(null)
-  const activeTab = ref<LachesisDetailTab>('chronology')
+  const activeTab = ref<LachesisDetailTab>('raw')
+  const cortexMode = ref<CortexViewMode>('timeline')
   const issue = ref<string | null>(null)
   const usingTauri = hasTauriBridge()
+  const tickTimeline = computed(() => visibleTicksForDetailTab(allTicks.value, activeTab.value))
+  const hiddenTickCount = computed(() => allTicks.value.length - tickTimeline.value.length)
 
   const loading = reactive({
     status: false,
@@ -86,7 +94,7 @@ export function useLachesisWorkspace() {
     await Promise.all([loadStatus(), loadWakeSessions(true)])
 
     if (!selectedRunId.value) {
-      tickTimeline.value = []
+      allTicks.value = []
       selectedTick.value = null
       selectedTickDetail.value = null
       return
@@ -132,7 +140,6 @@ export function useLachesisWorkspace() {
         selectedRunId.value = nextRunId
         selectedTick.value = null
         selectedTickDetail.value = null
-        activeTab.value = 'chronology'
       }
     } catch (error) {
       issue.value = `Unable to load wake sessions: ${errorMessage(error)}`
@@ -151,17 +158,17 @@ export function useLachesisWorkspace() {
         return
       }
 
-      tickTimeline.value = ticks
-
-      const nextTick =
-        preserveSelection && selectedTick.value != null && ticks.some((entry) => entry.tick === selectedTick.value)
-          ? selectedTick.value
-          : ticks[0]?.tick ?? null
+      allTicks.value = ticks
+      if (!preserveSelection && selectedTick.value == null) {
+        activeTab.value = defaultDetailTabForTicks(ticks)
+      } else if (activeTab.value === 'cortex' && !ticks.some((entry) => entry.cortexHandled)) {
+        activeTab.value = 'raw'
+      }
+      const nextTick = nextSelectedTick(ticks, activeTab.value, selectedTick.value, preserveSelection)
 
       if (nextTick !== selectedTick.value) {
         selectedTick.value = nextTick
         selectedTickDetail.value = null
-        activeTab.value = 'chronology'
       }
     } catch (error) {
       issue.value = `Unable to load tick timeline: ${errorMessage(error)}`
@@ -196,7 +203,6 @@ export function useLachesisWorkspace() {
     selectedRunId.value = runId
     selectedTick.value = null
     selectedTickDetail.value = null
-    activeTab.value = 'chronology'
     await loadTicksForRun(runId, false)
 
     if (selectedTick.value != null) {
@@ -211,15 +217,47 @@ export function useLachesisWorkspace() {
 
     selectedTick.value = tick
     selectedTickDetail.value = null
-    activeTab.value = 'chronology'
     await loadTickDetailForSelection(selectedRunId.value, tick)
+  }
+
+  async function selectDetailTab(tab: LachesisDetailTab): Promise<void> {
+    if (tab === activeTab.value) {
+      return
+    }
+
+    activeTab.value = tab
+    if (!selectedRunId.value) {
+      return
+    }
+
+    const nextTick = nextSelectedTick(allTicks.value, activeTab.value, selectedTick.value, true)
+    if (nextTick === selectedTick.value) {
+      return
+    }
+
+    selectedTick.value = nextTick
+    if (nextTick == null) {
+      selectedTickDetail.value = null
+      return
+    }
+
+    selectedTickDetail.value = null
+    await loadTickDetailForSelection(selectedRunId.value, nextTick)
+  }
+
+  function selectCortexMode(mode: CortexViewMode): void {
+    cortexMode.value = mode
   }
 
   return {
     activeTab,
+    cortexMode,
+    hiddenTickCount,
     issue,
     loading,
     refreshVisibleState,
+    selectCortexMode,
+    selectDetailTab,
     selectTick,
     selectWake,
     selectedRunId,
@@ -230,6 +268,25 @@ export function useLachesisWorkspace() {
     usingTauri,
     wakeSessions,
   }
+}
+
+function nextSelectedTick(
+  ticks: TickSummary[],
+  tab: LachesisDetailTab,
+  currentTick: number | null,
+  preserveSelection: boolean,
+): number | null {
+  const visibleTicks = visibleTicksForDetailTab(ticks, tab)
+
+  if (
+    preserveSelection &&
+    currentTick != null &&
+    visibleTicks.some((entry) => entry.tick === currentTick)
+  ) {
+    return currentTick
+  }
+
+  return visibleTicks[0]?.tick ?? null
 }
 
 function errorMessage(error: unknown): string {

@@ -71,9 +71,13 @@ const {
 } = useClothoProfileControl()
 const {
   activeTab,
+  cortexMode,
+  hiddenTickCount,
   issue,
   loading,
   refreshVisibleState,
+  selectCortexMode,
+  selectDetailTab,
   selectTick,
   selectWake,
   selectedRunId,
@@ -136,14 +140,17 @@ async function wakeSelectedTarget(): Promise<void> {
           ticks: loading.ticks,
           wakes: loading.wakes,
         }"
+        :cortex-hidden-tick-count="hiddenTickCount"
+        :cortex-mode="cortexMode"
         :selected-run-id="selectedRunId"
         :selected-tick="selectedTick"
         :selected-tick-detail="selectedTickDetail"
         :tick-timeline="tickTimeline"
         :wake-sessions="wakeSessions"
+        @update:cortex-mode="selectCortexMode"
         @select-tick="selectTick"
         @select-wake="selectWake"
-        @update:tab="activeTab = $event"
+        @update:tab="selectDetailTab"
       />
 
       <AtroposRuntimePanel

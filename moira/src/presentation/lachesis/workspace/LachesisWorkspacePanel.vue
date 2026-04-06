@@ -3,14 +3,15 @@ import { computed } from 'vue'
 
 import { formatWhen } from '@/presentation/format'
 import type { TickDetail, TickSummary, WakeSessionSummary } from '@/projection/lachesis/models'
+import type { CortexViewMode, LachesisDetailTab } from '@/query/lachesis/state'
 import TickDetailPanel from './TickDetailPanel.vue'
 import TickTimeline from './TickTimeline.vue'
 import WakeSessionList from './WakeSessionList.vue'
 
-type LachesisDetailTab = 'chronology' | 'cortex' | 'stem' | 'spine' | 'raw'
-
 const props = defineProps<{
   activeTab: LachesisDetailTab
+  cortexHiddenTickCount: number
+  cortexMode: CortexViewMode
   loading: {
     detail: boolean
     ticks: boolean
@@ -26,15 +27,18 @@ const props = defineProps<{
 const emit = defineEmits<{
   selectTick: [tick: number]
   selectWake: [runId: string]
+  'update:cortexMode': [mode: CortexViewMode]
   'update:tab': [tab: LachesisDetailTab]
 }>()
 
 const selectionHint = computed(() => {
   if (!props.selectedTickDetail) {
-    return 'Select a wake session and tick to inspect chronology, subsystem intervals, and source-grounded raw detail.'
+    return props.activeTab === 'cortex'
+      ? 'Cortex View shows only handled ticks. Switch tabs to inspect broader Stem, Spine, or raw evidence.'
+      : 'Select a wake session and tick to inspect subsystem narratives and source-grounded raw detail.'
   }
 
-  return `Tick ${props.selectedTickDetail.tick} from wake ${props.selectedTickDetail.runId} · ${props.selectedTickDetail.chronology.lanes.length} lanes · ${props.selectedTickDetail.rawEvents.length} raw events · updated ${formatWhen(
+  return `Tick ${props.selectedTickDetail.tick} from wake ${props.selectedTickDetail.runId} · ${props.selectedTickDetail.chronology.lanes.length} Cortex timeline lanes · ${props.selectedTickDetail.rawEvents.length} raw events · updated ${formatWhen(
     props.selectedTickDetail.rawEvents[props.selectedTickDetail.rawEvents.length - 1]?.observedAt ?? null,
   )}`
 })
@@ -47,8 +51,8 @@ const selectionHint = computed(() => {
         <p class="panel-kicker">Lachesis</p>
         <h2 class="panel-title">Wake Browse Surface</h2>
         <p class="panel-subtitle">
-          Inspect wake sessions, follow the tick timeline, and open the selected tick through chronology, cortex, stem,
-          spine, or raw detail.
+          Inspect wake sessions, follow the tick timeline, and open the selected tick through Cortex, Stem, Spine, or raw
+          detail.
         </p>
       </div>
     </div>
@@ -69,6 +73,8 @@ const selectionHint = computed(() => {
       <section class="workspace-row workspace-focus">
         <TickTimeline
           class="pane timeline-pane"
+          :cortex-view="activeTab === 'cortex'"
+          :hidden-tick-count="cortexHiddenTickCount"
           :run-id="selectedRunId"
           :ticks="tickTimeline"
           :selected-tick="selectedTick"
@@ -78,9 +84,11 @@ const selectionHint = computed(() => {
 
         <TickDetailPanel
           class="pane detail-pane"
+          :cortex-mode="cortexMode"
           :tab="activeTab"
           :detail="selectedTickDetail"
           :loading="loading.detail"
+          @update:cortex-mode="emit('update:cortexMode', $event)"
           @update:tab="emit('update:tab', $event)"
         />
       </section>

@@ -23,6 +23,7 @@ export function normalizeTickSummary(value: TickSummaryPayload): TickSummary {
     eventCount: value.eventCount,
     warningCount: value.warningCount,
     errorCount: value.errorCount,
+    cortexHandled: value.cortexHandled === true,
   }
 }
 
@@ -66,6 +67,7 @@ export function normalizeTickDetail(value: TickDetailPayload): TickDetail {
   return {
     runId,
     tick,
+    cortexHandled: value.summary.cortexHandled === true,
     chronology: buildChronology(rawEvents, cortexOrganIntervals),
     cortex: {
       organs: cortexOrganIntervals.map(intervalNarrative),

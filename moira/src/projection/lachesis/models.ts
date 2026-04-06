@@ -30,6 +30,7 @@ export interface TickSummary {
   eventCount: number
   warningCount: number
   errorCount: number
+  cortexHandled: boolean
 }
 
 export interface RawEvent {
@@ -112,6 +113,7 @@ export interface SpineDetail {
 export interface TickDetail {
   runId: string
   tick: number
+  cortexHandled: boolean
   chronology: TickChronology
   cortex: CortexDetail
   stem: StemDetail

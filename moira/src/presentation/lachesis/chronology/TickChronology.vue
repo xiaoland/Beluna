@@ -66,7 +66,7 @@ function clearSelection(): void {
     <template v-else>
       <div class="chronology-head">
         <div>
-          <h3>Humane Chronology</h3>
+          <h3>Cortex Timeline</h3>
           <p>
             {{ chronology.lanes.length }} lanes · {{ chronology.eventCount }} events · {{ axisModeLabel }}
           </p>

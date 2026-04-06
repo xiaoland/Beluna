@@ -23,7 +23,7 @@ const tabMeta: Array<{
     id: 'lachesis',
     kicker: 'Observe',
     name: 'Lachesis',
-    description: 'Browse wakes, tick timelines, chronology, and raw drilldown.',
+    description: 'Browse wakes, Cortex timelines, subsystem detail, and raw drilldown.',
   },
   {
     id: 'atropos',

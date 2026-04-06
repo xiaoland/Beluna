@@ -36,6 +36,7 @@ pub struct TickSummary {
     pub event_count: u64,
     pub warning_count: u64,
     pub error_count: u64,
+    pub cortex_handled: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]

@@ -85,10 +85,10 @@ Moira provides Beluna's first-party local control plane for:
 4. Logs are first-class locally stored observability data; metrics/traces remain exporter-status and handoff-link surfaces.
 5. Human-friendly browsing is a primary Loom responsibility. Raw JSON inspection is a secondary drilldown surface, not the main browsing mode.
 6. Full payload preservation is preferred for first-party local observability while Beluna is still in the observability-heavy early phase.
-7. Selected tick inspection is organized around tick-scoped chronology and interval work rather than one flat event list.
+7. Selected tick inspection is organized around Cortex-focused timeline and narrative modes plus sectional subsystem views rather than one flat event list.
 8. Goal-forest comparison is derived between two ticks rather than stored as a precomputed diff artifact.
 9. Clotho and Atropos must reuse the same Moira-owned wake and query surfaces rather than introducing parallel state models.
-10. AI transport and chat-capability investigation are normally entered from tick chronology or expanded Cortex intervals rather than through one separate first-class AI browsing mode.
+10. AI transport and chat-capability investigation are normally entered from the Cortex timeline mode or expanded Cortex intervals rather than through one separate first-class AI browsing mode.
 11. Source-grounded inspection means every human-friendly interpretation in Loom can be traced back to the supporting raw OTLP records without leaving the selected wake or tick context.
 12. Tauri commands are transport façades over internal backend owners; they must not become catch-all owners of process, preparation, or projection logic.
 13. Loom root views and presentational components must not become the primary owners of OTLP interpretation; projection logic belongs in the dedicated query/projection layer.

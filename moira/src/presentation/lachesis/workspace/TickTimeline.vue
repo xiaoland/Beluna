@@ -1,17 +1,30 @@
 <script setup lang="ts">
 import { formatWhen, prettyCount } from '@/presentation/format'
 import type { TickSummary } from '@/projection/lachesis/models'
+import { computed } from 'vue'
 
-defineProps<{
+const props = defineProps<{
+  hiddenTickCount: number
   runId: string | null
   ticks: TickSummary[]
   selectedTick: number | null
   loading: boolean
+  cortexView: boolean
 }>()
 
 defineEmits<{
   select: [tick: number]
 }>()
+
+const subtitle = computed(() => {
+  if (!props.runId) {
+    return 'Choose a wake session to see its tick cadence.'
+  }
+
+  return props.cortexView
+    ? `Wake ${props.runId} · Cortex-handled ticks only`
+    : `Wake ${props.runId} · all projected ticks`
+})
 </script>
 
 <template>
@@ -21,18 +34,25 @@ defineEmits<{
         <p class="panel-kicker">Cortex Anchor</p>
         <h2 class="panel-title">Tick Timeline</h2>
         <p class="panel-subtitle">
-          {{ runId ? `Wake ${runId}` : 'Choose a wake session to see its tick cadence.' }}
+          {{ subtitle }}
         </p>
       </div>
     </div>
 
     <div v-if="!runId" class="empty-state">No wake selected yet.</div>
     <div v-else-if="loading && !ticks.length" class="empty-state">Loading ticks…</div>
+    <div v-else-if="cortexView && !ticks.length && hiddenTickCount > 0" class="empty-state">
+      This wake has no Cortex-handled ticks. Switch to Stem, Spine, or Raw to inspect the hidden unhandled ticks.
+    </div>
     <div v-else-if="!ticks.length" class="empty-state">
       This wake has no projected ticks yet. Lachesis will populate them after ingest.
     </div>
 
     <div v-else class="timeline">
+      <p v-if="cortexView && hiddenTickCount > 0" class="timeline-note">
+        {{ hiddenTickCount }} unhandled tick{{ hiddenTickCount === 1 ? '' : 's' }} hidden in Cortex View.
+      </p>
+
       <button
         v-for="tick in ticks"
         :key="tick.tick"
@@ -67,6 +87,13 @@ defineEmits<{
   display: grid;
   gap: 0.3rem;
   padding: 0 0.9rem 0.9rem;
+}
+
+.timeline-note {
+  margin: 0 0 0.35rem;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
 }
 
 .timeline-row {

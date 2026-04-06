@@ -4,6 +4,8 @@ use serde_json::Value;
 use super::LachesisStore;
 use crate::lachesis::model::{EventRecord, RunSummary, TickDetail, TickSummary};
 
+const CORTEX_HANDLED_FAMILIES_SQL: &str = r#"'cortex.primary', 'cortex.sense-helper', 'cortex.goal-forest-helper', 'cortex.acts-helper', 'cortex.goal-forest'"#;
+
 impl LachesisStore {
     pub async fn list_runs(&self) -> Result<Vec<RunSummary>, String> {
         let conn = self.conn.lock().await;
@@ -39,16 +41,23 @@ impl LachesisStore {
     pub async fn list_ticks(&self, run_id: &str) -> Result<Vec<TickSummary>, String> {
         let conn = self.conn.lock().await;
         let mut stmt = conn
-            .prepare(
+            .prepare(&format!(
                 r#"
                 SELECT run_id, tick, first_seen_at, last_seen_at, event_count,
-                       warning_count, error_count
+                       warning_count, error_count,
+                       EXISTS(
+                           SELECT 1
+                           FROM raw_events
+                           WHERE raw_events.run_id = ticks.run_id
+                             AND raw_events.tick = ticks.tick
+                             AND raw_events.family IN ({CORTEX_HANDLED_FAMILIES_SQL})
+                       ) AS cortex_handled
                 FROM ticks
                 WHERE run_id = ?
                 ORDER BY tick DESC
                 LIMIT 400
                 "#,
-            )
+            ))
             .map_err(|err| format!("failed to prepare ticks query: {err}"))?;
         let rows = stmt
             .query_map(params![run_id], |row| {
@@ -60,6 +69,7 @@ impl LachesisStore {
                     event_count: row.get::<_, i64>(4)?.max(0) as u64,
                     warning_count: row.get::<_, i64>(5)?.max(0) as u64,
                     error_count: row.get::<_, i64>(6)?.max(0) as u64,
+                    cortex_handled: row.get(7)?,
                 })
             })
             .map_err(|err| format!("failed to query ticks: {err}"))?;
@@ -70,15 +80,22 @@ impl LachesisStore {
         let summary = {
             let conn = self.conn.lock().await;
             let mut stmt = conn
-                .prepare(
+                .prepare(&format!(
                     r#"
                     SELECT run_id, tick, first_seen_at, last_seen_at, event_count,
-                           warning_count, error_count
+                           warning_count, error_count,
+                           EXISTS(
+                               SELECT 1
+                               FROM raw_events
+                               WHERE raw_events.run_id = ticks.run_id
+                                 AND raw_events.tick = ticks.tick
+                                 AND raw_events.family IN ({CORTEX_HANDLED_FAMILIES_SQL})
+                           ) AS cortex_handled
                     FROM ticks
                     WHERE run_id = ? AND tick = ?
                     LIMIT 1
                     "#,
-                )
+                ))
                 .map_err(|err| format!("failed to prepare tick summary query: {err}"))?;
             stmt.query_row(params![run_id, tick as i64], |row| {
                 Ok(TickSummary {
@@ -89,6 +106,7 @@ impl LachesisStore {
                     event_count: row.get::<_, i64>(4)?.max(0) as u64,
                     warning_count: row.get::<_, i64>(5)?.max(0) as u64,
                     error_count: row.get::<_, i64>(6)?.max(0) as u64,
+                    cortex_handled: row.get(7)?,
                 })
             })
             .map_err(|err| format!("failed to query tick summary: {err}"))?

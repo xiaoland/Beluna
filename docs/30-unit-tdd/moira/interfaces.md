@@ -26,7 +26,7 @@
   - wake list
   - tick list
   - selected tick workspace
-  - human-friendly per-tick chronology anchored by `tick`, including interval work when reconstructable
+  - human-friendly Cortex timeline mode anchored by `tick`, including interval work when reconstructable for Cortex-handled ticks
   - expanded interval inspection for nested AI transport activity and chat-owned activity when present
   - Cortex per-organ and goal-forest inspection
   - Stem state and pathway inspection
