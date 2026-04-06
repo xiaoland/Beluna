@@ -45,7 +45,17 @@ const props = defineProps<{
   profileDialogOpen: boolean
   profileDraft: {
     profileId: string
-    contents: string
+    coreConfig: string
+    envFiles: Array<{
+      id: string
+      path: string
+      required: boolean
+    }>
+    inlineEnvironment: Array<{
+      id: string
+      key: string
+      value: string
+    }>
   }
   profileIssue: string | null
   profileLoading: {
@@ -96,6 +106,10 @@ const emit = defineEmits<{
   refreshPublishedReleases: []
   refreshTargets: []
   register: []
+  addProfileEnvFile: []
+  addProfileInlineEnvironment: []
+  removeProfileEnvFile: [rowId: string]
+  removeProfileInlineEnvironment: [rowId: string]
   saveProfile: []
   selectNoProfile: []
   selectPublishedRelease: [releaseKey: string]
@@ -103,7 +117,9 @@ const emit = defineEmits<{
   startNewProfile: []
   updateForgeField: [field: 'buildId' | 'sourceDir', value: string]
   updateRegisterField: [field: 'buildId' | 'executablePath' | 'workingDir' | 'sourceDir', value: string]
-  updateProfileField: [field: 'profileId' | 'contents', value: string]
+  updateProfileEnvFile: [field: 'path' | 'required', rowId: string, value: string | boolean]
+  updateProfileField: [field: 'profileId' | 'coreConfig', value: string]
+  updateProfileInlineEnvironment: [field: 'key' | 'value', rowId: string, value: string]
 }>()
 </script>
 
@@ -187,9 +203,15 @@ const emit = defineEmits<{
       :issue="profileIssue"
       :loading="{ load: profileLoading.load, save: profileLoading.save }"
       :path-hint="profilePathHint"
+      @add-env-file="emit('addProfileEnvFile')"
+      @add-inline-environment="emit('addProfileInlineEnvironment')"
       @close="emit('closeProfileDialog')"
+      @remove-env-file="emit('removeProfileEnvFile', $event)"
+      @remove-inline-environment="emit('removeProfileInlineEnvironment', $event)"
       @save="emit('saveProfile')"
+      @update-env-file="(field, rowId, value) => emit('updateProfileEnvFile', field, rowId, value)"
       @update-field="(field, value) => emit('updateProfileField', field, value)"
+      @update-inline-environment="(field, rowId, value) => emit('updateProfileInlineEnvironment', field, rowId, value)"
     />
   </section>
 </template>

@@ -4,15 +4,16 @@ import { hasTauriBridge } from '@/bridge/env'
 import { listProfileDocuments, loadProfileDocument, saveProfileDocument } from '@/bridge/clotho'
 import {
   compareProfileDocumentSummary,
+  createEmptyEditableProfileDocument,
+  parseEditableProfileDocument,
   normalizeProfileDocument,
   normalizeProfileDocumentSummary,
+  serializeEditableProfileDocument,
+  type EditableProfileDocument,
+  type EditableProfileEnvironmentFile,
+  type EditableProfileInlineEnvironment,
   type ProfileDocumentSummary,
 } from '@/projection/clotho'
-
-const DEFAULT_PROFILE_TEMPLATE = `{
-  // Add Core config fields here.
-}
-`
 
 export function useClothoProfileControl() {
   const usingTauri = hasTauriBridge()
@@ -24,7 +25,9 @@ export function useClothoProfileControl() {
 
   const draft = reactive({
     profileId: '',
-    contents: DEFAULT_PROFILE_TEMPLATE,
+    coreConfig: createEmptyEditableProfileDocument().coreConfig,
+    envFiles: [] as Array<EditableProfileEnvironmentFile & { id: string }>,
+    inlineEnvironment: [] as Array<EditableProfileInlineEnvironment & { id: string }>,
   })
 
   const loading = reactive({
@@ -49,7 +52,7 @@ export function useClothoProfileControl() {
       !loading.save &&
       !loading.load &&
       draft.profileId.trim().length > 0 &&
-      draft.contents.trim().length > 0,
+      draft.coreConfig.trim().length > 0,
   )
 
   const pathHint = computed(() => {
@@ -95,10 +98,11 @@ export function useClothoProfileControl() {
     try {
       const payload = await loadProfileDocument({ profileId })
       const document = normalizeProfileDocument(payload)
+      const editable = parseEditableProfileDocument(document.contents)
       selectedProfileId.value = document.profileId
       loadedProfilePath.value = document.profilePath
       draft.profileId = document.profileId
-      draft.contents = document.contents
+      assignEditableDraft(editable)
       profileDialogOpen.value = true
     } catch (error) {
       issue.value = `Unable to load profile document: ${errorMessage(error)}`
@@ -117,7 +121,7 @@ export function useClothoProfileControl() {
     issue.value = null
     loadedProfilePath.value = null
     draft.profileId = ''
-    draft.contents = DEFAULT_PROFILE_TEMPLATE
+    assignEditableDraft(createEmptyEditableProfileDocument())
     profileDialogOpen.value = true
   }
 
@@ -133,11 +137,59 @@ export function useClothoProfileControl() {
     selectedProfileId.value = null
   }
 
-  function updateDraftField(field: 'profileId' | 'contents', value: string): void {
+  function updateDraftField(field: 'profileId' | 'coreConfig', value: string): void {
     draft[field] = value
     if (field === 'profileId') {
       loadedProfilePath.value = null
     }
+  }
+
+  function addEnvFileRow(): void {
+    draft.envFiles.push({
+      id: nextDraftRowId('env-file'),
+      path: '',
+      required: true,
+    })
+  }
+
+  function removeEnvFileRow(rowId: string): void {
+    draft.envFiles = draft.envFiles.filter((entry) => entry.id !== rowId)
+  }
+
+  function updateEnvFileRow(field: 'path' | 'required', rowId: string, value: string | boolean): void {
+    const entry = draft.envFiles.find((candidate) => candidate.id === rowId)
+    if (!entry) {
+      return
+    }
+
+    if (field === 'required' && typeof value === 'boolean') {
+      entry.required = value
+      return
+    }
+    if (field === 'path' && typeof value === 'string') {
+      entry.path = value
+    }
+  }
+
+  function addInlineEnvironmentRow(): void {
+    draft.inlineEnvironment.push({
+      id: nextDraftRowId('inline-env'),
+      key: '',
+      value: '',
+    })
+  }
+
+  function removeInlineEnvironmentRow(rowId: string): void {
+    draft.inlineEnvironment = draft.inlineEnvironment.filter((entry) => entry.id !== rowId)
+  }
+
+  function updateInlineEnvironmentRow(field: 'key' | 'value', rowId: string, value: string): void {
+    const entry = draft.inlineEnvironment.find((candidate) => candidate.id === rowId)
+    if (!entry) {
+      return
+    }
+
+    entry[field] = value
   }
 
   async function saveCurrentProfile(): Promise<void> {
@@ -148,15 +200,21 @@ export function useClothoProfileControl() {
     issue.value = null
     loading.save = true
     try {
+      const contents = serializeEditableProfileDocument({
+        coreConfig: draft.coreConfig,
+        envFiles: draft.envFiles.map(({ path, required }) => ({ path, required })),
+        inlineEnvironment: draft.inlineEnvironment.map(({ key, value }) => ({ key, value })),
+      })
       const payload = await saveProfileDocument({
         profileId: draft.profileId.trim(),
-        contents: draft.contents,
+        contents,
       })
       const document = normalizeProfileDocument(payload)
+      const editable = parseEditableProfileDocument(document.contents)
       selectedProfileId.value = document.profileId
       loadedProfilePath.value = document.profilePath
       draft.profileId = document.profileId
-      draft.contents = document.contents
+      assignEditableDraft(editable)
       await refreshProfiles()
       profileDialogOpen.value = false
     } catch (error) {
@@ -167,6 +225,8 @@ export function useClothoProfileControl() {
   }
 
   return {
+    addEnvFileRow,
+    addInlineEnvironmentRow,
     canSave,
     closeProfileDialog,
     draft,
@@ -177,15 +237,38 @@ export function useClothoProfileControl() {
     profileDialogOpen,
     profiles,
     refreshProfiles,
+    removeEnvFileRow,
+    removeInlineEnvironmentRow,
     saveCurrentProfile,
     selectNoProfile,
     selectedProfileId,
     startNewProfile,
+    updateEnvFileRow,
     updateDraftField,
+    updateInlineEnvironmentRow,
     usingTauri,
+  }
+
+  function assignEditableDraft(editable: EditableProfileDocument): void {
+    draft.coreConfig = editable.coreConfig
+    draft.envFiles = editable.envFiles.map((entry) => ({
+      id: nextDraftRowId('env-file'),
+      ...entry,
+    }))
+    draft.inlineEnvironment = editable.inlineEnvironment.map((entry) => ({
+      id: nextDraftRowId('inline-env'),
+      ...entry,
+    }))
   }
 }
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+let draftRowCounter = 0
+
+function nextDraftRowId(prefix: string): string {
+  draftRowCounter += 1
+  return `${prefix}-${draftRowCounter}`
 }

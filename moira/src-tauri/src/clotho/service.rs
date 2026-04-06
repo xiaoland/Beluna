@@ -8,7 +8,8 @@ use crate::app::state::AppPaths;
 
 use super::{
     artifacts::{GitHubReleaseProvider, ReleaseProvider},
-    model::{PreparedWakeInput, WakeInputRequest},
+    model::{PreparedRuntimeWakeInput, PreparedWakeInput, WakeInputRequest},
+    profile_runtime::prepare_profile_runtime,
 };
 
 pub struct ClothoService {
@@ -54,16 +55,39 @@ impl ClothoService {
         &self,
         request: &WakeInputRequest,
     ) -> Result<PreparedWakeInput, String> {
-        let target = self.resolve_launch_target(&request.target)?;
-        let profile_path = request
-            .profile
-            .as_ref()
-            .map(|profile| self.resolve_profile_path(&profile.profile_id))
-            .transpose()?;
+        let prepared = self.prepare_runtime_wake_input(request)?;
 
         Ok(PreparedWakeInput {
+            target: prepared.target,
+            profile_path: prepared.profile_path,
+        })
+    }
+
+    pub(crate) fn prepare_runtime_wake_input(
+        &self,
+        request: &WakeInputRequest,
+    ) -> Result<PreparedRuntimeWakeInput, String> {
+        let target = self.resolve_launch_target(&request.target)?;
+        let profile_runtime = request
+            .profile
+            .as_ref()
+            .map(|profile| {
+                let profile_path = self.resolve_profile_path(&profile.profile_id)?;
+                prepare_profile_runtime(&profile.profile_id, &profile_path)
+            })
+            .transpose()?;
+
+        Ok(PreparedRuntimeWakeInput {
             target,
-            profile_path,
+            profile_path: profile_runtime
+                .as_ref()
+                .map(|profile| profile.profile_path.clone()),
+            config_path: profile_runtime
+                .as_ref()
+                .map(|profile| profile.config_path.clone()),
+            environment_overrides: profile_runtime
+                .map(|profile| profile.environment_overrides)
+                .unwrap_or_default(),
         })
     }
 

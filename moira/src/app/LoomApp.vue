@@ -47,6 +47,8 @@ const {
   updateRegisterDraftField,
 } = useClothoBuildControl()
 const {
+  addEnvFileRow,
+  addInlineEnvironmentRow,
   canSave,
   closeProfileDialog,
   draft: profileDraft,
@@ -57,11 +59,15 @@ const {
   profileDialogOpen,
   profiles,
   refreshProfiles,
+  removeEnvFileRow,
+  removeInlineEnvironmentRow,
   saveCurrentProfile,
   selectNoProfile,
   selectedProfileId,
   startNewProfile,
+  updateEnvFileRow,
   updateDraftField: updateProfileField,
+  updateInlineEnvironmentRow,
 } = useClothoProfileControl()
 const {
   activeTab,
@@ -193,9 +199,13 @@ async function wakeSelectedTarget(): Promise<void> {
         @open-install-dialog="openInstallDialog"
         @open-profile="openProfileEditor"
         @open-register-dialog="openRegisterDialog"
+        @add-profile-env-file="addEnvFileRow"
+        @add-profile-inline-environment="addInlineEnvironmentRow"
         @refresh-profiles="refreshProfiles"
         @refresh-published-releases="refreshPublishedReleases"
         @refresh-targets="refreshLaunchTargets"
+        @remove-profile-env-file="removeEnvFileRow"
+        @remove-profile-inline-environment="removeInlineEnvironmentRow"
         @register="registerBuild"
         @save-profile="saveCurrentProfile"
         @select-no-profile="selectNoProfile"
@@ -203,8 +213,10 @@ async function wakeSelectedTarget(): Promise<void> {
         @select-target="selectTarget"
         @start-new-profile="startNewProfile"
         @update-forge-field="updateForgeDraftField"
+        @update-profile-env-file="updateEnvFileRow"
         @update-register-field="updateRegisterDraftField"
         @update-profile-field="updateProfileField"
+        @update-profile-inline-environment="updateInlineEnvironmentRow"
       />
     </main>
   </div>

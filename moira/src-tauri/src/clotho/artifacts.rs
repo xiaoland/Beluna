@@ -1177,7 +1177,18 @@ mod tests {
 
         let executable_path = sandbox.create_file("fixtures/builds/dev-core/bin/beluna");
         let source_dir = sandbox.create_dir("fixtures/builds/dev-core/src");
-        let profile_path = sandbox.create_file("app-data/profiles/default.jsonc");
+        let profile_path = sandbox.create_file_with_contents(
+            "app-data/profiles/default.jsonc",
+            r#"
+            {
+              core_config: {
+                logging: {
+                  dir: "./logs"
+                }
+              }
+            }
+            "#,
+        );
         assert!(profile_path.exists());
 
         let service = ClothoService::with_dependencies(

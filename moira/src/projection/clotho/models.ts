@@ -50,3 +50,19 @@ export interface ProfileDocument {
   profilePath: string
   contents: string
 }
+
+export interface EditableProfileEnvironmentFile {
+  path: string
+  required: boolean
+}
+
+export interface EditableProfileInlineEnvironment {
+  key: string
+  value: string
+}
+
+export interface EditableProfileDocument {
+  coreConfig: string
+  envFiles: EditableProfileEnvironmentFile[]
+  inlineEnvironment: EditableProfileInlineEnvironment[]
+}

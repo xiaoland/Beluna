@@ -7,7 +7,17 @@ const props = defineProps<{
   canSave: boolean
   draft: {
     profileId: string
-    contents: string
+    coreConfig: string
+    envFiles: Array<{
+      id: string
+      path: string
+      required: boolean
+    }>
+    inlineEnvironment: Array<{
+      id: string
+      key: string
+      value: string
+    }>
   }
   issue: string | null
   loading: {
@@ -19,9 +29,15 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
+  addEnvFile: []
+  addInlineEnvironment: []
   close: []
+  removeEnvFile: [rowId: string]
+  removeInlineEnvironment: [rowId: string]
   save: []
-  updateField: [field: 'profileId' | 'contents', value: string]
+  updateEnvFile: [field: 'path' | 'required', rowId: string, value: string | boolean]
+  updateField: [field: 'profileId' | 'coreConfig', value: string]
+  updateInlineEnvironment: [field: 'key' | 'value', rowId: string, value: string]
 }>()
 
 const titleId = 'clotho-profile-document-dialog'
@@ -64,14 +80,83 @@ const dialogTitle = computed(() => (props.draft.profileId.trim().length > 0 ? 'E
       </p>
 
       <label class="field">
-        <span class="field-label">JSONC Document</span>
+        <span class="field-label">Core Config</span>
         <textarea
-          :value="props.draft.contents"
+          :value="props.draft.coreConfig"
           class="field-input field-textarea mono"
           spellcheck="false"
-          @input="emit('updateField', 'contents', ($event.target as HTMLTextAreaElement).value)"
+          @input="emit('updateField', 'coreConfig', ($event.target as HTMLTextAreaElement).value)"
         />
       </label>
+
+      <section class="group">
+        <div class="group-head">
+          <div>
+            <p class="field-label">Environment Files</p>
+            <p class="field-note">Relative paths resolve from the saved profile document directory.</p>
+          </div>
+          <button class="button-secondary compact-button" type="button" @click="emit('addEnvFile')">Add Env File</button>
+        </div>
+
+        <div v-if="props.draft.envFiles.length > 0" class="group-stack">
+          <div v-for="entry in props.draft.envFiles" :key="entry.id" class="env-file-row">
+            <input
+              :value="entry.path"
+              class="field-input mono"
+              type="text"
+              placeholder="./local.env"
+              @input="emit('updateEnvFile', 'path', entry.id, ($event.target as HTMLInputElement).value)"
+            />
+            <label class="toggle">
+              <input
+                :checked="entry.required"
+                type="checkbox"
+                @change="emit('updateEnvFile', 'required', entry.id, ($event.target as HTMLInputElement).checked)"
+              />
+              <span>Required</span>
+            </label>
+            <button class="button-secondary compact-button" type="button" @click="emit('removeEnvFile', entry.id)">
+              Remove
+            </button>
+          </div>
+        </div>
+        <p v-else class="field-note">No env file sources configured.</p>
+      </section>
+
+      <section class="group">
+        <div class="group-head">
+          <div>
+            <p class="field-label">Inline Environment</p>
+            <p class="field-note">Inline values are written directly into the profile document.</p>
+          </div>
+          <button class="button-secondary compact-button" type="button" @click="emit('addInlineEnvironment')">
+            Add Variable
+          </button>
+        </div>
+
+        <div v-if="props.draft.inlineEnvironment.length > 0" class="group-stack">
+          <div v-for="entry in props.draft.inlineEnvironment" :key="entry.id" class="inline-env-row">
+            <input
+              :value="entry.key"
+              class="field-input mono"
+              type="text"
+              placeholder="OPENAI_API_KEY"
+              @input="emit('updateInlineEnvironment', 'key', entry.id, ($event.target as HTMLInputElement).value)"
+            />
+            <input
+              :value="entry.value"
+              class="field-input mono"
+              type="text"
+              placeholder="sk-..."
+              @input="emit('updateInlineEnvironment', 'value', entry.id, ($event.target as HTMLInputElement).value)"
+            />
+            <button class="button-secondary compact-button" type="button" @click="emit('removeInlineEnvironment', entry.id)">
+              Remove
+            </button>
+          </div>
+        </div>
+        <p v-else class="field-note">No inline environment variables configured.</p>
+      </section>
 
       <div class="dialog-actions">
         <p class="field-note">
@@ -126,9 +211,54 @@ const dialogTitle = computed(() => (props.draft.profileId.trim().length > 0 ? 'E
 }
 
 .field-textarea {
-  min-height: 16rem;
+  min-height: 12rem;
   resize: vertical;
   line-height: 1.55;
+}
+
+.group {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.group-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.group-stack {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.env-file-row,
+.inline-env-row {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.env-file-row {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+}
+
+.inline-env-row {
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr) auto;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.compact-button {
+  align-self: start;
 }
 
 .dialog-actions {
@@ -147,6 +277,11 @@ const dialogTitle = computed(() => (props.draft.profileId.trim().length > 0 ? 'E
 }
 
 @media (max-width: 780px) {
+  .env-file-row,
+  .inline-env-row {
+    grid-template-columns: 1fr;
+  }
+
   .dialog-actions {
     align-items: flex-start;
     flex-direction: column;

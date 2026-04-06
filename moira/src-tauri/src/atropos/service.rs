@@ -1,22 +1,20 @@
-use std::{
-    process::{ExitStatus, Stdio},
-    sync::Arc,
-    time::Duration,
-};
+use std::{process::ExitStatus, sync::Arc, time::Duration};
 
-use tokio::{
-    process::{Child, Command},
-    sync::Mutex,
-    time::sleep,
-};
+use tokio::{process::Child, sync::Mutex, time::sleep};
 
 use crate::{
     app::state::AppPaths,
-    clotho::{ClothoService, model::WakeInputRequest},
+    clotho::{
+        ClothoService,
+        model::{PreparedRuntimeWakeInput, WakeInputRequest},
+    },
     lachesis::LachesisService,
 };
 
-use super::model::{RuntimeStatus, SupervisionPhase};
+use super::{
+    model::{RuntimeStatus, SupervisionPhase},
+    wake_command::build_wake_command,
+};
 const MONITOR_INTERVAL: Duration = Duration::from_millis(250);
 
 pub struct AtroposService {
@@ -29,7 +27,7 @@ pub struct AtroposService {
 struct RuntimeState {
     phase: SupervisionPhase,
     terminal_reason: Option<String>,
-    last_wake_input: Option<crate::clotho::model::PreparedWakeInput>,
+    last_wake_input: Option<PreparedRuntimeWakeInput>,
     running: Option<RunningProcess>,
 }
 
@@ -42,7 +40,7 @@ enum TerminationIntent {
 struct RunningProcess {
     pid: u32,
     termination_intent: Option<TerminationIntent>,
-    wake_input: crate::clotho::model::PreparedWakeInput,
+    wake_input: PreparedRuntimeWakeInput,
     child: Child,
 }
 impl RuntimeState {
@@ -54,7 +52,7 @@ impl RuntimeState {
             running: None,
         }
     }
-    fn wake_input(&self) -> Option<&crate::clotho::model::PreparedWakeInput> {
+    fn wake_input(&self) -> Option<&PreparedRuntimeWakeInput> {
         self.running
             .as_ref()
             .map(|running| &running.wake_input)
@@ -189,17 +187,9 @@ impl AtroposService {
     }
     async fn try_wake(&self, request: WakeInputRequest) -> Result<RuntimeStatus, String> {
         ensure_receiver_ready(self.lachesis.as_ref()).await?;
-        let wake_input = self.clotho.prepare_wake_input(&request)?;
+        let wake_input = self.clotho.prepare_runtime_wake_input(&request)?;
 
-        let mut command = Command::new(&wake_input.target.executable_path);
-        if let Some(profile_path) = wake_input.profile_path.as_ref() {
-            command.arg("--config").arg(profile_path);
-        }
-        command
-            .current_dir(&wake_input.target.working_dir)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null());
+        let mut command = build_wake_command(&wake_input);
 
         let mut child = command.spawn().map_err(|err| {
             format!(

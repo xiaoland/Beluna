@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{collections::BTreeMap, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -146,6 +146,14 @@ pub struct PreparedWakeInput {
     pub target: PreparedLaunchTarget,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub profile_path: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PreparedRuntimeWakeInput {
+    pub target: PreparedLaunchTarget,
+    pub profile_path: Option<PathBuf>,
+    pub config_path: Option<PathBuf>,
+    pub environment_overrides: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
