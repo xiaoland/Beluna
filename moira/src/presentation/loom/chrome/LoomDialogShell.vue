@@ -1,60 +1,60 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, watch } from 'vue'
+import { onBeforeUnmount, onMounted, watch } from "vue";
 
 const props = withDefaults(
   defineProps<{
-    closeLabel?: string
-    dismissible?: boolean
-    maxWidth?: string
-    open: boolean
-    titleId: string
+    closeLabel?: string;
+    dismissible?: boolean;
+    maxWidth?: string;
+    open: boolean;
+    titleId: string;
   }>(),
   {
-    closeLabel: 'Close',
+    closeLabel: "Close",
     dismissible: true,
-    maxWidth: '42rem',
+    maxWidth: "42rem",
   },
-)
+);
 
 const emit = defineEmits<{
-  close: []
-}>()
+  close: [];
+}>();
 
 watch(
   () => props.open,
   (open) => {
-    if (typeof document === 'undefined') {
-      return
+    if (typeof document === "undefined") {
+      return;
     }
 
-    document.body.style.overflow = open ? 'hidden' : ''
+    document.body.style.overflow = open ? "hidden" : "";
   },
-)
+);
 
 onMounted(() => {
-  window.addEventListener('keydown', handleKeydown)
-})
+  window.addEventListener("keydown", handleKeydown);
+});
 
 onBeforeUnmount(() => {
-  if (typeof document !== 'undefined') {
-    document.body.style.overflow = ''
+  if (typeof document !== "undefined") {
+    document.body.style.overflow = "";
   }
 
-  window.removeEventListener('keydown', handleKeydown)
-})
+  window.removeEventListener("keydown", handleKeydown);
+});
 
 function handleKeydown(event: KeyboardEvent): void {
-  if (event.key === 'Escape' && props.open && props.dismissible) {
-    emit('close')
+  if (event.key === "Escape" && props.open && props.dismissible) {
+    emit("close");
   }
 }
 
 function requestClose(): void {
   if (!props.dismissible) {
-    return
+    return;
   }
 
-  emit('close')
+  emit("close");
 }
 </script>
 
@@ -73,7 +73,12 @@ function requestClose(): void {
             <slot name="header" />
           </div>
 
-          <button type="button" class="button-secondary dialog-close" :disabled="!dismissible" @click="requestClose">
+          <button
+            type="button"
+            class="button-secondary dialog-close"
+            :disabled="!dismissible"
+            @click="requestClose"
+          >
             {{ closeLabel }}
           </button>
         </header>
@@ -99,7 +104,7 @@ function requestClose(): void {
 
 .dialog-shell {
   max-height: min(88vh, 46rem);
-  overflow: hidden;
+  overflow-y: auto;
   border: 1px solid var(--line-strong);
   background: var(--panel-strong);
   box-shadow: var(--shadow-soft);
