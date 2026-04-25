@@ -11,10 +11,11 @@
 ## High-Risk Invariants
 
 - Runtime model:
-  - Cortex is tick-driven only: one AI Gateway turn per admitted tick.
+  - Cortex is tick-driven: one admitted tick may run multiple Primary AI Gateway turns until `break-primary-phase` or `max_primary_turns_per_tick`.
   - Empty-sense tick cycles are valid.
   - Primary accepts only assembled Input IR payload; no direct side channels are allowed.
-  - If a tick turn returns tool calls, their results are buffered into the next admitted tick turn together with current tick input.
+  - If a Primary turn returns tool calls, their results are committed into the Primary thread and continued within the same admitted tick.
+  - A pure assistant-text Primary turn without `break-primary-phase` is allowed; runtime sends a same-tick reminder turn instead of treating text as phase completion.
 
 - Act and sense tooling:
   - Somatic act emission is tool-call-native; prompt text is not parsed to dispatch acts.
@@ -23,7 +24,7 @@
   - `wait_for_sense` is valid only for acts with non-empty `might_emit_sense_ids`, and its gating is tick-skip based rather than afferent-rule mutation.
 
 - Internal cognition tools:
-  - Static tools are `expand-senses`, `add-sense-deferral-rule`, `remove-sense-deferral-rule`, `sleep`, and `patch-goal-forest`.
+  - Static Primary tools are `expand-senses`, `add-sense-deferral-rule`, `remove-sense-deferral-rule`, `sleep`, `patch-goal-forest`, and `break-primary-phase`.
   - Sense references exposed to Primary use process-lifetime monotonic internal ids and deterministic rendered text.
 
 - Goal-forest mutation:

@@ -16,10 +16,7 @@ fn default_cortex_outbox_capacity() -> usize {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct CortexHelperRoutesConfig {
-    #[serde(default)]
-    #[validate(custom(function = "validate_non_blank"))]
-    pub default: Option<String>,
+pub struct CortexRoutesConfig {
     #[serde(default)]
     #[validate(custom(function = "validate_non_blank"))]
     pub primary: Option<String>,
@@ -31,17 +28,20 @@ pub struct CortexHelperRoutesConfig {
     pub acts_helper: Option<String>,
     #[serde(default)]
     #[validate(custom(function = "validate_non_blank"))]
-    pub goal_forest_helper: Option<String>,
+    pub attention: Option<String>,
+    #[serde(default)]
+    #[validate(custom(function = "validate_non_blank"))]
+    pub cleanup: Option<String>,
 }
 
-impl Default for CortexHelperRoutesConfig {
+impl Default for CortexRoutesConfig {
     fn default() -> Self {
         Self {
-            default: None,
             primary: None,
             sense_helper: None,
             acts_helper: None,
-            goal_forest_helper: None,
+            attention: None,
+            cleanup: None,
         }
     }
 }
@@ -60,7 +60,7 @@ pub struct CortexRuntimeConfig {
     pub default_limits: ReactionLimits,
     #[serde(default)]
     #[validate(nested)]
-    pub helper_routes: CortexHelperRoutesConfig,
+    pub routes: CortexRoutesConfig,
 }
 
 impl Default for CortexRuntimeConfig {
@@ -69,7 +69,7 @@ impl Default for CortexRuntimeConfig {
             inbox_capacity: default_cortex_inbox_capacity(),
             outbox_capacity: default_cortex_outbox_capacity(),
             default_limits: ReactionLimits::default(),
-            helper_routes: CortexHelperRoutesConfig::default(),
+            routes: CortexRoutesConfig::default(),
         }
     }
 }

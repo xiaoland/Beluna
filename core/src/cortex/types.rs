@@ -12,6 +12,10 @@ fn default_max_waiting_ticks() -> u64 {
     30
 }
 
+fn default_max_primary_turns_per_tick() -> u8 {
+    4
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Validate, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct ReactionLimits {
@@ -23,6 +27,9 @@ pub struct ReactionLimits {
     pub max_cycle_time_ms: u64,
     #[validate(range(min = 1, max = 1))]
     pub max_primary_calls: u8,
+    #[serde(default = "default_max_primary_turns_per_tick")]
+    #[validate(range(min = 1))]
+    pub max_primary_turns_per_tick: u8,
     #[validate(range(min = 1))]
     pub max_sub_calls: u8,
     #[validate(range(min = 0, max = 1))]
@@ -48,6 +55,7 @@ impl Default for ReactionLimits {
             max_payload_bytes: 16_384,
             max_cycle_time_ms: 60_000,
             max_primary_calls: 1,
+            max_primary_turns_per_tick: default_max_primary_turns_per_tick(),
             max_sub_calls: 2,
             max_repair_attempts: 1,
             max_primary_output_tokens: 1_024,

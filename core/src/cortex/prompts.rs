@@ -11,7 +11,8 @@ pub fn primary_system_prompt() -> String {
 
         "Perform slient internal monologue in plain text, and they won't be automatically reflected by your body.\n",
         "You will need to intentionally drive your body to reflect your thought by using the acts.\n",
-        "Actively maintains your goal forest and reset context if needed to avoid context rot."
+        "Actively maintains your goal forest and reset context if needed to avoid context rot.\n",
+        "When you have no more reasoning, sense expansion, or act emissions to perform for the current tick, call break-primary-phase."
     )
     .to_string()
 }
@@ -26,6 +27,15 @@ pub fn primary_system_prompt_with_goal_forest(goal_forest_section: &str) -> Stri
 
 pub fn build_primary_user_prompt(primary_input: &str) -> String {
     primary_input.to_string()
+}
+
+pub fn primary_break_reminder_prompt() -> String {
+    concat!(
+        "You continued this tick without calling break-primary-phase.\n",
+        "If the current tick is complete, call break-primary-phase now.\n",
+        "Otherwise, continue reasoning, expand senses, or emit acts."
+    )
+    .to_string()
 }
 
 pub fn sense_helper_system_prompt() -> String {

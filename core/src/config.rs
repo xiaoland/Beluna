@@ -22,7 +22,7 @@ mod validation;
 
 pub use body::{BodyRuntimeConfig, StdShellRuntimeConfig, StdWebRuntimeConfig};
 pub use continuity::ContinuityRuntimeConfig;
-pub use cortex::{CortexHelperRoutesConfig, CortexRuntimeConfig};
+pub use cortex::{CortexRoutesConfig, CortexRuntimeConfig};
 pub use logging::LoggingConfig;
 pub use observability::{
     ObservabilityConfig, OtlpConfig, OtlpDefaultsConfig, OtlpLogsConfig, OtlpMetricsConfig,
