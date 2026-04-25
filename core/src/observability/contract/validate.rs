@@ -95,6 +95,8 @@ impl ContractEvent {
                 require_non_empty(&event.kind, fixture_id, "kind")
             }
             Self::CortexPrimary(event)
+            | Self::CortexAttention(event)
+            | Self::CortexCleanup(event)
             | Self::CortexSenseHelper(event)
             | Self::CortexGoalForestHelper(event)
             | Self::CortexActsHelper(event) => {

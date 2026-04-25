@@ -118,6 +118,8 @@ pub(crate) fn flatten_contract_event(event: &ContractEvent) -> FlatContractEvent
             kind: Some(item.kind.clone()),
         },
         ContractEvent::CortexPrimary(item)
+        | ContractEvent::CortexAttention(item)
+        | ContractEvent::CortexCleanup(item)
         | ContractEvent::CortexSenseHelper(item)
         | ContractEvent::CortexGoalForestHelper(item)
         | ContractEvent::CortexActsHelper(item) => FlatContractEvent {

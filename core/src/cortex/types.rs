@@ -70,16 +70,6 @@ impl Default for ReactionLimits {
 pub struct CortexControlDirective {
     #[serde(default)]
     pub ignore_all_trigger_for_ticks: Option<u64>,
-    #[serde(default)]
-    pub wait_for_sense: Option<WaitForSenseControlDirective>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct WaitForSenseControlDirective {
-    pub act_instance_id: String,
-    #[serde(default)]
-    pub expected_fq_sense_ids: Vec<String>,
-    pub wait_ticks: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

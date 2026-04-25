@@ -221,7 +221,7 @@ input_schema: {}
 
 - 顯式表達「本 tick 的 Primary phase 已結束」
 - 本 turn 內若同時有 act tool call，先派發 act，再套用 break
-- 若 Primary turn commit 時沒有 pending continuation 且也沒有 `break-primary-phase`，視為 protocol violation
+- 純文字回合未呼叫 `break-primary-phase` 時，runtime 送出 same-tick reminder 並繼續 Primary loop
 
 ### Dynamic Act Tools
 
@@ -430,7 +430,7 @@ async fn replace_ruleset(&self, rules: Vec<DeferralRuleSpec>) -> Result<u64, Err
 
 ## Verification Draft for Later Implementation
 
-- Primary 沒有 `break-primary-phase` 就 commit，應 fail closed
+- Primary 純文字回合沒有 `break-primary-phase` 時，runtime 送出同 tick reminder 並繼續，直到 break 或 `max_primary_turns_per_tick`
 - 同一 turn 有 act tool call + break 時，act 先派發，break 後套用
 - Attention 無 `replace-afferent-gating` 時，不覆蓋現有 ruleset
 - Attention 的 `sleep` 會更新 runtime sleep gate
@@ -457,3 +457,20 @@ async fn replace_ruleset(&self, rules: Vec<DeferralRuleSpec>) -> Result<u64, Err
   - 初期不新增 tests。
 - final outcome:
   - 本 packet 提供了一版可直接進入 `#27` cleanup 與 `#14` coding 前確認的實作草案。
+
+## Implementation Landing Notes
+
+實作落點：
+
+- Primary 靜態工具收斂為 `expand-senses` 與 `break-primary-phase`。
+- Dynamic act tool schema 移除 `wait_for_sense`，tool result 保留 `act_instance_id`、`might_emit_sense_ids`、`dispatch_result`。
+- Attention 每個 admitted tick 在 Primary break 後 fresh derive，工具面為 `replace-afferent-gating` 與 `sleep`。
+- Cleanup 每個 admitted tick 在 Primary break 後 fresh derive，工具面為 `patch-goal-forest` 與 `reset-context`。
+- `patch-goal-forest.operations[]` 由 Rust reducer 依序套用，invalid sequence 讓 Cleanup phase fail closed。
+- `reset-context` 透過 `PrimarySession::reset()` 清空 Primary history 與 continuation，下一次 Primary thread 建立時只帶 system prompt。
+- `AfferentRuleControlPort::replace_ruleset(...)` 支援 Attention 產出的完整 gating state。
+
+本輪驗證：
+
+- `cargo fmt`
+- `cargo check --lib`

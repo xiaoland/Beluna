@@ -95,10 +95,12 @@ impl std::error::Error for RuleControlError {}
 
 pub type RuleRevision = u64;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DeferralRuleAddInput {
     pub rule_id: String,
+    #[serde(default)]
     pub min_weight: Option<f64>,
+    #[serde(default)]
     pub fq_sense_id_pattern: Option<String>,
 }
 
@@ -162,6 +164,11 @@ pub trait AfferentRuleControlPort: Send + Sync {
     -> Result<RuleRevision, RuleControlError>;
 
     async fn remove_rule(&self, rule_id: String) -> Result<RuleRevision, RuleControlError>;
+
+    async fn replace_ruleset(
+        &self,
+        rules: Vec<DeferralRuleAddInput>,
+    ) -> Result<RuleRevision, RuleControlError>;
 
     async fn snapshot_rules(&self) -> DeferralRuleSetSnapshot;
 }
@@ -271,6 +278,10 @@ enum RuleCommand {
     },
     RemoveOne {
         rule_id: String,
+        reply_tx: oneshot::Sender<Result<RuleRevision, RuleControlError>>,
+    },
+    ReplaceAll {
+        rules: Vec<DeferralRuleAddInput>,
         reply_tx: oneshot::Sender<Result<RuleRevision, RuleControlError>>,
     },
     Snapshot {
@@ -412,6 +423,21 @@ impl AfferentRuleControlPort for SenseAfferentPathway {
         reply_rx
             .await
             .map_err(|_| RuleControlError::internal("rule remove response dropped"))?
+    }
+
+    async fn replace_ruleset(
+        &self,
+        rules: Vec<DeferralRuleAddInput>,
+    ) -> Result<RuleRevision, RuleControlError> {
+        let (reply_tx, reply_rx) = oneshot::channel();
+        self.command_tx
+            .send(RuleCommand::ReplaceAll { rules, reply_tx })
+            .await
+            .map_err(|_| RuleControlError::internal("rule command channel is closed"))?;
+
+        reply_rx
+            .await
+            .map_err(|_| RuleControlError::internal("rule replace response dropped"))?
     }
 
     async fn snapshot_rules(&self) -> DeferralRuleSetSnapshot {
@@ -624,6 +650,48 @@ async fn handle_command(
             let _ = reply_tx.send(result);
             release_unblocked_front_fifo(state, egress_tx, sidecar_tx).await;
         }
+        RuleCommand::ReplaceAll { rules, reply_tx } => {
+            let result = build_replacement_ruleset(rules).map(|replacement| {
+                let previous_rule_ids = state.rules_by_id.keys().cloned().collect::<Vec<_>>();
+                state.rules_by_id = replacement;
+                state.revision = state.revision.saturating_add(1);
+                for rule_id in previous_rule_ids {
+                    emit_sidecar(
+                        sidecar_tx,
+                        AfferentSidecarEvent::RuleRemoved {
+                            revision: state.revision,
+                            rule_id,
+                            removed: true,
+                        },
+                    );
+                }
+                for rule_id in state.rules_by_id.keys() {
+                    emit_sidecar(
+                        sidecar_tx,
+                        AfferentSidecarEvent::RuleAdded {
+                            revision: state.revision,
+                            rule_id: rule_id.clone(),
+                        },
+                    );
+                }
+                observability_runtime::emit_stem_afferent_rule(
+                    None,
+                    "replace",
+                    state.revision,
+                    "ruleset",
+                    Some(json!({
+                        "rules": state.rules_by_id
+                            .values()
+                            .map(|rule| rule.snapshot())
+                            .collect::<Vec<_>>(),
+                    })),
+                    None,
+                );
+                state.revision
+            });
+            let _ = reply_tx.send(result);
+            release_unblocked_front_fifo(state, egress_tx, sidecar_tx).await;
+        }
         RuleCommand::Snapshot { reply_tx } => {
             let mut rules = state
                 .rules_by_id
@@ -637,6 +705,23 @@ async fn handle_command(
             });
         }
     }
+}
+
+fn build_replacement_ruleset(
+    rules: Vec<DeferralRuleAddInput>,
+) -> Result<BTreeMap<String, DeferralRuleRuntime>, RuleControlError> {
+    let mut replacement = BTreeMap::new();
+    for input in rules {
+        let runtime_rule = DeferralRuleRuntime::from_input(input)?;
+        let rule_id = runtime_rule.rule_id.clone();
+        if replacement.contains_key(rule_id.as_str()) {
+            return Err(RuleControlError::invalid_input(format!(
+                "duplicate rule_id '{rule_id}'"
+            )));
+        }
+        replacement.insert(rule_id, runtime_rule);
+    }
+    Ok(replacement)
 }
 
 async fn release_unblocked_front_fifo(

@@ -15,6 +15,8 @@ pub(crate) mod sense_input_helper;
 #[derive(Clone, Copy)]
 pub(crate) enum CognitionOrgan {
     Primary,
+    Attention,
+    Cleanup,
     Sense,
     GoalForest,
     Acts,
@@ -24,6 +26,8 @@ impl CognitionOrgan {
     pub(crate) fn stage(self) -> &'static str {
         match self {
             Self::Primary => "primary",
+            Self::Attention => "attention",
+            Self::Cleanup => "cleanup",
             Self::Sense => "sense_helper",
             Self::GoalForest => "goal_forest_helper",
             Self::Acts => "acts_helper",

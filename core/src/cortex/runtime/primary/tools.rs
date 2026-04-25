@@ -15,10 +15,6 @@ pub(super) struct ActToolBinding {
 }
 
 pub(super) const PRIMARY_TOOL_EXPAND_SENSES: &str = "expand-senses";
-pub(super) const PRIMARY_TOOL_PATCH_GOAL_FOREST: &str = "patch-goal-forest";
-pub(super) const PRIMARY_TOOL_ADD_SENSE_DEFERRAL_RULE: &str = "add-sense-deferral-rule";
-pub(super) const PRIMARY_TOOL_REMOVE_SENSE_DEFERRAL_RULE: &str = "remove-sense-deferral-rule";
-pub(super) const PRIMARY_TOOL_SLEEP: &str = "sleep";
 pub(super) const PRIMARY_TOOL_BREAK_PRIMARY_PHASE: &str = "break-primary-phase";
 
 #[derive(Debug, Deserialize)]
@@ -32,33 +28,6 @@ pub(super) struct ExpandSenseTask {
 pub(super) struct ActToolArgs {
     #[serde(default)]
     pub(super) payload: serde_json::Value,
-    pub(super) wait_for_sense: u64,
-}
-
-#[derive(Debug, Deserialize)]
-pub(super) struct SleepArgs {
-    pub(super) ticks: u64,
-}
-
-#[derive(Debug, Deserialize)]
-pub(super) struct AddSenseDeferralRuleArgs {
-    pub(super) rule_id: String,
-    #[serde(default)]
-    pub(super) min_weight: Option<f64>,
-    #[serde(default)]
-    pub(super) fq_sense_id_pattern: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub(super) struct RemoveSenseDeferralRuleArgs {
-    pub(super) rule_id: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub(super) struct PatchGoalForestArgs {
-    pub(super) patch_instructions: String,
-    #[serde(default)]
-    pub(super) reset_context: bool,
 }
 
 pub(super) fn primary_internal_tools() -> Vec<ChatToolDefinition> {
@@ -82,50 +51,6 @@ pub(super) fn primary_internal_tools() -> Vec<ChatToolDefinition> {
             }),
         },
         ChatToolDefinition {
-            name: PRIMARY_TOOL_ADD_SENSE_DEFERRAL_RULE.to_string(),
-            description: Some("Add one sense deferral rule.".to_string()),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "rule_id": { "type": "string", "minLength": 1 },
-                    "min_weight": {
-                        "type": "number", "minimum": 0, "maximum": 1,
-                        "description": "Senses with a weight < this value will be deferred"
-                    },
-                    "fq_sense_id_pattern": {
-                        "type": "string", "minLength": 1,
-                        "description": "The senses matching this pattern will be deferred."
-                    }
-                },
-                "required": ["rule_id"]
-            }),
-        },
-        ChatToolDefinition {
-            name: PRIMARY_TOOL_REMOVE_SENSE_DEFERRAL_RULE.to_string(),
-            description: Some("Remove one sense deferral rule by rule_id.".to_string()),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "rule_id": { "type": "string", "minLength": 1 }
-                },
-                "required": ["rule_id"],
-            }),
-        },
-        ChatToolDefinition {
-            name: PRIMARY_TOOL_SLEEP.to_string(),
-            description: Some("Sleep for N ticks.".to_string()),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "ticks": {
-                        "type": "integer",
-                        "minimum": 1
-                    }
-                },
-                "required": ["ticks"]
-            }),
-        },
-        ChatToolDefinition {
             name: PRIMARY_TOOL_BREAK_PRIMARY_PHASE.to_string(),
             description: Some(
                 concat!(
@@ -141,11 +66,6 @@ pub(super) fn primary_internal_tools() -> Vec<ChatToolDefinition> {
                 "properties": {},
                 "additionalProperties": false
             }),
-        },
-        ChatToolDefinition {
-            name: PRIMARY_TOOL_PATCH_GOAL_FOREST.to_string(),
-            description: Some("Patch the goal-forest as your will.".to_string()),
-            input_schema: patch_goal_forest_tool_input_schema(),
         },
     ]
 }
@@ -191,7 +111,7 @@ pub(super) fn build_act_tool_bindings(
 
 pub(super) fn dynamic_act_tool_overrides(
     act_bindings: &[ActToolBinding],
-    max_waiting_ticks: u64,
+    _max_waiting_ticks: u64,
 ) -> Vec<ToolOverride> {
     act_bindings
         .iter()
@@ -209,26 +129,14 @@ pub(super) fn dynamic_act_tool_overrides(
                 input_schema: serde_json::json!({
                     "type": "object",
                     "properties": {
-                        "payload": binding.descriptor.payload_schema.clone(),
-                        "wait_for_sense": {
-                            "type": "integer",
-                            "description": "Number of ticks to wait for the specified senses after dispatching the act.",
-                            "minimum": 0,
-                            "maximum": max_waiting_ticks,
-                        }
+                        "payload": binding.descriptor.payload_schema.clone()
                     },
-                    "required": ["payload", "wait_for_sense"],
+                    "required": ["payload"],
                     "additionalProperties": false
                 }),
             })
         })
         .collect()
-}
-
-pub(super) fn parse_patch_goal_forest_args(
-    arguments_json: &str,
-) -> Result<PatchGoalForestArgs, String> {
-    serde_json::from_str::<PatchGoalForestArgs>(arguments_json).map_err(|err| err.to_string())
 }
 
 fn transport_safe_act_tool_alias(endpoint_id: &str, neural_signal_descriptor_id: &str) -> String {
@@ -243,23 +151,4 @@ fn transport_safe_act_tool_alias(endpoint_id: &str, neural_signal_descriptor_id:
         }
     }
     format!("act_{normalized}")
-}
-
-fn patch_goal_forest_tool_input_schema() -> serde_json::Value {
-    serde_json::json!({
-        "type": "object",
-        "properties": {
-            "patch_instructions": {
-                "type": "string",
-                "minLength": 1
-            },
-            "reset_context": {
-                "type": "boolean",
-                "default": false,
-                "description": "Reset to avoid context rot, the goal forest will maintains your cognition continuity"
-            }
-        },
-        "required": ["patch_instructions"],
-        "additionalProperties": false
-    })
 }

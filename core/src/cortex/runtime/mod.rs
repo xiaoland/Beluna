@@ -6,9 +6,8 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    cortex::types::WaitForSenseControlDirective,
     stem::{SenseConsumerHandle, TickGrant},
-    types::{PhysicalState, Sense, build_fq_neural_signal_id},
+    types::{PhysicalState, Sense},
 };
 
 mod primary;
@@ -33,14 +32,6 @@ pub struct CortexRuntime {
     cycle_id: u64,
     pending_senses: VecDeque<Sense>,
     ignore_all_triggers_for_ticks_remaining: u64,
-    wait_for_sense_gate: Option<WaitForSenseGate>,
-}
-
-#[derive(Debug, Clone)]
-struct WaitForSenseGate {
-    act_instance_id: String,
-    expected_fq_sense_ids: Vec<String>,
-    ticks_remaining: u64,
 }
 
 impl CortexRuntime {
@@ -51,7 +42,6 @@ impl CortexRuntime {
             shutdown,
             pending_senses: VecDeque::new(),
             ignore_all_triggers_for_ticks_remaining: 0,
-            wait_for_sense_gate: None,
         }
     }
 
@@ -100,40 +90,6 @@ impl CortexRuntime {
             return Ok(());
         }
 
-        let mut clear_wait_gate = false;
-        if let Some(wait_gate) = self.wait_for_sense_gate.as_mut() {
-            if wait_for_sense_gate_satisfied(wait_gate, &self.pending_senses) {
-                tracing::debug!(
-                    target = "cortex",
-                    tick_seq = tick.tick_seq,
-                    act_instance_id = %wait_gate.act_instance_id,
-                    "wait_for_sense_satisfied_on_tick"
-                );
-                clear_wait_gate = true;
-            } else if wait_gate.ticks_remaining > 0 {
-                wait_gate.ticks_remaining = wait_gate.ticks_remaining.saturating_sub(1);
-                tracing::debug!(
-                    target = "cortex",
-                    tick_seq = tick.tick_seq,
-                    act_instance_id = %wait_gate.act_instance_id,
-                    remaining_ticks = wait_gate.ticks_remaining,
-                    "tick_skipped_waiting_for_sense"
-                );
-                return Ok(());
-            } else {
-                tracing::debug!(
-                    target = "cortex",
-                    tick_seq = tick.tick_seq,
-                    act_instance_id = %wait_gate.act_instance_id,
-                    "wait_for_sense_expired_on_tick"
-                );
-                clear_wait_gate = true;
-            }
-        }
-        if clear_wait_gate {
-            self.wait_for_sense_gate = None;
-        }
-
         let senses = self.pending_senses.drain(..).collect::<Vec<_>>();
 
         self.cycle_id = self.cycle_id.saturating_add(1);
@@ -155,11 +111,6 @@ impl CortexRuntime {
             self.ignore_all_triggers_for_ticks_remaining = ticks.max(1);
         }
 
-        self.wait_for_sense_gate = output
-            .control
-            .wait_for_sense
-            .and_then(wait_for_sense_gate_from_control);
-
         Ok(())
     }
 
@@ -168,49 +119,4 @@ impl CortexRuntime {
             self.pending_senses.push_back(sense);
         }
     }
-}
-
-fn wait_for_sense_gate_from_control(
-    control: WaitForSenseControlDirective,
-) -> Option<WaitForSenseGate> {
-    let mut expected_fq_sense_ids = control
-        .expected_fq_sense_ids
-        .into_iter()
-        .map(|id| id.trim().to_string())
-        .filter(|id| !id.is_empty())
-        .collect::<Vec<_>>();
-    expected_fq_sense_ids.sort();
-    expected_fq_sense_ids.dedup();
-    if control.act_instance_id.trim().is_empty()
-        || control.wait_ticks == 0
-        || expected_fq_sense_ids.is_empty()
-    {
-        return None;
-    }
-
-    Some(WaitForSenseGate {
-        act_instance_id: control.act_instance_id,
-        expected_fq_sense_ids,
-        ticks_remaining: control.wait_ticks,
-    })
-}
-
-fn wait_for_sense_gate_satisfied(
-    wait_gate: &WaitForSenseGate,
-    pending_senses: &VecDeque<Sense>,
-) -> bool {
-    pending_senses.iter().any(|sense| {
-        let Some(act_instance_id) = sense.act_instance_id.as_deref() else {
-            return false;
-        };
-        if act_instance_id != wait_gate.act_instance_id {
-            return false;
-        }
-        let fq_sense_id =
-            build_fq_neural_signal_id(&sense.endpoint_id, &sense.neural_signal_descriptor_id);
-        wait_gate
-            .expected_fq_sense_ids
-            .iter()
-            .any(|expected| expected == &fq_sense_id)
-    })
 }

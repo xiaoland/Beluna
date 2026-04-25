@@ -28,10 +28,7 @@ use crate::{
         },
         ir, prompts,
         testing::{PrimaryRequest as TestPrimaryRequest, TestHooks},
-        types::{
-            CognitionState, CortexControlDirective, CortexOutput, ReactionLimits,
-            WaitForSenseControlDirective,
-        },
+        types::{CognitionState, CortexControlDirective, CortexOutput, ReactionLimits},
     },
     observability::{
         contract::OrganResponseStatus, metrics as observability_metrics,
@@ -42,6 +39,9 @@ use crate::{
     types::{Act, NeuralSignalDescriptor, PhysicalState, Sense},
 };
 
+mod apply;
+mod attention;
+mod cleanup;
 mod executor;
 mod session;
 mod tools;
@@ -81,20 +81,18 @@ pub struct Cortex {
 struct PrimaryTurnState {
     next_act_seq_no: u64,
     dispatched_act_count: usize,
-    ignore_all_trigger_for_ticks: Option<u64>,
-    wait_for_sense: Option<WaitForSenseControlDirective>,
     break_primary_phase_requested: bool,
     protocol_violation: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct PrimaryEngineResult {
     output_text: String,
     dispatched_act_count: usize,
-    control: CortexControlDirective,
     pending_continuation: bool,
     goal_forest_nodes: Vec<GoalNode>,
     break_primary_phase_requested: bool,
+    committed_thread: Option<Thread>,
 }
 
 #[derive(Clone)]
@@ -342,6 +340,87 @@ impl Cortex {
             };
         }
 
+        let mut control = CortexControlDirective::default();
+        if primary_output.break_primary_phase_requested {
+            if let Some(committed_thread) = primary_output.committed_thread.as_ref() {
+                let (attention_result, cleanup_result) = tokio::join!(
+                    self.run_attention_phase(physical_state.cycle_id, committed_thread),
+                    self.run_cleanup_phase(
+                        physical_state.cycle_id,
+                        committed_thread,
+                        &primary_output.goal_forest_nodes,
+                    ),
+                );
+
+                match attention_result {
+                    Ok(attention_output) => {
+                        match self.apply_attention_result(attention_output).await {
+                            Ok(attention_control) => {
+                                control.ignore_all_trigger_for_ticks =
+                                    attention_control.ignore_all_trigger_for_ticks;
+                            }
+                            Err(err) => {
+                                self.emit(CortexTelemetryEvent::StageFailed {
+                                    cycle_id: physical_state.cycle_id,
+                                    stage: "attention_apply",
+                                });
+                                tracing::warn!(
+                                    target: "cortex",
+                                    cycle_id = physical_state.cycle_id,
+                                    error = %err,
+                                    "attention_apply_failed"
+                                );
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        self.emit(CortexTelemetryEvent::StageFailed {
+                            cycle_id: physical_state.cycle_id,
+                            stage: "attention",
+                        });
+                        tracing::warn!(
+                            target: "cortex",
+                            cycle_id = physical_state.cycle_id,
+                            error = %err,
+                            "attention_failed"
+                        );
+                    }
+                }
+
+                match cleanup_result {
+                    Ok(cleanup_output) => {
+                        if let Err(err) = self
+                            .apply_cleanup_result(physical_state.cycle_id, cleanup_output)
+                            .await
+                        {
+                            self.emit(CortexTelemetryEvent::StageFailed {
+                                cycle_id: physical_state.cycle_id,
+                                stage: "cleanup_apply",
+                            });
+                            tracing::warn!(
+                                target: "cortex",
+                                cycle_id = physical_state.cycle_id,
+                                error = %err,
+                                "cleanup_apply_failed"
+                            );
+                        }
+                    }
+                    Err(err) => {
+                        self.emit(CortexTelemetryEvent::StageFailed {
+                            cycle_id: physical_state.cycle_id,
+                            stage: "cleanup",
+                        });
+                        tracing::warn!(
+                            target: "cortex",
+                            cycle_id = physical_state.cycle_id,
+                            error = %err,
+                            "cleanup_failed"
+                        );
+                    }
+                }
+            }
+        }
+
         if !primary_output.pending_continuation && primary_output.dispatched_act_count == 0 {
             self.emit(CortexTelemetryEvent::NoopFallback {
                 cycle_id: physical_state.cycle_id,
@@ -355,7 +434,7 @@ impl Cortex {
         emit_goal_forest_snapshot();
 
         Ok(CortexOutput {
-            control: primary_output.control,
+            control,
             pending_primary_continuation: primary_output.pending_continuation,
         })
     }
@@ -389,10 +468,10 @@ impl Cortex {
             return Ok(PrimaryEngineResult {
                 output_text: output,
                 dispatched_act_count: 0,
-                control: CortexControlDirective::default(),
                 pending_continuation: false,
                 goal_forest_nodes: initial_goal_forest_nodes,
                 break_primary_phase_requested: false,
+                committed_thread: None,
             });
         }
 
@@ -463,7 +542,6 @@ impl Cortex {
                 self.clone(),
                 cycle_id,
                 step,
-                thread.clone(),
                 effective_sense_tool_context.clone(),
                 effective_act_binding_map.clone(),
                 working_goal_forest_nodes,
@@ -506,13 +584,10 @@ impl Cortex {
                 return Ok(PrimaryEngineResult {
                     output_text: assistant_text,
                     dispatched_act_count: turn_state.dispatched_act_count,
-                    control: CortexControlDirective {
-                        ignore_all_trigger_for_ticks: turn_state.ignore_all_trigger_for_ticks,
-                        wait_for_sense: turn_state.wait_for_sense.clone(),
-                    },
                     pending_continuation: false,
                     goal_forest_nodes: working_goal_forest_nodes,
                     break_primary_phase_requested: true,
+                    committed_thread: Some(thread.clone()),
                 });
             }
 
@@ -860,28 +935,20 @@ impl Cortex {
         Ok(state.revision)
     }
 
-    async fn dispatch_act_and_wait(
+    async fn dispatch_act(
         &self,
         cycle_id: u64,
         act_seq_no: u64,
         act: Act,
-        wait_for_sense_ticks: u64,
-        _expected_fq_sense_ids: &[String],
     ) -> Result<ActDispatchResult, String> {
         let Some(producer) = self.efferent_producer.as_ref() else {
             return Err("efferent producer is not configured".to_string());
         };
 
-        let timeout_duration = if wait_for_sense_ticks == 0 {
-            Duration::from_millis(1)
-        } else {
-            let capped_ticks = wait_for_sense_ticks.min(self.limits.max_waiting_ticks);
-            Duration::from_millis(self.tick_interval_ms.saturating_mul(capped_ticks).max(1))
-        };
         Ok(producer
             .dispatch_and_wait(
                 EfferentActEnvelope::with_response(cycle_id, act_seq_no, act),
-                timeout_duration,
+                Duration::from_millis(1),
             )
             .await)
     }
@@ -897,6 +964,8 @@ impl Cortex {
     fn resolve_route(&self, organ: CognitionOrgan) -> Option<String> {
         match organ {
             CognitionOrgan::Primary => self.routes.primary.clone(),
+            CognitionOrgan::Attention => self.routes.attention.clone(),
+            CognitionOrgan::Cleanup => self.routes.cleanup.clone(),
             CognitionOrgan::Sense => self.routes.sense_helper.clone(),
             CognitionOrgan::GoalForest => None,
             CognitionOrgan::Acts => self.routes.acts_helper.clone(),
@@ -1047,9 +1116,11 @@ fn alias_route_ref(route_alias: Option<String>) -> Option<ChatRouteRef> {
 fn map_organ_gateway_error(organ: CognitionOrgan, message: String) -> CortexError {
     match organ {
         CognitionOrgan::Primary => primary_failed(message),
-        CognitionOrgan::Sense | CognitionOrgan::GoalForest | CognitionOrgan::Acts => {
-            extractor_failed(message)
-        }
+        CognitionOrgan::Attention
+        | CognitionOrgan::Cleanup
+        | CognitionOrgan::Sense
+        | CognitionOrgan::GoalForest
+        | CognitionOrgan::Acts => extractor_failed(message),
     }
 }
 

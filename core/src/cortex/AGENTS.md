@@ -21,19 +21,26 @@
   - Somatic act emission is tool-call-native; prompt text is not parsed to dispatch acts.
   - Dynamic act tools are created per turn with deterministic transport-safe aliases mapped back to fq act ids in runtime code.
   - Dispatch results come from the serial `Continuity -> Spine` pipeline and remain timeout-bounded.
-  - `wait_for_sense` is valid only for acts with non-empty `might_emit_sense_ids`, and its gating is tick-skip based rather than afferent-rule mutation.
+  - Dynamic act tool payloads contain only `payload`; act tool results include `act_instance_id`, `might_emit_sense_ids`, and `dispatch_result`.
+  - Attention owns sleep and afferent gating decisions after Primary has committed for the tick.
 
 - Internal cognition tools:
-  - Static Primary tools are `expand-senses`, `add-sense-deferral-rule`, `remove-sense-deferral-rule`, `sleep`, `patch-goal-forest`, and `break-primary-phase`.
+  - Static Primary tools are `expand-senses` and `break-primary-phase`.
+  - Attention tools are `replace-afferent-gating` and `sleep`.
+  - Cleanup tools are `patch-goal-forest` and `reset-context`.
+  - Singleton control tools fail closed on repeated calls within one phase/tick.
   - Sense references exposed to Primary use process-lifetime monotonic internal ids and deterministic rendered text.
 
 - Goal-forest mutation:
-  - Goal-forest patching goes through `goal_forest_helper` and produces a complete replacement `GoalNode[]`.
+  - Goal-forest patching is owned by Cleanup through `patch-goal-forest.operations[]`.
+  - Operations are reduced by deterministic Rust code into a complete replacement `GoalNode[]`.
   - Goal hierarchy is nested through `children` arrays, not `parent_id/numbering` selectors.
   - Goal instincts live in Primary system prompt rather than a persisted root partition.
+  - `reset-context` clears Primary thread history and keeps cognition state intact.
 
 - Failure behavior:
   - Primary failure or timeout is fail-closed noop.
+  - Attention/Cleanup phase or apply failures are isolated to that phase after Primary has committed.
   - Helper failures must degrade through deterministic fallback rather than implicit recovery.
 
 ## Change Triggers

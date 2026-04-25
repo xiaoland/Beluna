@@ -51,6 +51,10 @@ pub enum ContractEvent {
     AiGatewayChatThread(AiGatewayChatThreadEvent),
     #[serde(rename = "cortex.primary")]
     CortexPrimary(CortexOrganExecutionEvent),
+    #[serde(rename = "cortex.attention")]
+    CortexAttention(CortexOrganExecutionEvent),
+    #[serde(rename = "cortex.cleanup")]
+    CortexCleanup(CortexOrganExecutionEvent),
     #[serde(rename = "cortex.sense-helper")]
     CortexSenseHelper(CortexOrganExecutionEvent),
     #[serde(rename = "cortex.goal-forest-helper")]
@@ -88,6 +92,8 @@ impl ContractEvent {
             Self::AiGatewayChatTurn(_) => "ai-gateway.chat.turn",
             Self::AiGatewayChatThread(_) => "ai-gateway.chat.thread",
             Self::CortexPrimary(_) => "cortex.primary",
+            Self::CortexAttention(_) => "cortex.attention",
+            Self::CortexCleanup(_) => "cortex.cleanup",
             Self::CortexSenseHelper(_) => "cortex.sense-helper",
             Self::CortexGoalForestHelper(_) => "cortex.goal-forest-helper",
             Self::CortexActsHelper(_) => "cortex.acts-helper",
@@ -111,6 +117,8 @@ impl ContractEvent {
             | Self::AiGatewayChatTurn(_)
             | Self::AiGatewayChatThread(_) => ObservabilitySubsystem::AiGateway,
             Self::CortexPrimary(_)
+            | Self::CortexAttention(_)
+            | Self::CortexCleanup(_)
             | Self::CortexSenseHelper(_)
             | Self::CortexGoalForestHelper(_)
             | Self::CortexActsHelper(_)

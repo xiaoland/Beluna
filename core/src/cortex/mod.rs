@@ -17,5 +17,5 @@ pub use runtime::{
 };
 pub use types::{
     CognitionState, CortexControlDirective, CortexOutput, ReactionLimits,
-    WaitForSenseControlDirective, new_default_cognition_state,
+    new_default_cognition_state,
 };

@@ -5,7 +5,8 @@ pub mod runtime;
 pub use afferent_pathway::{
     AfferentControlHandle, AfferentPathwayError, AfferentPathwayErrorKind, AfferentRuleControlPort,
     AfferentSidecarEvent, AfferentSidecarPort, AfferentSidecarSubscription, DeferralRuleAddInput,
-    DeferralRuleSetSnapshot, SenseAfferentPathway, SenseConsumerHandle, SenseIngressHandle,
+    DeferralRuleSetSnapshot, DeferralRuleSnapshot, SenseAfferentPathway, SenseConsumerHandle,
+    SenseIngressHandle,
 };
 pub use efferent_pathway::{
     ActProducerHandle, EfferentActEnvelope, EfferentEnqueueError, new_efferent_pathway,

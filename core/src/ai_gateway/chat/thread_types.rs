@@ -56,6 +56,8 @@ pub enum ContextControlReason {
     Manual,
     CortexReset,
     ContinuationCleanup,
+    AttentionPhase,
+    CleanupPhase,
     Recovery,
 }
 
@@ -65,6 +67,8 @@ impl ContextControlReason {
             Self::Manual => "manual",
             Self::CortexReset => "cortex_reset",
             Self::ContinuationCleanup => "continuation_cleanup",
+            Self::AttentionPhase => "attention_phase",
+            Self::CleanupPhase => "cleanup_phase",
             Self::Recovery => "recovery",
         }
     }

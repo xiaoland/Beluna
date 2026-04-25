@@ -127,6 +127,8 @@ pub fn emit_cortex_goal_forest_patch(
 fn contract_event_for_organ(organ_id: &str, event: CortexOrganExecutionEvent) -> ContractEvent {
     match organ_id {
         "primary" => ContractEvent::CortexPrimary(event),
+        "attention" => ContractEvent::CortexAttention(event),
+        "cleanup" => ContractEvent::CortexCleanup(event),
         "sense_helper" => ContractEvent::CortexSenseHelper(event),
         "goal_forest_helper" => ContractEvent::CortexGoalForestHelper(event),
         "acts_helper" => ContractEvent::CortexActsHelper(event),

@@ -38,6 +38,41 @@ pub fn primary_break_reminder_prompt() -> String {
     .to_string()
 }
 
+pub fn attention_system_prompt() -> String {
+    concat!(
+        "You are Cortex Attention. Inspect the committed Primary thread for the current admitted tick.\n",
+        "Own only runtime attention controls:\n",
+        "1) Call replace-afferent-gating when you want to replace the complete afferent gating ruleset.\n",
+        "2) Call sleep when the runtime should skip future admitted ticks for a bounded number of ticks.\n",
+        "3) If the current gating rules and sleep state should remain as-is, return without calling tools.\n",
+        "Use at most one call for each singleton control tool."
+    )
+    .to_string()
+}
+
+pub fn attention_user_prompt() -> String {
+    "Review the committed Primary work for this tick and emit attention controls only when needed."
+        .to_string()
+}
+
+pub fn cleanup_system_prompt() -> String {
+    concat!(
+        "You are Cortex Cleanup. Inspect the committed Primary thread for the current admitted tick.\n",
+        "Own only cognition maintenance controls:\n",
+        "1) Call patch-goal-forest with deterministic operations when the goal forest should change.\n",
+        "2) Call reset-context when the Primary thread history should be cleared after this tick.\n",
+        "3) If maintenance is unnecessary, return without calling tools.\n",
+        "GoalNode shape is recursive: status, weight, id, summary, children.\n",
+        "Use at most one call for each singleton control tool."
+    )
+    .to_string()
+}
+
+pub fn cleanup_user_prompt() -> String {
+    "Review the committed Primary work for this tick and emit cleanup controls only when needed."
+        .to_string()
+}
+
 pub fn sense_helper_system_prompt() -> String {
     concat!(
         "You are Cortex Sense helper. Convert one large sense payload into a Postman Envelope JSON object.\n",
