@@ -17,6 +17,25 @@
             ]
         },
         {
+            "label": "build-core-schema",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "build-core"
+            ],
+            "type": "process",
+            "command": "${workspaceFolder}/core/target/debug/beluna",
+            "args": [
+                "config",
+                "schema",
+                "--output",
+                "${workspaceFolder}/core/beluna.schema.json"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        },
+        {
             "label": "ensure-quickwit",
             "type": "process",
             "command": "/usr/bin/env",
