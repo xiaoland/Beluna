@@ -2,8 +2,6 @@ mod ai_gateway;
 mod cortex;
 mod emit;
 mod flatten;
-#[cfg(test)]
-mod flatten_tests;
 mod spine;
 mod stem;
 

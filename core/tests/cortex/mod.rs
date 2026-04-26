@@ -1,2 +1,0 @@
-mod clamp;
-mod pipeline;

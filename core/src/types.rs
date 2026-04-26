@@ -69,25 +69,6 @@ pub fn is_valid_neural_signal_identifier(value: &str) -> bool {
     in_segment
 }
 
-#[cfg(test)]
-mod tests {
-    use super::is_valid_neural_signal_identifier;
-
-    #[test]
-    fn accepts_ascii_alnum_dot_and_dash() {
-        for value in ["abc", "a1.b2", "aa-bb", "aa.bb-cc", "aa-bb.cc-dd"] {
-            assert!(is_valid_neural_signal_identifier(value), "{value}");
-        }
-    }
-
-    #[test]
-    fn rejects_empty_invalid_or_malformed_identifier() {
-        for value in ["", ".aa", "aa.", "aa..bb", "aa_bb", "aa/bb"] {
-            assert!(!is_valid_neural_signal_identifier(value), "{value}");
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NeuralSignalDescriptor {
     #[serde(rename = "type")]

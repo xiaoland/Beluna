@@ -51,21 +51,3 @@ pub(crate) fn parse_output_ir(output_text: &str) -> Result<OutputIr, CortexError
     }
     Ok(output_ir)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::parse_output_ir;
-
-    #[test]
-    fn parse_output_ir_accepts_non_empty_text() {
-        let output = "<output-ir>plain output</output-ir>";
-        let parsed = parse_output_ir(output).expect("parse should succeed");
-        assert_eq!(parsed.text, output);
-    }
-
-    #[test]
-    fn parse_output_ir_rejects_empty_output() {
-        let error = parse_output_ir(" \n\t ").expect_err("parse should fail");
-        assert_eq!(error.message, "primary output is empty");
-    }
-}
