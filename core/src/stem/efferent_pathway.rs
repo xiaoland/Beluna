@@ -1,9 +1,4 @@
-use std::{
-    collections::{BTreeMap, VecDeque},
-    fmt,
-    sync::Arc,
-    time::Duration,
-};
+use std::{fmt, sync::Arc, time::Duration};
 
 use serde_json::json;
 use tokio::{
@@ -17,12 +12,10 @@ use crate::{
     continuity::{ContinuityEngine, DispatchContext as ContinuityDispatchContext},
     observability::{contract::DispatchOutcomeClass, runtime as observability_runtime},
     spine::{ActDispatchResult, Spine},
-    stem::runtime::StemControlPort,
-    types::{Act, DispatchDecision, ProprioceptionDropPatch, ProprioceptionPatch},
+    types::{Act, DispatchDecision},
 };
 
 const DEFAULT_EFFERENT_QUEUE_CAPACITY: usize = 128;
-const DISPATCH_TERMINAL_RETENTION_LIMIT: usize = 128;
 
 #[derive(Debug)]
 pub struct EfferentActEnvelope {
@@ -148,12 +141,10 @@ pub fn spawn_efferent_runtime(
     mut rx: mpsc::Receiver<EfferentActEnvelope>,
     continuity: Arc<Mutex<ContinuityEngine>>,
     spine: Arc<Spine>,
-    stem_control: Arc<dyn StemControlPort>,
     shutdown: CancellationToken,
     shutdown_drain_timeout: Duration,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
-        let mut terminal_status_keys = VecDeque::new();
         let mut processed_count = 0_usize;
         let mut drain_deadline: Option<Instant> = None;
 
@@ -173,8 +164,6 @@ pub fn spawn_efferent_runtime(
                             task,
                             &continuity,
                             &spine,
-                            stem_control.as_ref(),
-                            &mut terminal_status_keys,
                         ).await;
                         processed_count = processed_count.saturating_add(1);
                     }
@@ -216,8 +205,6 @@ pub fn spawn_efferent_runtime(
                         task,
                         &continuity,
                         &spine,
-                        stem_control.as_ref(),
-                        &mut terminal_status_keys,
                     ).await;
                     processed_count = processed_count.saturating_add(1);
                 }
@@ -230,8 +217,6 @@ async fn process_efferent_dispatch(
     task: EfferentActEnvelope,
     continuity: &Arc<Mutex<ContinuityEngine>>,
     spine: &Arc<Spine>,
-    stem_control: &dyn StemControlPort,
-    terminal_status_keys: &mut VecDeque<String>,
 ) {
     let EfferentActEnvelope {
         cycle_id,
@@ -240,8 +225,6 @@ async fn process_efferent_dispatch(
         response_tx,
     } = task;
 
-    let status_key = dispatch_status_key(&act.act_instance_id);
-    emit_status_patch(stem_control, &status_key, "DISPATCHING").await;
     observability_runtime::emit_stem_efferent(
         "dispatch",
         &act.act_instance_id,
@@ -324,7 +307,6 @@ async fn process_efferent_dispatch(
     };
 
     let terminal_status = dispatch_terminal_status(&dispatch_result);
-    emit_status_patch(stem_control, &status_key, terminal_status).await;
     observability_runtime::emit_stem_efferent(
         "result",
         &act.act_instance_id,
@@ -344,17 +326,6 @@ async fn process_efferent_dispatch(
     if let Some(tx) = response_tx {
         let _ = tx.send(dispatch_result);
     }
-
-    terminal_status_keys.push_back(status_key.clone());
-    if terminal_status_keys.len() > DISPATCH_TERMINAL_RETENTION_LIMIT
-        && let Some(dropped_key) = terminal_status_keys.pop_front()
-    {
-        emit_status_drop(stem_control, dropped_key).await;
-    }
-}
-
-fn dispatch_status_key(act_instance_id: &str) -> String {
-    format!("stem.efferent.{act_instance_id}.status")
 }
 
 fn dispatch_terminal_status(dispatch_result: &ActDispatchResult) -> &'static str {
@@ -390,20 +361,6 @@ fn dispatch_result_reference(dispatch_result: &ActDispatchResult) -> serde_json:
             "reference_id": reference_id,
         }),
     }
-}
-
-async fn emit_status_patch(stem_control: &dyn StemControlPort, key: &str, value: &str) {
-    let mut entries = BTreeMap::new();
-    entries.insert(key.to_string(), value.to_string());
-    stem_control
-        .apply_proprioception_patch(ProprioceptionPatch { entries })
-        .await;
-}
-
-async fn emit_status_drop(stem_control: &dyn StemControlPort, key: String) {
-    stem_control
-        .apply_proprioception_drop(ProprioceptionDropPatch { keys: vec![key] })
-        .await;
 }
 
 fn drain_remaining(rx: &mut mpsc::Receiver<EfferentActEnvelope>) -> usize {

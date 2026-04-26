@@ -63,6 +63,9 @@ pub fn cleanup_system_prompt() -> String {
         "2) Call reset-context when the Primary thread history should be cleared after this tick.\n",
         "3) If maintenance is unnecessary, return without calling tools.\n",
         "GoalNode shape is recursive: status, weight, id, summary, children.\n",
+        "Treat Primary stable instincts, self-model, and body premise as prompt-level context.\n",
+        "Patch only mutable task goals, commitments, and decision structure in the goal forest.\n",
+        "Generic user-service, self-maintenance, and body-monitoring premises become goal nodes only when the current tick creates a concrete actionable task.\n",
         "Use at most one call for each singleton control tool."
     )
     .to_string()

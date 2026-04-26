@@ -257,7 +257,6 @@ async fn main() -> Result<()> {
         efferent_rx,
         continuity.clone(),
         spine_runtime,
-        stem_control,
         app_context.shutdown.child_token(),
         Duration::from_millis(config.r#loop.efferent_shutdown_drain_timeout_ms),
     );
