@@ -8,6 +8,10 @@ default = ["std-shell", "std-web"]
 std-shell = []
 std-web = []
 
+[[test]]
+name = "agent_task"
+path = "tests/agent-task/main.rs"
+
 [dependencies]
 anyhow = "1.0.97"
 async-trait = "0.1.88"

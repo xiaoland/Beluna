@@ -1,14 +1,14 @@
 # Agent Task Testing Exploration
 
-> Last updated: 2026-04-25
-> Status: exploratory discussion packet
+> Last updated: 2026-05-02
+> Status: exploratory packet with first runnable prototype
 > Scope: core task-level verification strategy
 
 ## MVT Core
 
 - Objective & Hypothesis: Define a small, repeatable way to verify Beluna Core by Agent Task completion, so the development loop measures useful agent behavior with auditable runtime evidence.
 - Guardrails Touched: Core remains the runtime authority for cognition, continuity, dispatch, body endpoint interaction, and observability; AI mocking must sit at the AI Gateway boundary while preserving real Core orchestration.
-- Verification: This packet is complete when it captures the testing frame, candidate harness shape, open questions, and decision gates clearly enough to continue discussion without jumping into implementation.
+- Verification: This packet is complete when it captures the testing frame, candidate harness shape, open questions, decision gates, and the first runnable Core Agent Task Case.
 
 ## Exploration Scaffold
 
@@ -29,6 +29,7 @@
   - The useful test unit is an Agent Task Case with a controlled world, scripted model behavior, executable Core runtime path, and explicit oracle.
   - CopilotKit AIMock is a strong candidate for model-boundary mocking because it supports OpenAI-compatible style record/replay and CI-friendly fixtures.
   - First useful Core task tests should drive the real AI Gateway, Cortex, Continuity, Efferent, Spine, and body endpoint surfaces as much as practical.
+  - AIMock should be the first AI boundary backend for replay fixtures.
 - Negotiation Triggers:
   - The harness starts testing only mocks and bypasses Core authority paths.
   - The case oracle becomes subjective or depends on free-form model prose.
@@ -39,6 +40,7 @@
   - Core task runner boundary.
   - AI Gateway mock fixture policy.
   - Minimal task oracle rules.
+  - Agent task kit primitive model and endpoint driver boundary.
 
 ## Current Read
 
@@ -261,14 +263,238 @@ The next useful artifact is a short `CASE-SCHEMA.md` or a section in this file d
 - allowed harness shortcuts
 - promotion criteria from exploratory task case to CI gate
 
+This packet now contains:
+
+- [`RESEARCH-NOTES.md`](./RESEARCH-NOTES.md): external benchmark, eval, AIMock, and sandboxing lessons.
+- [`CASE-SCHEMA.md`](./CASE-SCHEMA.md): current Agent Task Case schema and runner/oracle draft.
+- `/Users/lanzhijiang/Development/Beluna/core/tests/agent-task`: first runnable Core Agent Task test kit and case.
+
+## Design Direction Snapshot
+
+Agent Task Based tests should verify externally observable task completion in a constrained world.
+
+The test case should answer five questions:
+
+1. What task did the user ask Beluna to complete?
+2. What world was Beluna allowed to touch?
+3. Which Core authorities were exercised?
+4. What evidence proves completion or safe failure?
+5. What did the task cost in ticks, model calls, tokens, time, and actions?
+
+The primary oracle should be a world-state or runtime-state fact, such as file content, endpoint state, dispatch outcome, continuity state, or structured observability. LLM-as-judge may be useful for auxiliary scoring, but it should not be the only pass/fail criterion for early Core gates.
+
+The design should borrow from benchmark systems without adopting their full machinery:
+
+- From task-specific LLM benchmarking: evaluate on Beluna's real prompts/tasks and track quality, cost, and latency together.
+- From tool-agent benchmarks: model task state, policy, tool APIs, and multi-turn interaction as part of the case.
+- From software-agent benchmarks: make environments reproducible and require native objective checks.
+- From computer-use benchmarks: keep trajectory evidence for diagnosis because task success alone hides brittle behavior.
+- From sandbox engineering: make the world boundary explicit, small, and enforceable before running agent-produced actions.
+
+## Current Implementation Posture
+
+After `/Users/lanzhijiang/Development/Beluna/tasks/core-test-cleanup-20260426`, Core has no remaining tests. The next test surface should start from Agent Task Cases rather than restoring historical component tests.
+
+## Key Design Decisions
+
+1. Core library exports
+- Core is not binary-only in practice: `src/main.rs` bootstraps through the `beluna` library crate.
+- Agent Task tests should first use the existing public Core library API.
+- Do not add an `agent-task-testkit` feature by default.
+- Add public exports only when a missing runtime-composition primitive is also a coherent Core library API.
+
+2. Agent Task test location
+- Agent Task tests belong under `core/tests/agent-task/`.
+- They are black-box integration/task tests, not inline unit tests.
+- Cargo exposes them through a single explicit test target named `agent_task`.
+
+3. Test kit role
+- The test kit should provide primitive evaluation machinery rather than case-specific helpers.
+- Endpoint behavior should be pluggable drivers.
+- The first recording/ACK endpoint is only the first endpoint driver, not a special concept baked into the kit.
+
+4. Case-driven execution
+- New task cases should be YAML-driven.
+- Adding a normal case should not require new Rust test code.
+- Rust code changes should be reserved for new endpoint drivers, oracle primitives, world primitives, AI-boundary adapters, or runner lifecycle changes.
+
+5. AI boundary
+- Agent Task runner should support both `replay` and `live` AI modes.
+- `replay` mode uses AIMock strict replay through the published `@copilotkit/aimock` package and points Core's OpenAI-compatible AI Gateway backend at the local AIMock `/v1` URL.
+- `live` mode uses the real configured AI Gateway route and a real LLM. It is the mode for evaluating whether endpoint act descriptors, sense payloads, Cortex prompts, IR shape, and phase orchestration actually help a model solve the task.
+- AIMock fixtures are case-local and loaded from the case directory.
+- CI should start with `replay`; `live` should begin as manual or scheduled evaluation with cost, latency, model-call count, act count, success rate, and failure classification artifacts.
+
+6. Agent Task scope boundary
+- Agent Task Case verifies Core's ability to solve a task using available capabilities.
+- Endpoint implementation correctness belongs to endpoint-level contract tests and case setup preflight.
+- If a trusted endpoint cannot perform its basic declared capability during preflight, the run result should be `invalid_environment`.
+- Endpoint execution details, dispatch outcomes, shell result senses, and act payloads should be kept as diagnostics unless the case explicitly targets that Core path.
+
+7. Orthogonal oracle principle
+- Each Agent Task Case should keep its pass criteria focused on the behavior it uniquely contributes.
+- `core.intent_to_act_ack.v1` verifies the minimal intent-to-ACK path.
+- `core.shell_write_file_world_diff.v1` should focus on workspace file state as the primary proof and use dispatch/shell evidence for diagnosis.
+
+## Proposed Test Tree
+
+```text
+core/tests/agent-task/
+├── main.rs
+├── cases/
+│   └── core.intent_to_act_ack.v1/
+│       ├── case.yaml
+│       └── fixtures/
+│           └── llm.json
+├── kit/
+│   ├── ai.rs
+│   ├── case.rs
+│   ├── endpoints.rs
+│   ├── evidence.rs
+│   ├── oracle.rs
+│   └── runner.rs
+└── CASE-core.intent_to_act_ack.v1.md
+```
+
+The implemented Cargo target is:
+
+```toml
+[[test]]
+name = "agent_task"
+path = "tests/agent-task/main.rs"
+```
+
+## Kit Primitive Model
+
+The kit should be built around these primitives:
+
+1. `CaseLoader`
+- Reads YAML cases.
+- Validates schema version and required fields.
+
+2. Workspace and file-state primitives
+- `CaseWorkspace` creates a fresh case workspace and resolves case-local paths.
+- `FileTreeSnapshot` captures workspace-local file state before and after the run.
+- `FileTreeDiff` describes file mutations.
+- `FileExpectation` checks path existence, absence, and exact content.
+- `WorkspaceBoundary` rejects path expectations outside the case workspace.
+
+3. `CoreHarness`
+- Builds the in-process Core runtime slice from public Core library APIs where possible.
+- Injects user intent into afferent input.
+- Advances ticks under budgets.
+
+4. `AiBoundary`
+- Starts and controls AIMock replay.
+- Supplies the OpenAI-compatible base URL to Core AI Gateway.
+- Handles normalization for volatile request fields.
+
+5. `EndpointDriver`
+- Registers a test endpoint with Core.
+- Emits evidence into the journal.
+- Converts endpoint behavior into structured outcomes.
+
+6. `EvidenceJournal`
+- Records generic evidence streams:
+  - `sense.injected`
+  - `act.received`
+  - `dispatch.outcome`
+  - `model.call`
+  - `world.diff`
+  - `observability.event`
+  - `budget.event`
+
+7. `OracleEngine`
+- Evaluates case rules against evidence and file-state primitives.
+- Produces failure class and compact evidence summary.
+
+8. `BudgetGuard`
+- Enforces max ticks, acts, model calls, wall time, and optional token/cost estimates.
+
+9. `ArtifactWriter`
+- Writes `result.json`, evidence journal, world diff, AI journal, and diagnostics.
+
+Endpoint drivers should look conceptually like:
+
+```rust
+#[async_trait]
+trait EndpointDriver {
+    fn kind(&self) -> &'static str;
+
+    async fn attach(
+        &self,
+        harness: &mut CoreHarness,
+        spec: EndpointSpec,
+        journal: EvidenceJournal,
+    ) -> anyhow::Result<AttachedEndpoint>;
+}
+```
+
+The first endpoint driver should be named `ack_recording_endpoint`: it records incoming acts into `act.received` evidence and returns an acknowledged dispatch outcome.
+
+## Next Case
+
+The next dedicated case file is:
+
+- [`CASE-core.shell_write_file_world_diff.v1.md`](./CASE-core.shell_write_file_world_diff.v1.md)
+
+Its purpose is to validate that Core can use a trusted shell capability to complete an externally observable file-writing task.
+
+Primary oracle:
+
+```text
+workspace file state:
+  notes/hello.txt exists
+  content equals "hello beluna"
+```
+
+Diagnostic evidence:
+
+```text
+act payload
+dispatch outcome
+shell.exec.result sense
+model-call trajectory
+```
+
+## First Case
+
+The first dedicated case file is:
+
+- [`CASE-core.intent_to_act_ack.v1.md`](./CASE-core.intent_to_act_ack.v1.md)
+
+Its purpose is to validate:
+
+```text
+user intent -> afferent -> cortex -> efferent -> act acknowledged
+```
+
+It deliberately avoids shell/web world mutation so the first runner can prove the task pipeline and evidence/oracle model before adding sandboxed side effects.
+
 ## Execution Notes
 
 - Key findings:
   - Runtime compile succeeds while broad test compilation is stale.
   - Agent Task completion is the right verification center for Beluna's current product shape.
   - AIMock is a credible candidate for deterministic model-boundary behavior.
+  - Task-specific benchmarks must track cost and latency as first-class outcomes, not only pass/fail.
+  - Agent loops need external evidence and bounded action budgets; self-check loops are insufficient as verification.
+  - Sandbox and capability boundaries are part of the test subject for action-taking agents.
 - Decisions made:
-  - This packet remains exploratory.
-  - Implementation planning waits for more discussion.
+  - This packet remains exploratory at the strategy level.
+  - The first runnable prototype is implemented under `core/tests/agent-task`.
+  - Core library exports stay public-runtime first; no testkit feature by default.
+  - Agent Task kit primitives should stay generic, with endpoint behavior modeled as drivers.
+  - The first AI boundary uses AIMock strict replay from `@copilotkit/aimock`.
+- Implemented prototype:
+  - `case::CaseLoader` loads case-local `case.yaml` files using the current JSON-compatible subset.
+  - `ai::AimockBoundary` starts AIMock and provides Core with a local `/v1` base URL.
+  - `endpoints::AckRecordingEndpoint` records `act.received` and `dispatch.outcome`.
+  - `EvidenceJournal` stores generic evidence events.
+  - `OracleEngine` evaluates evidence match rules and correlation requirements.
+  - `AgentTaskRunner` composes Core in-process through public library APIs and writes `result.json` plus `evidence.jsonl`.
+- Verification commands:
+  - `cargo test --manifest-path core/Cargo.toml --test agent_task -- --nocapture`
+  - `cargo test --manifest-path core/Cargo.toml`
 - Final outcome:
-  - Pending.
+  - First runnable Agent Task test kit passes with `core.intent_to_act_ack.v1`.

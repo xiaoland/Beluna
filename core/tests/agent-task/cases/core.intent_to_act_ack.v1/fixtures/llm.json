@@ -1,0 +1,67 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "fixture-model",
+        "toolName": "act_audit-1_task-audit-record"
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_act_audit_record",
+            "name": "act_audit-1_task-audit-record",
+            "arguments": {
+              "payload": {
+                "message": "hello beluna"
+              }
+            }
+          },
+          {
+            "id": "call_break_primary",
+            "name": "break-primary-phase",
+            "arguments": {}
+          }
+        ],
+        "finishReason": "tool_calls",
+        "usage": {
+          "prompt_tokens": 1,
+          "completion_tokens": 1,
+          "total_tokens": 2
+        }
+      }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "fixture-model",
+        "toolName": "replace-afferent-gating"
+      },
+      "response": {
+        "content": "No gating changes.",
+        "finishReason": "stop",
+        "usage": {
+          "prompt_tokens": 1,
+          "completion_tokens": 1,
+          "total_tokens": 2
+        }
+      }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "fixture-model",
+        "toolName": "patch-goal-forest"
+      },
+      "response": {
+        "content": "No cleanup changes.",
+        "finishReason": "stop",
+        "usage": {
+          "prompt_tokens": 1,
+          "completion_tokens": 1,
+          "total_tokens": 2
+        }
+      }
+    }
+  ]
+}
