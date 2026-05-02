@@ -1,4 +1,5 @@
 use std::{
+    fs,
     net::TcpListener,
     path::{Path, PathBuf},
     process::Stdio,
@@ -13,6 +14,22 @@ pub struct AimockBoundary {
     base_url: String,
     origin_url: String,
     fixtures_path: PathBuf,
+}
+
+pub fn render_fixture_tree(
+    source: &Path,
+    target: &Path,
+    replacements: &[(&str, String)],
+) -> Result<PathBuf> {
+    if target.exists() {
+        fs::remove_dir_all(target).with_context(|| {
+            format!("failed to clear rendered fixture dir {}", target.display())
+        })?;
+    }
+    fs::create_dir_all(target)
+        .with_context(|| format!("failed to create rendered fixture dir {}", target.display()))?;
+    render_fixture_tree_inner(source, target, replacements)?;
+    Ok(target.to_path_buf())
 }
 
 impl AimockBoundary {
@@ -110,4 +127,47 @@ async fn wait_until_ready(child: &mut Child, origin_url: &str) -> Result<()> {
     }
 
     bail!("AIMock did not become ready at {health_url}");
+}
+
+fn render_fixture_tree_inner(
+    source: &Path,
+    target: &Path,
+    replacements: &[(&str, String)],
+) -> Result<()> {
+    for entry in fs::read_dir(source)
+        .with_context(|| format!("failed to read fixture dir {}", source.display()))?
+    {
+        let entry = entry?;
+        let source_path = entry.path();
+        let target_path = target.join(entry.file_name());
+        let metadata = entry.metadata()?;
+        if metadata.is_dir() {
+            fs::create_dir_all(&target_path).with_context(|| {
+                format!(
+                    "failed to create rendered fixture subdir {}",
+                    target_path.display()
+                )
+            })?;
+            render_fixture_tree_inner(&source_path, &target_path, replacements)?;
+            continue;
+        }
+        if metadata.is_file() {
+            match fs::read_to_string(&source_path) {
+                Ok(mut content) => {
+                    for (from, to) in replacements {
+                        content = content.replace(from, to);
+                    }
+                    fs::write(&target_path, content).with_context(|| {
+                        format!("failed to write rendered fixture {}", target_path.display())
+                    })?;
+                }
+                Err(_) => {
+                    fs::copy(&source_path, &target_path).with_context(|| {
+                        format!("failed to copy rendered fixture {}", source_path.display())
+                    })?;
+                }
+            }
+        }
+    }
+    Ok(())
 }

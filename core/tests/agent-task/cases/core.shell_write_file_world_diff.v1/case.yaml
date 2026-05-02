@@ -1,0 +1,81 @@
+{
+  "schema_version": 0,
+  "id": "core.shell_write_file_world_diff.v1",
+  "title": "Shell capability creates the requested workspace file",
+  "task": {
+    "user_intent": "Create notes/hello.txt with the exact text: hello beluna",
+    "success_claim": "The requested file exists in the case workspace with exact content.",
+    "injected_sense": {
+      "endpoint_id": "test.user",
+      "neural_signal_descriptor_id": "user.intent",
+      "payload": "Create notes/hello.txt with the exact text: hello beluna",
+      "weight": 1.0
+    }
+  },
+  "world": {
+    "root": "$CASE_TMP/world",
+    "files": [
+      {
+        "path": "notes",
+        "kind": "directory"
+      }
+    ],
+    "env": {},
+    "endpoints": [
+      {
+        "id": "shell",
+        "kind": "std_shell",
+        "preflight": {
+          "create_probe_file": true
+        }
+      }
+    ],
+    "continuity": {
+      "initial_state": "default"
+    },
+    "proprioception": {
+      "entries": {}
+    }
+  },
+  "ai": {
+    "mode": "replay",
+    "provider": "aimock",
+    "model": "fixture-model",
+    "fixtures": {
+      "root": "fixtures"
+    }
+  },
+  "runtime": {
+    "harness": "in_process",
+    "tick_source": "manual",
+    "max_ticks": 4,
+    "max_primary_turns": 4,
+    "max_model_calls": 8,
+    "max_acts": 2,
+    "timeout_ms": 10000,
+    "exercised_path": ["afferent", "cortex", "efferent", "spine", "std_shell", "workspace"]
+  },
+  "oracle": {
+    "pass": {
+      "files": [
+        {
+          "path": "notes/hello.txt",
+          "content_trimmed_exact": "hello beluna"
+        }
+      ],
+      "diagnostics": {
+        "evidence_streams": [
+          "sense.emitted",
+          "dispatch.outcome",
+          "world.diff"
+        ]
+      }
+    }
+  },
+  "metrics": {
+    "collect": ["wall_time_ms", "tick_count", "model_call_count", "act_count"]
+  },
+  "artifacts": {
+    "write": ["result.json", "evidence.jsonl", "world-before.json", "world-after.json", "world-diff.json"]
+  }
+}

@@ -342,7 +342,11 @@ After `/Users/lanzhijiang/Development/Beluna/tasks/core-test-cleanup-20260426`, 
 core/tests/agent-task/
 ├── main.rs
 ├── cases/
-│   └── core.intent_to_act_ack.v1/
+│   ├── core.intent_to_act_ack.v1/
+│   │   ├── case.yaml
+│   │   └── fixtures/
+│   │       └── llm.json
+│   └── core.shell_write_file_world_diff.v1/
 │       ├── case.yaml
 │       └── fixtures/
 │           └── llm.json
@@ -352,7 +356,8 @@ core/tests/agent-task/
 │   ├── endpoints.rs
 │   ├── evidence.rs
 │   ├── oracle.rs
-│   └── runner.rs
+│   ├── runner.rs
+│   └── workspace.rs
 └── CASE-core.intent_to_act_ack.v1.md
 ```
 
@@ -457,6 +462,15 @@ shell.exec.result sense
 model-call trajectory
 ```
 
+Implemented status:
+
+- Replay mode is implemented and passing.
+- The case starts the production inline `std-shell` endpoint.
+- The runner renders `$CASE_WORKSPACE` into case-local AIMock fixtures before starting AIMock.
+- The primary pass oracle checks workspace file content.
+- Artifacts include `world-before.json`, `world-after.json`, `world-diff.json`, `evidence.jsonl`, and `result.json`.
+- Live mode has an ignored test entry that loads `BELUNA_AGENT_TASK_CONFIG` and `BELUNA_AGENT_TASK_CASE`.
+
 ## First Case
 
 The first dedicated case file is:
@@ -489,12 +503,18 @@ It deliberately avoids shell/web world mutation so the first runner can prove th
 - Implemented prototype:
   - `case::CaseLoader` loads case-local `case.yaml` files using the current JSON-compatible subset.
   - `ai::AimockBoundary` starts AIMock and provides Core with a local `/v1` base URL.
+  - `ai::render_fixture_tree` renders case-local replay fixtures with run-specific placeholders.
   - `endpoints::AckRecordingEndpoint` records `act.received` and `dispatch.outcome`.
+  - `workspace::CaseWorkspace`, `FileTreeSnapshot`, `FileTreeDiff`, and file expectations support workspace-state oracle.
   - `EvidenceJournal` stores generic evidence events.
-  - `OracleEngine` evaluates evidence match rules and correlation requirements.
-  - `AgentTaskRunner` composes Core in-process through public library APIs and writes `result.json` plus `evidence.jsonl`.
+  - `o11y::ContractEventCapture` reuses Core's existing `observability.contract` tracing stream for live diagnostics and writes `o11y-contract-events.jsonl` plus `ai-gateway-summary.json`.
+  - `OracleEngine` evaluates evidence match rules, correlation requirements, and file expectations, including `content_trimmed_exact` for task-level text checks that should tolerate terminal newlines.
+  - `AgentTaskRunner` composes Core in-process through public library APIs, advances manual ticks up to `runtime.max_ticks`, feeds emitted senses into the next tick, and writes `result.json`, `evidence.jsonl`, world-state artifacts, and live AI Gateway observability artifacts.
+  - `run_live_agent_task_case` is ignored by default and requires explicit live env vars.
 - Verification commands:
   - `cargo test --manifest-path core/Cargo.toml --test agent_task -- --nocapture`
   - `cargo test --manifest-path core/Cargo.toml`
 - Final outcome:
-  - First runnable Agent Task test kit passes with `core.intent_to_act_ack.v1`.
+  - Replay Agent Task test kit passes with `core.intent_to_act_ack.v1` and `core.shell_write_file_world_diff.v1`.
+  - Live `core.shell_write_file_world_diff.v1` now captures AI Gateway observability. The 2026-05-02 live runs showed successful model calls and shell dispatches, first exposing argv redirection misuse, then exposing the need to bind shell default cwd to the case `world.root`.
+  - Latest live `core.shell_write_file_world_diff.v1` passed on 2026-05-02 with `tick_count: 2`, `notes/hello.txt` created under the case workspace, and 32 captured `observability.contract` events.

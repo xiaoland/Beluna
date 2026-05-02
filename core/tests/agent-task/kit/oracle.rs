@@ -1,7 +1,11 @@
 use anyhow::{Result, bail};
 use serde_json::Value;
 
-use super::{case::AgentTaskCase, evidence::EvidenceJournal};
+use super::{
+    case::AgentTaskCase,
+    evidence::EvidenceJournal,
+    workspace::{CaseWorkspace, FileTreeSnapshot},
+};
 
 #[derive(Debug, Clone)]
 pub struct RunResult {
@@ -13,7 +17,12 @@ pub struct RunResult {
 pub struct OracleEngine;
 
 impl OracleEngine {
-    pub fn evaluate(case: &AgentTaskCase, journal: &EvidenceJournal) -> Result<Vec<String>> {
+    pub fn evaluate(
+        case: &AgentTaskCase,
+        journal: &EvidenceJournal,
+        workspace: &CaseWorkspace,
+        after_snapshot: &FileTreeSnapshot,
+    ) -> Result<Vec<String>> {
         let events = journal.events();
         let mut failures = Vec::new();
 
@@ -61,6 +70,8 @@ impl OracleEngine {
                 failures.push("correlation requires tick evidence".to_string());
             }
         }
+
+        failures.extend(workspace.evaluate_expectations(&case.oracle.pass.files, after_snapshot));
 
         Ok(failures)
     }

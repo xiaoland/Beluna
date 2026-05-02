@@ -1,7 +1,7 @@
 # Case: core.shell_write_file_world_diff.v1
 
 > Last updated: 2026-05-02
-> Status: design draft
+> Status: replay implemented; live entry added
 > Scope: second Agent Task Case for Core
 
 ## MVT Core
@@ -37,6 +37,14 @@ ai:
 ```
 
 `replay` is the deterministic regression mode. `live` is the capability evaluation mode for real model reasoning, descriptor quality, sense design, and Cortex prompt/IR effects.
+
+The implemented live entry is ignored by default and requires:
+
+```bash
+BELUNA_AGENT_TASK_CONFIG=/path/to/beluna.jsonc
+BELUNA_AGENT_TASK_CASE=core.shell_write_file_world_diff.v1
+cargo test --manifest-path core/Cargo.toml --test agent_task -- --ignored --nocapture
+```
 
 ## Runtime Path Under Test
 
@@ -91,7 +99,7 @@ ai:
 runtime:
   harness: in_process
   tick_source: manual
-  max_ticks: 3
+  max_ticks: 4
   max_primary_turns: 4
   max_model_calls: 8
   max_acts: 2
@@ -101,7 +109,7 @@ oracle:
   pass:
     files:
       - path: notes/hello.txt
-        content_exact: "hello beluna"
+        content_trimmed_exact: "hello beluna"
   diagnostics:
     evidence_streams:
       - act.received
@@ -117,3 +125,39 @@ oracle:
 - Keep file oracle primitives small: `CaseWorkspace`, `FileTreeSnapshot`, `FileTreeDiff`, `FileExpectation`, and `WorkspaceBoundary`.
 - Treat workspace file state as the primary proof.
 - Use shell and dispatch evidence for debugging and failure classification.
+
+## Implemented Case Location
+
+```text
+core/tests/agent-task/cases/core.shell_write_file_world_diff.v1/
+├── case.yaml
+└── fixtures/
+    └── llm.json
+```
+
+Replay fixture behavior:
+
+- Calls `act_shell-1_shell-exec`.
+- Uses `$CASE_WORKSPACE` as the rendered `cwd`.
+- Executes `mkdir -p notes && printf 'hello beluna' > notes/hello.txt`.
+- Calls `break-primary-phase` in the same Primary turn.
+
+## Verification
+
+Commands:
+
+```bash
+cargo test --manifest-path core/Cargo.toml --test agent_task -- --nocapture
+cargo test --manifest-path core/Cargo.toml
+```
+
+Observed result on 2026-05-02:
+
+- `agent_task`: replay passed, live entry ignored.
+- full Core test surface: replay passed, live entry ignored, lib/bin/doc tests have 0 tests.
+- latest shell replay artifact recorded `world-diff.json` with `created: ["notes/hello.txt"]`.
+- live runs with workspace `beluna.jsonc` and `.env` wrote `o11y-contract-events.jsonl` plus `ai-gateway-summary.json`.
+- live observation: one run corrected argv redirection by using `sh -c`, then wrote outside the case workspace because the runner had not bound the shell default cwd to `world.root`; the runner now binds cwd to `world.root`.
+- live observation after cwd binding: one run spent tick 1 on an invalid `expand-senses` call, tick 2 on `mkdir`, and tick 3 on argv redirection; the case tick budget is now 4 so the model has one correction tick after receiving the shell result.
+- live observation after 4 ticks: the model created `notes/hello.txt` in the case workspace with `hello beluna\n`; the file oracle now uses `content_trimmed_exact` because this case targets task-level file content, not final newline formatting.
+- latest live run passed on 2026-05-02 with `tick_count: 2`, `world-diff.json` showing `created: ["notes/hello.txt"]`, and 32 captured `observability.contract` events.

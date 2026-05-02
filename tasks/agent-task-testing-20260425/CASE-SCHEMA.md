@@ -47,10 +47,12 @@ Implemented primitives:
 
 - `CaseLoader`: loads `cases/*/case.yaml` through the current JSON-compatible YAML subset.
 - `AiBoundary`: starts AIMock strict replay through `@copilotkit/aimock` and exposes a local OpenAI-compatible `/v1` base URL.
+- `render_fixture_tree`: renders case-local replay fixtures with run-specific placeholders such as `$CASE_WORKSPACE`.
 - `EndpointDriver`: supports `ack_recording_endpoint`.
+- `CaseWorkspace`, `FileTreeSnapshot`, and `FileTreeDiff`: support workspace file-state oracles and artifacts.
 - `EvidenceJournal`: stores generic events in memory and writes `evidence.jsonl`.
-- `OracleEngine`: evaluates evidence stream matchers, exact counts, reference id prefix checks, and basic correlation requirements.
-- `ArtifactWriter`: writes `result.json` and `evidence.jsonl`.
+- `OracleEngine`: evaluates evidence stream matchers, exact counts, reference id prefix checks, basic correlation requirements, and file expectations.
+- `ArtifactWriter`: writes `result.json`, `evidence.jsonl`, `world-before.json`, `world-after.json`, and `world-diff.json`.
 
 Current case fixture shape:
 
@@ -62,6 +64,11 @@ cases/<case-id>/
 ```
 
 The first implementation intentionally keeps YAML parsing to a JSON-compatible subset to avoid adding a parser dependency before the case language stabilizes.
+
+Implemented cases:
+
+- `core.intent_to_act_ack.v1`
+- `core.shell_write_file_world_diff.v1`
 
 ## AI Modes
 
@@ -82,6 +89,8 @@ ai:
 `replay` mode uses deterministic AIMock fixtures and is the starting point for CI regression.
 
 `live` mode uses a real configured AI Gateway route and a real LLM. It exists to measure whether Beluna's act descriptors, sense payloads, Cortex prompts, IR shape, and phase orchestration enable a model to solve the task. Live runs should write evaluation artifacts with success/failure, cost, latency, model-call count, act count, and failure classification.
+
+Live mode should reuse Core's existing observability contract stream. The Agent Task kit captures `tracing` events from target `observability.contract` and persists the parsed payloads. AI Gateway diagnostics come from the existing `ai-gateway.request`, `ai-gateway.chat.turn`, and `ai-gateway.chat.thread` families.
 
 ## Endpoint Boundary
 
@@ -160,7 +169,7 @@ ai:
 
 runtime:
   harness: in_process
-  max_ticks: 3
+  max_ticks: 4
   max_primary_turns: 4
   max_model_calls: 8
   max_acts: 2
@@ -171,7 +180,7 @@ oracle:
     world:
       files:
         - path: notes/hello.txt
-          content_exact: "hello beluna"
+          content_trimmed_exact: "hello beluna"
     diagnostics:
       evidence_streams:
         - act.received
@@ -307,10 +316,11 @@ This is required for tasks that touch shell, filesystem, network, or external en
 5. Build Core config from the case.
 6. Start Core harness.
 7. Inject the user intent sense.
-8. Advance ticks until pass, fail, timeout, or budget exhaustion.
-9. Stop Core and all harness services.
-10. Evaluate oracle.
-11. Write run artifact.
+8. Advance manual ticks up to `runtime.max_ticks`.
+9. After each tick, drain emitted senses into the next tick, snapshot world state, and evaluate the oracle for early pass.
+10. Stop Core and all harness services.
+11. Evaluate the final oracle against the final world snapshot.
+12. Write run artifact.
 
 ## Run Artifact Shape
 
@@ -323,7 +333,8 @@ case-runs/<case-id>/<timestamp>/
 ├── world-diff.json
 ├── dispatch-log.jsonl
 ├── ai-mock-journal.jsonl
-├── observability-summary.json
+├── o11y-contract-events.jsonl
+├── ai-gateway-summary.json
 └── diagnostics.log
 ```
 
@@ -342,7 +353,7 @@ case-runs/<case-id>/<timestamp>/
     "token_estimate": 1842
   },
   "evidence": {
-    "world": ["notes/hello.txt content_exact"],
+    "world": ["notes/hello.txt content_trimmed_exact"],
     "dispatch": ["shell acknowledged"],
     "observability": ["cortex.primary", "stem.efferent", "spine.act"]
   }

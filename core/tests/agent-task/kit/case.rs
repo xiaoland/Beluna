@@ -64,7 +64,10 @@ pub struct EndpointSpec {
     pub kind: String,
     #[serde(default)]
     pub descriptors: Vec<DescriptorSpec>,
-    pub response: EndpointResponseSpec,
+    #[serde(default)]
+    pub response: Option<EndpointResponseSpec>,
+    #[serde(default)]
+    pub preflight: Option<Value>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -131,7 +134,24 @@ pub struct OraclePassSpec {
     #[serde(default)]
     pub evidence: Vec<EvidenceExpectation>,
     #[serde(default)]
+    pub files: Vec<FileExpectationSpec>,
+    #[serde(default)]
+    pub diagnostics: Option<Value>,
+    #[serde(default)]
     pub correlation: Option<CorrelationSpec>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct FileExpectationSpec {
+    pub path: String,
+    #[serde(default)]
+    pub exists: Option<bool>,
+    #[serde(default)]
+    pub absent: bool,
+    #[serde(default)]
+    pub content_exact: Option<String>,
+    #[serde(default)]
+    pub content_trimmed_exact: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
