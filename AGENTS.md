@@ -34,6 +34,12 @@ Documentation is selective memory, not a parallel runtime.
 - Treat `tasks/` as procedural and non-authoritative.
 - When implementation reveals reusable knowledge, promote it into durable docs.
 
+## Testing
+
+- Core tests are documented under [`core/tests/AGENTS.md`](./core/tests/AGENTS.md).
+- Core Agent Task Tests are documented under [`core/tests/agent-task/AGENTS.md`](./core/tests/agent-task/AGENTS.md).
+- Root policy stays as an index; use local test docs for test placement, case design, commands, and artifact expectations.
+
 ## Operating Model
 
 1. Classify the incoming request as `Intent`, `Constraint`, `Reality`, or `Artifact`.
