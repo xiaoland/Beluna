@@ -13,6 +13,13 @@
 4. Release assets consumed by Moira must follow the Product TDD packaging contract rather than ad hoc workflow-local naming.
 5. The first release-producer workflow is pinned to a GitHub-hosted macOS arm64 runner (`macos-14`) to match the current first supported consumer target.
 
+## Release And CI Build Environment
+
+1. Local Moira backend checks use the default prebuilt DuckDB path.
+2. Release and CI jobs that need source-bundled DuckDB pass `--features duckdb-bundled` to the Moira Rust build command.
+3. The baseline bundled verification command is `cargo check --manifest-path moira/src-tauri/Cargo.toml --locked --features duckdb-bundled`.
+4. A Tauri release build that requires source-bundled DuckDB runs from `moira/` with `pnpm exec tauri build --features duckdb-bundled`.
+
 ## Configuration Model
 
 1. One unified config file input (`beluna.jsonc`).

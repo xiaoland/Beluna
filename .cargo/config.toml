@@ -1,0 +1,16 @@
+[build]
+# Keep nested Rust projects on one repo-local build surface.
+target-dir = "target"
+
+[env]
+# Prefer DuckDB's prebuilt library for local Moira builds.
+DUCKDB_DOWNLOAD_LIB = "1"
+
+[profile.dev]
+# Preserve line-number backtraces while avoiding full debug-info growth.
+debug = "line-tables-only"
+incremental = false
+
+[profile.test]
+debug = "line-tables-only"
+incremental = false

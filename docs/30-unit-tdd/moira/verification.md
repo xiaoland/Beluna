@@ -16,6 +16,13 @@
 4. Wrapper profile documents can package `core_config`, `env_files`, and inline environment variables through Loom.
 5. Moira still defers selected JSONC profile validation against the Core schema authority to a later slice.
 
+## Rust Build Checks
+
+1. Local Moira backend verification passes with `cargo check --manifest-path moira/src-tauri/Cargo.toml --locked`.
+2. DuckDB bundled verification is explicit through `cargo check --manifest-path moira/src-tauri/Cargo.toml --locked --features duckdb-bundled`.
+3. Cargo metadata for the default Moira feature set resolves DuckDB without the `bundled` feature.
+4. Cargo metadata with `--features duckdb-bundled` resolves `duckdb/bundled` and `libduckdb-sys/bundled`.
+
 ## Observability Checks
 
 1. OTLP logs are ingested and persisted locally without requiring an external first-party log UI.

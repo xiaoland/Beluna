@@ -19,7 +19,10 @@ __pycache__/
 /rust/target/
 
 # Editor and local tooling state
-.codex
+.codex/*
+!.codex/config.toml
+!.codex/environments/
+!.codex/environments/environment.toml
 .claude
 .vscode/*
 !.vscode/launch.example.jsonc

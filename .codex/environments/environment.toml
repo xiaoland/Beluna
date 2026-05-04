@@ -1,0 +1,15 @@
+version = 1
+name = "Beluna"
+
+[setup]
+script = ""
+
+[[actions]]
+name = "Build core config schema"
+icon = "tool"
+command = "cargo build --manifest-path core/Cargo.toml && target/debug/beluna config schema --output core/beluna.schema.json"
+
+[[actions]]
+name = "Rust storage sweep"
+icon = "trash"
+command = "bash scripts/rust-storage-maintenance.sh sweep-all"

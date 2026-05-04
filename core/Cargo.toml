@@ -12,6 +12,10 @@ std-web = []
 name = "agent_task"
 path = "tests/agent-task/main.rs"
 
+[[test]]
+name = "ai_gateway"
+path = "tests/ai_gateway/main.rs"
+
 [dependencies]
 anyhow = "1.0.97"
 async-trait = "0.1.88"

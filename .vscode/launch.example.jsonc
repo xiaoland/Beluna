@@ -6,7 +6,7 @@
             "name": "Debug Core",
             "type": "lldb",
             "request": "launch",
-            "program": "${workspaceFolder}/core/target/debug/beluna",
+            "program": "${workspaceFolder}/target/debug/beluna",
             "args": [
                 "--config",
                 "${workspaceFolder}/beluna.jsonc"

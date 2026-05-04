@@ -1,0 +1,51 @@
+# Beluna intentionally uses a repo-level skill/plugin allowlist.
+# Current Codex builds do not re-enable user-disabled skills from project config.
+
+[plugins."browser-use@openai-bundled"]
+enabled = false
+
+[plugins."build-ios-apps@openai-curated"]
+enabled = true
+
+[plugins."github@openai-curated"]
+enabled = true
+
+[[skills.config]]
+name = "ast-grep"
+enabled = true
+
+[[skills.config]]
+name = "build-ios-apps:ios-debugger-agent"
+enabled = true
+
+[[skills.config]]
+name = "build-ios-apps:ios-app-intents"
+enabled = true
+
+[[skills.config]]
+name = "build-ios-apps:swiftui-liquid-glass"
+enabled = true
+
+[[skills.config]]
+name = "build-ios-apps:swiftui-performance-audit"
+enabled = true
+
+[[skills.config]]
+name = "build-ios-apps:swiftui-ui-patterns"
+enabled = true
+
+[[skills.config]]
+name = "build-ios-apps:swiftui-view-refactor"
+enabled = true
+
+[[skills.config]]
+name = "github:gh-fix-ci"
+enabled = true
+
+[[skills.config]]
+name = "github:github"
+enabled = true
+
+[[skills.config]]
+name = "github:yeet"
+enabled = true

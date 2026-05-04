@@ -55,6 +55,8 @@ fn validate_non_blank(value: &str) -> Result<(), ValidationError> {
 pub enum BackendDialect {
     #[serde(rename = "openai_compatible")]
     OpenAiCompatible,
+    #[serde(rename = "openai_responses")]
+    OpenAiResponses,
     #[serde(rename = "ollama")]
     Ollama,
     #[serde(rename = "github_copilot_sdk")]

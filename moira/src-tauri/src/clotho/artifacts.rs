@@ -220,11 +220,15 @@ impl ClothoService {
         let requested_source_dir = canonicalize_dir("build source directory", &request.source_dir)?;
         let core_crate_root = resolve_core_crate_root(&requested_source_dir)?;
         let manifest_path = core_crate_root.join("Cargo.toml");
+        let target_dir =
+            resolve_cargo_target_directory(self.cargo_bin(), &manifest_path, &core_crate_root)
+                .await?;
 
         let output = Command::new(self.cargo_bin())
             .arg("build")
             .arg("--manifest-path")
             .arg(&manifest_path)
+            .arg("--locked")
             .arg("--bin")
             .arg(RELEASE_BINARY_NAME)
             .current_dir(&core_crate_root)
@@ -257,10 +261,7 @@ impl ClothoService {
 
         let executable_path = canonicalize_file(
             "forged executable",
-            &core_crate_root
-                .join("target")
-                .join("debug")
-                .join(executable_file_name()),
+            &target_dir.join("debug").join(executable_file_name()),
         )?;
 
         self.write_known_local_build_record(&KnownLocalBuildRecord {
@@ -848,6 +849,57 @@ fn resolve_core_crate_root(source_dir: &Path) -> Result<PathBuf, String> {
     ))
 }
 
+async fn resolve_cargo_target_directory(
+    cargo_bin: &Path,
+    manifest_path: &Path,
+    working_dir: &Path,
+) -> Result<PathBuf, String> {
+    let output = Command::new(cargo_bin)
+        .arg("metadata")
+        .arg("--manifest-path")
+        .arg(manifest_path)
+        .arg("--locked")
+        .arg("--format-version")
+        .arg("1")
+        .arg("--no-deps")
+        .current_dir(working_dir)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .await
+        .map_err(|err| {
+            format!(
+                "failed to query cargo metadata for `{}`: {err}",
+                manifest_path.display()
+            )
+        })?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let detail = if !stderr.trim().is_empty() {
+            stderr.trim().to_string()
+        } else {
+            stdout.trim().to_string()
+        };
+        return Err(format!(
+            "cargo metadata failed for `{}`: {}",
+            manifest_path.display(),
+            truncate_for_error(&detail)
+        ));
+    }
+
+    let metadata = serde_json::from_slice::<CargoMetadata>(&output.stdout).map_err(|err| {
+        format!(
+            "failed to decode cargo metadata for `{}`: {err}",
+            manifest_path.display()
+        )
+    })?;
+
+    canonicalize_dir("cargo target directory", &metadata.target_directory)
+}
+
 fn normalize_release_tag(value: &str) -> Result<String, String> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
@@ -975,6 +1027,11 @@ struct GitHubReleasePayload {
 struct GitHubReleaseAssetPayload {
     name: String,
     browser_download_url: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct CargoMetadata {
+    target_directory: PathBuf,
 }
 
 #[cfg(test)]
@@ -1258,7 +1315,7 @@ mod tests {
             let parent = path.parent().expect("fake cargo should have parent");
             fs::create_dir_all(parent).expect("fake cargo parent should create");
             let script = format!(
-                "#!/bin/sh\nmkdir -p \"$PWD/target/debug\"\nprintf '#!/bin/sh\\nexit 0\\n' > \"$PWD/target/debug/{}\"\nchmod +x \"$PWD/target/debug/{}\"\n",
+                "#!/bin/sh\nrepo_root=\"$(cd \"$PWD/..\" && pwd)\"\ntarget_dir=\"$repo_root/target\"\nif [ \"$1\" = \"metadata\" ]; then\n  mkdir -p \"$target_dir\"\n  printf '{{\"target_directory\":\"%s\"}}\\n' \"$target_dir\"\n  exit 0\nfi\nmkdir -p \"$target_dir/debug\"\nprintf '#!/bin/sh\\nexit 0\\n' > \"$target_dir/debug/{}\"\nchmod +x \"$target_dir/debug/{}\"\n",
                 executable_file_name(),
                 executable_file_name(),
             );

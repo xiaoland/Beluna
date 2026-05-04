@@ -13,6 +13,7 @@ pub(crate) mod http_errors;
 pub(crate) mod http_stream;
 pub mod ollama;
 pub mod openai_compatible;
+pub mod openai_responses;
 pub(crate) mod wire;
 
 #[async_trait]
@@ -47,6 +48,10 @@ pub(crate) fn build_default_adapters() -> HashMap<BackendDialect, Arc<dyn Backen
     adapters.insert(
         BackendDialect::OpenAiCompatible,
         Arc::new(openai_compatible::OpenAiCompatibleAdapter::default()),
+    );
+    adapters.insert(
+        BackendDialect::OpenAiResponses,
+        Arc::new(openai_responses::OpenAiResponsesAdapter::default()),
     );
     adapters.insert(
         BackendDialect::Ollama,

@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "core",
+    "cli",
+    "moira/src-tauri",
+]
+resolver = "3"

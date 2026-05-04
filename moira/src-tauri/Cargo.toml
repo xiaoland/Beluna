@@ -12,10 +12,15 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
+[features]
+default = ["duckdb-prebuilt"]
+duckdb-prebuilt = []
+duckdb-bundled = ["duckdb/bundled"]
+
 [dependencies]
 async-trait = "0.1.89"
 dotenvy = "0.15.7"
-duckdb = { version = "1.10501.0", features = ["bundled"] }
+duckdb = { version = "=1.10501.0", default-features = false }
 flate2 = "1.1.5"
 json5 = "0.4.1"
 libc = "0.2.177"

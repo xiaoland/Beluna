@@ -23,7 +23,7 @@
                 "build-core"
             ],
             "type": "process",
-            "command": "${workspaceFolder}/core/target/debug/beluna",
+            "command": "${workspaceFolder}/target/debug/beluna",
             "args": [
                 "config",
                 "schema",
@@ -34,6 +34,100 @@
                 "cwd": "${workspaceFolder}"
             },
             "problemMatcher": []
+        },
+        {
+            "label": "rust:storage-scan",
+            "type": "process",
+            "command": "/usr/bin/env",
+            "args": [
+                "bash",
+                "${workspaceFolder}/scripts/rust-storage-maintenance.sh",
+                "scan"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "rust:sweep-dry-run",
+            "type": "process",
+            "command": "/usr/bin/env",
+            "args": [
+                "bash",
+                "${workspaceFolder}/scripts/rust-storage-maintenance.sh",
+                "sweep-dry-run"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "rust:sweep-all-dry-run",
+            "type": "process",
+            "command": "/usr/bin/env",
+            "args": [
+                "bash",
+                "${workspaceFolder}/scripts/rust-storage-maintenance.sh",
+                "sweep-all-dry-run"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "rust:sweep-all",
+            "type": "process",
+            "command": "/usr/bin/env",
+            "args": [
+                "bash",
+                "${workspaceFolder}/scripts/rust-storage-maintenance.sh",
+                "sweep-all"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "moira:check-backend",
+            "type": "process",
+            "command": "/usr/bin/env",
+            "args": [
+                "cargo",
+                "check",
+                "--manifest-path",
+                "src-tauri/Cargo.toml",
+                "--locked"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/moira"
+            },
+            "problemMatcher": [
+                "$rustc"
+            ]
+        },
+        {
+            "label": "moira:check-backend-bundled",
+            "type": "process",
+            "command": "/usr/bin/env",
+            "args": [
+                "cargo",
+                "check",
+                "--manifest-path",
+                "src-tauri/Cargo.toml",
+                "--locked",
+                "--features",
+                "duckdb-bundled"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/moira"
+            },
+            "problemMatcher": [
+                "$rustc"
+            ]
         },
         {
             "label": "ensure-quickwit",

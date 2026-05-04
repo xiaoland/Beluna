@@ -23,6 +23,15 @@
 4. Installing a published release downloads the target archive plus `SHA256SUMS`, verifies the checksum, extracts the executable into a version-isolated install directory, and writes the installed artifact manifest.
 5. Loom may browse launch targets, but the current selected launch target remains query-owned session state until a later persistence slice lands.
 
+## Rust Build Storage Flow
+
+1. Local Rust builds share the repo-root Cargo target directory configured by `.cargo/config.toml`.
+2. Local Moira backend builds use the prebuilt DuckDB library path through `DUCKDB_DOWNLOAD_LIB=1`.
+3. Routine local backend verification runs `cargo check --manifest-path moira/src-tauri/Cargo.toml --locked` from the repo root.
+4. Source-bundled DuckDB verification runs `cargo check --manifest-path moira/src-tauri/Cargo.toml --locked --features duckdb-bundled`.
+5. Local Rust storage preview runs `bash scripts/rust-storage-maintenance.sh sweep-all-dry-run`.
+6. Local Rust storage cleanup runs `bash scripts/rust-storage-maintenance.sh sweep-all`.
+
 ## Observability Flow
 
 1. Receive Core OTLP logs locally.
