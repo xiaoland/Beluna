@@ -26,7 +26,7 @@ use beluna::{
     },
     continuity::ContinuityEngine,
     cortex::Cortex,
-    spine::{EndpointBinding, EndpointExecutionOutcome, Spine},
+    spine::{Endpoint, EndpointExecutionOutcome, Spine},
     stem::{
         AfferentRuleControlPort, SenseAfferentPathway, StemControlPort, StemPhysicalStateStore,
         new_efferent_pathway, spawn_efferent_runtime,
@@ -111,6 +111,15 @@ impl AgentTaskRunner {
         );
 
         start_case_endpoints(case, &spine, &workspace, &journal, tick_clock.clone()).await?;
+        let ns_descriptor = stem_state.ns_descriptor_snapshot().await;
+        journal.record(
+            "ns_descriptor.snapshot",
+            json!({
+                "version": ns_descriptor.version,
+                "descriptor_count": ns_descriptor.entries.len(),
+                "descriptors": ns_descriptor.entries,
+            }),
+        );
         let before_snapshot = workspace.snapshot()?;
 
         let ai_runtime = prepare_ai_runtime(case, &mode, &artifact_dir, &workspace).await?;
@@ -204,6 +213,7 @@ impl AgentTaskRunner {
         let failures = OracleEngine::evaluate(case, &journal, &workspace, &after_snapshot)?;
         assert_no_oracle_internal_error(&failures)?;
         let passed = failures.is_empty();
+        record_ai_boundary_journal(&ai_runtime, &journal).await;
         let contract_events = o11y_capture
             .as_ref()
             .map(ContractEventCapture::events)
@@ -374,6 +384,70 @@ async fn inject_and_admit_sense(
     Ok(admitted_sense)
 }
 
+async fn record_ai_boundary_journal(ai_runtime: &AiRuntime, journal: &EvidenceJournal) {
+    let Some(aimock) = ai_runtime._aimock.as_ref() else {
+        return;
+    };
+    match aimock.journal().await {
+        Ok(entries) => {
+            journal.record(
+                "ai.boundary.journal",
+                json!({
+                    "entries": summarize_aimock_journal(&entries),
+                }),
+            );
+        }
+        Err(err) => {
+            journal.record(
+                "ai.boundary.journal_failed",
+                json!({
+                    "error": err.to_string(),
+                }),
+            );
+        }
+    }
+}
+
+fn summarize_aimock_journal(entries: &Value) -> Value {
+    let Some(entries) = entries.as_array() else {
+        return json!({
+            "decode": "non_array",
+        });
+    };
+    Value::Array(
+        entries
+            .iter()
+            .map(|entry| {
+                let tool_names = entry
+                    .pointer("/body/tools")
+                    .and_then(Value::as_array)
+                    .map(|tools| {
+                        tools
+                            .iter()
+                            .filter_map(|tool| tool.pointer("/function/name").cloned())
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                let status = entry
+                    .pointer("/response/status")
+                    .cloned()
+                    .unwrap_or(Value::Null);
+                let fixture_matched = entry
+                    .pointer("/response/fixture")
+                    .map(|fixture| !fixture.is_null())
+                    .unwrap_or(false);
+                json!({
+                    "path": entry.get("path").cloned().unwrap_or(Value::Null),
+                    "model": entry.pointer("/body/model").cloned().unwrap_or(Value::Null),
+                    "status": status,
+                    "fixture_matched": fixture_matched,
+                    "tool_names": tool_names,
+                })
+            })
+            .collect(),
+    )
+}
+
 async fn start_case_endpoints(
     case: &AgentTaskCase,
     spine: &Arc<Spine>,
@@ -469,29 +543,36 @@ async fn attach_ack_endpoint(
         journal.clone(),
         tick_clock,
     ));
-    let handle = spine.add_endpoint(&endpoint.id, EndpointBinding::Inline(driver))?;
     let descriptors = endpoint
         .descriptors
         .iter()
         .map(|descriptor| descriptor_from_spec(&endpoint.id, descriptor))
         .collect::<Result<Vec<_>>>()?;
-    let accepted = spine
-        .add_ns_descriptors(&handle.body_endpoint_id, descriptors)
+    let inline_adapter = spine
+        .inline_adapter()
+        .context("ack_recording_endpoint requires an inline spine adapter")?;
+    let handles = inline_adapter
+        .attach_inline_endpoint(endpoint.id.clone(), descriptors)
         .await?;
-    if accepted.len() != endpoint.descriptors.len() {
-        bail!(
-            "endpoint '{}' descriptor registration incomplete: expected {}, accepted {}",
-            endpoint.id,
-            endpoint.descriptors.len(),
-            accepted.len()
-        );
-    }
+    let mut act_rx = handles.act_rx;
+    let sense_tx_guard = handles.sense_tx;
+    let runtime_endpoint_id = spine
+        .body_endpoint_ids_snapshot()
+        .into_iter()
+        .find(|id| id.starts_with(&format!("{}.", endpoint.id)))
+        .unwrap_or_else(|| endpoint.id.clone());
+    tokio::spawn(async move {
+        let _keep_sense_channel_open = sense_tx_guard;
+        while let Some(act) = act_rx.recv().await {
+            let _ = driver.invoke((*act).clone()).await;
+        }
+    });
     journal.record(
         "endpoint.attached",
         json!({
             "endpoint_id": endpoint.id,
-            "runtime_endpoint_id": handle.body_endpoint_id,
-            "descriptor_count": accepted.len(),
+            "runtime_endpoint_id": runtime_endpoint_id,
+            "descriptor_count": endpoint.descriptors.len(),
         }),
     );
     Ok(())
@@ -610,7 +691,7 @@ fn cortex_config(case: &AgentTaskCase, mode: &RunMode<'_>) -> CortexRuntimeConfi
 }
 
 fn spine_runtime_config(case: &AgentTaskCase) -> SpineRuntimeConfig {
-    if requires_std_shell(case) {
+    if requires_inline_adapter(case) {
         return SpineRuntimeConfig {
             adapters: vec![SpineAdapterConfig::Inline {
                 config: InlineAdapterConfig::default(),
@@ -627,6 +708,15 @@ fn requires_std_shell(case: &AgentTaskCase) -> bool {
         .endpoints
         .iter()
         .any(|endpoint| endpoint.kind == "std_shell")
+}
+
+fn requires_inline_adapter(case: &AgentTaskCase) -> bool {
+    case.world.endpoints.iter().any(|endpoint| {
+        matches!(
+            endpoint.kind.as_str(),
+            "std_shell" | "ack_recording_endpoint"
+        )
+    })
 }
 
 fn shell_limits() -> ShellLimits {

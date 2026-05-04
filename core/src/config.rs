@@ -84,13 +84,7 @@ impl Config {
 
     fn normalize_paths(&mut self, config_base: &Path) {
         normalize_path_against_base(&mut self.logging.dir, config_base);
-
-        for adapter in &mut self.spine.adapters {
-            if let SpineAdapterConfig::UnixSocketNdjson { config } = adapter {
-                normalize_path_against_base(&mut config.socket_path, config_base);
-            }
-        }
-
+        self.spine.normalize_paths(config_base);
         normalize_path_against_base(&mut self.continuity.state_path, config_base);
     }
 }

@@ -7,6 +7,7 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail};
+use serde_json::Value;
 use tokio::{process::Child, process::Command, time::sleep};
 
 pub struct AimockBoundary {
@@ -85,6 +86,19 @@ impl AimockBoundary {
 
     pub fn fixtures_path(&self) -> &Path {
         &self.fixtures_path
+    }
+
+    pub async fn journal(&self) -> Result<Value> {
+        let url = format!("{}/__aimock/journal", self.origin_url);
+        let response = reqwest::Client::new()
+            .get(&url)
+            .send()
+            .await
+            .with_context(|| format!("failed to fetch AIMock journal at {url}"))?;
+        response
+            .json::<Value>()
+            .await
+            .context("failed to decode AIMock journal")
     }
 }
 

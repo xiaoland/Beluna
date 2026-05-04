@@ -1,10 +1,6 @@
-use std::{
-    collections::BTreeMap,
-    sync::{Arc, Weak},
-};
+use std::{collections::BTreeMap, sync::Arc};
 
 use anyhow::{Result, anyhow};
-use async_trait::async_trait;
 use tokio::{
     sync::{Mutex, mpsc},
     task::JoinHandle,
@@ -13,13 +9,16 @@ use tokio_util::sync::CancellationToken;
 use tracing::Instrument;
 
 use crate::{
-    config::InlineAdapterConfig,
+    observability::{contract::AdapterLifecycleState, runtime as observability_runtime},
     spine::{
-        ActDispatchResult, Endpoint, EndpointBinding, NeuralSignalDescriptor, SpineControlPort,
-        runtime::Spine,
+        AdapterContext, AdapterId, NeuralSignalDescriptor, SpineAdapterPort,
+        types::ActDispatchResult,
     },
     types::{Act, Sense},
 };
+
+pub mod config;
+pub use config::InlineAdapterConfig;
 
 #[derive(Debug, Clone)]
 pub struct InlineSenseDatum {
@@ -42,8 +41,9 @@ pub struct InlineEndpointRuntimeHandles {
 }
 
 pub struct SpineInlineAdapter {
-    adapter_id: u64,
-    spine: Weak<Spine>,
+    adapter_id: AdapterId,
+    port: Arc<dyn SpineAdapterPort>,
+    sense_tx: mpsc::UnboundedSender<Sense>,
     shutdown: CancellationToken,
     act_queue_capacity: usize,
     sense_queue_capacity: usize,
@@ -51,24 +51,69 @@ pub struct SpineInlineAdapter {
 }
 
 impl SpineInlineAdapter {
-    pub fn new(
-        adapter_id: u64,
+    pub fn from_config(
         config: InlineAdapterConfig,
-        spine: Arc<Spine>,
-        shutdown: CancellationToken,
-    ) -> Self {
+        context: AdapterContext,
+    ) -> (Arc<Self>, JoinHandle<Result<()>>) {
+        let adapter = Arc::new(Self::new(config, &context));
+        let dispatch_task = Self::spawn_dispatch_task(Arc::clone(&adapter), context.act_rx);
+        (adapter, dispatch_task)
+    }
+
+    fn new(config: InlineAdapterConfig, context: &AdapterContext) -> Self {
         Self {
-            adapter_id,
-            spine: Arc::downgrade(&spine),
-            shutdown,
+            adapter_id: context.adapter_id,
+            port: Arc::clone(&context.port),
+            sense_tx: context.sense_tx.clone(),
+            shutdown: context.shutdown.clone(),
             act_queue_capacity: config.act_queue_capacity.max(1),
             sense_queue_capacity: config.sense_queue_capacity.max(1),
             endpoints: Mutex::new(BTreeMap::new()),
         }
     }
 
+    fn spawn_dispatch_task(
+        adapter: Arc<Self>,
+        mut act_rx: mpsc::UnboundedReceiver<Act>,
+    ) -> JoinHandle<Result<()>> {
+        let shutdown = adapter.shutdown.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    _ = shutdown.cancelled() => {
+                        break;
+                    }
+                    maybe_act = act_rx.recv() => {
+                        let Some(act) = maybe_act else {
+                            break;
+                        };
+                        adapter.enqueue_act(&act.endpoint_id.clone(), act).await?;
+                    }
+                }
+            }
+            Ok(())
+        })
+    }
+
     pub fn adapter_id(&self) -> u64 {
         self.adapter_id
+    }
+
+    pub fn emit_started(&self) {
+        tracing::info!(
+            target: "spine",
+            adapter_type = "inline",
+            adapter_id = self.adapter_id,
+            act_queue_capacity = self.act_queue_capacity,
+            sense_queue_capacity = self.sense_queue_capacity,
+            "adapter_started"
+        );
+        observability_runtime::emit_spine_adapter_lifecycle(
+            "inline",
+            &self.adapter_id.to_string(),
+            AdapterLifecycleState::Enabled,
+            None,
+        );
     }
 
     pub async fn attach_inline_endpoint(
@@ -81,27 +126,32 @@ impl SpineInlineAdapter {
             return Err(anyhow!("endpoint_name cannot be empty"));
         }
 
-        let endpoint_proxy: Arc<dyn Endpoint> = Arc::new(InlineAdapterEndpointProxy {
-            endpoint_name: endpoint_name.clone(),
-            adapter: Arc::downgrade(self),
-        });
-
-        let spine = self
-            .spine
-            .upgrade()
-            .ok_or_else(|| anyhow!("spine runtime is unavailable"))?;
-
-        let handle = spine
-            .add_endpoint(&endpoint_name, EndpointBinding::Inline(endpoint_proxy))
-            .map_err(|err| anyhow!(err.to_string()))?;
+        let handle = self
+            .port
+            .register_endpoint(self.adapter_id, &endpoint_name)
+            .await?;
 
         let body_endpoint_id = handle.body_endpoint_id.clone();
-        if let Err(err) = spine
+        let descriptor_count = ns_descriptors.len();
+        let accepted_descriptors = self
+            .port
             .add_ns_descriptors(&body_endpoint_id, ns_descriptors)
-            .await
-        {
-            spine.remove_endpoint(&body_endpoint_id).await;
-            return Err(anyhow!(err.to_string()));
+            .await;
+        let accepted_descriptors = match accepted_descriptors {
+            Ok(accepted_descriptors) => accepted_descriptors,
+            Err(err) => {
+                self.port.drop_endpoint(&body_endpoint_id).await;
+                return Err(anyhow!(err.to_string()));
+            }
+        };
+        if accepted_descriptors.len() != descriptor_count {
+            self.port.drop_endpoint(&body_endpoint_id).await;
+            return Err(anyhow!(
+                "inline endpoint '{}' descriptor registration incomplete: expected {}, accepted {}",
+                endpoint_name,
+                descriptor_count,
+                accepted_descriptors.len()
+            ));
         }
 
         let (act_tx, act_rx) = mpsc::channel::<Arc<Act>>(self.act_queue_capacity);
@@ -141,8 +191,8 @@ impl SpineInlineAdapter {
                                 weight: sense.weight.clamp(0.0, 1.0),
                                 act_instance_id: sense.act_instance_id.clone(),
                             };
-                            if let Some(spine) = adapter.spine.upgrade() {
-                                spine.publish_sense(sense).await;
+                            if adapter.sense_tx.send(sense).is_err() {
+                                break;
                             }
                         }
                     }
@@ -175,32 +225,37 @@ impl SpineInlineAdapter {
             );
         }
 
-        spine.refresh_topology_proprioception().await;
+        self.port.publish_topology_proprioception_snapshot().await;
 
         Ok(InlineEndpointRuntimeHandles { act_rx, sense_tx })
     }
 
-    async fn enqueue_act(&self, endpoint_name: &str, act: Act) -> Result<ActDispatchResult> {
+    async fn enqueue_act(&self, body_endpoint_id: &str, act: Act) -> Result<ActDispatchResult> {
         let act_instance_id = act.act_instance_id.clone();
         tracing::debug!(
             target: "spine.inline_adapter",
-            endpoint_id = endpoint_name,
+            endpoint_id = body_endpoint_id,
             act_instance_id = %act_instance_id,
             neural_signal_descriptor_id = %act.neural_signal_descriptor_id,
             "enqueue_act_for_inline_endpoint"
         );
 
-        let tx = {
+        let target = {
             let state = self.endpoints.lock().await;
-            state.get(endpoint_name).map(|entry| entry.act_tx.clone())
+            state
+                .iter()
+                .find(|(_, entry)| entry.body_endpoint_id == body_endpoint_id)
+                .map(|(endpoint_name, entry)| (endpoint_name.clone(), entry.act_tx.clone()))
         };
-        let Some(tx) = tx else {
+        let Some((endpoint_name, tx)) = target else {
             tracing::warn!(
                 target: "spine.inline_adapter",
-                endpoint_id = endpoint_name,
+                endpoint_id = body_endpoint_id,
                 act_instance_id = %act_instance_id,
                 "inline_endpoint_not_found_for_dispatch"
             );
+            self.port.drop_endpoint(body_endpoint_id).await;
+            self.port.publish_topology_proprioception_snapshot().await;
             return Ok(ActDispatchResult::Rejected {
                 reason_code: "endpoint_not_found".to_string(),
                 reference_id: format!("inline_adapter:endpoint_not_found:{act_instance_id}"),
@@ -214,7 +269,7 @@ impl SpineInlineAdapter {
                 act_instance_id = %act_instance_id,
                 "inline_endpoint_unavailable_during_dispatch"
             );
-            self.remove_endpoint_by_name(endpoint_name, None, true)
+            self.remove_endpoint_by_name(&endpoint_name, None, true)
                 .await;
             return Ok(ActDispatchResult::Rejected {
                 reason_code: "endpoint_unavailable".to_string(),
@@ -264,37 +319,7 @@ impl SpineInlineAdapter {
             removed.sense_task.abort();
         }
 
-        if let Some(spine) = self.spine.upgrade() {
-            spine.remove_endpoint(&removed.body_endpoint_id).await;
-            spine.refresh_topology_proprioception().await;
-        }
-    }
-}
-
-struct InlineAdapterEndpointProxy {
-    endpoint_name: String,
-    adapter: Weak<SpineInlineAdapter>,
-}
-
-#[async_trait]
-impl Endpoint for InlineAdapterEndpointProxy {
-    async fn invoke(&self, act: Act) -> Result<ActDispatchResult, crate::spine::SpineError> {
-        let Some(adapter) = self.adapter.upgrade() else {
-            tracing::warn!(
-                target: "spine.inline_adapter",
-                endpoint_id = %self.endpoint_name,
-                act_instance_id = %act.act_instance_id,
-                "inline_adapter_unavailable_for_dispatch"
-            );
-            return Ok(ActDispatchResult::Rejected {
-                reason_code: "adapter_unavailable".to_string(),
-                reference_id: format!("inline_adapter:unavailable:{}", act.act_instance_id),
-            });
-        };
-
-        adapter
-            .enqueue_act(&self.endpoint_name, act)
-            .await
-            .map_err(|err| crate::spine::error::internal_error(err.to_string()))
+        self.port.drop_endpoint(&removed.body_endpoint_id).await;
+        self.port.publish_topology_proprioception_snapshot().await;
     }
 }

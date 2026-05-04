@@ -1,22 +1,12 @@
-use std::path::PathBuf;
+use std::path::Path;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use validator::{Validate, ValidationError};
 
-use super::validation::validate_non_empty_path;
-
-fn default_socket_path() -> PathBuf {
-    PathBuf::from("beluna.sock")
-}
-
-fn default_inline_act_queue_capacity() -> usize {
-    32
-}
-
-fn default_inline_sense_queue_capacity() -> usize {
-    32
-}
+pub use crate::spine::adapters::{
+    inline::InlineAdapterConfig, unix_socket::UnixSocketNdjsonAdapterConfig,
+};
 
 fn default_spine_adapters() -> Vec<SpineAdapterConfig> {
     vec![
@@ -24,9 +14,7 @@ fn default_spine_adapters() -> Vec<SpineAdapterConfig> {
             config: InlineAdapterConfig::default(),
         },
         SpineAdapterConfig::UnixSocketNdjson {
-            config: UnixSocketNdjsonAdapterConfig {
-                socket_path: default_socket_path(),
-            },
+            config: UnixSocketNdjsonAdapterConfig::default(),
         },
     ]
 }
@@ -47,6 +35,14 @@ impl Default for SpineRuntimeConfig {
     }
 }
 
+impl SpineRuntimeConfig {
+    pub(super) fn normalize_paths(&mut self, config_base: &Path) {
+        for adapter in &mut self.adapters {
+            adapter.normalize_paths(config_base);
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum SpineAdapterConfig {
@@ -56,33 +52,6 @@ pub enum SpineAdapterConfig {
     UnixSocketNdjson {
         config: UnixSocketNdjsonAdapterConfig,
     },
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Validate, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct InlineAdapterConfig {
-    #[serde(default = "default_inline_act_queue_capacity")]
-    #[validate(range(min = 1))]
-    pub act_queue_capacity: usize,
-    #[serde(default = "default_inline_sense_queue_capacity")]
-    #[validate(range(min = 1))]
-    pub sense_queue_capacity: usize,
-}
-
-impl Default for InlineAdapterConfig {
-    fn default() -> Self {
-        Self {
-            act_queue_capacity: default_inline_act_queue_capacity(),
-            sense_queue_capacity: default_inline_sense_queue_capacity(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Validate, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct UnixSocketNdjsonAdapterConfig {
-    #[validate(custom(function = "validate_non_empty_path"))]
-    pub socket_path: PathBuf,
 }
 
 fn validate_adapters(adapters: &[SpineAdapterConfig]) -> Result<(), ValidationError> {
@@ -106,4 +75,13 @@ fn validate_adapters(adapters: &[SpineAdapterConfig]) -> Result<(), ValidationEr
     }
 
     Ok(())
+}
+
+impl SpineAdapterConfig {
+    fn normalize_paths(&mut self, config_base: &Path) {
+        match self {
+            SpineAdapterConfig::Inline { .. } => {}
+            SpineAdapterConfig::UnixSocketNdjson { config } => config.normalize_paths(config_base),
+        }
+    }
 }
