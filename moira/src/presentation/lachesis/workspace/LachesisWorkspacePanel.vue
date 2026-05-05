@@ -38,7 +38,7 @@ const selectionHint = computed(() => {
       : 'Select a wake session and tick to inspect subsystem narratives and source-grounded raw detail.'
   }
 
-  return `Tick ${props.selectedTickDetail.tick} from wake ${props.selectedTickDetail.runId} · ${props.selectedTickDetail.chronology.lanes.length} Cortex timeline lanes · ${props.selectedTickDetail.rawEvents.length} raw events · updated ${formatWhen(
+  return `Tick ${props.selectedTickDetail.tick} from wake ${props.selectedTickDetail.runId} · ${props.selectedTickDetail.chronology.lanes.length} timeline lanes · ${props.selectedTickDetail.rawEvents.length} raw events · updated ${formatWhen(
     props.selectedTickDetail.rawEvents[props.selectedTickDetail.rawEvents.length - 1]?.observedAt ?? null,
   )}`
 })

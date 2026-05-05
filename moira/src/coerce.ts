@@ -7,7 +7,9 @@ export function toArray(value: unknown): unknown[] {
 }
 
 export function toRecord(value: unknown): JsonRecord {
-  return value && typeof value === 'object' && !Array.isArray(value) ? (value as JsonRecord) : {}
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as JsonRecord)
+    : {}
 }
 
 export function read(record: JsonRecord, keys: string[]): unknown {
@@ -73,14 +75,20 @@ export function parseMaybeJson(value: unknown): unknown {
   }
 }
 
-export function compareDateDesc(left: string | null, right: string | null): number {
+export function compareDateDesc(
+  left: string | null,
+  right: string | null,
+): number {
   const leftMs = left ? Date.parse(left) : 0
   const rightMs = right ? Date.parse(right) : 0
   return rightMs - leftMs
 }
 
 export function cryptoRandomId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+  if (
+    typeof crypto !== 'undefined' &&
+    typeof crypto.randomUUID === 'function'
+  ) {
     return crypto.randomUUID()
   }
 
@@ -89,7 +97,12 @@ export function cryptoRandomId(): string {
 
 export function matchesKeywords(event: RawEvent, keywords: string[]): boolean {
   const haystack = [
+    event.recordKind,
     event.subsystem,
+    event.scopeName,
+    event.eventName,
+    event.traceId,
+    event.spanId,
     event.family,
     event.target,
     event.messageText,

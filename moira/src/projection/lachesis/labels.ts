@@ -28,6 +28,8 @@ export function rawEventHeadline(event: RawEvent): string {
 
   return (
     event.messageText ||
+    stringify(payload.summary) ||
+    [schemaKey(event), stringify(payload.status), event.spanId].filter(Boolean).join(' · ') ||
     [event.family, state.join(' / '), identity.join(' · ')].filter(Boolean).join(' · ') ||
     [event.subsystem, event.family, event.target].filter(Boolean).join(' / ') ||
     'Raw event'
@@ -137,18 +139,24 @@ export function resolveLaneLabel(
     case 'tick':
       return `Tick ${event.tick ?? laneKey}`
     case 'cortex':
+      if (event.scopeName === 'beluna.core.cortex') {
+        return event.eventName ?? 'Cortex'
+      }
       return event.family === 'cortex.goal-forest' ? 'Goal Forest' : organFamilyLabel(event.family)
     case 'afferent':
       return stringify(payload.sense_id) ?? stringify(payload.descriptor_id) ?? abbreviateId(laneKey)
     case 'efferent':
       return stringify(payload.act_id) ?? stringify(payload.descriptor_id) ?? abbreviateId(laneKey)
     case 'spine':
+      if (event.scopeName === 'beluna.core.spine') {
+        return stringify(payload.act_id) ?? stringify(payload.endpoint_id) ?? event.eventName ?? 'Spine'
+      }
       if (event.family === 'spine.adapter') {
         return stringify(payload.adapter_id) ?? 'Adapter'
       }
       return stringify(payload.endpoint_id) ?? stringify(payload.act_id) ?? stringify(payload.sense_id) ?? abbreviateId(laneKey)
     case 'misc':
-      return event.family ?? abbreviateId(laneKey)
+      return schemaKey(event) ?? event.family ?? abbreviateId(laneKey)
   }
 }
 
@@ -159,8 +167,11 @@ export function resolveLaneSubtitle(
 ): string | null {
   switch (laneType) {
     case 'tick':
-      return stringify(payload.status)
+      return [stringify(payload.summary), event.traceId ? abbreviateId(event.traceId) : null].filter(Boolean).join(' · ') || stringify(payload.status)
     case 'cortex':
+      if (event.scopeName === 'beluna.core.cortex') {
+        return [event.scopeName, event.spanId ? abbreviateId(event.spanId) : null].filter(Boolean).join(' · ') || null
+      }
       return [stringify(payload.route_or_backend), stringify(payload.request_id)].filter(Boolean).join(' · ') || null
     case 'afferent':
       return [stringify(payload.descriptor_id), stringify(payload.endpoint_id), stringify(payload.kind)]
@@ -171,6 +182,9 @@ export function resolveLaneSubtitle(
         .filter(Boolean)
         .join(' · ') || null
     case 'spine':
+      if (event.scopeName === 'beluna.core.spine') {
+        return [event.eventName, event.spanId ? abbreviateId(event.spanId) : null].filter(Boolean).join(' · ') || null
+      }
       return [
         stringify(payload.binding_kind),
         stringify(payload.channel_or_session),
@@ -180,11 +194,20 @@ export function resolveLaneSubtitle(
         .filter(Boolean)
         .join(' · ') || event.subsystem
     case 'misc':
-      return event.subsystem
+      return [event.scopeName, event.spanId ? abbreviateId(event.spanId) : null].filter(Boolean).join(' · ') || event.subsystem
   }
 }
 
 export function chronologyTitle(event: RawEvent, payload: Record<string, unknown>): string {
+  const summary = stringify(payload.summary)
+  if (summary) {
+    return summary
+  }
+
+  if (event.eventName) {
+    return event.eventName
+  }
+
   if (isCortexOrganFamily(event.family)) {
     return organFamilyLabel(event.family)
   }
@@ -205,7 +228,10 @@ export function chronologyTitle(event: RawEvent, payload: Record<string, unknown
 
 export function chronologySubtitle(event: RawEvent, payload: Record<string, unknown>): string | null {
   const fragments = [
+    schemaKey(event),
     event.family,
+    event.traceId ? abbreviateId(event.traceId) : null,
+    event.spanId ? abbreviateId(event.spanId) : null,
     stringify(payload.descriptor_id),
     stringify(payload.request_id),
     stringify(payload.endpoint_id),
@@ -234,4 +260,8 @@ function abbreviateId(value: string): string {
   }
 
   return `${value.slice(0, 10)}…${value.slice(-8)}`
+}
+
+function schemaKey(event: RawEvent): string | null {
+  return [event.scopeName, event.eventName].filter(Boolean).join(' / ') || null
 }

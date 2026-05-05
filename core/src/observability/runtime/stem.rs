@@ -5,10 +5,15 @@ use crate::observability::contract::{
     StemAfferentRuleEvent, StemEfferentEvent, StemNsCatalogEvent, StemProprioceptionEvent,
     StemTickEvent,
 };
+use crate::observability::owner_log;
 
 use super::{current_run_id, emit_contract_event, timestamp_now};
 
 pub fn emit_stem_tick(tick: u64, tick_seq: u64, status: &str) {
+    if status == "granted" {
+        owner_log::events::emit_tick_granted(tick, tick_seq);
+    }
+
     emit_contract_event(ContractEvent::StemTick(StemTickEvent {
         run_id: current_run_id().to_string(),
         timestamp: timestamp_now(),

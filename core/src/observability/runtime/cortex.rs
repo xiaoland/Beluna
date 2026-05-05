@@ -1,5 +1,6 @@
 use serde_json::{Value, json};
 
+use crate::observability::owner_log;
 use crate::{
     cortex::GoalNode,
     observability::contract::{
@@ -16,6 +17,10 @@ pub fn emit_cortex_organ_start(
     request_id: &str,
     input_payload: Value,
 ) {
+    if organ_id == "primary" {
+        owner_log::events::emit_primary_started(route_or_backend, tick, input_payload.clone());
+    }
+
     emit_contract_event(contract_event_for_organ(
         organ_id,
         CortexOrganExecutionEvent {
@@ -49,6 +54,18 @@ pub fn emit_cortex_organ_end(
     thread_id: Option<&str>,
     turn_id: Option<u64>,
 ) {
+    if organ_id == "primary" {
+        owner_log::events::emit_primary_finished(
+            tick,
+            status,
+            output_payload.clone(),
+            error.clone(),
+            ai_request_id,
+            thread_id,
+            turn_id,
+        );
+    }
+
     emit_contract_event(contract_event_for_organ(
         organ_id,
         CortexOrganExecutionEvent {

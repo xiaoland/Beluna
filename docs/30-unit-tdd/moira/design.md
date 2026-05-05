@@ -73,7 +73,7 @@ Moira provides Beluna's first-party local control plane for:
 4. `presentation`
 - Owns Vue view composition, interaction widgets, and JSON inspectors.
 - Owns display-only formatting such as time rendering, count rendering, and tone mapping.
-- It should consume normalized projections rather than reinterpret OTLP family semantics inline.
+- It should consume normalized projections rather than reinterpret OTLP owner scope and event schema semantics inline.
 - Presentation stays organized around Loom chrome plus feature namespaces such as `lachesis/workspace`, `lachesis/chronology`, `lachesis/inspectors`, `atropos/runtime`, `clotho/workshop`, and `clotho/dialogs`.
 - Shared shell affordances such as feature tabs, status chrome, and modal scaffolding belong in `presentation/loom/chrome`; feature-specific semantics stay inside the corresponding mythic namespace.
 
@@ -101,3 +101,4 @@ Moira provides Beluna's first-party local control plane for:
 20. Frontend contract boundaries follow ownership, not convenience: backend-shaped payload contracts belong in `bridge`, Loom-facing normalized models belong in `projection`, and query-owned UI state must not collapse back into one shared catch-all type bucket.
 21. `profile_id` is a logical Clotho identifier, not a raw filesystem path; Loom may show the derived path, but path derivation remains Clotho-owned behavior.
 22. Current selected launch target and selected profile refs are session-local query state until an explicit persistence slice lands; app-local Clotho documents and manifests remain the durable preparation truth.
+23. During the OTLP migration, Lachesis carries `record_kind` as a Moira-local marker for native owner logs, legacy contract logs, and ordinary logs.

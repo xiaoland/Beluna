@@ -3,6 +3,7 @@ use serde_json::Value;
 use crate::observability::contract::{
     AiGatewayChatThreadEvent, AiGatewayChatTurnEvent, AiGatewayRequestEvent, ContractEvent,
 };
+use crate::observability::owner_log;
 
 use super::{current_run_id, emit_contract_event, timestamp_now};
 
@@ -25,6 +26,8 @@ pub struct AiGatewayRequestArgs {
 }
 
 pub fn emit_ai_gateway_request(args: AiGatewayRequestArgs) {
+    owner_log::events::emit_transport_request_completed(&args);
+
     emit_contract_event(ContractEvent::AiGatewayRequest(AiGatewayRequestEvent {
         run_id: current_run_id().to_string(),
         timestamp: timestamp_now(),
@@ -65,6 +68,9 @@ pub struct AiGatewayChatTurnArgs {
 }
 
 pub fn emit_ai_gateway_chat_turn(args: AiGatewayChatTurnArgs) {
+    owner_log::events::emit_chat_turn_dispatched(&args);
+    owner_log::events::emit_chat_turn_committed(&args);
+
     emit_contract_event(ContractEvent::AiGatewayChatTurn(AiGatewayChatTurnEvent {
         run_id: current_run_id().to_string(),
         timestamp: timestamp_now(),

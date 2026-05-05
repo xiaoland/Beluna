@@ -5,8 +5,8 @@
 1. Known local build manifests, installed artifact manifests, install isolation directories, and checksum-verification state.
 2. JSONC profile documents keyed by logical `profile_id`, plus later schema-validation result state cached for operator workflows.
 3. Supervised Core wake state, including wake/stop status and terminal reason.
-4. Local OTLP raw-event storage.
-5. Local observability read models for `runs` and `ticks`, plus any Moira-owned chronology, interval-pairing, or targeted lookup indexes needed for human-friendly browsing.
+4. Local OTLP raw-event storage, including Moira-local compatibility markers for native owner logs, legacy contract logs, and ordinary logs.
+5. Local observability read models for `runs` and `ticks`, plus Moira-owned native event timeline projections and targeted lookup indexes when a Loom workflow needs them.
 6. Session-local Loom query state such as active feature tab, selected wake, selected tick, active Lachesis detail tab, open dialogs, and current selected build/profile refs.
 7. Frontend backend-shaped transport contracts and frontend Loom-facing normalized models, each under their owning layer rather than inside one shared bucket.
 
@@ -25,7 +25,7 @@
 - Within Clotho, artifact state and profile state remain distinct internal concerns even though they share one top-level owner.
 
 2. `lachesis`
-- Owns raw OTLP events, `runs` and `ticks`, chronology or interval-pairing indexes, and any future goal-forest comparison materialization that remains Moira-owned.
+- Owns raw OTLP events, `runs` and `ticks`, native event timelines, optional interval-pairing indexes, and any future goal-forest comparison materialization that remains Moira-owned.
 
 3. `atropos`
 - Owns supervised wake state, process handles or identifiers, explicit stop intent, and terminal reason state.
@@ -37,18 +37,20 @@
 
 1. Moira stores full raw OTLP log events locally for the current target design, including full request, response, signal, and topology payloads by default.
 2. Raw-event acceptance precedes read-model projection; projections are derived, not alternative sources of truth.
-3. `runs` and `ticks` remain the baseline read models. Moira may add lightweight chronology, interval-pairing, or targeted lookup indexes where humane browsing would otherwise require reparsing raw payload blobs in the view layer.
-4. Selected tick detail, per-tick chronology, nested AI transport investigation, nested chat-capability investigation, and source-grounded inspection remain reconstructable from raw events plus Moira-owned indexes.
-5. The selected-tick workspace projects a Cortex timeline mode for handled ticks and keeps sectional Cortex/Stem/Spine/raw inspection available without erasing broader tick evidence.
-6. Tick is the canonical operator-facing anchor for explainability and the primary trace selector in Loom.
-7. Cortex interval pairing is a Moira-owned projection responsibility built from Core boundary records and stable operation keys such as `request_id`.
-8. AI request ids, `thread_id`, `turn_id`, and `endpoint_id` remain inspectable in event bodies and query results without becoming first-class chronology keys by default.
-9. Metrics and traces are not persisted as first-class local observability datasets in the current target design.
-10. Goal-forest snapshots are stored or referenced per tick; comparisons are derived later between selected ticks.
-11. A supervised wake is either explicitly running, explicitly stopping, or explicitly terminal; hidden supervision state is disallowed.
-12. Module-owned state must remain writable only through the owning boundary, even when multiple modules share one local database or app-state container.
-13. Future Clotho and Atropos persistence must not be folded into Lachesis projections or Lachesis tables as a convenience shortcut.
-14. Clotho may own both artifact and profile preparation, but those persisted concerns must remain internally separable rather than collapsing into one undifferentiated preparation blob.
-15. Frontend raw transport contracts, normalized Loom-facing models, and query-owned UI state must remain distinct concerns even when they currently describe the same Lachesis operator flow.
-16. `profile_id` remains the durable operator-facing key for profile documents; app-local profile path is derived from that key rather than stored as an independent operator input.
-17. Current selected launch-target/profile refs remain session-local query state until an explicit persistence slice lands; they must not be mistaken for durable Clotho truth.
+3. `runs` and `ticks` remain the baseline read models. Moira derives them from Core `runtime.booted` and `tick.granted` anchors plus native trace ids.
+4. `raw_events.record_kind` is a Moira-local compatibility marker with three current values: `native_owner`, `legacy_contract`, and `ordinary_log`.
+5. Legacy contract records are inspectable through raw storage and compatibility normalization when they carry old `family` and serialized `payload` fields.
+6. Selected tick detail and source-grounded inspection are raw-first: Moira can show native OTLP event records before deeper owner-specific reconstruction exists.
+7. The selected-tick workspace projects a native event timeline for handled ticks and keeps raw inspection available as the strongest detailed surface.
+8. Tick is the canonical operator-facing anchor for explainability. Native `traceId` is the primary machine grouping key for one wake plus one tick.
+9. Cortex interval pairing is an optional Moira projection built from Core boundary records that share scope, event schema, and span id.
+10. AI transport ids, `thread_id`, `turn_id`, `endpoint_id`, and act routing ids remain inspectable in raw body/attributes and query results. They become dedicated indexes only when a Loom workflow needs them.
+11. Metrics and OTLP traces are not persisted as first-class local observability datasets in the current target design. Log records may still carry `traceId` and `spanId`.
+12. Goal-forest snapshots are stored or referenced per tick; comparisons are derived later between selected ticks.
+13. A supervised wake is either explicitly running, explicitly stopping, or explicitly terminal; hidden supervision state is disallowed.
+14. Module-owned state must remain writable only through the owning boundary, even when multiple modules share one local database or app-state container.
+15. Future Clotho and Atropos persistence must not be folded into Lachesis projections or Lachesis tables as a convenience shortcut.
+16. Clotho may own both artifact and profile preparation, but those persisted concerns must remain internally separable rather than collapsing into one undifferentiated preparation blob.
+17. Frontend raw transport contracts, normalized Loom-facing models, and query-owned UI state must remain distinct concerns even when they currently describe the same Lachesis operator flow.
+18. `profile_id` remains the durable operator-facing key for profile documents; app-local profile path is derived from that key rather than stored as an independent operator input.
+19. Current selected launch-target/profile refs remain session-local query state until an explicit persistence slice lands; they must not be mistaken for durable Clotho truth.

@@ -18,7 +18,7 @@ use beluna::{
     continuity::ContinuityEngine,
     cortex::{Cortex, CortexDeps, CortexRuntime, PhysicalStateReadPort},
     logging::init_tracing,
-    observability::{otel::OpenTelemetryRuntime, runtime as observability_runtime},
+    observability::{otel::OpenTelemetryRuntime, owner_log, runtime as observability_runtime},
     spine::{Spine, shutdown_global_spine},
     stem::{
         AfferentControlHandle, AfferentRuleControlPort, SenseAfferentPathway, StemControlPort,
@@ -169,6 +169,26 @@ async fn main() -> Result<()> {
         target: "core",
         config_path = %config_path.display(),
         "core_runtime_booting"
+    );
+    owner_log::emit_runtime_booted(
+        config_path.display().to_string(),
+        serde_json::Value::Array(
+            observability_runtime
+                .signal_states()
+                .iter()
+                .map(|state| {
+                    serde_json::json!({
+                        "signal": state.signal,
+                        "requested": state.requested,
+                        "enabled": state.enabled,
+                        "protocol": state.protocol,
+                        "endpoint": state.endpoint,
+                        "timeout_ms": state.timeout_ms,
+                        "detail": state.detail,
+                    })
+                })
+                .collect(),
+        ),
     );
 
     let lifecycle = AppLifecycle::new();

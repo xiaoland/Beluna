@@ -16,39 +16,63 @@ defineProps<{
   </div>
 
   <div v-else class="event-stack">
-    <details v-for="event in rawEvents" :key="event.rawEventId" class="event-card">
+    <details
+      v-for="event in rawEvents"
+      :key="event.rawEventId"
+      class="event-card"
+    >
       <summary class="event-summary">
         <div>
           <strong>{{ rawEventHeadline(event) }}</strong>
           <p class="event-meta">
-            {{ event.subsystem ?? 'unknown subsystem' }} / {{ event.family ?? 'unknown family' }}
+            {{ event.scopeName ?? event.subsystem ?? 'unknown scope' }} /
+            {{ event.eventName ?? event.family ?? 'unknown event' }}
           </p>
         </div>
 
         <div class="event-meta right">
+          <span class="record-kind">{{ event.recordKind }}</span>
           <span>{{ event.severityText ?? 'INFO' }}</span>
           <span>{{ formatWhen(event.observedAt) }}</span>
         </div>
       </summary>
 
-        <div class="event-detail">
-          <div class="kv">
-            <span class="label">run_id</span>
-            <span class="mono">{{ event.runId ?? '—' }}</span>
-          </div>
-          <div class="kv">
-            <span class="label">tick</span>
-            <span>{{ event.tick ?? '—' }}</span>
-          </div>
-          <div class="kv">
-            <span class="label">target</span>
-            <span>{{ event.target ?? '—' }}</span>
-          </div>
-
-          <JsonSectionGroup :sections="jsonSectionsForEvent(event, { openPayload: true })" />
+      <div class="event-detail">
+        <div class="kv">
+          <span class="label">record_kind</span>
+          <span>{{ event.recordKind }}</span>
         </div>
-      </details>
-    </div>
+        <div class="kv">
+          <span class="label">run_id</span>
+          <span class="mono">{{ event.runId ?? '—' }}</span>
+        </div>
+        <div class="kv">
+          <span class="label">trace_id</span>
+          <span class="mono">{{ event.traceId ?? '—' }}</span>
+        </div>
+        <div class="kv">
+          <span class="label">span_id</span>
+          <span class="mono">{{ event.spanId ?? '—' }}</span>
+        </div>
+        <div class="kv">
+          <span class="label">tick</span>
+          <span>{{ event.tick ?? '—' }}</span>
+        </div>
+        <div class="kv">
+          <span class="label">schema</span>
+          <span>{{
+            event.scopeName && event.eventName
+              ? `${event.scopeName} / ${event.eventName}`
+              : (event.target ?? '—')
+          }}</span>
+        </div>
+
+        <JsonSectionGroup
+          :sections="jsonSectionsForEvent(event, { openPayload: true })"
+        />
+      </div>
+    </details>
+  </div>
 </template>
 
 <style scoped>
@@ -87,6 +111,13 @@ defineProps<{
   display: grid;
   justify-items: end;
   gap: 0.2rem;
+}
+
+.record-kind {
+  color: var(--text);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
 }
 
 .event-detail {

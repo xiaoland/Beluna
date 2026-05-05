@@ -9,10 +9,23 @@ export function jsonSectionsForEvent(
 ): JsonSectionInput[] {
   return [
     {
+      key: 'otel',
+      title: 'OTLP',
+      value: {
+        record_kind: event.recordKind,
+        scope_name: event.scopeName,
+        event_name: event.eventName,
+        trace_id: event.traceId,
+        span_id: event.spanId,
+        trace_flags: event.traceFlags,
+      },
+      defaultOpen: true,
+    },
+    {
       key: 'payload',
       title: 'Payload',
       value: event.payload,
-      defaultOpen: options.openPayload ?? true,
+      defaultOpen: options.openPayload ?? false,
     },
     {
       key: 'body',

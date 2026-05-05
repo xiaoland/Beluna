@@ -66,7 +66,7 @@ function clearSelection(): void {
     <template v-else>
       <div class="chronology-head">
         <div>
-          <h3>Cortex Timeline</h3>
+          <h3>Tick Timeline</h3>
           <p>
             {{ chronology.lanes.length }} lanes · {{ chronology.eventCount }} events · {{ axisModeLabel }}
           </p>
@@ -78,7 +78,7 @@ function clearSelection(): void {
       </div>
 
       <p class="chronology-note">
-        Click an interval or event to inspect its source events and related activity in a popup.
+        Click an event to inspect its source OTLP record and related activity when a projection provides it.
       </p>
 
       <ChronologyLaneTrack

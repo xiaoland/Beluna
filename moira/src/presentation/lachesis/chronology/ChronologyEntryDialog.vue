@@ -31,8 +31,12 @@ const entryProjectionSections = computed(() => {
         title: props.entry.title,
         subtitle: props.entry.subtitle,
         entry_type: props.entry.entryType,
-        source_event_ids: props.entry.sourceEvents.map((event) => event.rawEventId),
-        related_event_ids: props.entry.relatedEvents.map((event) => event.rawEventId),
+        source_event_ids: props.entry.sourceEvents.map(
+          (event) => event.rawEventId,
+        ),
+        related_event_ids: props.entry.relatedEvents.map(
+          (event) => event.rawEventId,
+        ),
       },
       defaultOpen: true,
     },
@@ -70,8 +74,9 @@ function handleKeydown(event: KeyboardEvent): void {
 
 function eventMeta(event: RawEvent): string {
   return [
-    event.subsystem ?? 'unknown subsystem',
-    event.family ?? 'unknown family',
+    event.scopeName ?? event.subsystem ?? 'unknown scope',
+    event.eventName ?? event.family ?? 'unknown event',
+    event.recordKind,
     formatWhen(event.observedAt),
   ].join(' · ')
 }
@@ -89,7 +94,13 @@ function eventMeta(event: RawEvent): string {
         <header class="dialog-head">
           <div>
             <p class="dialog-kicker">
-              {{ entry.event.subsystem ?? 'unknown subsystem' }} / {{ entry.family ?? 'unknown family' }}
+              {{
+                entry.event.scopeName ??
+                entry.event.subsystem ??
+                'unknown scope'
+              }}
+              /
+              {{ entry.event.eventName ?? entry.family ?? 'unknown event' }}
             </p>
             <h3 :id="dialogTitleId">{{ entry.title }}</h3>
             <p class="dialog-subtitle">
@@ -99,7 +110,11 @@ function eventMeta(event: RawEvent): string {
             </p>
           </div>
 
-          <button type="button" class="button-secondary dialog-close" @click="emit('close')">
+          <button
+            type="button"
+            class="button-secondary dialog-close"
+            @click="emit('close')"
+          >
             Close
           </button>
         </header>
@@ -117,16 +132,26 @@ function eventMeta(event: RawEvent): string {
             </div>
 
             <div class="event-stack">
-              <article v-for="sourceEvent in entry.sourceEvents" :key="sourceEvent.rawEventId" class="event-card">
+              <article
+                v-for="sourceEvent in entry.sourceEvents"
+                :key="sourceEvent.rawEventId"
+                class="event-card"
+              >
                 <header class="event-head">
                   <div>
                     <strong>{{ rawEventHeadline(sourceEvent) }}</strong>
                     <p>{{ eventMeta(sourceEvent) }}</p>
                   </div>
-                  <span class="event-severity">{{ sourceEvent.severityText ?? 'INFO' }}</span>
+                  <span class="event-severity">{{
+                    sourceEvent.severityText ?? 'INFO'
+                  }}</span>
                 </header>
 
-                <JsonSectionGroup :sections="jsonSectionsForEvent(sourceEvent, { openPayload: true })" />
+                <JsonSectionGroup
+                  :sections="
+                    jsonSectionsForEvent(sourceEvent, { openPayload: true })
+                  "
+                />
               </article>
             </div>
           </section>
@@ -148,10 +173,16 @@ function eventMeta(event: RawEvent): string {
                     <strong>{{ rawEventHeadline(relatedEvent) }}</strong>
                     <p>{{ eventMeta(relatedEvent) }}</p>
                   </div>
-                  <span class="event-severity">{{ relatedEvent.severityText ?? 'INFO' }}</span>
+                  <span class="event-severity">{{
+                    relatedEvent.severityText ?? 'INFO'
+                  }}</span>
                 </header>
 
-                <JsonSectionGroup :sections="jsonSectionsForEvent(relatedEvent, { openPayload: true })" />
+                <JsonSectionGroup
+                  :sections="
+                    jsonSectionsForEvent(relatedEvent, { openPayload: true })
+                  "
+                />
               </article>
             </div>
           </section>

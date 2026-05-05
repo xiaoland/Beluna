@@ -13,6 +13,7 @@ use opentelemetry_sdk::{
 use tracing_subscriber::{Layer, Registry};
 
 use crate::config::ObservabilityConfig;
+use crate::observability::owner_log;
 
 const OTEL_SERVICE_NAME: &str = "beluna.core";
 
@@ -179,6 +180,13 @@ impl OpenTelemetryRuntime {
                 let timeout_ms = settings.timeout_ms;
                 match logs::build_logger_provider(resource, &settings) {
                     Ok(provider) => {
+                        if let Err(err) = owner_log::install_logger_provider(provider.clone()) {
+                            tracing::warn!(
+                                target: "observability",
+                                error = %err,
+                                "owner_log_provider_install_failed"
+                            );
+                        }
                         self.logger_provider = Some(provider);
                         SignalRuntimeState {
                             signal: "logs",

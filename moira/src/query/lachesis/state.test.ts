@@ -7,6 +7,7 @@ describe('lachesis workspace state', () => {
     {
       runId: 'run-1',
       tick: 3,
+      traceId: null,
       firstSeenAt: null,
       lastSeenAt: null,
       eventCount: 10,
@@ -17,6 +18,7 @@ describe('lachesis workspace state', () => {
     {
       runId: 'run-1',
       tick: 2,
+      traceId: 'trace-2',
       firstSeenAt: null,
       lastSeenAt: null,
       eventCount: 14,

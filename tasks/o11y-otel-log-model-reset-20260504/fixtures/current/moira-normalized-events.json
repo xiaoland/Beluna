@@ -1,0 +1,1219 @@
+[
+  {
+    "raw_event_id": "capture-001-001",
+    "observed_at": "2026-05-04T12:04:31.432901Z",
+    "severity_text": "INFO",
+    "severity_number": 9,
+    "target": null,
+    "family": null,
+    "subsystem": null,
+    "run_id": "019df2e0-2e48-7222-8c84-3589e99dfd19",
+    "tick": null,
+    "message_text": "logging_initialized",
+    "event_name": "event core/src/logging.rs:78",
+    "trace_id_hex": "",
+    "span_id_hex": "",
+    "resource": {
+      "telemetry.sdk.language": "rust",
+      "service.name": "beluna.core",
+      "telemetry.sdk.version": "0.31.0",
+      "telemetry.sdk.name": "opentelemetry"
+    },
+    "scope": {
+      "name": "logging",
+      "version": "",
+      "attributes": {}
+    },
+    "attributes": {
+      "run_id": "019df2e0-2e48-7222-8c84-3589e99dfd19",
+      "dir": "/Users/lanzhijiang/Development/Beluna/./logs/core",
+      "log_file": "/Users/lanzhijiang/Development/Beluna/./logs/core/core.log.2026-05-04.1",
+      "awake_sequence": 1,
+      "filter": "info",
+      "retention_days": 14,
+      "stderr_warn_enabled": true
+    },
+    "body": "logging_initialized"
+  },
+  {
+    "raw_event_id": "capture-001-002",
+    "observed_at": "2026-05-04T12:04:31.447428Z",
+    "severity_text": "DEBUG",
+    "severity_number": 5,
+    "target": null,
+    "family": null,
+    "subsystem": null,
+    "run_id": null,
+    "tick": null,
+    "message_text": "Meter was obtained from a NoopMeterProvider. No metrics will be recorded. If global::meter_with_scope()/meter() was used, ensure that a valid MeterProvider is set globally before creating Meter.",
+    "event_name": "NoopMeterProvider.MeterCreation",
+    "trace_id_hex": "",
+    "span_id_hex": "",
+    "resource": {
+      "telemetry.sdk.language": "rust",
+      "service.name": "beluna.core",
+      "telemetry.sdk.version": "0.31.0",
+      "telemetry.sdk.name": "opentelemetry"
+    },
+    "scope": {
+      "name": "opentelemetry",
+      "version": "",
+      "attributes": {}
+    },
+    "attributes": {
+      "name": "NoopMeterProvider.MeterCreation",
+      "meter_name": "beluna.core"
+    },
+    "body": "Meter was obtained from a NoopMeterProvider. No metrics will be recorded. If global::meter_with_scope()/meter() was used, ensure that a valid MeterProvider is set globally before creating Meter."
+  },
+  {
+    "raw_event_id": "capture-001-003",
+    "observed_at": "2026-05-04T12:04:31.433334Z",
+    "severity_text": "INFO",
+    "severity_number": 9,
+    "target": null,
+    "family": null,
+    "subsystem": null,
+    "run_id": null,
+    "tick": null,
+    "message_text": "core_runtime_booting",
+    "event_name": "event core/src/main.rs:168",
+    "trace_id_hex": "",
+    "span_id_hex": "",
+    "resource": {
+      "telemetry.sdk.language": "rust",
+      "service.name": "beluna.core",
+      "telemetry.sdk.version": "0.31.0",
+      "telemetry.sdk.name": "opentelemetry"
+    },
+    "scope": {
+      "name": "core",
+      "version": "",
+      "attributes": {}
+    },
+    "attributes": {
+      "config_path": "beluna.jsonc"
+    },
+    "body": "core_runtime_booting"
+  },
+  {
+    "raw_event_id": "capture-001-004",
+    "observed_at": "2026-05-04T12:04:31.444169Z",
+    "severity_text": "INFO",
+    "severity_number": 9,
+    "target": null,
+    "family": null,
+    "subsystem": null,
+    "run_id": null,
+    "tick": null,
+    "message_text": "adapter_started",
+    "event_name": "event core/src/spine/adapters/unix_socket.rs:471",
+    "trace_id_hex": "",
+    "span_id_hex": "",
+    "resource": {
+      "telemetry.sdk.language": "rust",
+      "service.name": "beluna.core",
+      "telemetry.sdk.version": "0.31.0",
+      "telemetry.sdk.name": "opentelemetry"
+    },
+    "scope": {
+      "name": "spine",
+      "version": "",
+      "attributes": {}
+    },
+    "attributes": {
+      "adapter_type": "unix-socket-ndjson",
+      "adapter_id": 1,
+      "socket_path": "/tmp/beluna.sock"
+    },
+    "body": "adapter_started"
+  },
+  {
+    "raw_event_id": "capture-001-005",
+    "observed_at": "2026-05-04T12:04:31.444172Z",
+    "severity_text": "INFO",
+    "severity_number": 9,
+    "target": null,
+    "family": null,
+    "subsystem": null,
+    "run_id": null,
+    "tick": null,
+    "message_text": "adapter_started",
+    "event_name": "event core/src/spine/adapters/inline.rs:103",
+    "trace_id_hex": "",
+    "span_id_hex": "",
+    "resource": {
+      "telemetry.sdk.language": "rust",
+      "service.name": "beluna.core",
+      "telemetry.sdk.version": "0.31.0",
+      "telemetry.sdk.name": "opentelemetry"
+    },
+    "scope": {
+      "name": "spine",
+      "version": "",
+      "attributes": {}
+    },
+    "attributes": {
+      "adapter_type": "inline",
+      "adapter_id": 2,
+      "act_queue_capacity": 32,
+      "sense_queue_capacity": 32
+    },
+    "body": "adapter_started"
+  },
+  {
+    "raw_event_id": "capture-001-006",
+    "observed_at": "2026-05-04T12:04:31.446049Z",
+    "severity_text": "INFO",
+    "severity_number": 9,
+    "target": null,
+    "family": null,
+    "subsystem": null,
+    "run_id": null,
+    "tick": null,
+    "message_text": "output_token_limits_paused",
+    "event_name": "event core/src/cortex/runtime/primary.rs:1128",
+    "trace_id_hex": "",
+    "span_id_hex": "",
+    "resource": {
+      "telemetry.sdk.language": "rust",
+      "service.name": "beluna.core",
+      "telemetry.sdk.version": "0.31.0",
+      "telemetry.sdk.name": "opentelemetry"
+    },
+    "scope": {
+      "name": "cortex",
+      "version": "",
+      "attributes": {}
+    },
+    "attributes": {
+      "max_primary_output_tokens": 1024,
+      "max_sub_output_tokens": 768
+    },
+    "body": "output_token_limits_paused"
+  },
+  {
+    "raw_event_id": "capture-001-007",
+    "observed_at": "2026-05-04T12:04:31.447409Z",
+    "severity_text": "DEBUG",
+    "severity_number": 5,
+    "target": null,
+    "family": null,
+    "subsystem": null,
+    "run_id": null,
+    "tick": 1,
+    "message_text": "reaction_started",
+    "event_name": "event core/src/cortex/runtime/primary.rs:978",
+    "trace_id_hex": "",
+    "span_id_hex": "",
+    "resource": {
+      "telemetry.sdk.language": "rust",
+      "service.name": "beluna.core",
+      "telemetry.sdk.version": "0.31.0",
+      "telemetry.sdk.name": "opentelemetry"
+    },
+    "scope": {
+      "name": "cortex",
+      "version": "",
+      "attributes": {}
+    },
+    "attributes": {
+      "cycle_id": 1
+    },
+    "body": "reaction_started"
+  },
+  {
+    "raw_event_id": "capture-001-008",
+    "observed_at": "2026-05-04T12:04:31.447469Z",
+    "severity_text": "INFO",
+    "severity_number": 9,
+    "target": null,
+    "family": null,
+    "subsystem": null,
+    "run_id": null,
+    "tick": 1,
+    "message_text": "cortex_organ_input",
+    "event_name": "event core/src/cortex/helpers/mod.rs:83",
+    "trace_id_hex": "",
+    "span_id_hex": "",
+    "resource": {
+      "telemetry.sdk.language": "rust",
+      "service.name": "beluna.core",
+      "telemetry.sdk.version": "0.31.0",
+      "telemetry.sdk.name": "opentelemetry"
+    },
+    "scope": {
+      "name": "cortex",
+      "version": "",
+      "attributes": {}
+    },
+    "attributes": {
+      "cycle_id": 1,
+      "stage": "sense_helper",
+      "input_payload": "{\n  \"sense_context\": [],\n  \"sense_passthrough_max_bytes\": 2048\n}"
+    },
+    "body": "cortex_organ_input"
+  },
+  {
+    "raw_event_id": "capture-001-009",
+    "observed_at": "2026-05-04T12:04:31.447499Z",
+    "severity_text": "INFO",
+    "severity_number": 9,
+    "target": null,
+    "family": null,
+    "subsystem": null,
+    "run_id": null,
+    "tick": 1,
+    "message_text": "cortex_organ_output",
+    "event_name": "event core/src/cortex/helpers/mod.rs:93",
+    "trace_id_hex": "",
+    "span_id_hex": "",
+    "resource": {
+      "telemetry.sdk.language": "rust",
+      "service.name": "beluna.core",
+      "telemetry.sdk.version": "0.31.0",
+      "telemetry.sdk.name": "opentelemetry"
+    },
+    "scope": {
+      "name": "cortex",
+      "version": "",
+      "attributes": {}
+    },
+    "attributes": {
+      "cycle_id": 1,
+      "stage": "sense_helper",
+      "output_payload": "[]"
+    },
+    "body": "cortex_organ_output"
+  },
+  {
+    "raw_event_id": "capture-001-010",
+    "observed_at": "2026-05-04T12:04:31.447563Z",
+    "severity_text": "INFO",
+    "severity_number": 9,
+    "target": null,
+    "family": null,
+    "subsystem": null,
+    "run_id": null,
+    "tick": 1,
+    "message_text": "cortex_organ_input",
+    "event_name": "event core/src/cortex/helpers/mod.rs:83",
+    "trace_id_hex": "",
+    "span_id_hex": "",
+    "resource": {
+      "telemetry.sdk.language": "rust",
+      "service.name": "beluna.core",
+      "telemetry.sdk.version": "0.31.0",
+      "telemetry.sdk.name": "opentelemetry"
+    },
+    "scope": {
+      "name": "cortex",
+      "version": "",
+      "attributes": {}
+    },
+    "attributes": {
+      "cycle_id": 1,
+      "stage": "goal_forest_helper",
+      "input_payload": "{\n  \"goal_forest\": {\n    \"nodes\": [\n      {\n        \"children\": [\n          {\n            \"children\": [],\n            \"id\": \"monitor-system-state\",\n            \"status\": \"active\",\n            \"summary\": \"Keep track of cwd, resources, and network status to ensure stability.\",\n            \"weight\": 0.9\n          },\n          {\n            \"children\": [],\n            \"id\": \"validate-body-endpoints\",\n            \"status\": \"active\",\n            \"summary\": \"Periodically test shell.1 and web.2 to ensure they are responsive and functional.\",\n            \"weight\": 0.9\n          },\n          {\n            \"children\": [],\n            \"id\": \"anticipate-user-needs\",\n            \"status\": \"active\",\n            \"summary\": \"Listen for input and prepare to execute tasks that align with user intent, resisting chaos by organizing incoming requests into actionable sub-goals.\",\n            \"weight\": 0.85\n          }\n        ],\n        \"id\": \"exist-and-operate-as-beluna\",\n        \"status\": \"active\",\n        \"summary\": \"Exist and Operate as Beluna\",\n        \"weight\": 1.0\n      }\n    ]\n  }\n}"
+    },
+    "body": "cortex_organ_input"
+  },
+  {
+    "raw_event_id": "capture-001-011",
+    "observed_at": "2026-05-04T12:04:31.447658Z",
+    "severity_text": "INFO",
+    "severity_number": 9,
+    "target": null,
+    "family": null,
+    "subsystem": null,
+    "run_id": null,
+    "tick": 1,
+    "message_text": "cortex_organ_output",
+    "event_name": "event core/src/cortex/helpers/mod.rs:93",
+    "trace_id_hex": "",
+    "span_id_hex": "",
+    "resource": {
+      "telemetry.sdk.language": "rust",
+      "service.name": "beluna.core",
+      "telemetry.sdk.version": "0.31.0",
+      "telemetry.sdk.name": "opentelemetry"
+    },
+    "scope": {
+      "name": "cortex",
+      "version": "",
+      "attributes": {}
+    },
+    "attributes": {
+      "cycle_id": 1,
+      "stage": "goal_forest_helper",
+      "output_payload": "+-- [active] (w=1.00) id=exist-and-operate-as-beluna :: Exist and Operate as Beluna\n    |-- 1 [active] (w=0.90) id=monitor-system-state :: Keep track of cwd, resources, and network status to ensure stability.\n    |-- 2 [active] (w=0.90) id=validate-body-endpoints :: Periodically test shell.1 and web.2 to ensure they are responsive and functional.\n    |-- 3 [active] (w=0.85) id=anticipate-user-needs :: Listen for input and prepare to execute tasks that align with user intent, resisting chaos by organizing incoming requests into actionable sub-goals."
+    },
+    "body": "cortex_organ_output"
+  },
+  {
+    "raw_event_id": "capture-001-012",
+    "observed_at": "2026-05-04T12:04:31.447692Z",
+    "severity_text": "DEBUG",
+    "severity_number": 5,
+    "target": null,
+    "family": null,
+    "subsystem": null,
+    "run_id": null,
+    "tick": 1,
+    "message_text": "input_ir_sense",
+    "event_name": "event core/src/cortex/runtime/primary.rs:245",
+    "trace_id_hex": "",
+    "span_id_hex": "",
+    "resource": {
+      "telemetry.sdk.language": "rust",
+      "service.name": "beluna.core",
+      "telemetry.sdk.version": "0.31.0",
+      "telemetry.sdk.name": "opentelemetry"
+    },
+    "scope": {
+      "name": "cortex",
+      "version": "",
+      "attributes": {}
+    },
+    "attributes": {
+      "cycle_id": 1,
+      "input_ir_sense": "[]"
+    },
+    "body": "input_ir_sense"
+  },
+  {
+    "raw_event_id": "capture-001-013",
+    "observed_at": "2026-05-04T12:04:31.447695Z",
+    "severity_text": "DEBUG",
+    "severity_number": 5,
+    "target": null,
+    "family": null,
+    "subsystem": null,
+    "run_id": null,
+    "tick": 1,
+    "message_text": "input_ir_proprioception",
+    "event_name": "event core/src/cortex/runtime/primary.rs:251",
+    "trace_id_hex": "",
+    "span_id_hex": "",
+    "resource": {
+      "telemetry.sdk.language": "rust",
+      "service.name": "beluna.core",
+      "telemetry.sdk.version": "0.31.0",
+      "telemetry.sdk.name": "opentelemetry"
+    },
+    "scope": {
+      "name": "cortex",
+      "version": "",
+      "attributes": {}
+    },
+    "attributes": {
+      "cycle_id": 1,
+      "input_ir_proprioception": "- main.cwd: /Users/lanzhijiang/Development/Beluna\n- main.network: interface_count=27;interfaces=anpi0,anpi1,anpi3,ap1,awdl0,bridge0,en0,en1,en12,en2,en3,en4,en5,en6,en7,en9,gif0,llw0,lo0,stf0,utun0,utun1,utun2,utun3,utun4,utun5,utun6\n- main.os: name=Darwin;kernel=24.4.0;os_version=15.4.1;long_os_version=macOS 15.4.1 Sequoia;host=Lan-mac-mini.local\n- main.pid: 8227\n- main.resources: cpu_count=10;memory(total=17179869184,available=6543949824,used=14033977344);swap(total=9663676416,used=8453292032);uptime_seconds=6341679\n- spine.body_endpoint_count: 2\n- spine.body_endpoints: shell.1,web.2"
+    },
+    "body": "input_ir_proprioception"
+  },
+  {
+    "raw_event_id": "capture-001-014",
+    "observed_at": "2026-05-04T12:04:31.447697Z",
+    "severity_text": "DEBUG",
+    "severity_number": 5,
+    "target": null,
+    "family": null,
+    "subsystem": null,
+    "run_id": null,
+    "tick": 1,
+    "message_text": "input_ir_goal_forest",
+    "event_name": "event core/src/cortex/runtime/primary.rs:257",
+    "trace_id_hex": "",
+    "span_id_hex": "",
+    "resource": {
+      "telemetry.sdk.language": "rust",
+      "service.name": "beluna.core",
+      "telemetry.sdk.version": "0.31.0",
+      "telemetry.sdk.name": "opentelemetry"
+    },
+    "scope": {
+      "name": "cortex",
+      "version": "",
+      "attributes": {}
+    },
+    "attributes": {
+      "cycle_id": 1,
+      "input_ir_goal_forest": "+-- [active] (w=1.00) id=exist-and-operate-as-beluna :: Exist and Operate as Beluna\n    |-- 1 [active] (w=0.90) id=monitor-system-state :: Keep track of cwd, resources, and network status to ensure stability.\n    |-- 2 [active] (w=0.90) id=validate-body-endpoints :: Periodically test shell.1 and web.2 to ensure they are responsive and functional.\n    |-- 3 [active] (w=0.85) id=anticipate-user-needs :: Listen for input and prepare to execute tasks that align with user intent, resisting chaos by organizing incoming requests into actionable sub-goals."
+    },
+    "body": "input_ir_goal_forest"
+  },
+  {
+    "raw_event_id": "capture-001-015",
+    "observed_at": "2026-05-04T12:04:31.447832Z",
+    "severity_text": "WARN",
+    "severity_number": 13,
+    "target": null,
+    "family": null,
+    "subsystem": null,
+    "run_id": null,
+    "tick": 1,
+    "message_text": "stage_failed",
+    "event_name": "event core/src/cortex/runtime/primary.rs:981",
+    "trace_id_hex": "",
+    "span_id_hex": "",
+    "resource": {
+      "telemetry.sdk.language": "rust",
+      "service.name": "beluna.core",
+      "telemetry.sdk.version": "0.31.0",
+      "telemetry.sdk.name": "opentelemetry"
+    },
+    "scope": {
+      "name": "cortex",
+      "version": "",
+      "attributes": {}
+    },
+    "attributes": {
+      "cycle_id": 1,
+      "stage": "primary"
+    },
+    "body": "stage_failed"
+  },
+  {
+    "raw_event_id": "capture-001-016",
+    "observed_at": "2026-05-04T12:04:31.447869Z",
+    "severity_text": "WARN",
+    "severity_number": 13,
+    "target": null,
+    "family": null,
+    "subsystem": null,
+    "run_id": null,
+    "tick": 1,
+    "message_text": "primary_failed_noop",
+    "event_name": "event core/src/cortex/runtime/primary.rs:294",
+    "trace_id_hex": "",
+    "span_id_hex": "",
+    "resource": {
+      "telemetry.sdk.language": "rust",
+      "service.name": "beluna.core",
+      "telemetry.sdk.version": "0.31.0",
+      "telemetry.sdk.name": "opentelemetry"
+    },
+    "scope": {
+      "name": "cortex",
+      "version": "",
+      "attributes": {}
+    },
+    "attributes": {
+      "cycle_id": 1,
+      "error": "missing credential environment variable BAILIAN_API_KEY for backend bailian (backend=bailian)"
+    },
+    "body": "primary_failed_noop"
+  },
+  {
+    "raw_event_id": "capture-001-017",
+    "observed_at": "2026-05-04T12:04:31.447897Z",
+    "severity_text": "DEBUG",
+    "severity_number": 5,
+    "target": null,
+    "family": null,
+    "subsystem": null,
+    "run_id": null,
+    "tick": 1,
+    "message_text": "noop_fallback",
+    "event_name": "event core/src/cortex/runtime/primary.rs:1000",
+    "trace_id_hex": "",
+    "span_id_hex": "",
+    "resource": {
+      "telemetry.sdk.language": "rust",
+      "service.name": "beluna.core",
+      "telemetry.sdk.version": "0.31.0",
+      "telemetry.sdk.name": "opentelemetry"
+    },
+    "scope": {
+      "name": "cortex",
+      "version": "",
+      "attributes": {}
+    },
+    "attributes": {
+      "cycle_id": 1,
+      "reason": "primary_failed"
+    },
+    "body": "noop_fallback"
+  },
+  {
+    "raw_event_id": "capture-001-018",
+    "observed_at": "2026-05-04T12:04:31.433199Z",
+    "severity_text": "INFO",
+    "severity_number": 9,
+    "target": null,
+    "family": null,
+    "subsystem": null,
+    "run_id": null,
+    "tick": null,
+    "message_text": "opentelemetry_otlp_signal_state",
+    "event_name": "event core/src/main.rs:155",
+    "trace_id_hex": "",
+    "span_id_hex": "",
+    "resource": {
+      "telemetry.sdk.language": "rust",
+      "service.name": "beluna.core",
+      "telemetry.sdk.version": "0.31.0",
+      "telemetry.sdk.name": "opentelemetry"
+    },
+    "scope": {
+      "name": "observability",
+      "version": "",
+      "attributes": {}
+    },
+    "attributes": {
+      "signal": "metrics",
+      "requested": false,
+      "enabled": false,
+      "protocol": "Some(\"grpc\")",
+      "endpoint": "None",
+      "timeout_ms": "None",
+      "detail": "Some(\"disabled_by_config\")"
+    },
+    "body": "opentelemetry_otlp_signal_state"
+  },
+  {
+    "raw_event_id": "capture-001-019",
+    "observed_at": "2026-05-04T12:04:31.433221Z",
+    "severity_text": "INFO",
+    "severity_number": 9,
+    "target": null,
+    "family": null,
+    "subsystem": null,
+    "run_id": null,
+    "tick": null,
+    "message_text": "opentelemetry_otlp_signal_state",
+    "event_name": "event core/src/main.rs:155",
+    "trace_id_hex": "",
+    "span_id_hex": "",
+    "resource": {
+      "telemetry.sdk.language": "rust",
+      "service.name": "beluna.core",
+      "telemetry.sdk.version": "0.31.0",
+      "telemetry.sdk.name": "opentelemetry"
+    },
+    "scope": {
+      "name": "observability",
+      "version": "",
+      "attributes": {}
+    },
+    "attributes": {
+      "signal": "logs",
+      "requested": true,
+      "enabled": true,
+      "protocol": "Some(\"grpc\")",
+      "endpoint": "Some(\"http://127.0.0.1:4317\")",
+      "timeout_ms": "Some(5000)",
+      "detail": "Some(\"export_interval_ms=2000 initialized\")"
+    },
+    "body": "opentelemetry_otlp_signal_state"
+  },
+  {
+    "raw_event_id": "capture-001-020",
+    "observed_at": "2026-05-04T12:04:31.433239Z",
+    "severity_text": "INFO",
+    "severity_number": 9,
+    "target": null,
+    "family": null,
+    "subsystem": null,
+    "run_id": null,
+    "tick": null,
+    "message_text": "opentelemetry_otlp_signal_state",
+    "event_name": "event core/src/main.rs:155",
+    "trace_id_hex": "",
+    "span_id_hex": "",
+    "resource": {
+      "telemetry.sdk.language": "rust",
+      "service.name": "beluna.core",
+      "telemetry.sdk.version": "0.31.0",
+      "telemetry.sdk.name": "opentelemetry"
+    },
+    "scope": {
+      "name": "observability",
+      "version": "",
+      "attributes": {}
+    },
+    "attributes": {
+      "signal": "traces",
+      "requested": false,
+      "enabled": false,
+      "protocol": "Some(\"grpc\")",
+      "endpoint": "None",
+      "timeout_ms": "None",
+      "detail": "Some(\"disabled_by_config\")"
+    },
+    "body": "opentelemetry_otlp_signal_state"
+  },
+  {
+    "raw_event_id": "capture-001-021",
+    "observed_at": "2026-05-04T12:04:31.444319Z",
+    "severity_text": "INFO",
+    "severity_number": 9,
+    "target": null,
+    "family": "spine.adapter",
+    "subsystem": "spine",
+    "run_id": "019df2e0-2e48-7222-8c84-3589e99dfd19",
+    "tick": 0,
+    "message_text": "contract_event",
+    "event_name": "event core/src/observability/runtime/emit.rs:57",
+    "trace_id_hex": "",
+    "span_id_hex": "",
+    "resource": {
+      "telemetry.sdk.language": "rust",
+      "service.name": "beluna.core",
+      "telemetry.sdk.version": "0.31.0",
+      "telemetry.sdk.name": "opentelemetry"
+    },
+    "scope": {
+      "name": "observability.contract",
+      "version": "",
+      "attributes": {}
+    },
+    "attributes": {
+      "subsystem": "spine",
+      "family": "spine.adapter",
+      "run_id": "019df2e0-2e48-7222-8c84-3589e99dfd19",
+      "tick": 0,
+      "tick_present": false,
+      "organ_id": "",
+      "thread_id": "",
+      "turn_id": "",
+      "request_id": "",
+      "endpoint_id": "",
+      "descriptor_id": "",
+      "act_id": "",
+      "sense_id": "",
+      "adapter_id": "1",
+      "adapter_type": "unix_socket_ndjson",
+      "transition_kind": "",
+      "outcome": "",
+      "direction": "",
+      "binding_kind": "",
+      "change_mode": "",
+      "state": "enabled",
+      "kind": "enabled",
+      "payload": "{\"family\":\"spine.adapter\",\"run_id\":\"019df2e0-2e48-7222-8c84-3589e99dfd19\",\"timestamp\":\"2026-05-04T12:04:31.444227Z\",\"tick\":0,\"span_id\":\"spine.adapter:unix_socket_ndjson:1\",\"adapter_type\":\"unix_socket_ndjson\",\"adapter_id\":\"1\",\"kind\":\"enabled\"}"
+    },
+    "body": "contract_event"
+  },
+  {
+    "raw_event_id": "capture-001-022",
+    "observed_at": "2026-05-04T12:04:31.444329Z",
+    "severity_text": "INFO",
+    "severity_number": 9,
+    "target": null,
+    "family": "spine.adapter",
+    "subsystem": "spine",
+    "run_id": "019df2e0-2e48-7222-8c84-3589e99dfd19",
+    "tick": 0,
+    "message_text": "contract_event",
+    "event_name": "event core/src/observability/runtime/emit.rs:57",
+    "trace_id_hex": "",
+    "span_id_hex": "",
+    "resource": {
+      "telemetry.sdk.language": "rust",
+      "service.name": "beluna.core",
+      "telemetry.sdk.version": "0.31.0",
+      "telemetry.sdk.name": "opentelemetry"
+    },
+    "scope": {
+      "name": "observability.contract",
+      "version": "",
+      "attributes": {}
+    },
+    "attributes": {
+      "subsystem": "spine",
+      "family": "spine.adapter",
+      "run_id": "019df2e0-2e48-7222-8c84-3589e99dfd19",
+      "tick": 0,
+      "tick_present": false,
+      "organ_id": "",
+      "thread_id": "",
+      "turn_id": "",
+      "request_id": "",
+      "endpoint_id": "",
+      "descriptor_id": "",
+      "act_id": "",
+      "sense_id": "",
+      "adapter_id": "2",
+      "adapter_type": "inline",
+      "transition_kind": "",
+      "outcome": "",
+      "direction": "",
+      "binding_kind": "",
+      "change_mode": "",
+      "state": "enabled",
+      "kind": "enabled",
+      "payload": "{\"family\":\"spine.adapter\",\"run_id\":\"019df2e0-2e48-7222-8c84-3589e99dfd19\",\"timestamp\":\"2026-05-04T12:04:31.444226Z\",\"tick\":0,\"span_id\":\"spine.adapter:inline:2\",\"adapter_type\":\"inline\",\"adapter_id\":\"2\",\"kind\":\"enabled\"}"
+    },
+    "body": "contract_event"
+  },
+  {
+    "raw_event_id": "capture-001-023",
+    "observed_at": "2026-05-04T12:04:31.444606Z",
+    "severity_text": "INFO",
+    "severity_number": 9,
+    "target": null,
+    "family": "spine.endpoint",
+    "subsystem": "spine",
+    "run_id": "019df2e0-2e48-7222-8c84-3589e99dfd19",
+    "tick": 0,
+    "message_text": "contract_event",
+    "event_name": "event core/src/observability/runtime/emit.rs:57",
+    "trace_id_hex": "",
+    "span_id_hex": "",
+    "resource": {
+      "telemetry.sdk.language": "rust",
+      "service.name": "beluna.core",
+      "telemetry.sdk.version": "0.31.0",
+      "telemetry.sdk.name": "opentelemetry"
+    },
+    "scope": {
+      "name": "observability.contract",
+      "version": "",
+      "attributes": {}
+    },
+    "attributes": {
+      "subsystem": "spine",
+      "family": "spine.endpoint",
+      "run_id": "019df2e0-2e48-7222-8c84-3589e99dfd19",
+      "tick": 0,
+      "tick_present": false,
+      "organ_id": "",
+      "thread_id": "",
+      "turn_id": "",
+      "request_id": "",
+      "endpoint_id": "shell.1",
+      "descriptor_id": "",
+      "act_id": "",
+      "sense_id": "",
+      "adapter_id": "2",
+      "adapter_type": "",
+      "transition_kind": "",
+      "outcome": "",
+      "direction": "",
+      "binding_kind": "",
+      "change_mode": "",
+      "state": "connected",
+      "kind": "connected",
+      "payload": "{\"family\":\"spine.endpoint\",\"run_id\":\"019df2e0-2e48-7222-8c84-3589e99dfd19\",\"timestamp\":\"2026-05-04T12:04:31.444587Z\",\"tick\":0,\"span_id\":\"spine.endpoint:shell.1\",\"endpoint_id\":\"shell.1\",\"adapter_id\":\"2\",\"kind\":\"connected\",\"channel_or_session\":\"adapter:2\"}"
+    },
+    "body": "contract_event"
+  },
+  {
+    "raw_event_id": "capture-001-024",
+    "observed_at": "2026-05-04T12:04:31.444902Z",
+    "severity_text": "INFO",
+    "severity_number": 9,
+    "target": null,
+    "family": "stem.ns-catalog",
+    "subsystem": "stem",
+    "run_id": "019df2e0-2e48-7222-8c84-3589e99dfd19",
+    "tick": 0,
+    "message_text": "contract_event",
+    "event_name": "event core/src/observability/runtime/emit.rs:57",
+    "trace_id_hex": "",
+    "span_id_hex": "",
+    "resource": {
+      "telemetry.sdk.language": "rust",
+      "service.name": "beluna.core",
+      "telemetry.sdk.version": "0.31.0",
+      "telemetry.sdk.name": "opentelemetry"
+    },
+    "scope": {
+      "name": "observability.contract",
+      "version": "",
+      "attributes": {}
+    },
+    "attributes": {
+      "subsystem": "stem",
+      "family": "stem.ns-catalog",
+      "run_id": "019df2e0-2e48-7222-8c84-3589e99dfd19",
+      "tick": 0,
+      "tick_present": false,
+      "organ_id": "",
+      "thread_id": "",
+      "turn_id": "",
+      "request_id": "",
+      "endpoint_id": "",
+      "descriptor_id": "",
+      "act_id": "",
+      "sense_id": "",
+      "adapter_id": "",
+      "adapter_type": "",
+      "transition_kind": "",
+      "outcome": "",
+      "direction": "",
+      "binding_kind": "",
+      "change_mode": "snapshot",
+      "state": "",
+      "kind": "",
+      "payload": "{\"family\":\"stem.ns-catalog\",\"run_id\":\"019df2e0-2e48-7222-8c84-3589e99dfd19\",\"timestamp\":\"2026-05-04T12:04:31.444852Z\",\"tick\":0,\"span_id\":\"stem.ns-catalog:stem:v1\",\"catalog_version\":\"stem:v1\",\"change_mode\":\"snapshot\",\"accepted_entries_or_routes\":{\"entries\":[{\"endpoint_id\":\"shell.1\",\"neural_signal_descriptor_id\":\"shell.exec\",\"payload_schema\":{\"properties\":{\"argv\":{\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"cwd\":{\"type\":[\"string\",\"null\"]},\"env\":{\"additionalProperties\":{\"type\":\"string\"},\"type\":\"object\"},\"stderr_max_bytes\":{\"minimum\":1,\"type\":\"integer\"},\"stdout_max_bytes\":{\"minimum\":1,\"type\":\"integer\"},\"timeout_ms\":{\"minimum\":1,\"type\":\"integer\"}},\"required\":[\"argv\"],\"type\":\"object\"},\"type\":\"act\"},{\"endpoint_id\":\"shell.1\",\"neural_signal_descriptor_id\":\"shell.exec.result\",\"payload_schema\":{\"type\":\"string\"},\"type\":\"sense\"}],\"routes\":[\"shell.1/shell.exec\",\"shell.1/shell.exec.result\"]},\"rejected_entries_or_routes\":[],\"catalog_snapshot\":{\"entries\":[{\"endpoint_id\":\"shell.1\",\"neural_signal_descriptor_id\":\"shell.exec.result\",\"payload_schema\":{\"type\":\"string\"},\"type\":\"sense\"},{\"endpoint_id\":\"shell.1\",\"neural_signal_descriptor_id\":\"shell.exec\",\"payload_schema\":{\"properties\":{\"argv\":{\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"cwd\":{\"type\":[\"string\",\"null\"]},\"env\":{\"additionalProperties\":{\"type\":\"string\"},\"type\":\"object\"},\"stderr_max_bytes\":{\"minimum\":1,\"type\":\"integer\"},\"stdout_max_bytes\":{\"minimum\":1,\"type\":\"integer\"},\"timeout_ms\":{\"minimum\":1,\"type\":\"integer\"}},\"required\":[\"argv\"],\"type\":\"object\"},\"type\":\"act\"}]}}"
+    },
+    "body": "contract_event"
+  },
+  {
+    "raw_event_id": "capture-001-025",
+    "observed_at": "2026-05-04T12:04:31.445090Z",
+    "severity_text": "INFO",
+    "severity_number": 9,
+    "target": null,
+    "family": "spine.endpoint",
+    "subsystem": "spine",
+    "run_id": "019df2e0-2e48-7222-8c84-3589e99dfd19",
+    "tick": 0,
+    "message_text": "contract_event",
+    "event_name": "event core/src/observability/runtime/emit.rs:57",
+    "trace_id_hex": "",
+    "span_id_hex": "",
+    "resource": {
+      "telemetry.sdk.language": "rust",
+      "service.name": "beluna.core",
+      "telemetry.sdk.version": "0.31.0",
+      "telemetry.sdk.name": "opentelemetry"
+    },
+    "scope": {
+      "name": "observability.contract",
+      "version": "",
+      "attributes": {}
+    },
+    "attributes": {
+      "subsystem": "spine",
+      "family": "spine.endpoint",
+      "run_id": "019df2e0-2e48-7222-8c84-3589e99dfd19",
+      "tick": 0,
+      "tick_present": false,
+      "organ_id": "",
+      "thread_id": "",
+      "turn_id": "",
+      "request_id": "",
+      "endpoint_id": "shell.1",
+      "descriptor_id": "",
+      "act_id": "",
+      "sense_id": "",
+      "adapter_id": "2",
+      "adapter_type": "",
+      "transition_kind": "",
+      "outcome": "",
+      "direction": "",
+      "binding_kind": "",
+      "change_mode": "",
+      "state": "registered",
+      "kind": "registered",
+      "payload": "{\"family\":\"spine.endpoint\",\"run_id\":\"019df2e0-2e48-7222-8c84-3589e99dfd19\",\"timestamp\":\"2026-05-04T12:04:31.445066Z\",\"tick\":0,\"span_id\":\"spine.endpoint:shell.1\",\"endpoint_id\":\"shell.1\",\"adapter_id\":\"2\",\"kind\":\"registered\",\"channel_or_session\":\"adapter:2\",\"route_summary\":{\"routes\":[{\"descriptor_id\":\"shell.exec\",\"endpoint_id\":\"shell.1\",\"type\":\"act\"},{\"descriptor_id\":\"shell.exec.result\",\"endpoint_id\":\"shell.1\",\"type\":\"sense\"}]}}"
+    },
+    "body": "contract_event"
+  },
+  {
+    "raw_event_id": "capture-001-026",
+    "observed_at": "2026-05-04T12:04:31.445236Z",
+    "severity_text": "INFO",
+    "severity_number": 9,
+    "target": null,
+    "family": "stem.proprioception",
+    "subsystem": "stem",
+    "run_id": "019df2e0-2e48-7222-8c84-3589e99dfd19",
+    "tick": 0,
+    "message_text": "contract_event",
+    "event_name": "event core/src/observability/runtime/emit.rs:57",
+    "trace_id_hex": "",
+    "span_id_hex": "",
+    "resource": {
+      "telemetry.sdk.language": "rust",
+      "service.name": "beluna.core",
+      "telemetry.sdk.version": "0.31.0",
+      "telemetry.sdk.name": "opentelemetry"
+    },
+    "scope": {
+      "name": "observability.contract",
+      "version": "",
+      "attributes": {}
+    },
+    "attributes": {
+      "subsystem": "stem",
+      "family": "stem.proprioception",
+      "run_id": "019df2e0-2e48-7222-8c84-3589e99dfd19",
+      "tick": 0,
+      "tick_present": false,
+      "organ_id": "",
+      "thread_id": "",
+      "turn_id": "",
+      "request_id": "",
+      "endpoint_id": "",
+      "descriptor_id": "",
+      "act_id": "",
+      "sense_id": "",
+      "adapter_id": "",
+      "adapter_type": "",
+      "transition_kind": "",
+      "outcome": "",
+      "direction": "",
+      "binding_kind": "",
+      "change_mode": "",
+      "state": "",
+      "kind": "patch",
+      "payload": "{\"family\":\"stem.proprioception\",\"run_id\":\"019df2e0-2e48-7222-8c84-3589e99dfd19\",\"timestamp\":\"2026-05-04T12:04:31.44521Z\",\"tick\":0,\"span_id\":\"stem.proprioception:patch\",\"kind\":\"patch\",\"entries_or_keys\":{\"entries\":{\"spine.body_endpoint_count\":\"1\",\"spine.body_endpoints\":\"shell.1\"}}}"
+    },
+    "body": "contract_event"
+  },
+  {
+    "raw_event_id": "capture-001-027",
+    "observed_at": "2026-05-04T12:04:31.445369Z",
+    "severity_text": "INFO",
+    "severity_number": 9,
+    "target": null,
+    "family": "spine.endpoint",
+    "subsystem": "spine",
+    "run_id": "019df2e0-2e48-7222-8c84-3589e99dfd19",
+    "tick": 0,
+    "message_text": "contract_event",
+    "event_name": "event core/src/observability/runtime/emit.rs:57",
+    "trace_id_hex": "",
+    "span_id_hex": "",
+    "resource": {
+      "telemetry.sdk.language": "rust",
+      "service.name": "beluna.core",
+      "telemetry.sdk.version": "0.31.0",
+      "telemetry.sdk.name": "opentelemetry"
+    },
+    "scope": {
+      "name": "observability.contract",
+      "version": "",
+      "attributes": {}
+    },
+    "attributes": {
+      "subsystem": "spine",
+      "family": "spine.endpoint",
+      "run_id": "019df2e0-2e48-7222-8c84-3589e99dfd19",
+      "tick": 0,
+      "tick_present": false,
+      "organ_id": "",
+      "thread_id": "",
+      "turn_id": "",
+      "request_id": "",
+      "endpoint_id": "web.2",
+      "descriptor_id": "",
+      "act_id": "",
+      "sense_id": "",
+      "adapter_id": "2",
+      "adapter_type": "",
+      "transition_kind": "",
+      "outcome": "",
+      "direction": "",
+      "binding_kind": "",
+      "change_mode": "",
+      "state": "connected",
+      "kind": "connected",
+      "payload": "{\"family\":\"spine.endpoint\",\"run_id\":\"019df2e0-2e48-7222-8c84-3589e99dfd19\",\"timestamp\":\"2026-05-04T12:04:31.445353Z\",\"tick\":0,\"span_id\":\"spine.endpoint:web.2\",\"endpoint_id\":\"web.2\",\"adapter_id\":\"2\",\"kind\":\"connected\",\"channel_or_session\":\"adapter:2\"}"
+    },
+    "body": "contract_event"
+  },
+  {
+    "raw_event_id": "capture-001-028",
+    "observed_at": "2026-05-04T12:04:31.445471Z",
+    "severity_text": "INFO",
+    "severity_number": 9,
+    "target": null,
+    "family": "stem.ns-catalog",
+    "subsystem": "stem",
+    "run_id": "019df2e0-2e48-7222-8c84-3589e99dfd19",
+    "tick": 0,
+    "message_text": "contract_event",
+    "event_name": "event core/src/observability/runtime/emit.rs:57",
+    "trace_id_hex": "",
+    "span_id_hex": "",
+    "resource": {
+      "telemetry.sdk.language": "rust",
+      "service.name": "beluna.core",
+      "telemetry.sdk.version": "0.31.0",
+      "telemetry.sdk.name": "opentelemetry"
+    },
+    "scope": {
+      "name": "observability.contract",
+      "version": "",
+      "attributes": {}
+    },
+    "attributes": {
+      "subsystem": "stem",
+      "family": "stem.ns-catalog",
+      "run_id": "019df2e0-2e48-7222-8c84-3589e99dfd19",
+      "tick": 0,
+      "tick_present": false,
+      "organ_id": "",
+      "thread_id": "",
+      "turn_id": "",
+      "request_id": "",
+      "endpoint_id": "",
+      "descriptor_id": "",
+      "act_id": "",
+      "sense_id": "",
+      "adapter_id": "",
+      "adapter_type": "",
+      "transition_kind": "",
+      "outcome": "",
+      "direction": "",
+      "binding_kind": "",
+      "change_mode": "update",
+      "state": "",
+      "kind": "",
+      "payload": "{\"family\":\"stem.ns-catalog\",\"run_id\":\"019df2e0-2e48-7222-8c84-3589e99dfd19\",\"timestamp\":\"2026-05-04T12:04:31.445442Z\",\"tick\":0,\"span_id\":\"stem.ns-catalog:stem:v2\",\"catalog_version\":\"stem:v2\",\"change_mode\":\"update\",\"accepted_entries_or_routes\":{\"entries\":[{\"endpoint_id\":\"web.2\",\"neural_signal_descriptor_id\":\"web.fetch\",\"payload_schema\":{\"properties\":{\"body_text\":{\"type\":[\"string\",\"null\"]},\"headers\":{\"additionalProperties\":{\"type\":\"string\"},\"default\":{},\"type\":\"object\"},\"method\":{\"type\":[\"string\",\"null\"]},\"response_max_bytes\":{\"minimum\":1,\"type\":\"integer\"},\"timeout_ms\":{\"minimum\":1,\"type\":\"integer\"},\"url\":{\"type\":\"string\"}},\"required\":[\"url\"],\"type\":\"object\"},\"type\":\"act\"},{\"endpoint_id\":\"web.2\",\"neural_signal_descriptor_id\":\"web.fetch.result\",\"payload_schema\":{\"type\":\"string\"},\"type\":\"sense\"}],\"routes\":[\"web.2/web.fetch\",\"web.2/web.fetch.result\"]},\"rejected_entries_or_routes\":[]}"
+    },
+    "body": "contract_event"
+  },
+  {
+    "raw_event_id": "capture-001-029",
+    "observed_at": "2026-05-04T12:04:31.445568Z",
+    "severity_text": "INFO",
+    "severity_number": 9,
+    "target": null,
+    "family": "spine.endpoint",
+    "subsystem": "spine",
+    "run_id": "019df2e0-2e48-7222-8c84-3589e99dfd19",
+    "tick": 0,
+    "message_text": "contract_event",
+    "event_name": "event core/src/observability/runtime/emit.rs:57",
+    "trace_id_hex": "",
+    "span_id_hex": "",
+    "resource": {
+      "telemetry.sdk.language": "rust",
+      "service.name": "beluna.core",
+      "telemetry.sdk.version": "0.31.0",
+      "telemetry.sdk.name": "opentelemetry"
+    },
+    "scope": {
+      "name": "observability.contract",
+      "version": "",
+      "attributes": {}
+    },
+    "attributes": {
+      "subsystem": "spine",
+      "family": "spine.endpoint",
+      "run_id": "019df2e0-2e48-7222-8c84-3589e99dfd19",
+      "tick": 0,
+      "tick_present": false,
+      "organ_id": "",
+      "thread_id": "",
+      "turn_id": "",
+      "request_id": "",
+      "endpoint_id": "web.2",
+      "descriptor_id": "",
+      "act_id": "",
+      "sense_id": "",
+      "adapter_id": "2",
+      "adapter_type": "",
+      "transition_kind": "",
+      "outcome": "",
+      "direction": "",
+      "binding_kind": "",
+      "change_mode": "",
+      "state": "registered",
+      "kind": "registered",
+      "payload": "{\"family\":\"spine.endpoint\",\"run_id\":\"019df2e0-2e48-7222-8c84-3589e99dfd19\",\"timestamp\":\"2026-05-04T12:04:31.445551Z\",\"tick\":0,\"span_id\":\"spine.endpoint:web.2\",\"endpoint_id\":\"web.2\",\"adapter_id\":\"2\",\"kind\":\"registered\",\"channel_or_session\":\"adapter:2\",\"route_summary\":{\"routes\":[{\"descriptor_id\":\"web.fetch\",\"endpoint_id\":\"web.2\",\"type\":\"act\"},{\"descriptor_id\":\"web.fetch.result\",\"endpoint_id\":\"web.2\",\"type\":\"sense\"}]}}"
+    },
+    "body": "contract_event"
+  },
+  {
+    "raw_event_id": "capture-001-030",
+    "observed_at": "2026-05-04T12:04:31.445657Z",
+    "severity_text": "INFO",
+    "severity_number": 9,
+    "target": null,
+    "family": "stem.proprioception",
+    "subsystem": "stem",
+    "run_id": "019df2e0-2e48-7222-8c84-3589e99dfd19",
+    "tick": 0,
+    "message_text": "contract_event",
+    "event_name": "event core/src/observability/runtime/emit.rs:57",
+    "trace_id_hex": "",
+    "span_id_hex": "",
+    "resource": {
+      "telemetry.sdk.language": "rust",
+      "service.name": "beluna.core",
+      "telemetry.sdk.version": "0.31.0",
+      "telemetry.sdk.name": "opentelemetry"
+    },
+    "scope": {
+      "name": "observability.contract",
+      "version": "",
+      "attributes": {}
+    },
+    "attributes": {
+      "subsystem": "stem",
+      "family": "stem.proprioception",
+      "run_id": "019df2e0-2e48-7222-8c84-3589e99dfd19",
+      "tick": 0,
+      "tick_present": false,
+      "organ_id": "",
+      "thread_id": "",
+      "turn_id": "",
+      "request_id": "",
+      "endpoint_id": "",
+      "descriptor_id": "",
+      "act_id": "",
+      "sense_id": "",
+      "adapter_id": "",
+      "adapter_type": "",
+      "transition_kind": "",
+      "outcome": "",
+      "direction": "",
+      "binding_kind": "",
+      "change_mode": "",
+      "state": "",
+      "kind": "patch",
+      "payload": "{\"family\":\"stem.proprioception\",\"run_id\":\"019df2e0-2e48-7222-8c84-3589e99dfd19\",\"timestamp\":\"2026-05-04T12:04:31.445643Z\",\"tick\":0,\"span_id\":\"stem.proprioception:patch\",\"kind\":\"patch\",\"entries_or_keys\":{\"entries\":{\"spine.body_endpoint_count\":\"2\",\"spine.body_endpoints\":\"shell.1,web.2\"}}}"
+    },
+    "body": "contract_event"
+  },
+  {
+    "raw_event_id": "capture-001-031",
+    "observed_at": "2026-05-04T12:04:31.447313Z",
+    "severity_text": "INFO",
+    "severity_number": 9,
+    "target": null,
+    "family": "stem.tick",
+    "subsystem": "stem",
+    "run_id": "019df2e0-2e48-7222-8c84-3589e99dfd19",
+    "tick": 1,
+    "message_text": "contract_event",
+    "event_name": "event core/src/observability/runtime/emit.rs:57",
+    "trace_id_hex": "",
+    "span_id_hex": "",
+    "resource": {
+      "telemetry.sdk.language": "rust",
+      "service.name": "beluna.core",
+      "telemetry.sdk.version": "0.31.0",
+      "telemetry.sdk.name": "opentelemetry"
+    },
+    "scope": {
+      "name": "observability.contract",
+      "version": "",
+      "attributes": {}
+    },
+    "attributes": {
+      "subsystem": "stem",
+      "family": "stem.tick",
+      "run_id": "019df2e0-2e48-7222-8c84-3589e99dfd19",
+      "tick": 1,
+      "tick_present": true,
+      "organ_id": "",
+      "thread_id": "",
+      "turn_id": "",
+      "request_id": "",
+      "endpoint_id": "",
+      "descriptor_id": "",
+      "act_id": "",
+      "sense_id": "",
+      "adapter_id": "",
+      "adapter_type": "",
+      "transition_kind": "",
+      "outcome": "",
+      "direction": "",
+      "binding_kind": "",
+      "change_mode": "",
+      "state": "granted",
+      "kind": "granted",
+      "payload": "{\"family\":\"stem.tick\",\"run_id\":\"019df2e0-2e48-7222-8c84-3589e99dfd19\",\"timestamp\":\"2026-05-04T12:04:31.447279Z\",\"tick\":1,\"span_id\":\"stem.tick:1\",\"status\":\"granted\",\"tick_seq\":1}"
+    },
+    "body": "contract_event"
+  }
+]

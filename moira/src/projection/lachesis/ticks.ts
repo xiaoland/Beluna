@@ -18,6 +18,7 @@ export function normalizeTickSummary(value: TickSummaryPayload): TickSummary {
   return {
     runId: value.runId,
     tick: value.tick,
+    traceId: value.traceId ?? null,
     firstSeenAt: value.firstSeenAt,
     lastSeenAt: value.lastSeenAt,
     eventCount: value.eventCount,
@@ -42,6 +43,7 @@ export function normalizeTickDetail(value: TickDetailPayload): TickDetail {
   const runId = value.summary.runId
   const tick = value.summary.tick
   const rawEvents = value.raw.map((item) => normalizeRawEvent(item, runId, tick))
+  const hasNativeEvents = rawEvents.some((event) => event.scopeName || event.eventName || event.traceId)
   const aiEvents = eventsForFamilies(
     [],
     rawEvents,
@@ -62,7 +64,9 @@ export function normalizeTickDetail(value: TickDetailPayload): TickDetail {
     rawEvents,
     'spine',
   )
-  const cortexOrganIntervals = buildCortexOrganIntervals(rawEvents, cortexEvents, aiEvents, organFamilyLabel)
+  const cortexOrganIntervals = hasNativeEvents
+    ? []
+    : buildCortexOrganIntervals(rawEvents, cortexEvents, aiEvents, organFamilyLabel)
 
   return {
     runId,

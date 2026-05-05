@@ -98,8 +98,7 @@ const cortexModes: Array<{ key: CortexViewMode; label: string }> = [
       </div>
 
       <p class="section-note">
-        Cortex View only includes ticks with reconstructable `cortex.*` evidence; switch to Stem, Spine, or Raw to inspect
-        unhandled ticks.
+        Cortex View includes ticks with Cortex owner evidence; native records appear as source-grounded timeline events first.
       </p>
 
       <TickChronology v-if="cortexMode === 'timeline'" :chronology="detail.chronology" />

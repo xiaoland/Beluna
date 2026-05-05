@@ -37,7 +37,7 @@ pub fn install_run_id(run_id: impl Into<String>) -> Result<(), String> {
         .map_err(|_| "observability run id already installed".to_string())
 }
 
-fn current_run_id() -> &'static str {
+pub(crate) fn current_run_id() -> &'static str {
     RUN_ID.get().map(String::as_str).unwrap_or(FALLBACK_RUN_ID)
 }
 

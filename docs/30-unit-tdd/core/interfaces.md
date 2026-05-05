@@ -15,8 +15,8 @@
 
 4. Observability export interface:
 - OTLP logs satisfy the cross-unit reconstruction guarantees defined in `docs/20-product-tdd/observability-contract.md`.
-- The operator-facing cognition-cycle anchor is exported as `tick`.
-- Current subsystem family catalog and fixture contract are defined in [Observability](./observability.md).
+- The operator-facing cognition-cycle anchor is reconstructed from native `traceId` plus bootstrap and tick anchor events.
+- Current owner scope, `eventName`, span-key, body, and attribute contract is defined in [Observability](./observability.md).
 
 ## Core Runtime Interface Contracts
 

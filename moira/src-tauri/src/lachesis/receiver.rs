@@ -271,13 +271,24 @@ pub(crate) fn extract_i64_field(attributes: &Map<String, Value>, key: &str) -> O
     value.as_str().and_then(|item| item.parse::<i64>().ok())
 }
 
-pub(crate) fn infer_subsystem(target: Option<&str>, family: Option<&str>) -> Option<String> {
+pub(crate) fn infer_subsystem(
+    target: Option<&str>,
+    family: Option<&str>,
+    scope_name: Option<&str>,
+) -> Option<String> {
     family
         .and_then(|item| item.split('.').next())
         .or_else(|| target.and_then(|item| item.split('.').next()))
+        .or_else(|| scope_name.and_then(core_owner_from_scope))
         .map(str::to_string)
 }
 
 pub(crate) fn random_raw_event_id() -> String {
     Uuid::now_v7().to_string()
+}
+
+fn core_owner_from_scope(scope_name: &str) -> Option<&str> {
+    scope_name
+        .strip_prefix("beluna.core.")
+        .map(|owner| owner.split('.').next().unwrap_or(owner))
 }

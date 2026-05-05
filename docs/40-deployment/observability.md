@@ -7,9 +7,9 @@ Moira is the default first-party local control-plane and observability consumer 
 
 ## Signals
 
-1. Logs: tracing-based JSON file logs and optional OTLP logs export. Cross-unit reconstruction guarantees for local first-party observability are defined in `docs/20-product-tdd/observability-contract.md`. Local operator workflow targets Moira/Loom as the primary first-party inspection surface.
+1. Logs: tracing-based JSON file logs and optional OTLP logs export. First-party owner events use native OTLP Logs fields: resource, scope, `eventName`, trace/span context, attributes, and structured body. Cross-unit reconstruction guarantees for local first-party observability are defined in `docs/20-product-tdd/observability-contract.md`. Local operator workflow targets Moira/Loom as the primary first-party inspection surface.
 2. Metrics: OTLP metrics export. Local control-plane workflow surfaces exporter status and handoff destinations rather than first-party local metrics storage.
-3. Traces: OTLP traces export with configurable sampling ratio. Local control-plane workflow surfaces exporter status and handoff destinations rather than first-party local trace storage.
+3. Traces: OTLP traces export with configurable sampling ratio. Local control-plane workflow surfaces exporter status and handoff destinations. Moira's current first-party local model reads trace/span context from OTLP log records.
 
 ## Constraints
 

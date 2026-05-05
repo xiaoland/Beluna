@@ -26,19 +26,18 @@
   - wake list
   - tick list
   - selected tick workspace
-  - human-friendly Cortex timeline mode anchored by `tick`, including interval work when reconstructable for Cortex-handled ticks
-  - expanded interval inspection for nested AI transport activity and chat-owned activity when present
-  - Cortex per-organ and goal-forest inspection
-  - Stem state and pathway inspection
-  - Spine adapter, endpoint, sense-ingress, and act-routing inspection
-  - raw event inspector as the source-grounded inspection surface
+  - raw-first native event timeline anchored by selected tick and native `traceId`
+  - raw event inspector as the source-grounded inspection surface, including native/legacy/ordinary `record_kind`
+  - Cortex interval inspection when matching boundary records are reconstructable
+  - AI transport, AI Chat, Stem, Spine, and goal-forest projections when their native owner events are available
 - Metrics/traces exporter-status surfaces and handoff links only.
 
 ## Consumed Contract
 
 1. Core typed config boundary remains the schema authority.
-2. Core OTLP logs satisfy the cross-unit reconstruction rules defined in `docs/20-product-tdd/observability-contract.md` and the current exported family catalog described in `docs/30-unit-tdd/core/observability.md`.
+2. Core OTLP logs satisfy the cross-unit reconstruction rules defined in `docs/20-product-tdd/observability-contract.md` and the current owner scope / `eventName` surface described in `docs/30-unit-tdd/core/observability.md`.
 3. Core startup/shutdown semantics remain Core-owned even when Moira supervises the process locally.
+4. Legacy Core contract logs remain readable through Lachesis compatibility normalization during the migration period.
 
 ## Cleanup-Stage Constraint
 

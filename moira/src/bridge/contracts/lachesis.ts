@@ -22,6 +22,7 @@ export interface RunSummaryPayload {
 export interface TickSummaryPayload {
   runId: string
   tick: number
+  traceId: string | null
   firstSeenAt: string
   lastSeenAt: string
   eventCount: number
@@ -36,6 +37,12 @@ export interface EventRecordPayload {
   observedAt: string
   severityText: string
   severityNumber?: number | null
+  recordKind?: string | null
+  scopeName: string | null
+  eventName: string | null
+  traceId: string | null
+  spanId: string | null
+  traceFlags: number | null
   target: string | null
   family: string | null
   subsystem: string | null

@@ -4,6 +4,7 @@ use crate::observability::contract::{
     AdapterLifecycleState, ContractEvent, DispatchOutcomeClass, EndpointLifecycleTransition,
     SpineActEvent, SpineAdapterEvent, SpineEndpointEvent, SpineSenseEvent,
 };
+use crate::observability::owner_log;
 
 use super::{current_run_id, emit_contract_event, timestamp_now};
 
@@ -109,6 +110,17 @@ pub fn emit_spine_act_outcome(
     outcome: DispatchOutcomeClass,
     reason_or_reference: Option<Value>,
 ) {
+    owner_log::events::emit_act_delivered(
+        tick,
+        act_id,
+        endpoint_id,
+        descriptor_id,
+        binding_kind,
+        act_payload.clone(),
+        outcome,
+        reason_or_reference.clone(),
+    );
+
     emit_contract_event(ContractEvent::SpineAct(SpineActEvent {
         run_id: current_run_id().to_string(),
         timestamp: timestamp_now(),

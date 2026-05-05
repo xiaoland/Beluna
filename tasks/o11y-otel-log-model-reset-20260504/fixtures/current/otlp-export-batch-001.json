@@ -1,0 +1,2520 @@
+{
+  "resourceLogs": [
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "telemetry.sdk.language",
+            "value": {
+              "stringValue": "rust"
+            }
+          },
+          {
+            "key": "service.name",
+            "value": {
+              "stringValue": "beluna.core"
+            }
+          },
+          {
+            "key": "telemetry.sdk.version",
+            "value": {
+              "stringValue": "0.31.0"
+            }
+          },
+          {
+            "key": "telemetry.sdk.name",
+            "value": {
+              "stringValue": "opentelemetry"
+            }
+          }
+        ],
+        "droppedAttributesCount": 0,
+        "entityRefs": []
+      },
+      "scopeLogs": [
+        {
+          "scope": {
+            "name": "logging",
+            "version": "",
+            "attributes": [],
+            "droppedAttributesCount": 0
+          },
+          "logRecords": [
+            {
+              "timeUnixNano": "1777896271432901000",
+              "observedTimeUnixNano": "1777896271432901000",
+              "severityNumber": 9,
+              "severityText": "INFO",
+              "body": {
+                "stringValue": "logging_initialized"
+              },
+              "attributes": [
+                {
+                  "key": "run_id",
+                  "value": {
+                    "stringValue": "019df2e0-2e48-7222-8c84-3589e99dfd19"
+                  }
+                },
+                {
+                  "key": "dir",
+                  "value": {
+                    "stringValue": "/Users/lanzhijiang/Development/Beluna/./logs/core"
+                  }
+                },
+                {
+                  "key": "log_file",
+                  "value": {
+                    "stringValue": "/Users/lanzhijiang/Development/Beluna/./logs/core/core.log.2026-05-04.1"
+                  }
+                },
+                {
+                  "key": "awake_sequence",
+                  "value": {
+                    "intValue": "1"
+                  }
+                },
+                {
+                  "key": "filter",
+                  "value": {
+                    "stringValue": "info"
+                  }
+                },
+                {
+                  "key": "retention_days",
+                  "value": {
+                    "intValue": "14"
+                  }
+                },
+                {
+                  "key": "stderr_warn_enabled",
+                  "value": {
+                    "boolValue": true
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "",
+              "spanId": "",
+              "eventName": "event core/src/logging.rs:78"
+            }
+          ],
+          "schemaUrl": ""
+        },
+        {
+          "scope": {
+            "name": "opentelemetry",
+            "version": "",
+            "attributes": [],
+            "droppedAttributesCount": 0
+          },
+          "logRecords": [
+            {
+              "timeUnixNano": "1777896271447428000",
+              "observedTimeUnixNano": "1777896271447428000",
+              "severityNumber": 5,
+              "severityText": "DEBUG",
+              "body": {
+                "stringValue": "Meter was obtained from a NoopMeterProvider. No metrics will be recorded. If global::meter_with_scope()/meter() was used, ensure that a valid MeterProvider is set globally before creating Meter."
+              },
+              "attributes": [
+                {
+                  "key": "name",
+                  "value": {
+                    "stringValue": "NoopMeterProvider.MeterCreation"
+                  }
+                },
+                {
+                  "key": "meter_name",
+                  "value": {
+                    "stringValue": "beluna.core"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "",
+              "spanId": "",
+              "eventName": "NoopMeterProvider.MeterCreation"
+            }
+          ],
+          "schemaUrl": ""
+        },
+        {
+          "scope": {
+            "name": "core",
+            "version": "",
+            "attributes": [],
+            "droppedAttributesCount": 0
+          },
+          "logRecords": [
+            {
+              "timeUnixNano": "1777896271433334000",
+              "observedTimeUnixNano": "1777896271433334000",
+              "severityNumber": 9,
+              "severityText": "INFO",
+              "body": {
+                "stringValue": "core_runtime_booting"
+              },
+              "attributes": [
+                {
+                  "key": "config_path",
+                  "value": {
+                    "stringValue": "beluna.jsonc"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "",
+              "spanId": "",
+              "eventName": "event core/src/main.rs:168"
+            }
+          ],
+          "schemaUrl": ""
+        },
+        {
+          "scope": {
+            "name": "spine",
+            "version": "",
+            "attributes": [],
+            "droppedAttributesCount": 0
+          },
+          "logRecords": [
+            {
+              "timeUnixNano": "1777896271444169000",
+              "observedTimeUnixNano": "1777896271444169000",
+              "severityNumber": 9,
+              "severityText": "INFO",
+              "body": {
+                "stringValue": "adapter_started"
+              },
+              "attributes": [
+                {
+                  "key": "adapter_type",
+                  "value": {
+                    "stringValue": "unix-socket-ndjson"
+                  }
+                },
+                {
+                  "key": "adapter_id",
+                  "value": {
+                    "intValue": "1"
+                  }
+                },
+                {
+                  "key": "socket_path",
+                  "value": {
+                    "stringValue": "/tmp/beluna.sock"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "",
+              "spanId": "",
+              "eventName": "event core/src/spine/adapters/unix_socket.rs:471"
+            },
+            {
+              "timeUnixNano": "1777896271444172000",
+              "observedTimeUnixNano": "1777896271444172000",
+              "severityNumber": 9,
+              "severityText": "INFO",
+              "body": {
+                "stringValue": "adapter_started"
+              },
+              "attributes": [
+                {
+                  "key": "adapter_type",
+                  "value": {
+                    "stringValue": "inline"
+                  }
+                },
+                {
+                  "key": "adapter_id",
+                  "value": {
+                    "intValue": "2"
+                  }
+                },
+                {
+                  "key": "act_queue_capacity",
+                  "value": {
+                    "intValue": "32"
+                  }
+                },
+                {
+                  "key": "sense_queue_capacity",
+                  "value": {
+                    "intValue": "32"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "",
+              "spanId": "",
+              "eventName": "event core/src/spine/adapters/inline.rs:103"
+            }
+          ],
+          "schemaUrl": ""
+        },
+        {
+          "scope": {
+            "name": "cortex",
+            "version": "",
+            "attributes": [],
+            "droppedAttributesCount": 0
+          },
+          "logRecords": [
+            {
+              "timeUnixNano": "1777896271446049000",
+              "observedTimeUnixNano": "1777896271446049000",
+              "severityNumber": 9,
+              "severityText": "INFO",
+              "body": {
+                "stringValue": "output_token_limits_paused"
+              },
+              "attributes": [
+                {
+                  "key": "max_primary_output_tokens",
+                  "value": {
+                    "intValue": "1024"
+                  }
+                },
+                {
+                  "key": "max_sub_output_tokens",
+                  "value": {
+                    "intValue": "768"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "",
+              "spanId": "",
+              "eventName": "event core/src/cortex/runtime/primary.rs:1128"
+            },
+            {
+              "timeUnixNano": "1777896271447409000",
+              "observedTimeUnixNano": "1777896271447409000",
+              "severityNumber": 5,
+              "severityText": "DEBUG",
+              "body": {
+                "stringValue": "reaction_started"
+              },
+              "attributes": [
+                {
+                  "key": "cycle_id",
+                  "value": {
+                    "intValue": "1"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "",
+              "spanId": "",
+              "eventName": "event core/src/cortex/runtime/primary.rs:978"
+            },
+            {
+              "timeUnixNano": "1777896271447469000",
+              "observedTimeUnixNano": "1777896271447469000",
+              "severityNumber": 9,
+              "severityText": "INFO",
+              "body": {
+                "stringValue": "cortex_organ_input"
+              },
+              "attributes": [
+                {
+                  "key": "cycle_id",
+                  "value": {
+                    "intValue": "1"
+                  }
+                },
+                {
+                  "key": "stage",
+                  "value": {
+                    "stringValue": "sense_helper"
+                  }
+                },
+                {
+                  "key": "input_payload",
+                  "value": {
+                    "stringValue": "{\n  \"sense_context\": [],\n  \"sense_passthrough_max_bytes\": 2048\n}"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "",
+              "spanId": "",
+              "eventName": "event core/src/cortex/helpers/mod.rs:83"
+            },
+            {
+              "timeUnixNano": "1777896271447499000",
+              "observedTimeUnixNano": "1777896271447499000",
+              "severityNumber": 9,
+              "severityText": "INFO",
+              "body": {
+                "stringValue": "cortex_organ_output"
+              },
+              "attributes": [
+                {
+                  "key": "cycle_id",
+                  "value": {
+                    "intValue": "1"
+                  }
+                },
+                {
+                  "key": "stage",
+                  "value": {
+                    "stringValue": "sense_helper"
+                  }
+                },
+                {
+                  "key": "output_payload",
+                  "value": {
+                    "stringValue": "[]"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "",
+              "spanId": "",
+              "eventName": "event core/src/cortex/helpers/mod.rs:93"
+            },
+            {
+              "timeUnixNano": "1777896271447563000",
+              "observedTimeUnixNano": "1777896271447563000",
+              "severityNumber": 9,
+              "severityText": "INFO",
+              "body": {
+                "stringValue": "cortex_organ_input"
+              },
+              "attributes": [
+                {
+                  "key": "cycle_id",
+                  "value": {
+                    "intValue": "1"
+                  }
+                },
+                {
+                  "key": "stage",
+                  "value": {
+                    "stringValue": "goal_forest_helper"
+                  }
+                },
+                {
+                  "key": "input_payload",
+                  "value": {
+                    "stringValue": "{\n  \"goal_forest\": {\n    \"nodes\": [\n      {\n        \"children\": [\n          {\n            \"children\": [],\n            \"id\": \"monitor-system-state\",\n            \"status\": \"active\",\n            \"summary\": \"Keep track of cwd, resources, and network status to ensure stability.\",\n            \"weight\": 0.9\n          },\n          {\n            \"children\": [],\n            \"id\": \"validate-body-endpoints\",\n            \"status\": \"active\",\n            \"summary\": \"Periodically test shell.1 and web.2 to ensure they are responsive and functional.\",\n            \"weight\": 0.9\n          },\n          {\n            \"children\": [],\n            \"id\": \"anticipate-user-needs\",\n            \"status\": \"active\",\n            \"summary\": \"Listen for input and prepare to execute tasks that align with user intent, resisting chaos by organizing incoming requests into actionable sub-goals.\",\n            \"weight\": 0.85\n          }\n        ],\n        \"id\": \"exist-and-operate-as-beluna\",\n        \"status\": \"active\",\n        \"summary\": \"Exist and Operate as Beluna\",\n        \"weight\": 1.0\n      }\n    ]\n  }\n}"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "",
+              "spanId": "",
+              "eventName": "event core/src/cortex/helpers/mod.rs:83"
+            },
+            {
+              "timeUnixNano": "1777896271447658000",
+              "observedTimeUnixNano": "1777896271447658000",
+              "severityNumber": 9,
+              "severityText": "INFO",
+              "body": {
+                "stringValue": "cortex_organ_output"
+              },
+              "attributes": [
+                {
+                  "key": "cycle_id",
+                  "value": {
+                    "intValue": "1"
+                  }
+                },
+                {
+                  "key": "stage",
+                  "value": {
+                    "stringValue": "goal_forest_helper"
+                  }
+                },
+                {
+                  "key": "output_payload",
+                  "value": {
+                    "stringValue": "+-- [active] (w=1.00) id=exist-and-operate-as-beluna :: Exist and Operate as Beluna\n    |-- 1 [active] (w=0.90) id=monitor-system-state :: Keep track of cwd, resources, and network status to ensure stability.\n    |-- 2 [active] (w=0.90) id=validate-body-endpoints :: Periodically test shell.1 and web.2 to ensure they are responsive and functional.\n    |-- 3 [active] (w=0.85) id=anticipate-user-needs :: Listen for input and prepare to execute tasks that align with user intent, resisting chaos by organizing incoming requests into actionable sub-goals."
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "",
+              "spanId": "",
+              "eventName": "event core/src/cortex/helpers/mod.rs:93"
+            },
+            {
+              "timeUnixNano": "1777896271447692000",
+              "observedTimeUnixNano": "1777896271447692000",
+              "severityNumber": 5,
+              "severityText": "DEBUG",
+              "body": {
+                "stringValue": "input_ir_sense"
+              },
+              "attributes": [
+                {
+                  "key": "cycle_id",
+                  "value": {
+                    "intValue": "1"
+                  }
+                },
+                {
+                  "key": "input_ir_sense",
+                  "value": {
+                    "stringValue": "[]"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "",
+              "spanId": "",
+              "eventName": "event core/src/cortex/runtime/primary.rs:245"
+            },
+            {
+              "timeUnixNano": "1777896271447695000",
+              "observedTimeUnixNano": "1777896271447695000",
+              "severityNumber": 5,
+              "severityText": "DEBUG",
+              "body": {
+                "stringValue": "input_ir_proprioception"
+              },
+              "attributes": [
+                {
+                  "key": "cycle_id",
+                  "value": {
+                    "intValue": "1"
+                  }
+                },
+                {
+                  "key": "input_ir_proprioception",
+                  "value": {
+                    "stringValue": "- main.cwd: /Users/lanzhijiang/Development/Beluna\n- main.network: interface_count=27;interfaces=anpi0,anpi1,anpi3,ap1,awdl0,bridge0,en0,en1,en12,en2,en3,en4,en5,en6,en7,en9,gif0,llw0,lo0,stf0,utun0,utun1,utun2,utun3,utun4,utun5,utun6\n- main.os: name=Darwin;kernel=24.4.0;os_version=15.4.1;long_os_version=macOS 15.4.1 Sequoia;host=Lan-mac-mini.local\n- main.pid: 8227\n- main.resources: cpu_count=10;memory(total=17179869184,available=6543949824,used=14033977344);swap(total=9663676416,used=8453292032);uptime_seconds=6341679\n- spine.body_endpoint_count: 2\n- spine.body_endpoints: shell.1,web.2"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "",
+              "spanId": "",
+              "eventName": "event core/src/cortex/runtime/primary.rs:251"
+            },
+            {
+              "timeUnixNano": "1777896271447697000",
+              "observedTimeUnixNano": "1777896271447697000",
+              "severityNumber": 5,
+              "severityText": "DEBUG",
+              "body": {
+                "stringValue": "input_ir_goal_forest"
+              },
+              "attributes": [
+                {
+                  "key": "cycle_id",
+                  "value": {
+                    "intValue": "1"
+                  }
+                },
+                {
+                  "key": "input_ir_goal_forest",
+                  "value": {
+                    "stringValue": "+-- [active] (w=1.00) id=exist-and-operate-as-beluna :: Exist and Operate as Beluna\n    |-- 1 [active] (w=0.90) id=monitor-system-state :: Keep track of cwd, resources, and network status to ensure stability.\n    |-- 2 [active] (w=0.90) id=validate-body-endpoints :: Periodically test shell.1 and web.2 to ensure they are responsive and functional.\n    |-- 3 [active] (w=0.85) id=anticipate-user-needs :: Listen for input and prepare to execute tasks that align with user intent, resisting chaos by organizing incoming requests into actionable sub-goals."
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "",
+              "spanId": "",
+              "eventName": "event core/src/cortex/runtime/primary.rs:257"
+            },
+            {
+              "timeUnixNano": "1777896271447832000",
+              "observedTimeUnixNano": "1777896271447832000",
+              "severityNumber": 13,
+              "severityText": "WARN",
+              "body": {
+                "stringValue": "stage_failed"
+              },
+              "attributes": [
+                {
+                  "key": "cycle_id",
+                  "value": {
+                    "intValue": "1"
+                  }
+                },
+                {
+                  "key": "stage",
+                  "value": {
+                    "stringValue": "primary"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "",
+              "spanId": "",
+              "eventName": "event core/src/cortex/runtime/primary.rs:981"
+            },
+            {
+              "timeUnixNano": "1777896271447869000",
+              "observedTimeUnixNano": "1777896271447869000",
+              "severityNumber": 13,
+              "severityText": "WARN",
+              "body": {
+                "stringValue": "primary_failed_noop"
+              },
+              "attributes": [
+                {
+                  "key": "cycle_id",
+                  "value": {
+                    "intValue": "1"
+                  }
+                },
+                {
+                  "key": "error",
+                  "value": {
+                    "stringValue": "missing credential environment variable BAILIAN_API_KEY for backend bailian (backend=bailian)"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "",
+              "spanId": "",
+              "eventName": "event core/src/cortex/runtime/primary.rs:294"
+            },
+            {
+              "timeUnixNano": "1777896271447897000",
+              "observedTimeUnixNano": "1777896271447897000",
+              "severityNumber": 5,
+              "severityText": "DEBUG",
+              "body": {
+                "stringValue": "noop_fallback"
+              },
+              "attributes": [
+                {
+                  "key": "cycle_id",
+                  "value": {
+                    "intValue": "1"
+                  }
+                },
+                {
+                  "key": "reason",
+                  "value": {
+                    "stringValue": "primary_failed"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "",
+              "spanId": "",
+              "eventName": "event core/src/cortex/runtime/primary.rs:1000"
+            }
+          ],
+          "schemaUrl": ""
+        },
+        {
+          "scope": {
+            "name": "observability",
+            "version": "",
+            "attributes": [],
+            "droppedAttributesCount": 0
+          },
+          "logRecords": [
+            {
+              "timeUnixNano": "1777896271433199000",
+              "observedTimeUnixNano": "1777896271433199000",
+              "severityNumber": 9,
+              "severityText": "INFO",
+              "body": {
+                "stringValue": "opentelemetry_otlp_signal_state"
+              },
+              "attributes": [
+                {
+                  "key": "signal",
+                  "value": {
+                    "stringValue": "metrics"
+                  }
+                },
+                {
+                  "key": "requested",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "enabled",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "protocol",
+                  "value": {
+                    "stringValue": "Some(\"grpc\")"
+                  }
+                },
+                {
+                  "key": "endpoint",
+                  "value": {
+                    "stringValue": "None"
+                  }
+                },
+                {
+                  "key": "timeout_ms",
+                  "value": {
+                    "stringValue": "None"
+                  }
+                },
+                {
+                  "key": "detail",
+                  "value": {
+                    "stringValue": "Some(\"disabled_by_config\")"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "",
+              "spanId": "",
+              "eventName": "event core/src/main.rs:155"
+            },
+            {
+              "timeUnixNano": "1777896271433221000",
+              "observedTimeUnixNano": "1777896271433221000",
+              "severityNumber": 9,
+              "severityText": "INFO",
+              "body": {
+                "stringValue": "opentelemetry_otlp_signal_state"
+              },
+              "attributes": [
+                {
+                  "key": "signal",
+                  "value": {
+                    "stringValue": "logs"
+                  }
+                },
+                {
+                  "key": "requested",
+                  "value": {
+                    "boolValue": true
+                  }
+                },
+                {
+                  "key": "enabled",
+                  "value": {
+                    "boolValue": true
+                  }
+                },
+                {
+                  "key": "protocol",
+                  "value": {
+                    "stringValue": "Some(\"grpc\")"
+                  }
+                },
+                {
+                  "key": "endpoint",
+                  "value": {
+                    "stringValue": "Some(\"http://127.0.0.1:4317\")"
+                  }
+                },
+                {
+                  "key": "timeout_ms",
+                  "value": {
+                    "stringValue": "Some(5000)"
+                  }
+                },
+                {
+                  "key": "detail",
+                  "value": {
+                    "stringValue": "Some(\"export_interval_ms=2000 initialized\")"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "",
+              "spanId": "",
+              "eventName": "event core/src/main.rs:155"
+            },
+            {
+              "timeUnixNano": "1777896271433239000",
+              "observedTimeUnixNano": "1777896271433239000",
+              "severityNumber": 9,
+              "severityText": "INFO",
+              "body": {
+                "stringValue": "opentelemetry_otlp_signal_state"
+              },
+              "attributes": [
+                {
+                  "key": "signal",
+                  "value": {
+                    "stringValue": "traces"
+                  }
+                },
+                {
+                  "key": "requested",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "enabled",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "protocol",
+                  "value": {
+                    "stringValue": "Some(\"grpc\")"
+                  }
+                },
+                {
+                  "key": "endpoint",
+                  "value": {
+                    "stringValue": "None"
+                  }
+                },
+                {
+                  "key": "timeout_ms",
+                  "value": {
+                    "stringValue": "None"
+                  }
+                },
+                {
+                  "key": "detail",
+                  "value": {
+                    "stringValue": "Some(\"disabled_by_config\")"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "",
+              "spanId": "",
+              "eventName": "event core/src/main.rs:155"
+            }
+          ],
+          "schemaUrl": ""
+        },
+        {
+          "scope": {
+            "name": "observability.contract",
+            "version": "",
+            "attributes": [],
+            "droppedAttributesCount": 0
+          },
+          "logRecords": [
+            {
+              "timeUnixNano": "1777896271444319000",
+              "observedTimeUnixNano": "1777896271444319000",
+              "severityNumber": 9,
+              "severityText": "INFO",
+              "body": {
+                "stringValue": "contract_event"
+              },
+              "attributes": [
+                {
+                  "key": "subsystem",
+                  "value": {
+                    "stringValue": "spine"
+                  }
+                },
+                {
+                  "key": "family",
+                  "value": {
+                    "stringValue": "spine.adapter"
+                  }
+                },
+                {
+                  "key": "run_id",
+                  "value": {
+                    "stringValue": "019df2e0-2e48-7222-8c84-3589e99dfd19"
+                  }
+                },
+                {
+                  "key": "tick",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "tick_present",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "organ_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "thread_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "turn_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "request_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "endpoint_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "descriptor_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "act_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "sense_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "adapter_id",
+                  "value": {
+                    "stringValue": "1"
+                  }
+                },
+                {
+                  "key": "adapter_type",
+                  "value": {
+                    "stringValue": "unix_socket_ndjson"
+                  }
+                },
+                {
+                  "key": "transition_kind",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "outcome",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "direction",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "binding_kind",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "change_mode",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "state",
+                  "value": {
+                    "stringValue": "enabled"
+                  }
+                },
+                {
+                  "key": "kind",
+                  "value": {
+                    "stringValue": "enabled"
+                  }
+                },
+                {
+                  "key": "payload",
+                  "value": {
+                    "stringValue": "{\"family\":\"spine.adapter\",\"run_id\":\"019df2e0-2e48-7222-8c84-3589e99dfd19\",\"timestamp\":\"2026-05-04T12:04:31.444227Z\",\"tick\":0,\"span_id\":\"spine.adapter:unix_socket_ndjson:1\",\"adapter_type\":\"unix_socket_ndjson\",\"adapter_id\":\"1\",\"kind\":\"enabled\"}"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "",
+              "spanId": "",
+              "eventName": "event core/src/observability/runtime/emit.rs:57"
+            },
+            {
+              "timeUnixNano": "1777896271444329000",
+              "observedTimeUnixNano": "1777896271444329000",
+              "severityNumber": 9,
+              "severityText": "INFO",
+              "body": {
+                "stringValue": "contract_event"
+              },
+              "attributes": [
+                {
+                  "key": "subsystem",
+                  "value": {
+                    "stringValue": "spine"
+                  }
+                },
+                {
+                  "key": "family",
+                  "value": {
+                    "stringValue": "spine.adapter"
+                  }
+                },
+                {
+                  "key": "run_id",
+                  "value": {
+                    "stringValue": "019df2e0-2e48-7222-8c84-3589e99dfd19"
+                  }
+                },
+                {
+                  "key": "tick",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "tick_present",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "organ_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "thread_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "turn_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "request_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "endpoint_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "descriptor_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "act_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "sense_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "adapter_id",
+                  "value": {
+                    "stringValue": "2"
+                  }
+                },
+                {
+                  "key": "adapter_type",
+                  "value": {
+                    "stringValue": "inline"
+                  }
+                },
+                {
+                  "key": "transition_kind",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "outcome",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "direction",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "binding_kind",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "change_mode",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "state",
+                  "value": {
+                    "stringValue": "enabled"
+                  }
+                },
+                {
+                  "key": "kind",
+                  "value": {
+                    "stringValue": "enabled"
+                  }
+                },
+                {
+                  "key": "payload",
+                  "value": {
+                    "stringValue": "{\"family\":\"spine.adapter\",\"run_id\":\"019df2e0-2e48-7222-8c84-3589e99dfd19\",\"timestamp\":\"2026-05-04T12:04:31.444226Z\",\"tick\":0,\"span_id\":\"spine.adapter:inline:2\",\"adapter_type\":\"inline\",\"adapter_id\":\"2\",\"kind\":\"enabled\"}"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "",
+              "spanId": "",
+              "eventName": "event core/src/observability/runtime/emit.rs:57"
+            },
+            {
+              "timeUnixNano": "1777896271444606000",
+              "observedTimeUnixNano": "1777896271444606000",
+              "severityNumber": 9,
+              "severityText": "INFO",
+              "body": {
+                "stringValue": "contract_event"
+              },
+              "attributes": [
+                {
+                  "key": "subsystem",
+                  "value": {
+                    "stringValue": "spine"
+                  }
+                },
+                {
+                  "key": "family",
+                  "value": {
+                    "stringValue": "spine.endpoint"
+                  }
+                },
+                {
+                  "key": "run_id",
+                  "value": {
+                    "stringValue": "019df2e0-2e48-7222-8c84-3589e99dfd19"
+                  }
+                },
+                {
+                  "key": "tick",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "tick_present",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "organ_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "thread_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "turn_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "request_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "endpoint_id",
+                  "value": {
+                    "stringValue": "shell.1"
+                  }
+                },
+                {
+                  "key": "descriptor_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "act_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "sense_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "adapter_id",
+                  "value": {
+                    "stringValue": "2"
+                  }
+                },
+                {
+                  "key": "adapter_type",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "transition_kind",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "outcome",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "direction",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "binding_kind",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "change_mode",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "state",
+                  "value": {
+                    "stringValue": "connected"
+                  }
+                },
+                {
+                  "key": "kind",
+                  "value": {
+                    "stringValue": "connected"
+                  }
+                },
+                {
+                  "key": "payload",
+                  "value": {
+                    "stringValue": "{\"family\":\"spine.endpoint\",\"run_id\":\"019df2e0-2e48-7222-8c84-3589e99dfd19\",\"timestamp\":\"2026-05-04T12:04:31.444587Z\",\"tick\":0,\"span_id\":\"spine.endpoint:shell.1\",\"endpoint_id\":\"shell.1\",\"adapter_id\":\"2\",\"kind\":\"connected\",\"channel_or_session\":\"adapter:2\"}"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "",
+              "spanId": "",
+              "eventName": "event core/src/observability/runtime/emit.rs:57"
+            },
+            {
+              "timeUnixNano": "1777896271444902000",
+              "observedTimeUnixNano": "1777896271444902000",
+              "severityNumber": 9,
+              "severityText": "INFO",
+              "body": {
+                "stringValue": "contract_event"
+              },
+              "attributes": [
+                {
+                  "key": "subsystem",
+                  "value": {
+                    "stringValue": "stem"
+                  }
+                },
+                {
+                  "key": "family",
+                  "value": {
+                    "stringValue": "stem.ns-catalog"
+                  }
+                },
+                {
+                  "key": "run_id",
+                  "value": {
+                    "stringValue": "019df2e0-2e48-7222-8c84-3589e99dfd19"
+                  }
+                },
+                {
+                  "key": "tick",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "tick_present",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "organ_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "thread_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "turn_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "request_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "endpoint_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "descriptor_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "act_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "sense_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "adapter_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "adapter_type",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "transition_kind",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "outcome",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "direction",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "binding_kind",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "change_mode",
+                  "value": {
+                    "stringValue": "snapshot"
+                  }
+                },
+                {
+                  "key": "state",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "kind",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "payload",
+                  "value": {
+                    "stringValue": "{\"family\":\"stem.ns-catalog\",\"run_id\":\"019df2e0-2e48-7222-8c84-3589e99dfd19\",\"timestamp\":\"2026-05-04T12:04:31.444852Z\",\"tick\":0,\"span_id\":\"stem.ns-catalog:stem:v1\",\"catalog_version\":\"stem:v1\",\"change_mode\":\"snapshot\",\"accepted_entries_or_routes\":{\"entries\":[{\"endpoint_id\":\"shell.1\",\"neural_signal_descriptor_id\":\"shell.exec\",\"payload_schema\":{\"properties\":{\"argv\":{\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"cwd\":{\"type\":[\"string\",\"null\"]},\"env\":{\"additionalProperties\":{\"type\":\"string\"},\"type\":\"object\"},\"stderr_max_bytes\":{\"minimum\":1,\"type\":\"integer\"},\"stdout_max_bytes\":{\"minimum\":1,\"type\":\"integer\"},\"timeout_ms\":{\"minimum\":1,\"type\":\"integer\"}},\"required\":[\"argv\"],\"type\":\"object\"},\"type\":\"act\"},{\"endpoint_id\":\"shell.1\",\"neural_signal_descriptor_id\":\"shell.exec.result\",\"payload_schema\":{\"type\":\"string\"},\"type\":\"sense\"}],\"routes\":[\"shell.1/shell.exec\",\"shell.1/shell.exec.result\"]},\"rejected_entries_or_routes\":[],\"catalog_snapshot\":{\"entries\":[{\"endpoint_id\":\"shell.1\",\"neural_signal_descriptor_id\":\"shell.exec.result\",\"payload_schema\":{\"type\":\"string\"},\"type\":\"sense\"},{\"endpoint_id\":\"shell.1\",\"neural_signal_descriptor_id\":\"shell.exec\",\"payload_schema\":{\"properties\":{\"argv\":{\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"cwd\":{\"type\":[\"string\",\"null\"]},\"env\":{\"additionalProperties\":{\"type\":\"string\"},\"type\":\"object\"},\"stderr_max_bytes\":{\"minimum\":1,\"type\":\"integer\"},\"stdout_max_bytes\":{\"minimum\":1,\"type\":\"integer\"},\"timeout_ms\":{\"minimum\":1,\"type\":\"integer\"}},\"required\":[\"argv\"],\"type\":\"object\"},\"type\":\"act\"}]}}"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "",
+              "spanId": "",
+              "eventName": "event core/src/observability/runtime/emit.rs:57"
+            },
+            {
+              "timeUnixNano": "1777896271445090000",
+              "observedTimeUnixNano": "1777896271445090000",
+              "severityNumber": 9,
+              "severityText": "INFO",
+              "body": {
+                "stringValue": "contract_event"
+              },
+              "attributes": [
+                {
+                  "key": "subsystem",
+                  "value": {
+                    "stringValue": "spine"
+                  }
+                },
+                {
+                  "key": "family",
+                  "value": {
+                    "stringValue": "spine.endpoint"
+                  }
+                },
+                {
+                  "key": "run_id",
+                  "value": {
+                    "stringValue": "019df2e0-2e48-7222-8c84-3589e99dfd19"
+                  }
+                },
+                {
+                  "key": "tick",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "tick_present",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "organ_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "thread_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "turn_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "request_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "endpoint_id",
+                  "value": {
+                    "stringValue": "shell.1"
+                  }
+                },
+                {
+                  "key": "descriptor_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "act_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "sense_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "adapter_id",
+                  "value": {
+                    "stringValue": "2"
+                  }
+                },
+                {
+                  "key": "adapter_type",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "transition_kind",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "outcome",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "direction",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "binding_kind",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "change_mode",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "state",
+                  "value": {
+                    "stringValue": "registered"
+                  }
+                },
+                {
+                  "key": "kind",
+                  "value": {
+                    "stringValue": "registered"
+                  }
+                },
+                {
+                  "key": "payload",
+                  "value": {
+                    "stringValue": "{\"family\":\"spine.endpoint\",\"run_id\":\"019df2e0-2e48-7222-8c84-3589e99dfd19\",\"timestamp\":\"2026-05-04T12:04:31.445066Z\",\"tick\":0,\"span_id\":\"spine.endpoint:shell.1\",\"endpoint_id\":\"shell.1\",\"adapter_id\":\"2\",\"kind\":\"registered\",\"channel_or_session\":\"adapter:2\",\"route_summary\":{\"routes\":[{\"descriptor_id\":\"shell.exec\",\"endpoint_id\":\"shell.1\",\"type\":\"act\"},{\"descriptor_id\":\"shell.exec.result\",\"endpoint_id\":\"shell.1\",\"type\":\"sense\"}]}}"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "",
+              "spanId": "",
+              "eventName": "event core/src/observability/runtime/emit.rs:57"
+            },
+            {
+              "timeUnixNano": "1777896271445236000",
+              "observedTimeUnixNano": "1777896271445236000",
+              "severityNumber": 9,
+              "severityText": "INFO",
+              "body": {
+                "stringValue": "contract_event"
+              },
+              "attributes": [
+                {
+                  "key": "subsystem",
+                  "value": {
+                    "stringValue": "stem"
+                  }
+                },
+                {
+                  "key": "family",
+                  "value": {
+                    "stringValue": "stem.proprioception"
+                  }
+                },
+                {
+                  "key": "run_id",
+                  "value": {
+                    "stringValue": "019df2e0-2e48-7222-8c84-3589e99dfd19"
+                  }
+                },
+                {
+                  "key": "tick",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "tick_present",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "organ_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "thread_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "turn_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "request_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "endpoint_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "descriptor_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "act_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "sense_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "adapter_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "adapter_type",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "transition_kind",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "outcome",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "direction",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "binding_kind",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "change_mode",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "state",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "kind",
+                  "value": {
+                    "stringValue": "patch"
+                  }
+                },
+                {
+                  "key": "payload",
+                  "value": {
+                    "stringValue": "{\"family\":\"stem.proprioception\",\"run_id\":\"019df2e0-2e48-7222-8c84-3589e99dfd19\",\"timestamp\":\"2026-05-04T12:04:31.44521Z\",\"tick\":0,\"span_id\":\"stem.proprioception:patch\",\"kind\":\"patch\",\"entries_or_keys\":{\"entries\":{\"spine.body_endpoint_count\":\"1\",\"spine.body_endpoints\":\"shell.1\"}}}"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "",
+              "spanId": "",
+              "eventName": "event core/src/observability/runtime/emit.rs:57"
+            },
+            {
+              "timeUnixNano": "1777896271445369000",
+              "observedTimeUnixNano": "1777896271445369000",
+              "severityNumber": 9,
+              "severityText": "INFO",
+              "body": {
+                "stringValue": "contract_event"
+              },
+              "attributes": [
+                {
+                  "key": "subsystem",
+                  "value": {
+                    "stringValue": "spine"
+                  }
+                },
+                {
+                  "key": "family",
+                  "value": {
+                    "stringValue": "spine.endpoint"
+                  }
+                },
+                {
+                  "key": "run_id",
+                  "value": {
+                    "stringValue": "019df2e0-2e48-7222-8c84-3589e99dfd19"
+                  }
+                },
+                {
+                  "key": "tick",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "tick_present",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "organ_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "thread_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "turn_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "request_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "endpoint_id",
+                  "value": {
+                    "stringValue": "web.2"
+                  }
+                },
+                {
+                  "key": "descriptor_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "act_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "sense_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "adapter_id",
+                  "value": {
+                    "stringValue": "2"
+                  }
+                },
+                {
+                  "key": "adapter_type",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "transition_kind",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "outcome",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "direction",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "binding_kind",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "change_mode",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "state",
+                  "value": {
+                    "stringValue": "connected"
+                  }
+                },
+                {
+                  "key": "kind",
+                  "value": {
+                    "stringValue": "connected"
+                  }
+                },
+                {
+                  "key": "payload",
+                  "value": {
+                    "stringValue": "{\"family\":\"spine.endpoint\",\"run_id\":\"019df2e0-2e48-7222-8c84-3589e99dfd19\",\"timestamp\":\"2026-05-04T12:04:31.445353Z\",\"tick\":0,\"span_id\":\"spine.endpoint:web.2\",\"endpoint_id\":\"web.2\",\"adapter_id\":\"2\",\"kind\":\"connected\",\"channel_or_session\":\"adapter:2\"}"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "",
+              "spanId": "",
+              "eventName": "event core/src/observability/runtime/emit.rs:57"
+            },
+            {
+              "timeUnixNano": "1777896271445471000",
+              "observedTimeUnixNano": "1777896271445471000",
+              "severityNumber": 9,
+              "severityText": "INFO",
+              "body": {
+                "stringValue": "contract_event"
+              },
+              "attributes": [
+                {
+                  "key": "subsystem",
+                  "value": {
+                    "stringValue": "stem"
+                  }
+                },
+                {
+                  "key": "family",
+                  "value": {
+                    "stringValue": "stem.ns-catalog"
+                  }
+                },
+                {
+                  "key": "run_id",
+                  "value": {
+                    "stringValue": "019df2e0-2e48-7222-8c84-3589e99dfd19"
+                  }
+                },
+                {
+                  "key": "tick",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "tick_present",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "organ_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "thread_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "turn_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "request_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "endpoint_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "descriptor_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "act_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "sense_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "adapter_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "adapter_type",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "transition_kind",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "outcome",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "direction",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "binding_kind",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "change_mode",
+                  "value": {
+                    "stringValue": "update"
+                  }
+                },
+                {
+                  "key": "state",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "kind",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "payload",
+                  "value": {
+                    "stringValue": "{\"family\":\"stem.ns-catalog\",\"run_id\":\"019df2e0-2e48-7222-8c84-3589e99dfd19\",\"timestamp\":\"2026-05-04T12:04:31.445442Z\",\"tick\":0,\"span_id\":\"stem.ns-catalog:stem:v2\",\"catalog_version\":\"stem:v2\",\"change_mode\":\"update\",\"accepted_entries_or_routes\":{\"entries\":[{\"endpoint_id\":\"web.2\",\"neural_signal_descriptor_id\":\"web.fetch\",\"payload_schema\":{\"properties\":{\"body_text\":{\"type\":[\"string\",\"null\"]},\"headers\":{\"additionalProperties\":{\"type\":\"string\"},\"default\":{},\"type\":\"object\"},\"method\":{\"type\":[\"string\",\"null\"]},\"response_max_bytes\":{\"minimum\":1,\"type\":\"integer\"},\"timeout_ms\":{\"minimum\":1,\"type\":\"integer\"},\"url\":{\"type\":\"string\"}},\"required\":[\"url\"],\"type\":\"object\"},\"type\":\"act\"},{\"endpoint_id\":\"web.2\",\"neural_signal_descriptor_id\":\"web.fetch.result\",\"payload_schema\":{\"type\":\"string\"},\"type\":\"sense\"}],\"routes\":[\"web.2/web.fetch\",\"web.2/web.fetch.result\"]},\"rejected_entries_or_routes\":[]}"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "",
+              "spanId": "",
+              "eventName": "event core/src/observability/runtime/emit.rs:57"
+            },
+            {
+              "timeUnixNano": "1777896271445568000",
+              "observedTimeUnixNano": "1777896271445568000",
+              "severityNumber": 9,
+              "severityText": "INFO",
+              "body": {
+                "stringValue": "contract_event"
+              },
+              "attributes": [
+                {
+                  "key": "subsystem",
+                  "value": {
+                    "stringValue": "spine"
+                  }
+                },
+                {
+                  "key": "family",
+                  "value": {
+                    "stringValue": "spine.endpoint"
+                  }
+                },
+                {
+                  "key": "run_id",
+                  "value": {
+                    "stringValue": "019df2e0-2e48-7222-8c84-3589e99dfd19"
+                  }
+                },
+                {
+                  "key": "tick",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "tick_present",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "organ_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "thread_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "turn_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "request_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "endpoint_id",
+                  "value": {
+                    "stringValue": "web.2"
+                  }
+                },
+                {
+                  "key": "descriptor_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "act_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "sense_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "adapter_id",
+                  "value": {
+                    "stringValue": "2"
+                  }
+                },
+                {
+                  "key": "adapter_type",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "transition_kind",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "outcome",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "direction",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "binding_kind",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "change_mode",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "state",
+                  "value": {
+                    "stringValue": "registered"
+                  }
+                },
+                {
+                  "key": "kind",
+                  "value": {
+                    "stringValue": "registered"
+                  }
+                },
+                {
+                  "key": "payload",
+                  "value": {
+                    "stringValue": "{\"family\":\"spine.endpoint\",\"run_id\":\"019df2e0-2e48-7222-8c84-3589e99dfd19\",\"timestamp\":\"2026-05-04T12:04:31.445551Z\",\"tick\":0,\"span_id\":\"spine.endpoint:web.2\",\"endpoint_id\":\"web.2\",\"adapter_id\":\"2\",\"kind\":\"registered\",\"channel_or_session\":\"adapter:2\",\"route_summary\":{\"routes\":[{\"descriptor_id\":\"web.fetch\",\"endpoint_id\":\"web.2\",\"type\":\"act\"},{\"descriptor_id\":\"web.fetch.result\",\"endpoint_id\":\"web.2\",\"type\":\"sense\"}]}}"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "",
+              "spanId": "",
+              "eventName": "event core/src/observability/runtime/emit.rs:57"
+            },
+            {
+              "timeUnixNano": "1777896271445657000",
+              "observedTimeUnixNano": "1777896271445657000",
+              "severityNumber": 9,
+              "severityText": "INFO",
+              "body": {
+                "stringValue": "contract_event"
+              },
+              "attributes": [
+                {
+                  "key": "subsystem",
+                  "value": {
+                    "stringValue": "stem"
+                  }
+                },
+                {
+                  "key": "family",
+                  "value": {
+                    "stringValue": "stem.proprioception"
+                  }
+                },
+                {
+                  "key": "run_id",
+                  "value": {
+                    "stringValue": "019df2e0-2e48-7222-8c84-3589e99dfd19"
+                  }
+                },
+                {
+                  "key": "tick",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "tick_present",
+                  "value": {
+                    "boolValue": false
+                  }
+                },
+                {
+                  "key": "organ_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "thread_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "turn_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "request_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "endpoint_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "descriptor_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "act_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "sense_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "adapter_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "adapter_type",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "transition_kind",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "outcome",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "direction",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "binding_kind",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "change_mode",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "state",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "kind",
+                  "value": {
+                    "stringValue": "patch"
+                  }
+                },
+                {
+                  "key": "payload",
+                  "value": {
+                    "stringValue": "{\"family\":\"stem.proprioception\",\"run_id\":\"019df2e0-2e48-7222-8c84-3589e99dfd19\",\"timestamp\":\"2026-05-04T12:04:31.445643Z\",\"tick\":0,\"span_id\":\"stem.proprioception:patch\",\"kind\":\"patch\",\"entries_or_keys\":{\"entries\":{\"spine.body_endpoint_count\":\"2\",\"spine.body_endpoints\":\"shell.1,web.2\"}}}"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "",
+              "spanId": "",
+              "eventName": "event core/src/observability/runtime/emit.rs:57"
+            },
+            {
+              "timeUnixNano": "1777896271447313000",
+              "observedTimeUnixNano": "1777896271447313000",
+              "severityNumber": 9,
+              "severityText": "INFO",
+              "body": {
+                "stringValue": "contract_event"
+              },
+              "attributes": [
+                {
+                  "key": "subsystem",
+                  "value": {
+                    "stringValue": "stem"
+                  }
+                },
+                {
+                  "key": "family",
+                  "value": {
+                    "stringValue": "stem.tick"
+                  }
+                },
+                {
+                  "key": "run_id",
+                  "value": {
+                    "stringValue": "019df2e0-2e48-7222-8c84-3589e99dfd19"
+                  }
+                },
+                {
+                  "key": "tick",
+                  "value": {
+                    "intValue": "1"
+                  }
+                },
+                {
+                  "key": "tick_present",
+                  "value": {
+                    "boolValue": true
+                  }
+                },
+                {
+                  "key": "organ_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "thread_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "turn_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "request_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "endpoint_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "descriptor_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "act_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "sense_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "adapter_id",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "adapter_type",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "transition_kind",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "outcome",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "direction",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "binding_kind",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "change_mode",
+                  "value": {
+                    "stringValue": ""
+                  }
+                },
+                {
+                  "key": "state",
+                  "value": {
+                    "stringValue": "granted"
+                  }
+                },
+                {
+                  "key": "kind",
+                  "value": {
+                    "stringValue": "granted"
+                  }
+                },
+                {
+                  "key": "payload",
+                  "value": {
+                    "stringValue": "{\"family\":\"stem.tick\",\"run_id\":\"019df2e0-2e48-7222-8c84-3589e99dfd19\",\"timestamp\":\"2026-05-04T12:04:31.447279Z\",\"tick\":1,\"span_id\":\"stem.tick:1\",\"status\":\"granted\",\"tick_seq\":1}"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "",
+              "spanId": "",
+              "eventName": "event core/src/observability/runtime/emit.rs:57"
+            }
+          ],
+          "schemaUrl": ""
+        }
+      ],
+      "schemaUrl": ""
+    }
+  ]
+}

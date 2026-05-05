@@ -1,0 +1,587 @@
+{
+  "resourceLogs": [
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "telemetry.sdk.language",
+            "value": {
+              "stringValue": "rust"
+            }
+          },
+          {
+            "key": "telemetry.sdk.name",
+            "value": {
+              "stringValue": "opentelemetry"
+            }
+          },
+          {
+            "key": "telemetry.sdk.version",
+            "value": {
+              "stringValue": "0.31.0"
+            }
+          },
+          {
+            "key": "service.name",
+            "value": {
+              "stringValue": "beluna.core"
+            }
+          },
+          {
+            "key": "service.version",
+            "value": {
+              "stringValue": "0.1.0-dev"
+            }
+          },
+          {
+            "key": "process.executable.name",
+            "value": {
+              "stringValue": "beluna"
+            }
+          }
+        ],
+        "droppedAttributesCount": 0,
+        "entityRefs": []
+      },
+      "scopeLogs": [
+        {
+          "scope": {
+            "name": "beluna.core.main",
+            "version": "",
+            "attributes": [],
+            "droppedAttributesCount": 0
+          },
+          "logRecords": [
+            {
+              "timeUnixNano": "1777896000000000000",
+              "observedTimeUnixNano": "1777896000000000000",
+              "severityNumber": 9,
+              "severityText": "INFO",
+              "body": {
+                "kvlistValue": {
+                  "values": [
+                {
+                  "key": "summary",
+                  "value": {
+                    "stringValue": "Core runtime booted with OTLP logs enabled."
+                  }
+                },
+                {
+                  "key": "run_id",
+                  "value": {
+                    "stringValue": "target-wake-0001"
+                  }
+                },
+                {
+                  "key": "config_path",
+                      "value": {
+                        "stringValue": "beluna.jsonc"
+                      }
+                    },
+                    {
+                      "key": "otlp_logs_endpoint",
+                      "value": {
+                        "stringValue": "http://127.0.0.1:4317"
+                      }
+                    }
+                  ]
+                }
+              },
+              "attributes": [],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "11111111111111111111111111110000",
+              "spanId": "0000000000000001",
+              "eventName": "runtime.booted"
+            }
+          ],
+          "schemaUrl": ""
+        },
+        {
+          "scope": {
+            "name": "beluna.core.stem",
+            "version": "",
+            "attributes": [],
+            "droppedAttributesCount": 0
+          },
+          "logRecords": [
+            {
+              "timeUnixNano": "1777896001000000000",
+              "observedTimeUnixNano": "1777896001000000000",
+              "severityNumber": 9,
+              "severityText": "INFO",
+              "body": {
+                "kvlistValue": {
+                  "values": [
+                {
+                  "key": "summary",
+                  "value": {
+                    "stringValue": "Stem granted tick 1."
+                  }
+                },
+                {
+                  "key": "run_id",
+                  "value": {
+                    "stringValue": "target-wake-0001"
+                  }
+                },
+                {
+                  "key": "tick",
+                  "value": {
+                    "intValue": "1"
+                  }
+                },
+                {
+                  "key": "tick_seq",
+                      "value": {
+                        "intValue": "1"
+                      }
+                    }
+                  ]
+                }
+              },
+              "attributes": [],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "11111111111111111111111111110001",
+              "spanId": "0000000000000100",
+              "eventName": "tick.granted"
+            }
+          ],
+          "schemaUrl": ""
+        },
+        {
+          "scope": {
+            "name": "beluna.core.cortex",
+            "version": "",
+            "attributes": [],
+            "droppedAttributesCount": 0
+          },
+          "logRecords": [
+            {
+              "timeUnixNano": "1777896001100000000",
+              "observedTimeUnixNano": "1777896001100000000",
+              "severityNumber": 9,
+              "severityText": "INFO",
+              "body": {
+                "kvlistValue": {
+                  "values": [
+                    {
+                      "key": "summary",
+                      "value": {
+                        "stringValue": "Cortex primary organ started."
+                      }
+                    },
+                    {
+                      "key": "input",
+                      "value": {
+                        "kvlistValue": {
+                          "values": [
+                            {
+                              "key": "message_count",
+                              "value": {
+                                "intValue": "1"
+                              }
+                            },
+                            {
+                              "key": "tool_override_count",
+                              "value": {
+                                "intValue": "2"
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              "attributes": [],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "11111111111111111111111111110001",
+              "spanId": "0000000000000200",
+              "eventName": "primary.started"
+            },
+            {
+              "timeUnixNano": "1777896002400000000",
+              "observedTimeUnixNano": "1777896002400000000",
+              "severityNumber": 9,
+              "severityText": "INFO",
+              "body": {
+                "kvlistValue": {
+                  "values": [
+                    {
+                      "key": "summary",
+                      "value": {
+                        "stringValue": "Cortex primary organ finished."
+                      }
+                    },
+                    {
+                      "key": "output",
+                      "value": {
+                        "kvlistValue": {
+                          "values": [
+                            {
+                              "key": "finish_reason",
+                              "value": {
+                                "stringValue": "stop"
+                              }
+                            },
+                            {
+                              "key": "tool_call_count",
+                              "value": {
+                                "intValue": "0"
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              "attributes": [],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "11111111111111111111111111110001",
+              "spanId": "0000000000000200",
+              "eventName": "primary.finished"
+            }
+          ],
+          "schemaUrl": ""
+        },
+        {
+          "scope": {
+            "name": "beluna.core.ai-gateway",
+            "version": "",
+            "attributes": [],
+            "droppedAttributesCount": 0
+          },
+          "logRecords": [
+            {
+              "timeUnixNano": "1777896002100000000",
+              "observedTimeUnixNano": "1777896002100000000",
+              "severityNumber": 9,
+              "severityText": "INFO",
+              "body": {
+                "kvlistValue": {
+                  "values": [
+                    {
+                      "key": "summary",
+                      "value": {
+                        "stringValue": "AI backend request completed."
+                      }
+                    },
+                    {
+                      "key": "transport_request_id",
+                      "value": {
+                        "stringValue": "bailian-qwen3.5-plus-1"
+                      }
+                    },
+                    {
+                      "key": "usage",
+                      "value": {
+                        "kvlistValue": {
+                          "values": [
+                            {
+                              "key": "input_tokens",
+                              "value": {
+                                "intValue": "120"
+                              }
+                            },
+                            {
+                              "key": "output_tokens",
+                              "value": {
+                                "intValue": "32"
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              "attributes": [
+                {
+                  "key": "ai.capability",
+                  "value": {
+                    "stringValue": "chat"
+                  }
+                },
+                {
+                  "key": "ai.backend.id",
+                  "value": {
+                    "stringValue": "bailian"
+                  }
+                },
+                {
+                  "key": "ai.model",
+                  "value": {
+                    "stringValue": "qwen3.5-plus"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "11111111111111111111111111110001",
+              "spanId": "0000000000000300",
+              "eventName": "transport.request.completed"
+            }
+          ],
+          "schemaUrl": ""
+        },
+        {
+          "scope": {
+            "name": "beluna.core.ai-gateway.chat",
+            "version": "",
+            "attributes": [],
+            "droppedAttributesCount": 0
+          },
+          "logRecords": [
+            {
+              "timeUnixNano": "1777896002200000000",
+              "observedTimeUnixNano": "1777896002200000000",
+              "severityNumber": 9,
+              "severityText": "INFO",
+              "body": {
+                "kvlistValue": {
+                  "values": [
+                    {
+                      "key": "summary",
+                      "value": {
+                        "stringValue": "Chat turn dispatched to backend."
+                      }
+                    },
+                    {
+                      "key": "chat_id",
+                      "value": {
+                        "stringValue": "cortex-primary-chat"
+                      }
+                    },
+                    {
+                      "key": "thread_id",
+                      "value": {
+                        "stringValue": "cortex-primary-thread"
+                      }
+                    },
+                    {
+                      "key": "turn_id",
+                      "value": {
+                        "intValue": "1"
+                      }
+                    },
+                    {
+                      "key": "transport_request_id",
+                      "value": {
+                        "stringValue": "bailian-qwen3.5-plus-1"
+                      }
+                    },
+                    {
+                      "key": "dispatch_payload",
+                      "value": {
+                        "kvlistValue": {
+                          "values": [
+                            {
+                              "key": "message_count",
+                              "value": {
+                                "intValue": "1"
+                              }
+                            },
+                            {
+                              "key": "output_mode",
+                              "value": {
+                                "stringValue": "text"
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              "attributes": [],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "11111111111111111111111111110001",
+              "spanId": "0000000000000310",
+              "eventName": "turn.dispatched"
+            },
+            {
+              "timeUnixNano": "1777896002300000000",
+              "observedTimeUnixNano": "1777896002300000000",
+              "severityNumber": 9,
+              "severityText": "INFO",
+              "body": {
+                "kvlistValue": {
+                  "values": [
+                    {
+                      "key": "summary",
+                      "value": {
+                        "stringValue": "Chat turn committed to thread."
+                      }
+                    },
+                    {
+                      "key": "chat_id",
+                      "value": {
+                        "stringValue": "cortex-primary-chat"
+                      }
+                    },
+                    {
+                      "key": "thread_id",
+                      "value": {
+                        "stringValue": "cortex-primary-thread"
+                      }
+                    },
+                    {
+                      "key": "turn_id",
+                      "value": {
+                        "intValue": "1"
+                      }
+                    },
+                    {
+                      "key": "transport_request_id",
+                      "value": {
+                        "stringValue": "bailian-qwen3.5-plus-1"
+                      }
+                    },
+                    {
+                      "key": "messages_when_committed",
+                      "value": {
+                        "arrayValue": {
+                          "values": [
+                            {
+                              "kvlistValue": {
+                                "values": [
+                                  {
+                                    "key": "role",
+                                    "value": {
+                                      "stringValue": "user"
+                                    }
+                                  },
+                                  {
+                                    "key": "text",
+                                    "value": {
+                                      "stringValue": "Summarize current state."
+                                    }
+                                  }
+                                ]
+                              }
+                            },
+                            {
+                              "kvlistValue": {
+                                "values": [
+                                  {
+                                    "key": "role",
+                                    "value": {
+                                      "stringValue": "assistant"
+                                    }
+                                  },
+                                  {
+                                    "key": "text",
+                                    "value": {
+                                      "stringValue": "State summarized."
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              "attributes": [],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "11111111111111111111111111110001",
+              "spanId": "0000000000000310",
+              "eventName": "turn.committed"
+            }
+          ],
+          "schemaUrl": ""
+        },
+        {
+          "scope": {
+            "name": "beluna.core.spine",
+            "version": "",
+            "attributes": [],
+            "droppedAttributesCount": 0
+          },
+          "logRecords": [
+            {
+              "timeUnixNano": "1777896002500000000",
+              "observedTimeUnixNano": "1777896002500000000",
+              "severityNumber": 9,
+              "severityText": "INFO",
+              "body": {
+                "kvlistValue": {
+                  "values": [
+                    {
+                      "key": "summary",
+                      "value": {
+                        "stringValue": "Spine delivered act to endpoint."
+                      }
+                    },
+                    {
+                      "key": "delivery",
+                      "value": {
+                        "kvlistValue": {
+                          "values": [
+                            {
+                              "key": "binding_kind",
+                              "value": {
+                                "stringValue": "inline"
+                              }
+                            },
+                            {
+                              "key": "acknowledged",
+                              "value": {
+                                "boolValue": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              "attributes": [
+                {
+                  "key": "spine.act.id",
+                  "value": {
+                    "stringValue": "act-target-0001"
+                  }
+                },
+                {
+                  "key": "spine.endpoint.id",
+                  "value": {
+                    "stringValue": "shell.1"
+                  }
+                },
+                {
+                  "key": "spine.descriptor.id",
+                  "value": {
+                    "stringValue": "shell.exec"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "flags": 0,
+              "traceId": "11111111111111111111111111110001",
+              "spanId": "0000000000000400",
+              "eventName": "act.delivered"
+            }
+          ],
+          "schemaUrl": ""
+        }
+      ],
+      "schemaUrl": ""
+    }
+  ]
+}

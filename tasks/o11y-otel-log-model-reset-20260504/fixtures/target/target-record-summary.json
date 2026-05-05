@@ -1,0 +1,74 @@
+[
+  {
+    "scope": "beluna.core.main",
+    "eventName": "runtime.booted",
+    "traceId": "11111111111111111111111111110000",
+    "spanId": "0000000000000001",
+    "bodyShape": "kvlistValue",
+    "attributeKeys": []
+  },
+  {
+    "scope": "beluna.core.stem",
+    "eventName": "tick.granted",
+    "traceId": "11111111111111111111111111110001",
+    "spanId": "0000000000000100",
+    "bodyShape": "kvlistValue",
+    "attributeKeys": []
+  },
+  {
+    "scope": "beluna.core.cortex",
+    "eventName": "primary.started",
+    "traceId": "11111111111111111111111111110001",
+    "spanId": "0000000000000200",
+    "bodyShape": "kvlistValue",
+    "attributeKeys": []
+  },
+  {
+    "scope": "beluna.core.cortex",
+    "eventName": "primary.finished",
+    "traceId": "11111111111111111111111111110001",
+    "spanId": "0000000000000200",
+    "bodyShape": "kvlistValue",
+    "attributeKeys": []
+  },
+  {
+    "scope": "beluna.core.ai-gateway",
+    "eventName": "transport.request.completed",
+    "traceId": "11111111111111111111111111110001",
+    "spanId": "0000000000000300",
+    "bodyShape": "kvlistValue",
+    "attributeKeys": [
+      "ai.capability",
+      "ai.backend.id",
+      "ai.model"
+    ]
+  },
+  {
+    "scope": "beluna.core.ai-gateway.chat",
+    "eventName": "turn.dispatched",
+    "traceId": "11111111111111111111111111110001",
+    "spanId": "0000000000000310",
+    "bodyShape": "kvlistValue",
+    "attributeKeys": []
+  },
+  {
+    "scope": "beluna.core.ai-gateway.chat",
+    "eventName": "turn.committed",
+    "traceId": "11111111111111111111111111110001",
+    "spanId": "0000000000000310",
+    "bodyShape": "kvlistValue",
+    "attributeKeys": []
+  },
+  {
+    "scope": "beluna.core.spine",
+    "eventName": "act.delivered",
+    "traceId": "11111111111111111111111111110001",
+    "spanId": "0000000000000400",
+    "bodyShape": "kvlistValue",
+    "attributeKeys": [
+      "spine.act.id",
+      "spine.endpoint.id",
+      "spine.descriptor.id"
+    ]
+  }
+]

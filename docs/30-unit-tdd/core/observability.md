@@ -5,136 +5,85 @@ This file defines Core's target local OTLP log model after the observability res
 Cross-unit reconstruction guarantees belong in `docs/20-product-tdd/observability-contract.md`.
 Loom composition and operator-facing investigation flows belong in `docs/30-unit-tdd/moira/*`.
 
-Current code may still emit the older coarse Stage 2 family catalog in places until the synchronized refactor lands.
-This file is the target lattice for that refactor.
-AI observability is split into one capability-neutral gateway transport family plus chat-owned capability families under the gateway namespace.
-
 ## Local Rules
 
-1. Core's native telemetry carrier is OpenTelemetry semantic context plus structured log body.
-2. Every canonical emitted record is attributed to one `tick`. Bootstrap or pre-first-grant activity uses `tick = 0`.
-3. `tick` is the operator-facing trace anchor. Tick-scoped runtime work should remain in one stable trace context per admitted tick and stay unique within one wake.
-4. Literal OpenTelemetry `span_id` values are opaque operation-instance identifiers. They are not human-friendly domain labels.
-5. Domain identifiers such as `organ_id`, `thread_id`, `turn_id`, `endpoint_id`, and similar fields remain structured-body fields by default. Promote them into broader telemetry context only when cross-record pairing or cross-module correlation requires it.
-6. Resource- or process-level identity belongs in OpenTelemetry resource attributes, not duplicated in every event body field set.
-7. Core should prefer domain-honest families over coarse catch-all families. Do not merge asymmetrical state machines only because one struct could make many fields optional.
-8. `cortex.tick` is removed from the target model. The canonical tick anchor is `stem.tick`.
-9. `stem.signal` and `stem.dispatch` are removed from the target model. Their semantics split into `stem.afferent` and `stem.efferent`.
-10. Stable Cortex execution families are one family per stable organ rather than one coarse `cortex.organ` family.
-11. `spine.endpoint` owns endpoint attachment and lifecycle semantics such as new, register, and drop. `spine.sense` means Spine received one sense from a body endpoint.
-12. The outbound Spine act family is `spine.act`.
-13. `ai-gateway.request` is the stable capability-neutral gateway transport family. It must not own thread, turn, message, or tool semantics.
-14. Goal-forest observability remains grounded in the mutation semantics the runtime actually owns today. The stable target surface is snapshot plus mutation, not speculative botanical diff verbs.
-15. During Beluna's early development phase, Core preserves full request, response, signal, topology, and other diagnostic payloads in raw OTLP records by default.
-16. Golden fixture bundles live under `core/tests/fixtures/observability/` and should be refreshed only after the family catalog stabilizes enough to justify the maintenance cost.
-17. Chat capability observability lives under `ai-gateway.chat.*`. Chat turn and thread semantics must not be hidden inside `ai-gateway.request`.
+1. Core's first-party telemetry carrier is native OTLP Logs shape: resource attributes, instrumentation scope, `eventName`, trace/span context, log attributes, and structured log body.
+2. `resource` describes the Core process. Current service name is `beluna.core`.
+3. `scope.name` identifies the Core owner that emitted the record.
+4. `eventName` identifies the event type under one scope. The schema key is `scope.name + eventName`.
+5. Records with the same schema key keep stable attributes and body schema.
+6. One wake plus one tick maps to one trace. Pre-first-tick activity uses `tick = 0` inside the wake.
+7. Trace ids and span ids use SHA-256 domain-separated deterministic derivation for the first implementation.
+8. `span_key` is scoped by `scope.name`; span keys avoid repeating owner or scope segments.
+9. Log attributes carry small, stable metadata used for the event type's own lookup, grouping, or filtering.
+10. Log body carries rich payload, snapshots, provider/request/response data, message arrays, and large or schema-deep values.
+11. Wake/tick grouping comes from trace id plus bootstrap and tick anchor events. Core avoids repeating wake/tick as attributes on every first-party event.
+12. Event result semantics come from `eventName`, severity, and event-specific body/outcome fields.
+13. Domain ids such as `sense_id`, `act_id`, `descriptor_id`, `endpoint_id`, `thread_id`, and `turn_id` stay local to the owning event schema. Body or attributes placement is an event-schema choice.
+14. Ordinary Rust diagnostics can continue through `tracing` and `opentelemetry-appender-tracing`. First-party owner events use the Owner Log Emitter over the OpenTelemetry Logs API so structured body and owner scope remain explicit.
+15. Legacy `ContractEvent` and family flattening may coexist temporarily during migration. The target source of truth is the native OTLP event surface below.
 
-## Field Notation
+## Owner Scopes
 
-In the tables below:
+| Scope | Owner |
+|---|---|
+| `beluna.core.main` | boot, config, runtime lifecycle, exporter state |
+| `beluna.core.stem` | tick grant, afferent/efferent pathways, proprioception, neural-signal catalog |
+| `beluna.core.cortex` | cognition organs, goal forest, tick-local cognition work |
+| `beluna.core.ai-gateway` | gateway transport, backend dispatch, capability-level request records |
+| `beluna.core.ai-gateway.chat` | chat thread/turn lifecycle and rich chat payloads |
+| `beluna.core.spine` | adapter lifecycle, endpoint lifecycle, sense ingress, act routing/delivery |
 
-1. ``?`` marks an optional field.
-2. Listed fields are structured event-body fields unless stated otherwise.
-3. OpenTelemetry context and resource attributes are still required where the Product TDD contract says they matter, even when they are not repeated in every family row below.
+## First Implementation Event Surface
 
-## Target Family Lattice
+Slice 2 starts with eight first-party owner event schemas.
 
-### Stable Non-AI Families
+| Scope | `eventName` | Span key | Attribute keys | Body owns |
+|---|---|---|---|---|
+| `beluna.core.main` | `runtime.booted` | `boot` | none | run id, bootstrap summary, config path, OTLP signal state |
+| `beluna.core.stem` | `tick.granted` | `grant` | none | run id, tick, tick sequence, and grant summary |
+| `beluna.core.cortex` | `primary.started` | `primary` | none | primary input payload, route, execution summary |
+| `beluna.core.cortex` | `primary.finished` | `primary` | none | primary output/error payload, linked AI transport id, thread/turn ids when present |
+| `beluna.core.ai-gateway` | `transport.request.completed` | `request:{transport_request_id}` | `ai.capability`; `ai.backend.id`; `ai.model` | transport request id, attempt/retry metadata, usage, provider payloads, terminal error |
+| `beluna.core.ai-gateway.chat` | `turn.dispatched` | `turn:{thread_id}:{turn_id}` | none | chat/thread/turn ids, transport request id, dispatch payload, metadata |
+| `beluna.core.ai-gateway.chat` | `turn.committed` | `turn:{thread_id}:{turn_id}` | none | chat/thread/turn ids, transport request id, committed messages, finish reason, usage, backend metadata |
+| `beluna.core.spine` | `act.delivered` | `delivery:{act_id}` | `spine.act.id`; `spine.endpoint.id`; `spine.descriptor.id` | act delivery summary, binding kind, acknowledgement/reference data |
 
-| Logical family | Runtime owner / emit point | Required logical fields | Supports |
-|---|---|---|---|
-| `stem.tick` | Stem tick grant loop | `run_id`; `tick`; `span_id`; `status`; `tick_seq` | canonical tick anchor and grant narrative |
-| `stem.afferent` | afferent enqueue / defer / release / drop boundaries | `run_id`; `tick`; `span_id`; `parent_span_id?`; `kind`; `descriptor_id`; `endpoint_id?`; `sense_id?`; `sense_payload?`; `weight?`; `queue_state?`; `matched_rule_ids?`; `reason?` | afferent pathway inspection |
-| `stem.efferent` | efferent enqueue / route / outcome boundaries owned by Stem | `run_id`; `tick`; `span_id`; `parent_span_id?`; `kind`; `act_id`; `descriptor_id?`; `endpoint_id?`; `act_payload?`; `queue_state?`; `continuity_decision?`; `terminal_outcome?`; `reason?` | efferent pathway inspection |
-| `stem.proprioception` | physical-state patch / drop mutation boundary | `run_id`; `tick`; `span_id`; `kind`; `entries_or_keys` | proprioception history |
-| `stem.ns-catalog` | neural-signal catalog snapshot / update / drop commit | `run_id`; `tick`; `span_id`; `catalog_version`; `change_mode`; `accepted_entries_or_routes`; `rejected_entries_or_routes`; `catalog_snapshot?` | neural-signal catalog history |
-| `stem.afferent.rule` | afferent scheduler rule add / remove boundary when explicit in runtime | `run_id`; `tick`; `span_id`; `kind`; `revision`; `rule_id`; `rule?`; `removed?` | afferent-rule lifecycle |
-| `cortex.goal-forest` | goal-forest snapshot and mutation path | `run_id`; `tick`; `span_id`; `parent_span_id?`; `kind`; `snapshot?`; `mutation_request?`; `mutation_result?`; `persisted_revision?`; `reset_context_applied?`; `selected_turn_ids?` | goal-forest state and mutation narrative |
-| `spine.adapter` | adapter startup / lifecycle / fault handling | `run_id`; `tick`; `span_id`; `adapter_type`; `adapter_id`; `kind`; `reason_or_error?` | adapter topology reconstruction |
-| `spine.endpoint` | endpoint connect / drop / lifecycle changes | `run_id`; `tick`; `span_id`; `endpoint_id`; `adapter_id?`; `kind`; `channel_or_session?`; `route_summary?`; `reason_or_error?` | endpoint topology reconstruction |
-| `spine.sense` | body-endpoint ingress into Core | `run_id`; `tick`; `span_id`; `parent_span_id?`; `endpoint_id`; `descriptor_id?`; `sense_id`; `kind`; `sense_payload`; `reason?` | sense ingress and endpoint-origin reconstruction |
-| `spine.act` | act routing / binding / delivery path owned by Spine | `run_id`; `tick`; `span_id`; `parent_span_id?`; `act_id`; `endpoint_id?`; `descriptor_id?`; `kind`; `binding_kind?`; `channel_id?`; `act_payload?`; `outcome?`; `reason_or_reference?` | act routing and delivery reconstruction |
+## Trace And Span Derivation
 
-### Stable Per-Organ Cortex Families
-
-All stable per-organ Cortex execution families share one common event-body shape:
-
-`run_id`; `tick`; `request_id`; `span_id`; `parent_span_id?`; `phase`; `status`; `route_or_backend?`; `input_payload?`; `output_payload?`; `error?`; `ai_request_id?`; `thread_id?`; `turn_id?`
-
-| Logical family | Runtime owner / emit point | Supports |
-|---|---|---|
-| `cortex.primary` | primary cognition turn boundaries | primary-organ execution and interval pairing |
-| `cortex.sense-helper` | sense helper execution boundaries | helper-organ execution and interval pairing |
-| `cortex.goal-forest-helper` | goal-forest helper execution boundaries | helper-organ execution and interval pairing |
-| `cortex.acts-helper` | acts helper execution boundaries | helper-organ execution and interval pairing |
-
-### Stable AI Families
-
-| Logical family | Runtime owner / emit point | Required logical fields | Supports |
-|---|---|---|---|
-| `ai-gateway.request` | gateway transport request lifecycle around one backend call | `run_id`; `tick`; `request_id`; `span_id`; `parent_span_id?`; `organ_id?`; `capability`; `backend_id`; `model`; `kind`; `attempt?`; `retryable?`; `provider_request?`; `provider_response?`; `usage?`; `error?` | capability-neutral provider/backend call narrative |
-| `ai-gateway.chat.turn` | chat turn commit / failure boundary | `run_id`; `tick`; `thread_id`; `turn_id`; `span_id`; `parent_span_id?`; `organ_id?`; `request_id?`; `status`; `dispatch_payload`; `messages_when_committed?`; `metadata`; `finish_reason?`; `usage?`; `backend_metadata?`; `error?` | turn lifecycle, message/tool inspection, and linked transport drilldown |
-| `ai-gateway.chat.thread` | chat thread snapshot on open / clone / derive / rewrite / turn commit | `run_id`; `tick`; `thread_id`; `span_id`; `parent_span_id?`; `organ_id?`; `request_id?`; `kind`; `messages`; `turn_summaries?`; `source_thread_id?`; `source_turn_ids?`; `kept_turn_ids?`; `dropped_turn_ids?`; `continuation_dropped?`; `context_reason?` | authoritative thread snapshot and thread-level reconstruction |
+1. `trace_id = first_16_bytes(sha256("beluna.core.trace" + run_id + tick))`.
+2. `span_id = first_8_bytes(sha256("beluna.core.span" + run_id + tick + scope + span_key))`.
+3. `runtime.booted` uses `tick = 0`.
+4. `tick.granted` is the canonical tick anchor for live tick traces.
+5. `primary.started` and `primary.finished` share the `primary` span key for one tick's primary phase.
+6. Per-turn chat detail is owned by `beluna.core.ai-gateway.chat` spans.
 
 ## Correlation Requirements
 
 Moira owns chronology grouping and interval rendering.
-Core's responsibility is to expose enough stable correlation that Moira can investigate one tick without parsing prose or inventing missing semantics.
+Core exposes stable native fields and event bodies so Moira can inspect one tick without parsing prose.
 
-1. `stem.tick` provides the canonical tick anchor.
-2. Per-organ Cortex start and end records must share one stable operation key such as `request_id` so Moira can pair them into one interval.
-3. Nested work inside one tick must carry stable `span_id` and `parent_span_id` where one operation is causally under another.
-4. `ai-gateway.request` records must correlate to the invoking Cortex interval through `parent_span_id` and the request identity exposed by Cortex as `ai_request_id` when that bridge is available.
-5. `ai-gateway.chat.turn` and `ai-gateway.chat.thread` records may additionally expose `thread_id`, `turn_id`, and optional linked `request_id` for targeted drilldown, but those identifiers do not need to become first-class chronology keys by default.
-6. Domain identifiers such as `endpoint_id` remain available for inspection and targeted correlation without being promoted automatically into first-class chronology keys.
-7. If one future Loom surface requires a domain identifier to become a first-class grouping key, that requirement should be added from Moira Unit TDD rather than guessed here.
-
-Implementation notes:
-
-1. Literal OpenTelemetry `span_id` remains an opaque instance id even when a family also exposes domain identifiers for inspection.
-2. This section defines the minimum correlation Core must support. It does not freeze Moira's final lane decomposition.
-3. If one future operator context needs a richer grouping key, that is a Moira concern layered on top of this minimum contract.
+1. `traceId` groups all first-party owner events for one wake plus tick.
+2. `runtime.booted` anchors `tick = 0` bootstrap records and exposes `run_id` in body.
+3. `tick.granted` anchors admitted live ticks and exposes `run_id`, `tick`, and `tick_seq` in body.
+4. Paired interval records share the same span id through the same scope and span key.
+5. AI Gateway transport records expose `transport_request_id` in body and backend/model/capability attributes.
+6. AI Gateway Chat records expose `thread_id`, `turn_id`, and `transport_request_id` in body.
+7. Spine act delivery records expose act routing ids as event-specific attributes because the event's primary lookup surface is act delivery.
 
 ## Minimum Fixture Set
 
-When the target family catalog is refreshed into fixtures, the minimum coverage should include:
+Core-side verification should cover:
 
-1. `ai-gateway.request` and `ai-gateway.chat.*`
-- one gateway request success with provider request / response payloads
-- one gateway request retry or failure with attempt metadata
-- one committed chat turn with user, assistant, tool-call, and tool-result messages
-- one failed chat turn with input payload and terminal error
-- one thread snapshot after a completed turn
-- one thread snapshot after thread clone or reset-style rewrite
-
-2. `cortex.*`
-- one `cortex.primary` start / end pair with full input and output
-- one helper-organ start / end pair
-- one per-organ error termination
-- one goal-forest snapshot
-- one goal-forest mutation / persist event with reset-context details when applicable
-
-3. `stem.*`
-- one `stem.tick`
-- one `stem.afferent` enqueue or accept event with full sense payload
-- one `stem.afferent` defer or release path
-- one `stem.efferent` queue admission
-- one `stem.efferent` terminal outcome with full act payload
-- one `stem.proprioception` patch and one drop
-- one `stem.ns-catalog` update or drop
-- one `stem.afferent.rule` add or remove when that lifecycle remains explicit
-
-4. `spine.*`
-- one adapter lifecycle change
-- one endpoint lifecycle change
-- one `spine.sense` ingress event
-- one `spine.act` bind / route event
-- one `spine.act` terminal outcome
+1. deterministic trace/span id derivation.
+2. `serde_json::Value` conversion into OTLP `AnyValue::Map`.
+3. one in-memory log exporter proof for owner scope, `eventName`, structured body, attributes, `trace_id`, and `span_id`.
+4. raw OTLP capture comparison for the eight-event first implementation surface.
+5. legacy `ContractEvent` path coexistence during migration.
 
 ## Change Discipline
 
-1. Renaming a logical family or changing its required logical field set requires updating this file and the corresponding Core emit points in the same change.
-2. When a family is marked provisional in this file, later naming churn is acceptable only inside the explicitly provisional scope.
-3. If a change affects only Core-local debug decoration and not the canonical reconstruction fields, keep it in Core Unit TDD unless it changes a cross-unit guarantee.
-4. If a new field or family is required so Moira can reconstruct a new domain guaranteed by Product TDD, update Product TDD first and then update this file.
-5. Do not collapse separate pathway or lifecycle families back into one coarse catch-all family unless the runtime genuinely owns one uniform state machine.
+1. Renaming one `eventName`, owner scope, span key, or required body/attribute field requires updating this file and the corresponding Core emit point in the same change.
+2. Adding a first-party owner event requires an event schema keyed by `scope.name + eventName`.
+3. A field becomes a shared attribute convention only after a concrete Moira lookup, grouping, or filtering need is documented.
+4. Raw rich payload preservation remains the default during early development.

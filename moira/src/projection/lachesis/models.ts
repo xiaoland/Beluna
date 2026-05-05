@@ -1,4 +1,10 @@
-export type ChronologyLaneType = 'tick' | 'cortex' | 'afferent' | 'efferent' | 'spine' | 'misc'
+export type ChronologyLaneType =
+  | 'tick'
+  | 'cortex'
+  | 'afferent'
+  | 'efferent'
+  | 'spine'
+  | 'misc'
 export type ChronologyEntryType = 'point' | 'interval'
 
 export interface ReceiverStatus {
@@ -25,6 +31,7 @@ export interface WakeSessionSummary {
 export interface TickSummary {
   runId: string
   tick: number
+  traceId: string | null
   firstSeenAt: string | null
   lastSeenAt: string | null
   eventCount: number
@@ -39,6 +46,12 @@ export interface RawEvent {
   observedAt: string | null
   severityText: string | null
   severityNumber: number | null
+  recordKind: string
+  scopeName: string | null
+  eventName: string | null
+  traceId: string | null
+  spanId: string | null
+  traceFlags: number | null
   target: string | null
   family: string | null
   subsystem: string | null

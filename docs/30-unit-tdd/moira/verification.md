@@ -27,13 +27,13 @@
 
 1. OTLP logs are ingested and persisted locally without requiring an external first-party log UI.
 2. Loom can show wake-scoped inspection from local Moira state plus locally stored Core OTLP logs.
-3. Loom can show a tick timeline from locally stored log data without relying on free-form raw payload parsing as the primary contract.
-4. Loom can render one Cortex-handled tick as a timeline using `tick` as the trace anchor and reconstructed interval work where Core boundary records allow pairing.
-5. The selected-tick workspace exposes chronology as a Cortex timeline mode rather than a standalone primary tab, while preserving Stem, Spine, and raw source-grounded inspection tabs.
-6. Cortex View hides ticks with no reconstructable Cortex handling evidence without erasing broader tick inspection from Lachesis.
-7. Loom can inspect nested AI transport activity from the Cortex timeline mode or expanded Cortex intervals whenever the corresponding Core records exist, including provider, model, attempt or retry detail, token consumption, provider request or response payloads, and terminal errors when present.
-8. Loom can inspect nested chat-capability activity from the same Cortex timeline mode or expanded Cortex intervals whenever the corresponding Core records exist, including thread snapshots, turn state, tool activity, thinking payload when present, and full chat payloads.
-9. Loom can inspect one selected tick through non-empty Cortex, Stem, Spine, and raw-event surfaces whenever the corresponding Core events exist, including per-organ Cortex intervals, goal-forest snapshot or mutation history, Stem afferent/efferent activity, and Spine endpoint/sense/act records.
+3. Loom can show a tick timeline from locally stored native OTLP log data without relying on free-form raw payload parsing as the primary contract.
+4. Loom can render one Cortex-handled tick as a raw-first native event timeline using native `traceId` as the machine grouping key.
+5. The selected-tick workspace exposes native chronology and raw source-grounded inspection before deeper owner-specific reconstruction.
+6. Cortex View recognizes ticks with native Cortex owner evidence without erasing broader tick inspection from Lachesis.
+7. Raw inspection surfaces `record_kind` so operators can distinguish native owner records, legacy contract records, and ordinary logs during migration.
+8. Legacy contract payloads remain readable through compatibility normalization while native records keep scope/event/trace/span identity.
+9. Loom can inspect AI transport, AI Chat, Stem, Spine, and goal-forest data through raw records first and targeted projections as those projections mature.
 10. Goal-forest comparison is derived from selected ticks rather than loaded from a precomputed diff artifact.
 11. Metrics/traces surfaces show exporter status and handoff links without claiming local signal ownership.
 

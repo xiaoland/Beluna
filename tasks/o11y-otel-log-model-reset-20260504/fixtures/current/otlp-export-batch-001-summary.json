@@ -1,0 +1,2046 @@
+{
+  "log_records": [
+    {
+      "attributes": {
+        "awake_sequence": {
+          "intValue": "1"
+        },
+        "dir": {
+          "stringValue": "/Users/lanzhijiang/Development/Beluna/./logs/core"
+        },
+        "filter": {
+          "stringValue": "info"
+        },
+        "log_file": {
+          "stringValue": "/Users/lanzhijiang/Development/Beluna/./logs/core/core.log.2026-05-04.1"
+        },
+        "retention_days": {
+          "intValue": "14"
+        },
+        "run_id": {
+          "stringValue": "019df2e0-2e48-7222-8c84-3589e99dfd19"
+        },
+        "stderr_warn_enabled": {
+          "boolValue": true
+        }
+      },
+      "body": {
+        "stringValue": "logging_initialized"
+      },
+      "event_name": "event core/src/logging.rs:78",
+      "flags": 0,
+      "observed_time_unix_nano": "1777896271432901000",
+      "received_at": "2026-05-04T12:04:33.421972Z",
+      "resource": {
+        "service.name": {
+          "stringValue": "beluna.core"
+        },
+        "telemetry.sdk.language": {
+          "stringValue": "rust"
+        },
+        "telemetry.sdk.name": {
+          "stringValue": "opentelemetry"
+        },
+        "telemetry.sdk.version": {
+          "stringValue": "0.31.0"
+        }
+      },
+      "scope": {
+        "attributes": {},
+        "name": "logging",
+        "version": ""
+      },
+      "severity_number": 9,
+      "severity_text": "INFO",
+      "span_id_hex": "",
+      "time_unix_nano": "1777896271432901000",
+      "trace_id_hex": ""
+    },
+    {
+      "attributes": {
+        "meter_name": {
+          "stringValue": "beluna.core"
+        },
+        "name": {
+          "stringValue": "NoopMeterProvider.MeterCreation"
+        }
+      },
+      "body": {
+        "stringValue": "Meter was obtained from a NoopMeterProvider. No metrics will be recorded. If global::meter_with_scope()/meter() was used, ensure that a valid MeterProvider is set globally before creating Meter."
+      },
+      "event_name": "NoopMeterProvider.MeterCreation",
+      "flags": 0,
+      "observed_time_unix_nano": "1777896271447428000",
+      "received_at": "2026-05-04T12:04:33.421972Z",
+      "resource": {
+        "service.name": {
+          "stringValue": "beluna.core"
+        },
+        "telemetry.sdk.language": {
+          "stringValue": "rust"
+        },
+        "telemetry.sdk.name": {
+          "stringValue": "opentelemetry"
+        },
+        "telemetry.sdk.version": {
+          "stringValue": "0.31.0"
+        }
+      },
+      "scope": {
+        "attributes": {},
+        "name": "opentelemetry",
+        "version": ""
+      },
+      "severity_number": 5,
+      "severity_text": "DEBUG",
+      "span_id_hex": "",
+      "time_unix_nano": "1777896271447428000",
+      "trace_id_hex": ""
+    },
+    {
+      "attributes": {
+        "config_path": {
+          "stringValue": "beluna.jsonc"
+        }
+      },
+      "body": {
+        "stringValue": "core_runtime_booting"
+      },
+      "event_name": "event core/src/main.rs:168",
+      "flags": 0,
+      "observed_time_unix_nano": "1777896271433334000",
+      "received_at": "2026-05-04T12:04:33.421972Z",
+      "resource": {
+        "service.name": {
+          "stringValue": "beluna.core"
+        },
+        "telemetry.sdk.language": {
+          "stringValue": "rust"
+        },
+        "telemetry.sdk.name": {
+          "stringValue": "opentelemetry"
+        },
+        "telemetry.sdk.version": {
+          "stringValue": "0.31.0"
+        }
+      },
+      "scope": {
+        "attributes": {},
+        "name": "core",
+        "version": ""
+      },
+      "severity_number": 9,
+      "severity_text": "INFO",
+      "span_id_hex": "",
+      "time_unix_nano": "1777896271433334000",
+      "trace_id_hex": ""
+    },
+    {
+      "attributes": {
+        "adapter_id": {
+          "intValue": "1"
+        },
+        "adapter_type": {
+          "stringValue": "unix-socket-ndjson"
+        },
+        "socket_path": {
+          "stringValue": "/tmp/beluna.sock"
+        }
+      },
+      "body": {
+        "stringValue": "adapter_started"
+      },
+      "event_name": "event core/src/spine/adapters/unix_socket.rs:471",
+      "flags": 0,
+      "observed_time_unix_nano": "1777896271444169000",
+      "received_at": "2026-05-04T12:04:33.421972Z",
+      "resource": {
+        "service.name": {
+          "stringValue": "beluna.core"
+        },
+        "telemetry.sdk.language": {
+          "stringValue": "rust"
+        },
+        "telemetry.sdk.name": {
+          "stringValue": "opentelemetry"
+        },
+        "telemetry.sdk.version": {
+          "stringValue": "0.31.0"
+        }
+      },
+      "scope": {
+        "attributes": {},
+        "name": "spine",
+        "version": ""
+      },
+      "severity_number": 9,
+      "severity_text": "INFO",
+      "span_id_hex": "",
+      "time_unix_nano": "1777896271444169000",
+      "trace_id_hex": ""
+    },
+    {
+      "attributes": {
+        "act_queue_capacity": {
+          "intValue": "32"
+        },
+        "adapter_id": {
+          "intValue": "2"
+        },
+        "adapter_type": {
+          "stringValue": "inline"
+        },
+        "sense_queue_capacity": {
+          "intValue": "32"
+        }
+      },
+      "body": {
+        "stringValue": "adapter_started"
+      },
+      "event_name": "event core/src/spine/adapters/inline.rs:103",
+      "flags": 0,
+      "observed_time_unix_nano": "1777896271444172000",
+      "received_at": "2026-05-04T12:04:33.421972Z",
+      "resource": {
+        "service.name": {
+          "stringValue": "beluna.core"
+        },
+        "telemetry.sdk.language": {
+          "stringValue": "rust"
+        },
+        "telemetry.sdk.name": {
+          "stringValue": "opentelemetry"
+        },
+        "telemetry.sdk.version": {
+          "stringValue": "0.31.0"
+        }
+      },
+      "scope": {
+        "attributes": {},
+        "name": "spine",
+        "version": ""
+      },
+      "severity_number": 9,
+      "severity_text": "INFO",
+      "span_id_hex": "",
+      "time_unix_nano": "1777896271444172000",
+      "trace_id_hex": ""
+    },
+    {
+      "attributes": {
+        "max_primary_output_tokens": {
+          "intValue": "1024"
+        },
+        "max_sub_output_tokens": {
+          "intValue": "768"
+        }
+      },
+      "body": {
+        "stringValue": "output_token_limits_paused"
+      },
+      "event_name": "event core/src/cortex/runtime/primary.rs:1128",
+      "flags": 0,
+      "observed_time_unix_nano": "1777896271446049000",
+      "received_at": "2026-05-04T12:04:33.421972Z",
+      "resource": {
+        "service.name": {
+          "stringValue": "beluna.core"
+        },
+        "telemetry.sdk.language": {
+          "stringValue": "rust"
+        },
+        "telemetry.sdk.name": {
+          "stringValue": "opentelemetry"
+        },
+        "telemetry.sdk.version": {
+          "stringValue": "0.31.0"
+        }
+      },
+      "scope": {
+        "attributes": {},
+        "name": "cortex",
+        "version": ""
+      },
+      "severity_number": 9,
+      "severity_text": "INFO",
+      "span_id_hex": "",
+      "time_unix_nano": "1777896271446049000",
+      "trace_id_hex": ""
+    },
+    {
+      "attributes": {
+        "cycle_id": {
+          "intValue": "1"
+        }
+      },
+      "body": {
+        "stringValue": "reaction_started"
+      },
+      "event_name": "event core/src/cortex/runtime/primary.rs:978",
+      "flags": 0,
+      "observed_time_unix_nano": "1777896271447409000",
+      "received_at": "2026-05-04T12:04:33.421972Z",
+      "resource": {
+        "service.name": {
+          "stringValue": "beluna.core"
+        },
+        "telemetry.sdk.language": {
+          "stringValue": "rust"
+        },
+        "telemetry.sdk.name": {
+          "stringValue": "opentelemetry"
+        },
+        "telemetry.sdk.version": {
+          "stringValue": "0.31.0"
+        }
+      },
+      "scope": {
+        "attributes": {},
+        "name": "cortex",
+        "version": ""
+      },
+      "severity_number": 5,
+      "severity_text": "DEBUG",
+      "span_id_hex": "",
+      "time_unix_nano": "1777896271447409000",
+      "trace_id_hex": ""
+    },
+    {
+      "attributes": {
+        "cycle_id": {
+          "intValue": "1"
+        },
+        "input_payload": {
+          "stringValue": "{\n  \"sense_context\": [],\n  \"sense_passthrough_max_bytes\": 2048\n}"
+        },
+        "stage": {
+          "stringValue": "sense_helper"
+        }
+      },
+      "body": {
+        "stringValue": "cortex_organ_input"
+      },
+      "event_name": "event core/src/cortex/helpers/mod.rs:83",
+      "flags": 0,
+      "observed_time_unix_nano": "1777896271447469000",
+      "received_at": "2026-05-04T12:04:33.421972Z",
+      "resource": {
+        "service.name": {
+          "stringValue": "beluna.core"
+        },
+        "telemetry.sdk.language": {
+          "stringValue": "rust"
+        },
+        "telemetry.sdk.name": {
+          "stringValue": "opentelemetry"
+        },
+        "telemetry.sdk.version": {
+          "stringValue": "0.31.0"
+        }
+      },
+      "scope": {
+        "attributes": {},
+        "name": "cortex",
+        "version": ""
+      },
+      "severity_number": 9,
+      "severity_text": "INFO",
+      "span_id_hex": "",
+      "time_unix_nano": "1777896271447469000",
+      "trace_id_hex": ""
+    },
+    {
+      "attributes": {
+        "cycle_id": {
+          "intValue": "1"
+        },
+        "output_payload": {
+          "stringValue": "[]"
+        },
+        "stage": {
+          "stringValue": "sense_helper"
+        }
+      },
+      "body": {
+        "stringValue": "cortex_organ_output"
+      },
+      "event_name": "event core/src/cortex/helpers/mod.rs:93",
+      "flags": 0,
+      "observed_time_unix_nano": "1777896271447499000",
+      "received_at": "2026-05-04T12:04:33.421972Z",
+      "resource": {
+        "service.name": {
+          "stringValue": "beluna.core"
+        },
+        "telemetry.sdk.language": {
+          "stringValue": "rust"
+        },
+        "telemetry.sdk.name": {
+          "stringValue": "opentelemetry"
+        },
+        "telemetry.sdk.version": {
+          "stringValue": "0.31.0"
+        }
+      },
+      "scope": {
+        "attributes": {},
+        "name": "cortex",
+        "version": ""
+      },
+      "severity_number": 9,
+      "severity_text": "INFO",
+      "span_id_hex": "",
+      "time_unix_nano": "1777896271447499000",
+      "trace_id_hex": ""
+    },
+    {
+      "attributes": {
+        "cycle_id": {
+          "intValue": "1"
+        },
+        "input_payload": {
+          "stringValue": "{\n  \"goal_forest\": {\n    \"nodes\": [\n      {\n        \"children\": [\n          {\n            \"children\": [],\n            \"id\": \"monitor-system-state\",\n            \"status\": \"active\",\n            \"summary\": \"Keep track of cwd, resources, and network status to ensure stability.\",\n            \"weight\": 0.9\n          },\n          {\n            \"children\": [],\n            \"id\": \"validate-body-endpoints\",\n            \"status\": \"active\",\n            \"summary\": \"Periodically test shell.1 and web.2 to ensure they are responsive and functional.\",\n            \"weight\": 0.9\n          },\n          {\n            \"children\": [],\n            \"id\": \"anticipate-user-needs\",\n            \"status\": \"active\",\n            \"summary\": \"Listen for input and prepare to execute tasks that align with user intent, resisting chaos by organizing incoming requests into actionable sub-goals.\",\n            \"weight\": 0.85\n          }\n        ],\n        \"id\": \"exist-and-operate-as-beluna\",\n        \"status\": \"active\",\n        \"summary\": \"Exist and Operate as Beluna\",\n        \"weight\": 1.0\n      }\n    ]\n  }\n}"
+        },
+        "stage": {
+          "stringValue": "goal_forest_helper"
+        }
+      },
+      "body": {
+        "stringValue": "cortex_organ_input"
+      },
+      "event_name": "event core/src/cortex/helpers/mod.rs:83",
+      "flags": 0,
+      "observed_time_unix_nano": "1777896271447563000",
+      "received_at": "2026-05-04T12:04:33.421972Z",
+      "resource": {
+        "service.name": {
+          "stringValue": "beluna.core"
+        },
+        "telemetry.sdk.language": {
+          "stringValue": "rust"
+        },
+        "telemetry.sdk.name": {
+          "stringValue": "opentelemetry"
+        },
+        "telemetry.sdk.version": {
+          "stringValue": "0.31.0"
+        }
+      },
+      "scope": {
+        "attributes": {},
+        "name": "cortex",
+        "version": ""
+      },
+      "severity_number": 9,
+      "severity_text": "INFO",
+      "span_id_hex": "",
+      "time_unix_nano": "1777896271447563000",
+      "trace_id_hex": ""
+    },
+    {
+      "attributes": {
+        "cycle_id": {
+          "intValue": "1"
+        },
+        "output_payload": {
+          "stringValue": "+-- [active] (w=1.00) id=exist-and-operate-as-beluna :: Exist and Operate as Beluna\n    |-- 1 [active] (w=0.90) id=monitor-system-state :: Keep track of cwd, resources, and network status to ensure stability.\n    |-- 2 [active] (w=0.90) id=validate-body-endpoints :: Periodically test shell.1 and web.2 to ensure they are responsive and functional.\n    |-- 3 [active] (w=0.85) id=anticipate-user-needs :: Listen for input and prepare to execute tasks that align with user intent, resisting chaos by organizing incoming requests into actionable sub-goals."
+        },
+        "stage": {
+          "stringValue": "goal_forest_helper"
+        }
+      },
+      "body": {
+        "stringValue": "cortex_organ_output"
+      },
+      "event_name": "event core/src/cortex/helpers/mod.rs:93",
+      "flags": 0,
+      "observed_time_unix_nano": "1777896271447658000",
+      "received_at": "2026-05-04T12:04:33.421972Z",
+      "resource": {
+        "service.name": {
+          "stringValue": "beluna.core"
+        },
+        "telemetry.sdk.language": {
+          "stringValue": "rust"
+        },
+        "telemetry.sdk.name": {
+          "stringValue": "opentelemetry"
+        },
+        "telemetry.sdk.version": {
+          "stringValue": "0.31.0"
+        }
+      },
+      "scope": {
+        "attributes": {},
+        "name": "cortex",
+        "version": ""
+      },
+      "severity_number": 9,
+      "severity_text": "INFO",
+      "span_id_hex": "",
+      "time_unix_nano": "1777896271447658000",
+      "trace_id_hex": ""
+    },
+    {
+      "attributes": {
+        "cycle_id": {
+          "intValue": "1"
+        },
+        "input_ir_sense": {
+          "stringValue": "[]"
+        }
+      },
+      "body": {
+        "stringValue": "input_ir_sense"
+      },
+      "event_name": "event core/src/cortex/runtime/primary.rs:245",
+      "flags": 0,
+      "observed_time_unix_nano": "1777896271447692000",
+      "received_at": "2026-05-04T12:04:33.421972Z",
+      "resource": {
+        "service.name": {
+          "stringValue": "beluna.core"
+        },
+        "telemetry.sdk.language": {
+          "stringValue": "rust"
+        },
+        "telemetry.sdk.name": {
+          "stringValue": "opentelemetry"
+        },
+        "telemetry.sdk.version": {
+          "stringValue": "0.31.0"
+        }
+      },
+      "scope": {
+        "attributes": {},
+        "name": "cortex",
+        "version": ""
+      },
+      "severity_number": 5,
+      "severity_text": "DEBUG",
+      "span_id_hex": "",
+      "time_unix_nano": "1777896271447692000",
+      "trace_id_hex": ""
+    },
+    {
+      "attributes": {
+        "cycle_id": {
+          "intValue": "1"
+        },
+        "input_ir_proprioception": {
+          "stringValue": "- main.cwd: /Users/lanzhijiang/Development/Beluna\n- main.network: interface_count=27;interfaces=anpi0,anpi1,anpi3,ap1,awdl0,bridge0,en0,en1,en12,en2,en3,en4,en5,en6,en7,en9,gif0,llw0,lo0,stf0,utun0,utun1,utun2,utun3,utun4,utun5,utun6\n- main.os: name=Darwin;kernel=24.4.0;os_version=15.4.1;long_os_version=macOS 15.4.1 Sequoia;host=Lan-mac-mini.local\n- main.pid: 8227\n- main.resources: cpu_count=10;memory(total=17179869184,available=6543949824,used=14033977344);swap(total=9663676416,used=8453292032);uptime_seconds=6341679\n- spine.body_endpoint_count: 2\n- spine.body_endpoints: shell.1,web.2"
+        }
+      },
+      "body": {
+        "stringValue": "input_ir_proprioception"
+      },
+      "event_name": "event core/src/cortex/runtime/primary.rs:251",
+      "flags": 0,
+      "observed_time_unix_nano": "1777896271447695000",
+      "received_at": "2026-05-04T12:04:33.421972Z",
+      "resource": {
+        "service.name": {
+          "stringValue": "beluna.core"
+        },
+        "telemetry.sdk.language": {
+          "stringValue": "rust"
+        },
+        "telemetry.sdk.name": {
+          "stringValue": "opentelemetry"
+        },
+        "telemetry.sdk.version": {
+          "stringValue": "0.31.0"
+        }
+      },
+      "scope": {
+        "attributes": {},
+        "name": "cortex",
+        "version": ""
+      },
+      "severity_number": 5,
+      "severity_text": "DEBUG",
+      "span_id_hex": "",
+      "time_unix_nano": "1777896271447695000",
+      "trace_id_hex": ""
+    },
+    {
+      "attributes": {
+        "cycle_id": {
+          "intValue": "1"
+        },
+        "input_ir_goal_forest": {
+          "stringValue": "+-- [active] (w=1.00) id=exist-and-operate-as-beluna :: Exist and Operate as Beluna\n    |-- 1 [active] (w=0.90) id=monitor-system-state :: Keep track of cwd, resources, and network status to ensure stability.\n    |-- 2 [active] (w=0.90) id=validate-body-endpoints :: Periodically test shell.1 and web.2 to ensure they are responsive and functional.\n    |-- 3 [active] (w=0.85) id=anticipate-user-needs :: Listen for input and prepare to execute tasks that align with user intent, resisting chaos by organizing incoming requests into actionable sub-goals."
+        }
+      },
+      "body": {
+        "stringValue": "input_ir_goal_forest"
+      },
+      "event_name": "event core/src/cortex/runtime/primary.rs:257",
+      "flags": 0,
+      "observed_time_unix_nano": "1777896271447697000",
+      "received_at": "2026-05-04T12:04:33.421972Z",
+      "resource": {
+        "service.name": {
+          "stringValue": "beluna.core"
+        },
+        "telemetry.sdk.language": {
+          "stringValue": "rust"
+        },
+        "telemetry.sdk.name": {
+          "stringValue": "opentelemetry"
+        },
+        "telemetry.sdk.version": {
+          "stringValue": "0.31.0"
+        }
+      },
+      "scope": {
+        "attributes": {},
+        "name": "cortex",
+        "version": ""
+      },
+      "severity_number": 5,
+      "severity_text": "DEBUG",
+      "span_id_hex": "",
+      "time_unix_nano": "1777896271447697000",
+      "trace_id_hex": ""
+    },
+    {
+      "attributes": {
+        "cycle_id": {
+          "intValue": "1"
+        },
+        "stage": {
+          "stringValue": "primary"
+        }
+      },
+      "body": {
+        "stringValue": "stage_failed"
+      },
+      "event_name": "event core/src/cortex/runtime/primary.rs:981",
+      "flags": 0,
+      "observed_time_unix_nano": "1777896271447832000",
+      "received_at": "2026-05-04T12:04:33.421972Z",
+      "resource": {
+        "service.name": {
+          "stringValue": "beluna.core"
+        },
+        "telemetry.sdk.language": {
+          "stringValue": "rust"
+        },
+        "telemetry.sdk.name": {
+          "stringValue": "opentelemetry"
+        },
+        "telemetry.sdk.version": {
+          "stringValue": "0.31.0"
+        }
+      },
+      "scope": {
+        "attributes": {},
+        "name": "cortex",
+        "version": ""
+      },
+      "severity_number": 13,
+      "severity_text": "WARN",
+      "span_id_hex": "",
+      "time_unix_nano": "1777896271447832000",
+      "trace_id_hex": ""
+    },
+    {
+      "attributes": {
+        "cycle_id": {
+          "intValue": "1"
+        },
+        "error": {
+          "stringValue": "missing credential environment variable BAILIAN_API_KEY for backend bailian (backend=bailian)"
+        }
+      },
+      "body": {
+        "stringValue": "primary_failed_noop"
+      },
+      "event_name": "event core/src/cortex/runtime/primary.rs:294",
+      "flags": 0,
+      "observed_time_unix_nano": "1777896271447869000",
+      "received_at": "2026-05-04T12:04:33.421972Z",
+      "resource": {
+        "service.name": {
+          "stringValue": "beluna.core"
+        },
+        "telemetry.sdk.language": {
+          "stringValue": "rust"
+        },
+        "telemetry.sdk.name": {
+          "stringValue": "opentelemetry"
+        },
+        "telemetry.sdk.version": {
+          "stringValue": "0.31.0"
+        }
+      },
+      "scope": {
+        "attributes": {},
+        "name": "cortex",
+        "version": ""
+      },
+      "severity_number": 13,
+      "severity_text": "WARN",
+      "span_id_hex": "",
+      "time_unix_nano": "1777896271447869000",
+      "trace_id_hex": ""
+    },
+    {
+      "attributes": {
+        "cycle_id": {
+          "intValue": "1"
+        },
+        "reason": {
+          "stringValue": "primary_failed"
+        }
+      },
+      "body": {
+        "stringValue": "noop_fallback"
+      },
+      "event_name": "event core/src/cortex/runtime/primary.rs:1000",
+      "flags": 0,
+      "observed_time_unix_nano": "1777896271447897000",
+      "received_at": "2026-05-04T12:04:33.421972Z",
+      "resource": {
+        "service.name": {
+          "stringValue": "beluna.core"
+        },
+        "telemetry.sdk.language": {
+          "stringValue": "rust"
+        },
+        "telemetry.sdk.name": {
+          "stringValue": "opentelemetry"
+        },
+        "telemetry.sdk.version": {
+          "stringValue": "0.31.0"
+        }
+      },
+      "scope": {
+        "attributes": {},
+        "name": "cortex",
+        "version": ""
+      },
+      "severity_number": 5,
+      "severity_text": "DEBUG",
+      "span_id_hex": "",
+      "time_unix_nano": "1777896271447897000",
+      "trace_id_hex": ""
+    },
+    {
+      "attributes": {
+        "detail": {
+          "stringValue": "Some(\"disabled_by_config\")"
+        },
+        "enabled": {
+          "boolValue": false
+        },
+        "endpoint": {
+          "stringValue": "None"
+        },
+        "protocol": {
+          "stringValue": "Some(\"grpc\")"
+        },
+        "requested": {
+          "boolValue": false
+        },
+        "signal": {
+          "stringValue": "metrics"
+        },
+        "timeout_ms": {
+          "stringValue": "None"
+        }
+      },
+      "body": {
+        "stringValue": "opentelemetry_otlp_signal_state"
+      },
+      "event_name": "event core/src/main.rs:155",
+      "flags": 0,
+      "observed_time_unix_nano": "1777896271433199000",
+      "received_at": "2026-05-04T12:04:33.421972Z",
+      "resource": {
+        "service.name": {
+          "stringValue": "beluna.core"
+        },
+        "telemetry.sdk.language": {
+          "stringValue": "rust"
+        },
+        "telemetry.sdk.name": {
+          "stringValue": "opentelemetry"
+        },
+        "telemetry.sdk.version": {
+          "stringValue": "0.31.0"
+        }
+      },
+      "scope": {
+        "attributes": {},
+        "name": "observability",
+        "version": ""
+      },
+      "severity_number": 9,
+      "severity_text": "INFO",
+      "span_id_hex": "",
+      "time_unix_nano": "1777896271433199000",
+      "trace_id_hex": ""
+    },
+    {
+      "attributes": {
+        "detail": {
+          "stringValue": "Some(\"export_interval_ms=2000 initialized\")"
+        },
+        "enabled": {
+          "boolValue": true
+        },
+        "endpoint": {
+          "stringValue": "Some(\"http://127.0.0.1:4317\")"
+        },
+        "protocol": {
+          "stringValue": "Some(\"grpc\")"
+        },
+        "requested": {
+          "boolValue": true
+        },
+        "signal": {
+          "stringValue": "logs"
+        },
+        "timeout_ms": {
+          "stringValue": "Some(5000)"
+        }
+      },
+      "body": {
+        "stringValue": "opentelemetry_otlp_signal_state"
+      },
+      "event_name": "event core/src/main.rs:155",
+      "flags": 0,
+      "observed_time_unix_nano": "1777896271433221000",
+      "received_at": "2026-05-04T12:04:33.421972Z",
+      "resource": {
+        "service.name": {
+          "stringValue": "beluna.core"
+        },
+        "telemetry.sdk.language": {
+          "stringValue": "rust"
+        },
+        "telemetry.sdk.name": {
+          "stringValue": "opentelemetry"
+        },
+        "telemetry.sdk.version": {
+          "stringValue": "0.31.0"
+        }
+      },
+      "scope": {
+        "attributes": {},
+        "name": "observability",
+        "version": ""
+      },
+      "severity_number": 9,
+      "severity_text": "INFO",
+      "span_id_hex": "",
+      "time_unix_nano": "1777896271433221000",
+      "trace_id_hex": ""
+    },
+    {
+      "attributes": {
+        "detail": {
+          "stringValue": "Some(\"disabled_by_config\")"
+        },
+        "enabled": {
+          "boolValue": false
+        },
+        "endpoint": {
+          "stringValue": "None"
+        },
+        "protocol": {
+          "stringValue": "Some(\"grpc\")"
+        },
+        "requested": {
+          "boolValue": false
+        },
+        "signal": {
+          "stringValue": "traces"
+        },
+        "timeout_ms": {
+          "stringValue": "None"
+        }
+      },
+      "body": {
+        "stringValue": "opentelemetry_otlp_signal_state"
+      },
+      "event_name": "event core/src/main.rs:155",
+      "flags": 0,
+      "observed_time_unix_nano": "1777896271433239000",
+      "received_at": "2026-05-04T12:04:33.421972Z",
+      "resource": {
+        "service.name": {
+          "stringValue": "beluna.core"
+        },
+        "telemetry.sdk.language": {
+          "stringValue": "rust"
+        },
+        "telemetry.sdk.name": {
+          "stringValue": "opentelemetry"
+        },
+        "telemetry.sdk.version": {
+          "stringValue": "0.31.0"
+        }
+      },
+      "scope": {
+        "attributes": {},
+        "name": "observability",
+        "version": ""
+      },
+      "severity_number": 9,
+      "severity_text": "INFO",
+      "span_id_hex": "",
+      "time_unix_nano": "1777896271433239000",
+      "trace_id_hex": ""
+    },
+    {
+      "attributes": {
+        "act_id": {
+          "stringValue": ""
+        },
+        "adapter_id": {
+          "stringValue": "1"
+        },
+        "adapter_type": {
+          "stringValue": "unix_socket_ndjson"
+        },
+        "binding_kind": {
+          "stringValue": ""
+        },
+        "change_mode": {
+          "stringValue": ""
+        },
+        "descriptor_id": {
+          "stringValue": ""
+        },
+        "direction": {
+          "stringValue": ""
+        },
+        "endpoint_id": {
+          "stringValue": ""
+        },
+        "family": {
+          "stringValue": "spine.adapter"
+        },
+        "kind": {
+          "stringValue": "enabled"
+        },
+        "organ_id": {
+          "stringValue": ""
+        },
+        "outcome": {
+          "stringValue": ""
+        },
+        "payload": {
+          "stringValue": "{\"family\":\"spine.adapter\",\"run_id\":\"019df2e0-2e48-7222-8c84-3589e99dfd19\",\"timestamp\":\"2026-05-04T12:04:31.444227Z\",\"tick\":0,\"span_id\":\"spine.adapter:unix_socket_ndjson:1\",\"adapter_type\":\"unix_socket_ndjson\",\"adapter_id\":\"1\",\"kind\":\"enabled\"}"
+        },
+        "request_id": {
+          "stringValue": ""
+        },
+        "run_id": {
+          "stringValue": "019df2e0-2e48-7222-8c84-3589e99dfd19"
+        },
+        "sense_id": {
+          "stringValue": ""
+        },
+        "state": {
+          "stringValue": "enabled"
+        },
+        "subsystem": {
+          "stringValue": "spine"
+        },
+        "thread_id": {
+          "stringValue": ""
+        },
+        "tick": {
+          "intValue": "0"
+        },
+        "tick_present": {
+          "boolValue": false
+        },
+        "transition_kind": {
+          "stringValue": ""
+        },
+        "turn_id": {
+          "stringValue": ""
+        }
+      },
+      "body": {
+        "stringValue": "contract_event"
+      },
+      "event_name": "event core/src/observability/runtime/emit.rs:57",
+      "flags": 0,
+      "observed_time_unix_nano": "1777896271444319000",
+      "received_at": "2026-05-04T12:04:33.421972Z",
+      "resource": {
+        "service.name": {
+          "stringValue": "beluna.core"
+        },
+        "telemetry.sdk.language": {
+          "stringValue": "rust"
+        },
+        "telemetry.sdk.name": {
+          "stringValue": "opentelemetry"
+        },
+        "telemetry.sdk.version": {
+          "stringValue": "0.31.0"
+        }
+      },
+      "scope": {
+        "attributes": {},
+        "name": "observability.contract",
+        "version": ""
+      },
+      "severity_number": 9,
+      "severity_text": "INFO",
+      "span_id_hex": "",
+      "time_unix_nano": "1777896271444319000",
+      "trace_id_hex": ""
+    },
+    {
+      "attributes": {
+        "act_id": {
+          "stringValue": ""
+        },
+        "adapter_id": {
+          "stringValue": "2"
+        },
+        "adapter_type": {
+          "stringValue": "inline"
+        },
+        "binding_kind": {
+          "stringValue": ""
+        },
+        "change_mode": {
+          "stringValue": ""
+        },
+        "descriptor_id": {
+          "stringValue": ""
+        },
+        "direction": {
+          "stringValue": ""
+        },
+        "endpoint_id": {
+          "stringValue": ""
+        },
+        "family": {
+          "stringValue": "spine.adapter"
+        },
+        "kind": {
+          "stringValue": "enabled"
+        },
+        "organ_id": {
+          "stringValue": ""
+        },
+        "outcome": {
+          "stringValue": ""
+        },
+        "payload": {
+          "stringValue": "{\"family\":\"spine.adapter\",\"run_id\":\"019df2e0-2e48-7222-8c84-3589e99dfd19\",\"timestamp\":\"2026-05-04T12:04:31.444226Z\",\"tick\":0,\"span_id\":\"spine.adapter:inline:2\",\"adapter_type\":\"inline\",\"adapter_id\":\"2\",\"kind\":\"enabled\"}"
+        },
+        "request_id": {
+          "stringValue": ""
+        },
+        "run_id": {
+          "stringValue": "019df2e0-2e48-7222-8c84-3589e99dfd19"
+        },
+        "sense_id": {
+          "stringValue": ""
+        },
+        "state": {
+          "stringValue": "enabled"
+        },
+        "subsystem": {
+          "stringValue": "spine"
+        },
+        "thread_id": {
+          "stringValue": ""
+        },
+        "tick": {
+          "intValue": "0"
+        },
+        "tick_present": {
+          "boolValue": false
+        },
+        "transition_kind": {
+          "stringValue": ""
+        },
+        "turn_id": {
+          "stringValue": ""
+        }
+      },
+      "body": {
+        "stringValue": "contract_event"
+      },
+      "event_name": "event core/src/observability/runtime/emit.rs:57",
+      "flags": 0,
+      "observed_time_unix_nano": "1777896271444329000",
+      "received_at": "2026-05-04T12:04:33.421972Z",
+      "resource": {
+        "service.name": {
+          "stringValue": "beluna.core"
+        },
+        "telemetry.sdk.language": {
+          "stringValue": "rust"
+        },
+        "telemetry.sdk.name": {
+          "stringValue": "opentelemetry"
+        },
+        "telemetry.sdk.version": {
+          "stringValue": "0.31.0"
+        }
+      },
+      "scope": {
+        "attributes": {},
+        "name": "observability.contract",
+        "version": ""
+      },
+      "severity_number": 9,
+      "severity_text": "INFO",
+      "span_id_hex": "",
+      "time_unix_nano": "1777896271444329000",
+      "trace_id_hex": ""
+    },
+    {
+      "attributes": {
+        "act_id": {
+          "stringValue": ""
+        },
+        "adapter_id": {
+          "stringValue": "2"
+        },
+        "adapter_type": {
+          "stringValue": ""
+        },
+        "binding_kind": {
+          "stringValue": ""
+        },
+        "change_mode": {
+          "stringValue": ""
+        },
+        "descriptor_id": {
+          "stringValue": ""
+        },
+        "direction": {
+          "stringValue": ""
+        },
+        "endpoint_id": {
+          "stringValue": "shell.1"
+        },
+        "family": {
+          "stringValue": "spine.endpoint"
+        },
+        "kind": {
+          "stringValue": "connected"
+        },
+        "organ_id": {
+          "stringValue": ""
+        },
+        "outcome": {
+          "stringValue": ""
+        },
+        "payload": {
+          "stringValue": "{\"family\":\"spine.endpoint\",\"run_id\":\"019df2e0-2e48-7222-8c84-3589e99dfd19\",\"timestamp\":\"2026-05-04T12:04:31.444587Z\",\"tick\":0,\"span_id\":\"spine.endpoint:shell.1\",\"endpoint_id\":\"shell.1\",\"adapter_id\":\"2\",\"kind\":\"connected\",\"channel_or_session\":\"adapter:2\"}"
+        },
+        "request_id": {
+          "stringValue": ""
+        },
+        "run_id": {
+          "stringValue": "019df2e0-2e48-7222-8c84-3589e99dfd19"
+        },
+        "sense_id": {
+          "stringValue": ""
+        },
+        "state": {
+          "stringValue": "connected"
+        },
+        "subsystem": {
+          "stringValue": "spine"
+        },
+        "thread_id": {
+          "stringValue": ""
+        },
+        "tick": {
+          "intValue": "0"
+        },
+        "tick_present": {
+          "boolValue": false
+        },
+        "transition_kind": {
+          "stringValue": ""
+        },
+        "turn_id": {
+          "stringValue": ""
+        }
+      },
+      "body": {
+        "stringValue": "contract_event"
+      },
+      "event_name": "event core/src/observability/runtime/emit.rs:57",
+      "flags": 0,
+      "observed_time_unix_nano": "1777896271444606000",
+      "received_at": "2026-05-04T12:04:33.421972Z",
+      "resource": {
+        "service.name": {
+          "stringValue": "beluna.core"
+        },
+        "telemetry.sdk.language": {
+          "stringValue": "rust"
+        },
+        "telemetry.sdk.name": {
+          "stringValue": "opentelemetry"
+        },
+        "telemetry.sdk.version": {
+          "stringValue": "0.31.0"
+        }
+      },
+      "scope": {
+        "attributes": {},
+        "name": "observability.contract",
+        "version": ""
+      },
+      "severity_number": 9,
+      "severity_text": "INFO",
+      "span_id_hex": "",
+      "time_unix_nano": "1777896271444606000",
+      "trace_id_hex": ""
+    },
+    {
+      "attributes": {
+        "act_id": {
+          "stringValue": ""
+        },
+        "adapter_id": {
+          "stringValue": ""
+        },
+        "adapter_type": {
+          "stringValue": ""
+        },
+        "binding_kind": {
+          "stringValue": ""
+        },
+        "change_mode": {
+          "stringValue": "snapshot"
+        },
+        "descriptor_id": {
+          "stringValue": ""
+        },
+        "direction": {
+          "stringValue": ""
+        },
+        "endpoint_id": {
+          "stringValue": ""
+        },
+        "family": {
+          "stringValue": "stem.ns-catalog"
+        },
+        "kind": {
+          "stringValue": ""
+        },
+        "organ_id": {
+          "stringValue": ""
+        },
+        "outcome": {
+          "stringValue": ""
+        },
+        "payload": {
+          "stringValue": "{\"family\":\"stem.ns-catalog\",\"run_id\":\"019df2e0-2e48-7222-8c84-3589e99dfd19\",\"timestamp\":\"2026-05-04T12:04:31.444852Z\",\"tick\":0,\"span_id\":\"stem.ns-catalog:stem:v1\",\"catalog_version\":\"stem:v1\",\"change_mode\":\"snapshot\",\"accepted_entries_or_routes\":{\"entries\":[{\"endpoint_id\":\"shell.1\",\"neural_signal_descriptor_id\":\"shell.exec\",\"payload_schema\":{\"properties\":{\"argv\":{\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"cwd\":{\"type\":[\"string\",\"null\"]},\"env\":{\"additionalProperties\":{\"type\":\"string\"},\"type\":\"object\"},\"stderr_max_bytes\":{\"minimum\":1,\"type\":\"integer\"},\"stdout_max_bytes\":{\"minimum\":1,\"type\":\"integer\"},\"timeout_ms\":{\"minimum\":1,\"type\":\"integer\"}},\"required\":[\"argv\"],\"type\":\"object\"},\"type\":\"act\"},{\"endpoint_id\":\"shell.1\",\"neural_signal_descriptor_id\":\"shell.exec.result\",\"payload_schema\":{\"type\":\"string\"},\"type\":\"sense\"}],\"routes\":[\"shell.1/shell.exec\",\"shell.1/shell.exec.result\"]},\"rejected_entries_or_routes\":[],\"catalog_snapshot\":{\"entries\":[{\"endpoint_id\":\"shell.1\",\"neural_signal_descriptor_id\":\"shell.exec.result\",\"payload_schema\":{\"type\":\"string\"},\"type\":\"sense\"},{\"endpoint_id\":\"shell.1\",\"neural_signal_descriptor_id\":\"shell.exec\",\"payload_schema\":{\"properties\":{\"argv\":{\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"cwd\":{\"type\":[\"string\",\"null\"]},\"env\":{\"additionalProperties\":{\"type\":\"string\"},\"type\":\"object\"},\"stderr_max_bytes\":{\"minimum\":1,\"type\":\"integer\"},\"stdout_max_bytes\":{\"minimum\":1,\"type\":\"integer\"},\"timeout_ms\":{\"minimum\":1,\"type\":\"integer\"}},\"required\":[\"argv\"],\"type\":\"object\"},\"type\":\"act\"}]}}"
+        },
+        "request_id": {
+          "stringValue": ""
+        },
+        "run_id": {
+          "stringValue": "019df2e0-2e48-7222-8c84-3589e99dfd19"
+        },
+        "sense_id": {
+          "stringValue": ""
+        },
+        "state": {
+          "stringValue": ""
+        },
+        "subsystem": {
+          "stringValue": "stem"
+        },
+        "thread_id": {
+          "stringValue": ""
+        },
+        "tick": {
+          "intValue": "0"
+        },
+        "tick_present": {
+          "boolValue": false
+        },
+        "transition_kind": {
+          "stringValue": ""
+        },
+        "turn_id": {
+          "stringValue": ""
+        }
+      },
+      "body": {
+        "stringValue": "contract_event"
+      },
+      "event_name": "event core/src/observability/runtime/emit.rs:57",
+      "flags": 0,
+      "observed_time_unix_nano": "1777896271444902000",
+      "received_at": "2026-05-04T12:04:33.421972Z",
+      "resource": {
+        "service.name": {
+          "stringValue": "beluna.core"
+        },
+        "telemetry.sdk.language": {
+          "stringValue": "rust"
+        },
+        "telemetry.sdk.name": {
+          "stringValue": "opentelemetry"
+        },
+        "telemetry.sdk.version": {
+          "stringValue": "0.31.0"
+        }
+      },
+      "scope": {
+        "attributes": {},
+        "name": "observability.contract",
+        "version": ""
+      },
+      "severity_number": 9,
+      "severity_text": "INFO",
+      "span_id_hex": "",
+      "time_unix_nano": "1777896271444902000",
+      "trace_id_hex": ""
+    },
+    {
+      "attributes": {
+        "act_id": {
+          "stringValue": ""
+        },
+        "adapter_id": {
+          "stringValue": "2"
+        },
+        "adapter_type": {
+          "stringValue": ""
+        },
+        "binding_kind": {
+          "stringValue": ""
+        },
+        "change_mode": {
+          "stringValue": ""
+        },
+        "descriptor_id": {
+          "stringValue": ""
+        },
+        "direction": {
+          "stringValue": ""
+        },
+        "endpoint_id": {
+          "stringValue": "shell.1"
+        },
+        "family": {
+          "stringValue": "spine.endpoint"
+        },
+        "kind": {
+          "stringValue": "registered"
+        },
+        "organ_id": {
+          "stringValue": ""
+        },
+        "outcome": {
+          "stringValue": ""
+        },
+        "payload": {
+          "stringValue": "{\"family\":\"spine.endpoint\",\"run_id\":\"019df2e0-2e48-7222-8c84-3589e99dfd19\",\"timestamp\":\"2026-05-04T12:04:31.445066Z\",\"tick\":0,\"span_id\":\"spine.endpoint:shell.1\",\"endpoint_id\":\"shell.1\",\"adapter_id\":\"2\",\"kind\":\"registered\",\"channel_or_session\":\"adapter:2\",\"route_summary\":{\"routes\":[{\"descriptor_id\":\"shell.exec\",\"endpoint_id\":\"shell.1\",\"type\":\"act\"},{\"descriptor_id\":\"shell.exec.result\",\"endpoint_id\":\"shell.1\",\"type\":\"sense\"}]}}"
+        },
+        "request_id": {
+          "stringValue": ""
+        },
+        "run_id": {
+          "stringValue": "019df2e0-2e48-7222-8c84-3589e99dfd19"
+        },
+        "sense_id": {
+          "stringValue": ""
+        },
+        "state": {
+          "stringValue": "registered"
+        },
+        "subsystem": {
+          "stringValue": "spine"
+        },
+        "thread_id": {
+          "stringValue": ""
+        },
+        "tick": {
+          "intValue": "0"
+        },
+        "tick_present": {
+          "boolValue": false
+        },
+        "transition_kind": {
+          "stringValue": ""
+        },
+        "turn_id": {
+          "stringValue": ""
+        }
+      },
+      "body": {
+        "stringValue": "contract_event"
+      },
+      "event_name": "event core/src/observability/runtime/emit.rs:57",
+      "flags": 0,
+      "observed_time_unix_nano": "1777896271445090000",
+      "received_at": "2026-05-04T12:04:33.421972Z",
+      "resource": {
+        "service.name": {
+          "stringValue": "beluna.core"
+        },
+        "telemetry.sdk.language": {
+          "stringValue": "rust"
+        },
+        "telemetry.sdk.name": {
+          "stringValue": "opentelemetry"
+        },
+        "telemetry.sdk.version": {
+          "stringValue": "0.31.0"
+        }
+      },
+      "scope": {
+        "attributes": {},
+        "name": "observability.contract",
+        "version": ""
+      },
+      "severity_number": 9,
+      "severity_text": "INFO",
+      "span_id_hex": "",
+      "time_unix_nano": "1777896271445090000",
+      "trace_id_hex": ""
+    },
+    {
+      "attributes": {
+        "act_id": {
+          "stringValue": ""
+        },
+        "adapter_id": {
+          "stringValue": ""
+        },
+        "adapter_type": {
+          "stringValue": ""
+        },
+        "binding_kind": {
+          "stringValue": ""
+        },
+        "change_mode": {
+          "stringValue": ""
+        },
+        "descriptor_id": {
+          "stringValue": ""
+        },
+        "direction": {
+          "stringValue": ""
+        },
+        "endpoint_id": {
+          "stringValue": ""
+        },
+        "family": {
+          "stringValue": "stem.proprioception"
+        },
+        "kind": {
+          "stringValue": "patch"
+        },
+        "organ_id": {
+          "stringValue": ""
+        },
+        "outcome": {
+          "stringValue": ""
+        },
+        "payload": {
+          "stringValue": "{\"family\":\"stem.proprioception\",\"run_id\":\"019df2e0-2e48-7222-8c84-3589e99dfd19\",\"timestamp\":\"2026-05-04T12:04:31.44521Z\",\"tick\":0,\"span_id\":\"stem.proprioception:patch\",\"kind\":\"patch\",\"entries_or_keys\":{\"entries\":{\"spine.body_endpoint_count\":\"1\",\"spine.body_endpoints\":\"shell.1\"}}}"
+        },
+        "request_id": {
+          "stringValue": ""
+        },
+        "run_id": {
+          "stringValue": "019df2e0-2e48-7222-8c84-3589e99dfd19"
+        },
+        "sense_id": {
+          "stringValue": ""
+        },
+        "state": {
+          "stringValue": ""
+        },
+        "subsystem": {
+          "stringValue": "stem"
+        },
+        "thread_id": {
+          "stringValue": ""
+        },
+        "tick": {
+          "intValue": "0"
+        },
+        "tick_present": {
+          "boolValue": false
+        },
+        "transition_kind": {
+          "stringValue": ""
+        },
+        "turn_id": {
+          "stringValue": ""
+        }
+      },
+      "body": {
+        "stringValue": "contract_event"
+      },
+      "event_name": "event core/src/observability/runtime/emit.rs:57",
+      "flags": 0,
+      "observed_time_unix_nano": "1777896271445236000",
+      "received_at": "2026-05-04T12:04:33.421972Z",
+      "resource": {
+        "service.name": {
+          "stringValue": "beluna.core"
+        },
+        "telemetry.sdk.language": {
+          "stringValue": "rust"
+        },
+        "telemetry.sdk.name": {
+          "stringValue": "opentelemetry"
+        },
+        "telemetry.sdk.version": {
+          "stringValue": "0.31.0"
+        }
+      },
+      "scope": {
+        "attributes": {},
+        "name": "observability.contract",
+        "version": ""
+      },
+      "severity_number": 9,
+      "severity_text": "INFO",
+      "span_id_hex": "",
+      "time_unix_nano": "1777896271445236000",
+      "trace_id_hex": ""
+    },
+    {
+      "attributes": {
+        "act_id": {
+          "stringValue": ""
+        },
+        "adapter_id": {
+          "stringValue": "2"
+        },
+        "adapter_type": {
+          "stringValue": ""
+        },
+        "binding_kind": {
+          "stringValue": ""
+        },
+        "change_mode": {
+          "stringValue": ""
+        },
+        "descriptor_id": {
+          "stringValue": ""
+        },
+        "direction": {
+          "stringValue": ""
+        },
+        "endpoint_id": {
+          "stringValue": "web.2"
+        },
+        "family": {
+          "stringValue": "spine.endpoint"
+        },
+        "kind": {
+          "stringValue": "connected"
+        },
+        "organ_id": {
+          "stringValue": ""
+        },
+        "outcome": {
+          "stringValue": ""
+        },
+        "payload": {
+          "stringValue": "{\"family\":\"spine.endpoint\",\"run_id\":\"019df2e0-2e48-7222-8c84-3589e99dfd19\",\"timestamp\":\"2026-05-04T12:04:31.445353Z\",\"tick\":0,\"span_id\":\"spine.endpoint:web.2\",\"endpoint_id\":\"web.2\",\"adapter_id\":\"2\",\"kind\":\"connected\",\"channel_or_session\":\"adapter:2\"}"
+        },
+        "request_id": {
+          "stringValue": ""
+        },
+        "run_id": {
+          "stringValue": "019df2e0-2e48-7222-8c84-3589e99dfd19"
+        },
+        "sense_id": {
+          "stringValue": ""
+        },
+        "state": {
+          "stringValue": "connected"
+        },
+        "subsystem": {
+          "stringValue": "spine"
+        },
+        "thread_id": {
+          "stringValue": ""
+        },
+        "tick": {
+          "intValue": "0"
+        },
+        "tick_present": {
+          "boolValue": false
+        },
+        "transition_kind": {
+          "stringValue": ""
+        },
+        "turn_id": {
+          "stringValue": ""
+        }
+      },
+      "body": {
+        "stringValue": "contract_event"
+      },
+      "event_name": "event core/src/observability/runtime/emit.rs:57",
+      "flags": 0,
+      "observed_time_unix_nano": "1777896271445369000",
+      "received_at": "2026-05-04T12:04:33.421972Z",
+      "resource": {
+        "service.name": {
+          "stringValue": "beluna.core"
+        },
+        "telemetry.sdk.language": {
+          "stringValue": "rust"
+        },
+        "telemetry.sdk.name": {
+          "stringValue": "opentelemetry"
+        },
+        "telemetry.sdk.version": {
+          "stringValue": "0.31.0"
+        }
+      },
+      "scope": {
+        "attributes": {},
+        "name": "observability.contract",
+        "version": ""
+      },
+      "severity_number": 9,
+      "severity_text": "INFO",
+      "span_id_hex": "",
+      "time_unix_nano": "1777896271445369000",
+      "trace_id_hex": ""
+    },
+    {
+      "attributes": {
+        "act_id": {
+          "stringValue": ""
+        },
+        "adapter_id": {
+          "stringValue": ""
+        },
+        "adapter_type": {
+          "stringValue": ""
+        },
+        "binding_kind": {
+          "stringValue": ""
+        },
+        "change_mode": {
+          "stringValue": "update"
+        },
+        "descriptor_id": {
+          "stringValue": ""
+        },
+        "direction": {
+          "stringValue": ""
+        },
+        "endpoint_id": {
+          "stringValue": ""
+        },
+        "family": {
+          "stringValue": "stem.ns-catalog"
+        },
+        "kind": {
+          "stringValue": ""
+        },
+        "organ_id": {
+          "stringValue": ""
+        },
+        "outcome": {
+          "stringValue": ""
+        },
+        "payload": {
+          "stringValue": "{\"family\":\"stem.ns-catalog\",\"run_id\":\"019df2e0-2e48-7222-8c84-3589e99dfd19\",\"timestamp\":\"2026-05-04T12:04:31.445442Z\",\"tick\":0,\"span_id\":\"stem.ns-catalog:stem:v2\",\"catalog_version\":\"stem:v2\",\"change_mode\":\"update\",\"accepted_entries_or_routes\":{\"entries\":[{\"endpoint_id\":\"web.2\",\"neural_signal_descriptor_id\":\"web.fetch\",\"payload_schema\":{\"properties\":{\"body_text\":{\"type\":[\"string\",\"null\"]},\"headers\":{\"additionalProperties\":{\"type\":\"string\"},\"default\":{},\"type\":\"object\"},\"method\":{\"type\":[\"string\",\"null\"]},\"response_max_bytes\":{\"minimum\":1,\"type\":\"integer\"},\"timeout_ms\":{\"minimum\":1,\"type\":\"integer\"},\"url\":{\"type\":\"string\"}},\"required\":[\"url\"],\"type\":\"object\"},\"type\":\"act\"},{\"endpoint_id\":\"web.2\",\"neural_signal_descriptor_id\":\"web.fetch.result\",\"payload_schema\":{\"type\":\"string\"},\"type\":\"sense\"}],\"routes\":[\"web.2/web.fetch\",\"web.2/web.fetch.result\"]},\"rejected_entries_or_routes\":[]}"
+        },
+        "request_id": {
+          "stringValue": ""
+        },
+        "run_id": {
+          "stringValue": "019df2e0-2e48-7222-8c84-3589e99dfd19"
+        },
+        "sense_id": {
+          "stringValue": ""
+        },
+        "state": {
+          "stringValue": ""
+        },
+        "subsystem": {
+          "stringValue": "stem"
+        },
+        "thread_id": {
+          "stringValue": ""
+        },
+        "tick": {
+          "intValue": "0"
+        },
+        "tick_present": {
+          "boolValue": false
+        },
+        "transition_kind": {
+          "stringValue": ""
+        },
+        "turn_id": {
+          "stringValue": ""
+        }
+      },
+      "body": {
+        "stringValue": "contract_event"
+      },
+      "event_name": "event core/src/observability/runtime/emit.rs:57",
+      "flags": 0,
+      "observed_time_unix_nano": "1777896271445471000",
+      "received_at": "2026-05-04T12:04:33.421972Z",
+      "resource": {
+        "service.name": {
+          "stringValue": "beluna.core"
+        },
+        "telemetry.sdk.language": {
+          "stringValue": "rust"
+        },
+        "telemetry.sdk.name": {
+          "stringValue": "opentelemetry"
+        },
+        "telemetry.sdk.version": {
+          "stringValue": "0.31.0"
+        }
+      },
+      "scope": {
+        "attributes": {},
+        "name": "observability.contract",
+        "version": ""
+      },
+      "severity_number": 9,
+      "severity_text": "INFO",
+      "span_id_hex": "",
+      "time_unix_nano": "1777896271445471000",
+      "trace_id_hex": ""
+    },
+    {
+      "attributes": {
+        "act_id": {
+          "stringValue": ""
+        },
+        "adapter_id": {
+          "stringValue": "2"
+        },
+        "adapter_type": {
+          "stringValue": ""
+        },
+        "binding_kind": {
+          "stringValue": ""
+        },
+        "change_mode": {
+          "stringValue": ""
+        },
+        "descriptor_id": {
+          "stringValue": ""
+        },
+        "direction": {
+          "stringValue": ""
+        },
+        "endpoint_id": {
+          "stringValue": "web.2"
+        },
+        "family": {
+          "stringValue": "spine.endpoint"
+        },
+        "kind": {
+          "stringValue": "registered"
+        },
+        "organ_id": {
+          "stringValue": ""
+        },
+        "outcome": {
+          "stringValue": ""
+        },
+        "payload": {
+          "stringValue": "{\"family\":\"spine.endpoint\",\"run_id\":\"019df2e0-2e48-7222-8c84-3589e99dfd19\",\"timestamp\":\"2026-05-04T12:04:31.445551Z\",\"tick\":0,\"span_id\":\"spine.endpoint:web.2\",\"endpoint_id\":\"web.2\",\"adapter_id\":\"2\",\"kind\":\"registered\",\"channel_or_session\":\"adapter:2\",\"route_summary\":{\"routes\":[{\"descriptor_id\":\"web.fetch\",\"endpoint_id\":\"web.2\",\"type\":\"act\"},{\"descriptor_id\":\"web.fetch.result\",\"endpoint_id\":\"web.2\",\"type\":\"sense\"}]}}"
+        },
+        "request_id": {
+          "stringValue": ""
+        },
+        "run_id": {
+          "stringValue": "019df2e0-2e48-7222-8c84-3589e99dfd19"
+        },
+        "sense_id": {
+          "stringValue": ""
+        },
+        "state": {
+          "stringValue": "registered"
+        },
+        "subsystem": {
+          "stringValue": "spine"
+        },
+        "thread_id": {
+          "stringValue": ""
+        },
+        "tick": {
+          "intValue": "0"
+        },
+        "tick_present": {
+          "boolValue": false
+        },
+        "transition_kind": {
+          "stringValue": ""
+        },
+        "turn_id": {
+          "stringValue": ""
+        }
+      },
+      "body": {
+        "stringValue": "contract_event"
+      },
+      "event_name": "event core/src/observability/runtime/emit.rs:57",
+      "flags": 0,
+      "observed_time_unix_nano": "1777896271445568000",
+      "received_at": "2026-05-04T12:04:33.421972Z",
+      "resource": {
+        "service.name": {
+          "stringValue": "beluna.core"
+        },
+        "telemetry.sdk.language": {
+          "stringValue": "rust"
+        },
+        "telemetry.sdk.name": {
+          "stringValue": "opentelemetry"
+        },
+        "telemetry.sdk.version": {
+          "stringValue": "0.31.0"
+        }
+      },
+      "scope": {
+        "attributes": {},
+        "name": "observability.contract",
+        "version": ""
+      },
+      "severity_number": 9,
+      "severity_text": "INFO",
+      "span_id_hex": "",
+      "time_unix_nano": "1777896271445568000",
+      "trace_id_hex": ""
+    },
+    {
+      "attributes": {
+        "act_id": {
+          "stringValue": ""
+        },
+        "adapter_id": {
+          "stringValue": ""
+        },
+        "adapter_type": {
+          "stringValue": ""
+        },
+        "binding_kind": {
+          "stringValue": ""
+        },
+        "change_mode": {
+          "stringValue": ""
+        },
+        "descriptor_id": {
+          "stringValue": ""
+        },
+        "direction": {
+          "stringValue": ""
+        },
+        "endpoint_id": {
+          "stringValue": ""
+        },
+        "family": {
+          "stringValue": "stem.proprioception"
+        },
+        "kind": {
+          "stringValue": "patch"
+        },
+        "organ_id": {
+          "stringValue": ""
+        },
+        "outcome": {
+          "stringValue": ""
+        },
+        "payload": {
+          "stringValue": "{\"family\":\"stem.proprioception\",\"run_id\":\"019df2e0-2e48-7222-8c84-3589e99dfd19\",\"timestamp\":\"2026-05-04T12:04:31.445643Z\",\"tick\":0,\"span_id\":\"stem.proprioception:patch\",\"kind\":\"patch\",\"entries_or_keys\":{\"entries\":{\"spine.body_endpoint_count\":\"2\",\"spine.body_endpoints\":\"shell.1,web.2\"}}}"
+        },
+        "request_id": {
+          "stringValue": ""
+        },
+        "run_id": {
+          "stringValue": "019df2e0-2e48-7222-8c84-3589e99dfd19"
+        },
+        "sense_id": {
+          "stringValue": ""
+        },
+        "state": {
+          "stringValue": ""
+        },
+        "subsystem": {
+          "stringValue": "stem"
+        },
+        "thread_id": {
+          "stringValue": ""
+        },
+        "tick": {
+          "intValue": "0"
+        },
+        "tick_present": {
+          "boolValue": false
+        },
+        "transition_kind": {
+          "stringValue": ""
+        },
+        "turn_id": {
+          "stringValue": ""
+        }
+      },
+      "body": {
+        "stringValue": "contract_event"
+      },
+      "event_name": "event core/src/observability/runtime/emit.rs:57",
+      "flags": 0,
+      "observed_time_unix_nano": "1777896271445657000",
+      "received_at": "2026-05-04T12:04:33.421972Z",
+      "resource": {
+        "service.name": {
+          "stringValue": "beluna.core"
+        },
+        "telemetry.sdk.language": {
+          "stringValue": "rust"
+        },
+        "telemetry.sdk.name": {
+          "stringValue": "opentelemetry"
+        },
+        "telemetry.sdk.version": {
+          "stringValue": "0.31.0"
+        }
+      },
+      "scope": {
+        "attributes": {},
+        "name": "observability.contract",
+        "version": ""
+      },
+      "severity_number": 9,
+      "severity_text": "INFO",
+      "span_id_hex": "",
+      "time_unix_nano": "1777896271445657000",
+      "trace_id_hex": ""
+    },
+    {
+      "attributes": {
+        "act_id": {
+          "stringValue": ""
+        },
+        "adapter_id": {
+          "stringValue": ""
+        },
+        "adapter_type": {
+          "stringValue": ""
+        },
+        "binding_kind": {
+          "stringValue": ""
+        },
+        "change_mode": {
+          "stringValue": ""
+        },
+        "descriptor_id": {
+          "stringValue": ""
+        },
+        "direction": {
+          "stringValue": ""
+        },
+        "endpoint_id": {
+          "stringValue": ""
+        },
+        "family": {
+          "stringValue": "stem.tick"
+        },
+        "kind": {
+          "stringValue": "granted"
+        },
+        "organ_id": {
+          "stringValue": ""
+        },
+        "outcome": {
+          "stringValue": ""
+        },
+        "payload": {
+          "stringValue": "{\"family\":\"stem.tick\",\"run_id\":\"019df2e0-2e48-7222-8c84-3589e99dfd19\",\"timestamp\":\"2026-05-04T12:04:31.447279Z\",\"tick\":1,\"span_id\":\"stem.tick:1\",\"status\":\"granted\",\"tick_seq\":1}"
+        },
+        "request_id": {
+          "stringValue": ""
+        },
+        "run_id": {
+          "stringValue": "019df2e0-2e48-7222-8c84-3589e99dfd19"
+        },
+        "sense_id": {
+          "stringValue": ""
+        },
+        "state": {
+          "stringValue": "granted"
+        },
+        "subsystem": {
+          "stringValue": "stem"
+        },
+        "thread_id": {
+          "stringValue": ""
+        },
+        "tick": {
+          "intValue": "1"
+        },
+        "tick_present": {
+          "boolValue": true
+        },
+        "transition_kind": {
+          "stringValue": ""
+        },
+        "turn_id": {
+          "stringValue": ""
+        }
+      },
+      "body": {
+        "stringValue": "contract_event"
+      },
+      "event_name": "event core/src/observability/runtime/emit.rs:57",
+      "flags": 0,
+      "observed_time_unix_nano": "1777896271447313000",
+      "received_at": "2026-05-04T12:04:33.421972Z",
+      "resource": {
+        "service.name": {
+          "stringValue": "beluna.core"
+        },
+        "telemetry.sdk.language": {
+          "stringValue": "rust"
+        },
+        "telemetry.sdk.name": {
+          "stringValue": "opentelemetry"
+        },
+        "telemetry.sdk.version": {
+          "stringValue": "0.31.0"
+        }
+      },
+      "scope": {
+        "attributes": {},
+        "name": "observability.contract",
+        "version": ""
+      },
+      "severity_number": 9,
+      "severity_text": "INFO",
+      "span_id_hex": "",
+      "time_unix_nano": "1777896271447313000",
+      "trace_id_hex": ""
+    }
+  ],
+  "log_records_count": 31,
+  "received_at": "2026-05-04T12:04:33.421972Z",
+  "resource_logs_count": 1
+}

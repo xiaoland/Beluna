@@ -16,7 +16,13 @@ export function normalizeRawEvent(
 ): RawEvent {
   const attributes = toRecord(parseMaybeJson(value.attributes))
   const body = parseMaybeJson(value.body)
+  const bodyRecord = toRecord(body)
+  const scope = toRecord(parseMaybeJson(value.scope))
+  const scopeName = value.scopeName ?? readString(scope, ['name']) ?? null
+  const eventName = value.eventName ?? null
+  const family = value.family ?? null
   const tickAttribute = read(attributes, ['tick', 'cycle_id'])
+  const bodyTick = read(bodyRecord, ['tick', 'cycle_id'])
 
   return {
     rawEventId: value.rawEventId ?? cryptoRandomId(),
@@ -24,28 +30,44 @@ export function normalizeRawEvent(
     observedAt: value.observedAt ?? null,
     severityText: value.severityText ?? null,
     severityNumber: value.severityNumber ?? null,
+    recordKind:
+      value.recordKind ??
+      inferRecordKind(scopeName, eventName, family, attributes.payload),
+    scopeName,
+    eventName,
+    traceId: value.traceId ?? null,
+    spanId: value.spanId ?? null,
+    traceFlags: value.traceFlags ?? null,
     target: value.target ?? null,
-    family: value.family ?? null,
-    subsystem: value.subsystem ?? null,
-    runId: value.runId ?? readString(attributes, ['run_id']) ?? fallbackRunId,
+    family,
+    subsystem: value.subsystem ?? coreOwnerFromScope(scopeName),
+    runId:
+      value.runId ??
+      readString(attributes, ['run_id']) ??
+      readString(bodyRecord, ['run_id']) ??
+      fallbackRunId,
     tick:
       value.tick ??
       coerceTick(tickAttribute) ??
+      coerceTick(bodyTick) ??
       coerceTick(fallbackTick),
     messageText:
       value.messageText ??
       readString(attributes, ['message']) ??
-      readString(toRecord(body), ['message']) ??
+      readString(bodyRecord, ['message']) ??
       (typeof body === 'string' ? body : null),
     payload: parseEventPayload(attributes, body),
     body,
     attributes,
     resource: toRecord(parseMaybeJson(value.resource)),
-    scope: toRecord(parseMaybeJson(value.scope)),
+    scope,
   }
 }
 
-export function compareChronologyEvents(left: RawEvent, right: RawEvent): number {
+export function compareChronologyEvents(
+  left: RawEvent,
+  right: RawEvent,
+): number {
   const leftMs = parseObservedMs(left.observedAt) ?? Number.POSITIVE_INFINITY
   const rightMs = parseObservedMs(right.observedAt) ?? Number.POSITIVE_INFINITY
   if (leftMs !== rightMs) {
@@ -54,7 +76,10 @@ export function compareChronologyEvents(left: RawEvent, right: RawEvent): number
   return left.rawEventId.localeCompare(right.rawEventId)
 }
 
-export function compareTicksByObservedAt(left: string | null, right: string | null): number {
+export function compareTicksByObservedAt(
+  left: string | null,
+  right: string | null,
+): number {
   return compareDateDesc(left, right)
 }
 
@@ -67,7 +92,11 @@ export function parseObservedMs(value: string | null): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
-export function eventsForSubsystem(explicit: RawEvent[], rawEvents: RawEvent[], subsystem: string): RawEvent[] {
+export function eventsForSubsystem(
+  explicit: RawEvent[],
+  rawEvents: RawEvent[],
+  subsystem: string,
+): RawEvent[] {
   if (explicit.length > 0) {
     return explicit
   }
@@ -87,7 +116,11 @@ export function eventsForFamilies(
   return rawEvents.filter((event) => predicate(event.family))
 }
 
-export function firstPayloadValue(events: RawEvent[], family: string, keys: string[]): unknown | null {
+export function firstPayloadValue(
+  events: RawEvent[],
+  family: string,
+  keys: string[],
+): unknown | null {
   for (const event of events) {
     if (event.family !== family) {
       continue
@@ -115,7 +148,10 @@ function coerceTick(value: unknown): number | null {
   return null
 }
 
-export function collectNarratives(events: RawEvent[], families?: string[]): unknown[] {
+export function collectNarratives(
+  events: RawEvent[],
+  families?: string[],
+): unknown[] {
   return events
     .filter((event) => !families || families.includes(event.family ?? ''))
     .map(eventNarrative)
@@ -145,7 +181,10 @@ export function eventPayloadRecord(event: RawEvent): Record<string, unknown> {
   return toRecord(event.payload)
 }
 
-function parseEventPayload(attributes: Record<string, unknown>, body: unknown): unknown | null {
+function parseEventPayload(
+  attributes: Record<string, unknown>,
+  body: unknown,
+): unknown | null {
   const payload = parseMaybeJson(attributes.payload)
   if (payload != null) {
     return payload
@@ -156,4 +195,29 @@ function parseEventPayload(attributes: Record<string, unknown>, body: unknown): 
   }
 
   return null
+}
+
+function inferRecordKind(
+  scopeName: string | null,
+  eventName: string | null,
+  family: string | null,
+  payload: unknown,
+): string {
+  if (scopeName === 'observability.contract' || (family && payload != null)) {
+    return 'legacy_contract'
+  }
+
+  if (scopeName?.startsWith('beluna.core.') && eventName) {
+    return 'native_owner'
+  }
+
+  return 'ordinary_log'
+}
+
+function coreOwnerFromScope(scopeName: string | null): string | null {
+  if (!scopeName?.startsWith('beluna.core.')) {
+    return null
+  }
+
+  return scopeName.slice('beluna.core.'.length).split('.')[0] || null
 }

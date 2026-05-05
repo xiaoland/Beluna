@@ -374,6 +374,18 @@ function appendChronologyEntry(
 }
 
 function resolveLaneType(event: RawEvent, payload: Record<string, unknown>): ChronologyLaneType {
+  if (event.scopeName === 'beluna.core.stem' && event.eventName === 'tick.granted') {
+    return 'tick'
+  }
+
+  if (event.scopeName === 'beluna.core.cortex') {
+    return 'cortex'
+  }
+
+  if (event.scopeName === 'beluna.core.spine') {
+    return 'spine'
+  }
+
   const family = event.family ?? ''
 
   if (family === 'stem.tick') {
@@ -418,17 +430,17 @@ function resolveLaneKey(
 ): string {
   switch (laneType) {
     case 'tick':
-      return `tick:${event.tick ?? '0'}`
+      return event.traceId ? `trace:${event.traceId}` : `tick:${event.tick ?? '0'}`
     case 'cortex':
-      return firstString(payload, ['request_id']) ?? event.family ?? event.rawEventId
+      return event.spanId ?? firstString(payload, ['request_id']) ?? event.eventName ?? event.family ?? event.rawEventId
     case 'afferent':
       return firstString(payload, ['sense_id', 'descriptor_id', 'endpoint_id']) ?? event.rawEventId
     case 'efferent':
       return firstString(payload, ['act_id', 'descriptor_id', 'endpoint_id']) ?? event.rawEventId
     case 'spine':
-      return firstString(payload, ['endpoint_id', 'adapter_id', 'act_id', 'sense_id']) ?? event.rawEventId
+      return event.spanId ?? firstString(payload, ['endpoint_id', 'adapter_id', 'act_id', 'sense_id']) ?? event.rawEventId
     case 'misc':
-      return firstString(payload, ['span_id', 'request_id']) ?? event.rawEventId
+      return event.spanId ?? firstString(payload, ['span_id', 'request_id']) ?? event.eventName ?? event.rawEventId
   }
 }
 
