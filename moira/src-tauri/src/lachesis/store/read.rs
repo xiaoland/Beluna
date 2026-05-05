@@ -5,7 +5,6 @@ use super::LachesisStore;
 use crate::lachesis::model::{EventRecord, RunSummary, TickDetail, TickSummary};
 
 const CORTEX_HANDLED_FAMILIES_SQL: &str = r#"'cortex.primary', 'cortex.sense-helper', 'cortex.goal-forest-helper', 'cortex.acts-helper', 'cortex.goal-forest'"#;
-const CORTEX_HANDLED_EVENTS_SQL: &str = r#"'primary.started', 'primary.finished'"#;
 
 impl LachesisStore {
     pub async fn list_runs(&self) -> Result<Vec<RunSummary>, String> {
@@ -52,8 +51,7 @@ impl LachesisStore {
                            WHERE (
                                ticks.trace_id_hex IS NOT NULL
                                AND raw_events.trace_id_hex = ticks.trace_id_hex
-                               AND raw_events.scope_name = 'beluna.core.cortex'
-                               AND raw_events.event_name IN ({CORTEX_HANDLED_EVENTS_SQL})
+                               AND raw_events.scope_name LIKE 'beluna.core.cortex.%'
                              )
                              OR (
                                raw_events.run_id = ticks.run_id
@@ -100,8 +98,7 @@ impl LachesisStore {
                                WHERE (
                                    ticks.trace_id_hex IS NOT NULL
                                    AND raw_events.trace_id_hex = ticks.trace_id_hex
-                                   AND raw_events.scope_name = 'beluna.core.cortex'
-                                   AND raw_events.event_name IN ({CORTEX_HANDLED_EVENTS_SQL})
+                                   AND raw_events.scope_name LIKE 'beluna.core.cortex.%'
                                  )
                                  OR (
                                    raw_events.run_id = ticks.run_id

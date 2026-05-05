@@ -12,6 +12,9 @@ defineEmits<{
 }>()
 
 function laneLabel(type: string): string {
+  if (type === 'owner') {
+    return 'core owner'
+  }
   return type.replace(/-/g, ' ')
 }
 

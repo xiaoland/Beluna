@@ -47,8 +47,14 @@ mod tests {
         assert_eq!(trace, trace_id("run-a", 1));
         assert_ne!(trace, trace_id("run-a", 2));
 
-        let span = span_id("run-a", 1, "beluna.core.cortex", "primary");
-        assert_eq!(span, span_id("run-a", 1, "beluna.core.cortex", "primary"));
-        assert_ne!(span, span_id("run-a", 1, "beluna.core.cortex", "cleanup"));
+        let span = span_id("run-a", 1, "beluna.core.cortex.primary", "primary");
+        assert_eq!(
+            span,
+            span_id("run-a", 1, "beluna.core.cortex.primary", "primary")
+        );
+        assert_ne!(
+            span,
+            span_id("run-a", 1, "beluna.core.cortex.cleanup", "cleanup")
+        );
     }
 }

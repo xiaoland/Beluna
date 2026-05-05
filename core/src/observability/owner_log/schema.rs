@@ -2,23 +2,35 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum OwnerScope {
-    Main,
-    Stem,
-    Cortex,
-    AiGateway,
-    AiGatewayChat,
-    Spine,
+    MainRuntime,
+    StemTick,
+    CortexPrimary,
+    CortexAttention,
+    CortexCleanup,
+    CortexSenseHelper,
+    CortexGoalForest,
+    CortexActsHelper,
+    AiGatewayTransport,
+    AiGatewayChatTurn,
+    AiGatewayChatThread,
+    SpineActRouting,
 }
 
 impl OwnerScope {
     pub(crate) const fn as_str(self) -> &'static str {
         match self {
-            OwnerScope::Main => "beluna.core.main",
-            OwnerScope::Stem => "beluna.core.stem",
-            OwnerScope::Cortex => "beluna.core.cortex",
-            OwnerScope::AiGateway => "beluna.core.ai-gateway",
-            OwnerScope::AiGatewayChat => "beluna.core.ai-gateway.chat",
-            OwnerScope::Spine => "beluna.core.spine",
+            OwnerScope::MainRuntime => "beluna.core.main.runtime",
+            OwnerScope::StemTick => "beluna.core.stem.tick",
+            OwnerScope::CortexPrimary => "beluna.core.cortex.primary",
+            OwnerScope::CortexAttention => "beluna.core.cortex.attention",
+            OwnerScope::CortexCleanup => "beluna.core.cortex.cleanup",
+            OwnerScope::CortexSenseHelper => "beluna.core.cortex.sense-helper",
+            OwnerScope::CortexGoalForest => "beluna.core.cortex.goal-forest",
+            OwnerScope::CortexActsHelper => "beluna.core.cortex.acts-helper",
+            OwnerScope::AiGatewayTransport => "beluna.core.ai-gateway.transport",
+            OwnerScope::AiGatewayChatTurn => "beluna.core.ai-gateway.chat.turn",
+            OwnerScope::AiGatewayChatThread => "beluna.core.ai-gateway.chat.thread",
+            OwnerScope::SpineActRouting => "beluna.core.spine.act-routing",
         }
     }
 }

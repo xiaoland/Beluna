@@ -123,8 +123,8 @@ mod tests {
                 native_event(
                     "evt-tick",
                     "2026-05-05T00:00:00Z",
-                    "beluna.core.stem",
-                    "tick.granted",
+                    "beluna.core.stem.tick",
+                    "granted",
                     "trace-1",
                     "span-tick",
                     Some("run-1"),
@@ -139,8 +139,8 @@ mod tests {
                 native_event(
                     "evt-primary",
                     "2026-05-05T00:00:01Z",
-                    "beluna.core.cortex",
-                    "primary.started",
+                    "beluna.core.cortex.primary",
+                    "started",
                     "trace-1",
                     "span-primary",
                     None,
@@ -168,7 +168,7 @@ mod tests {
 
         let detail = store.tick_detail("run-1", 1).await.expect("tick detail");
         assert_eq!(detail.raw.len(), 2);
-        assert_eq!(detail.raw[1].event_name.as_deref(), Some("primary.started"));
+        assert_eq!(detail.raw[1].event_name.as_deref(), Some("started"));
 
         drop(store);
         let _ = std::fs::remove_file(path);

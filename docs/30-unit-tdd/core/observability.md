@@ -20,43 +20,64 @@ Loom composition and operator-facing investigation flows belong in `docs/30-unit
 11. Wake/tick grouping comes from trace id plus bootstrap and tick anchor events. Core avoids repeating wake/tick as attributes on every first-party event.
 12. Event result semantics come from `eventName`, severity, and event-specific body/outcome fields.
 13. Domain ids such as `sense_id`, `act_id`, `descriptor_id`, `endpoint_id`, `thread_id`, and `turn_id` stay local to the owning event schema. Body or attributes placement is an event-schema choice.
-14. Ordinary Rust diagnostics can continue through `tracing` and `opentelemetry-appender-tracing`. First-party owner events use the Owner Log Emitter over the OpenTelemetry Logs API so structured body and owner scope remain explicit.
-15. Core runtime first-party events use native owner-log emission. Historical legacy contract logs remain a Moira ingestion compatibility concern.
+14. Ordinary Rust diagnostics can continue through `tracing` and `opentelemetry-appender-tracing`. The tracing file layer and tracing-to-OTLP bridge both obey `logging.filter`.
+15. First-party owner events use the Owner Log Emitter over the OpenTelemetry Logs API so structured body and owner scope remain explicit; this direct owner-log path is independent of the ordinary tracing filter.
+16. Core runtime first-party events use native owner-log emission. Historical legacy contract logs remain a Moira ingestion compatibility concern.
 
 ## Owner Scopes
 
 | Scope | Owner |
 |---|---|
-| `beluna.core.main` | boot, config, runtime lifecycle, exporter state |
-| `beluna.core.stem` | tick grant, afferent/efferent pathways, proprioception, neural-signal catalog |
-| `beluna.core.cortex` | cognition organs, goal forest, tick-local cognition work |
-| `beluna.core.ai-gateway` | gateway transport, backend dispatch, capability-level request records |
-| `beluna.core.ai-gateway.chat` | chat thread/turn lifecycle and rich chat payloads |
-| `beluna.core.spine` | adapter lifecycle, endpoint lifecycle, sense ingress, act routing/delivery |
+| `beluna.core.main.runtime` | boot, config, runtime lifecycle, exporter state |
+| `beluna.core.stem.tick` | tick grant and admitted-tick anchors |
+| `beluna.core.stem.afferent-pathway` | inbound sense pathway from Spine into Cortex-facing tick input |
+| `beluna.core.stem.afferent-rules` | afferent rule lifecycle and match decisions |
+| `beluna.core.stem.proprioception` | runtime self-state and environment observations |
+| `beluna.core.stem.descriptor-catalog` | neural-signal descriptor catalog changes and lookups |
+| `beluna.core.cortex.primary` | primary cognition phase for a tick |
+| `beluna.core.cortex.attention` | attention and focus work within a tick |
+| `beluna.core.cortex.cleanup` | cleanup phase after primary cognition |
+| `beluna.core.cortex.sense-helper` | sense helper cognition work |
+| `beluna.core.cortex.acts-helper` | act helper cognition work |
+| `beluna.core.cortex.goal-forest` | goal-forest inspection and mutation records |
+| `beluna.core.ai-gateway.chat.turn` | chat turn lifecycle and rich chat payloads |
+| `beluna.core.ai-gateway.chat.thread` | chat thread lifecycle and thread-local state |
+| `beluna.core.ai-gateway.transport` | gateway transport, backend dispatch, capability-level request records |
+| `beluna.core.stem.efferent-pathway` | outbound act pathway from Cortex decisions toward Spine |
+| `beluna.core.spine.sense-ingress` | inbound sense ingress from endpoint/adapter surfaces |
+| `beluna.core.spine.act-routing` | outbound act routing, binding, and terminal delivery outcomes |
+| `beluna.core.spine.endpoint` | endpoint lifecycle and endpoint-local state |
+| `beluna.core.spine.adapter` | adapter lifecycle and adapter-local state |
 
 ## Current Event Surface
 
-The first native implementation covers eight first-party owner event schemas.
+The current native implementation covers boot/tick anchors, Cortex owner boundary records, AI Gateway transport/chat records, and Spine act delivery.
 
 | Scope | `eventName` | Span key | Attribute keys | Body owns |
 |---|---|---|---|---|
-| `beluna.core.main` | `runtime.booted` | `boot` | none | run id, bootstrap summary, config path, OTLP signal state |
-| `beluna.core.stem` | `tick.granted` | `grant` | none | run id, tick, tick sequence, and grant summary |
-| `beluna.core.cortex` | `primary.started` | `primary` | none | primary input payload, route, execution summary |
-| `beluna.core.cortex` | `primary.finished` | `primary` | none | primary output/error payload, linked AI transport id, thread/turn ids when present |
-| `beluna.core.ai-gateway` | `transport.request.completed` | `request:{transport_request_id}` | `ai.capability`; `ai.backend.id`; `ai.model` | transport request id, attempt/retry metadata, usage, provider payloads, terminal error |
-| `beluna.core.ai-gateway.chat` | `turn.dispatched` | `turn:{thread_id}:{turn_id}` | none | chat/thread/turn ids, transport request id, dispatch payload, metadata |
-| `beluna.core.ai-gateway.chat` | `turn.committed` | `turn:{thread_id}:{turn_id}` | none | chat/thread/turn ids, transport request id, committed messages, finish reason, usage, backend metadata |
-| `beluna.core.spine` | `act.delivered` | `delivery:{act_id}` | `spine.act.id`; `spine.endpoint.id`; `spine.descriptor.id` | act delivery summary, binding kind, acknowledgement/reference data |
+| `beluna.core.main.runtime` | `booted` | `boot` | none | run id, bootstrap summary, config path, OTLP signal state |
+| `beluna.core.stem.tick` | `granted` | `grant` | none | run id, tick, tick sequence, and grant summary |
+| `beluna.core.cortex.primary` | `started` | `primary` | none | primary input payload, route, execution summary |
+| `beluna.core.cortex.primary` | `finished` | `primary` | none | primary output/error payload, linked AI transport id, thread/turn ids when present |
+| `beluna.core.cortex.attention` | `started`; `finished` | `attention` | none | attention input/output/error payloads, route, linked AI transport id, thread/turn ids when present |
+| `beluna.core.cortex.cleanup` | `started`; `finished` | `cleanup` | none | cleanup input/output/error payloads, route, linked AI transport id, thread/turn ids when present |
+| `beluna.core.cortex.sense-helper` | `started`; `finished` | `sense-helper` | none | sense helper input/output/error payloads, route, linked AI transport id, thread/turn ids when present |
+| `beluna.core.cortex.goal-forest` | `started`; `finished` | `goal-forest` | none | goal-forest helper input/output/error payloads, route, linked AI transport id, thread/turn ids when present |
+| `beluna.core.cortex.acts-helper` | `started`; `finished` | `acts-helper` | none | acts helper input/output/error payloads, route, linked AI transport id, thread/turn ids when present |
+| `beluna.core.ai-gateway.transport` | `request.completed` | `request:{transport_request_id}` | `ai.capability`; `ai.backend.id`; `ai.model` | transport request id, parent span id, organ id, attempt/retry metadata, usage, provider payloads, terminal error |
+| `beluna.core.ai-gateway.chat.turn` | `dispatched` | `turn:{thread_id}:{turn_id}` | none | chat/thread/turn ids, parent span id, organ id, transport request id, dispatch payload, metadata |
+| `beluna.core.ai-gateway.chat.turn` | `committed`; `failed` | `turn:{thread_id}:{turn_id}` | none | chat/thread/turn ids, parent span id, organ id, transport request id, committed messages or terminal error, finish reason, usage, backend metadata |
+| `beluna.core.ai-gateway.chat.thread` | `opened`; `derived`; `rewritten`; `turn.committed`; `snapshot` | `thread:{thread_id}` | none | thread id, source/kept/dropped turn ids, messages, turn summaries, context reason, continuation state |
+| `beluna.core.spine.act-routing` | `delivered` | `delivery:{act_id}` | `spine.act.id`; `spine.endpoint.id`; `spine.descriptor.id` | act delivery summary, binding kind, acknowledgement/reference data |
 
 ## Trace And Span Derivation
 
 1. `trace_id = first_16_bytes(sha256("beluna.core.trace" + run_id + tick))`.
 2. `span_id = first_8_bytes(sha256("beluna.core.span" + run_id + tick + scope + span_key))`.
-3. `runtime.booted` uses `tick = 0`.
-4. `tick.granted` is the canonical tick anchor for live tick traces.
-5. `primary.started` and `primary.finished` share the `primary` span key for one tick's primary phase.
-6. Per-turn chat detail is owned by `beluna.core.ai-gateway.chat` spans.
+3. `beluna.core.main.runtime / booted` uses `tick = 0`.
+4. `beluna.core.stem.tick / granted` is the canonical tick anchor for live tick traces.
+5. Cortex owner boundary pairs share a scope-local organ span key, for example `primary`, `attention`, or `cleanup`.
+6. Per-turn chat detail is owned by `beluna.core.ai-gateway.chat.turn` spans.
 
 ## Correlation Requirements
 
@@ -64,8 +85,8 @@ Moira owns chronology grouping and interval rendering.
 Core exposes stable native fields and event bodies so Moira can inspect one tick without parsing prose.
 
 1. `traceId` groups all first-party owner events for one wake plus tick.
-2. `runtime.booted` anchors `tick = 0` bootstrap records and exposes `run_id` in body.
-3. `tick.granted` anchors admitted live ticks and exposes `run_id`, `tick`, and `tick_seq` in body.
+2. `beluna.core.main.runtime / booted` anchors `tick = 0` bootstrap records and exposes `run_id` in body.
+3. `beluna.core.stem.tick / granted` anchors admitted live ticks and exposes `run_id`, `tick`, and `tick_seq` in body.
 4. Paired interval records share the same span id through the same scope and span key.
 5. AI Gateway transport records expose `transport_request_id` in body and backend/model/capability attributes.
 6. AI Gateway Chat records expose `thread_id`, `turn_id`, and `transport_request_id` in body.

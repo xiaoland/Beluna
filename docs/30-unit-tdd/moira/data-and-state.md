@@ -37,13 +37,13 @@
 
 1. Moira stores full raw OTLP log events locally for the current target design, including full request, response, signal, and topology payloads by default.
 2. Raw-event acceptance precedes read-model projection; projections are derived, not alternative sources of truth.
-3. `runs` and `ticks` remain the baseline read models. Moira derives them from Core `runtime.booted` and `tick.granted` anchors plus native trace ids.
+3. `runs` and `ticks` remain the baseline read models. Moira derives them from Core `beluna.core.main.runtime / booted` and `beluna.core.stem.tick / granted` anchors plus native trace ids.
 4. `raw_events.record_kind` is a Moira-local compatibility marker with three current values: `native_owner`, `legacy_contract`, and `ordinary_log`.
 5. Legacy contract records are inspectable through raw storage and compatibility normalization when they carry old `family` and serialized `payload` fields.
 6. Selected tick detail and source-grounded inspection are raw-first: Moira can show native OTLP event records before deeper owner-specific reconstruction exists.
-7. The selected-tick workspace projects a native event timeline for handled ticks and keeps raw inspection available as the strongest detailed surface.
+7. The selected-tick workspace projects a native Core owner-lane timeline for handled ticks and keeps raw inspection available as the strongest detailed surface.
 8. Tick is the canonical operator-facing anchor for explainability. Native `traceId` is the primary machine grouping key for one wake plus one tick.
-9. Cortex interval pairing is an optional Moira projection built from Core boundary records that share scope, event schema, and span id.
+9. Owner interval pairing is an optional Moira projection built from Core boundary records that share owner scope and span id. Event names identify the point or interval boundary on that owner lane.
 10. AI transport ids, `thread_id`, `turn_id`, `endpoint_id`, and act routing ids remain inspectable in raw body/attributes and query results. They become dedicated indexes only when a Loom workflow needs them.
 11. Metrics and OTLP traces are not persisted as first-class local observability datasets in the current target design. Log records may still carry `traceId` and `spanId`.
 12. Goal-forest snapshots are stored or referenced per tick; comparisons are derived later between selected ticks.

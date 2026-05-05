@@ -11,9 +11,7 @@ pub fn emit_cortex_organ_start(
     _request_id: &str,
     input_payload: Value,
 ) {
-    if organ_id == "primary" {
-        owner_log::events::emit_primary_started(route_or_backend, tick, input_payload.clone());
-    }
+    owner_log::events::emit_cortex_organ_started(tick, organ_id, route_or_backend, input_payload);
 }
 
 pub fn emit_cortex_organ_end(
@@ -27,17 +25,16 @@ pub fn emit_cortex_organ_end(
     thread_id: Option<&str>,
     turn_id: Option<u64>,
 ) {
-    if organ_id == "primary" {
-        owner_log::events::emit_primary_finished(
-            tick,
-            status,
-            output_payload.clone(),
-            error.clone(),
-            ai_request_id,
-            thread_id,
-            turn_id,
-        );
-    }
+    owner_log::events::emit_cortex_organ_finished(
+        tick,
+        organ_id,
+        status,
+        output_payload,
+        error,
+        ai_request_id,
+        thread_id,
+        turn_id,
+    );
 }
 
 pub fn emit_cortex_goal_forest_snapshot(tick: u64, goal_forest_nodes: &[GoalNode]) -> Value {

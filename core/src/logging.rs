@@ -45,7 +45,8 @@ pub fn init_tracing(
     let (log_file, log_file_path, awake_sequence) =
         open_log_file_for_awake(&log_dir, LOG_FILE_PREFIX)?;
     let (non_blocking_writer, worker_guard) = tracing_appender::non_blocking(log_file);
-    let env_filter = build_env_filter(&logging_config.filter)?;
+    let file_filter = build_env_filter(&logging_config.filter)?;
+    let otlp_filter = build_env_filter(&logging_config.filter)?;
 
     let file_layer = fmt::layer()
         .json()
@@ -55,7 +56,7 @@ pub fn init_tracing(
         .with_span_list(true)
         .with_ansi(false)
         .with_writer(non_blocking_writer)
-        .with_filter(env_filter);
+        .with_filter(file_filter);
 
     let stderr_layer = logging_config.stderr_warn_enabled.then(|| {
         fmt::layer()
@@ -64,7 +65,7 @@ pub fn init_tracing(
             .with_filter(LevelFilter::WARN)
     });
 
-    let otlp_layer = compose_otlp_layers(otlp_trace_layer, otlp_log_layer);
+    let otlp_layer = compose_otlp_layers(otlp_trace_layer, otlp_log_layer, otlp_filter);
 
     tracing_subscriber::registry()
         .with(otlp_layer)
@@ -99,13 +100,16 @@ pub fn init_tracing(
 fn compose_otlp_layers(
     otlp_trace_layer: Option<Box<dyn Layer<Registry> + Send + Sync>>,
     otlp_log_layer: Option<Box<dyn Layer<Registry> + Send + Sync>>,
+    filter: EnvFilter,
 ) -> Option<Box<dyn Layer<Registry> + Send + Sync>> {
-    match (otlp_trace_layer, otlp_log_layer) {
+    let layer: Box<dyn Layer<Registry> + Send + Sync> = match (otlp_trace_layer, otlp_log_layer) {
         (Some(trace_layer), Some(log_layer)) => Some(trace_layer.and_then(log_layer).boxed()),
         (Some(trace_layer), None) => Some(trace_layer),
         (None, Some(log_layer)) => Some(log_layer),
         (None, None) => None,
-    }
+    }?;
+
+    Some(layer.with_filter(filter).boxed())
 }
 
 fn build_env_filter(filter: &str) -> Result<EnvFilter> {
@@ -283,4 +287,54 @@ fn purge_old_log_files_at(
     }
 
     warnings
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use tracing::Subscriber;
+    use tracing_subscriber::{layer::Context, layer::SubscriberExt};
+
+    use super::*;
+
+    #[test]
+    fn composed_otlp_layer_obeys_logging_filter() {
+        let captured = Arc::new(Mutex::new(Vec::new()));
+        let otlp_layer = CaptureLayer {
+            captured: captured.clone(),
+        };
+        let subscriber = Registry::default().with(
+            compose_otlp_layers(
+                None,
+                Some(Box::new(otlp_layer)),
+                build_env_filter("info,h2=warn").expect("filter should parse"),
+            )
+            .expect("layer should compose"),
+        );
+
+        tracing::subscriber::with_default(subscriber, || {
+            tracing::debug!(target: "h2::proto::streams", "filtered_h2_debug");
+            tracing::info!(target: "beluna::test", "kept_info");
+        });
+
+        let captured = captured.lock().expect("capture lock should not poison");
+        assert_eq!(captured.as_slice(), ["beluna::test"]);
+    }
+
+    struct CaptureLayer {
+        captured: Arc<Mutex<Vec<&'static str>>>,
+    }
+
+    impl<S> Layer<S> for CaptureLayer
+    where
+        S: Subscriber,
+    {
+        fn on_event(&self, event: &tracing::Event<'_>, _ctx: Context<'_, S>) {
+            self.captured
+                .lock()
+                .expect("capture lock should not poison")
+                .push(event.metadata().target());
+        }
+    }
 }

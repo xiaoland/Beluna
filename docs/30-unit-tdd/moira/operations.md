@@ -27,10 +27,11 @@
 
 1. Local Rust builds share the repo-root Cargo target directory configured by `.cargo/config.toml`.
 2. Local Moira backend builds use the prebuilt DuckDB library path through `DUCKDB_DOWNLOAD_LIB=1`.
-3. Routine local backend verification runs `cargo check --manifest-path moira/src-tauri/Cargo.toml --locked` from the repo root.
-4. Source-bundled DuckDB verification runs `cargo check --manifest-path moira/src-tauri/Cargo.toml --locked --features duckdb-bundled`.
-5. Local Rust storage preview runs `bash scripts/rust-storage-maintenance.sh sweep-all-dry-run`.
-6. Local Rust storage cleanup runs `bash scripts/rust-storage-maintenance.sh sweep-all`.
+3. macOS debug Moira binaries embed `@loader_path/deps` as a runtime search path so the prebuilt DuckDB dylib in `target/debug/deps` is visible to VSCode Launch and direct binary startup.
+4. Routine local backend verification runs `cargo check --manifest-path moira/src-tauri/Cargo.toml --locked` from the repo root.
+5. Source-bundled DuckDB verification runs `cargo check --manifest-path moira/src-tauri/Cargo.toml --locked --features duckdb-bundled`.
+6. Local Rust storage preview runs `bash scripts/rust-storage-maintenance.sh sweep-all-dry-run`.
+7. Local Rust storage cleanup runs `bash scripts/rust-storage-maintenance.sh sweep-all`.
 
 ## Observability Flow
 

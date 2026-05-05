@@ -65,4 +65,6 @@ pub struct AiGatewayChatThreadArgs {
     pub context_reason: Option<String>,
 }
 
-pub fn emit_ai_gateway_chat_thread(_args: AiGatewayChatThreadArgs) {}
+pub fn emit_ai_gateway_chat_thread(args: AiGatewayChatThreadArgs) {
+    owner_log::events::emit_chat_thread(&args);
+}

@@ -9,8 +9,8 @@ describe('Lachesis raw event normalization', () => {
       eventRecord({
         rawEventId: 'evt-native',
         recordKind: 'native_owner',
-        scopeName: 'beluna.core.stem',
-        eventName: 'tick.granted',
+        scopeName: 'beluna.core.stem.tick',
+        eventName: 'granted',
         traceId: 'trace-1',
         spanId: 'span-tick',
         body: {
@@ -24,8 +24,8 @@ describe('Lachesis raw event normalization', () => {
     expect(event).toMatchObject({
       rawEventId: 'evt-native',
       recordKind: 'native_owner',
-      scopeName: 'beluna.core.stem',
-      eventName: 'tick.granted',
+      scopeName: 'beluna.core.stem.tick',
+      eventName: 'granted',
       traceId: 'trace-1',
       spanId: 'span-tick',
       subsystem: 'stem',

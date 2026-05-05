@@ -18,12 +18,12 @@ This file defines reconstructable operator domains and correlations that both un
 
 1. Core first-party logs use native OTLP fields: resource, instrumentation scope, `eventName`, trace/span context, attributes, and body.
 2. `resource` identifies the Core process.
-3. `scope.name` identifies the emitting Core owner.
-4. `eventName` identifies the event type under one scope. `scope.name + eventName` is the event schema key.
+3. `scope.name` identifies the emitting Core owner and is Moira's native owner-lane key.
+4. `eventName` identifies the event type under one owner. `scope.name + eventName` is the event schema key.
 5. `body` carries the rich structured event payload.
 6. Attributes carry small, stable metadata used for the event type's own lookup, grouping, or filtering.
 7. One wake plus one tick maps to one trace. Pre-first-tick activity uses `tick = 0`.
-8. Wake read models are anchored by `runtime.booted` body identity. Tick read models are anchored by `tick.granted` body identity plus trace id.
+8. Wake read models are anchored by `beluna.core.main.runtime / booted` body identity. Tick read models are anchored by `beluna.core.stem.tick / granted` body identity plus trace id.
 9. Within-tick interval work is a Moira projection from shared span context across boundary records.
 10. Parent/child topology can later come from OTLP traces, a span registry, or explicit bridge fields.
 11. Raw OTLP records must preserve full request, response, signal, topology, chat, and diagnostic payloads by default.
@@ -33,38 +33,42 @@ This file defines reconstructable operator domains and correlations that both un
 
 1. Main domain
 - Core exposes runtime bootstrap and signal/exporter state.
-- The bootstrap anchor event is `beluna.core.main / runtime.booted`.
+- The bootstrap anchor event is `beluna.core.main.runtime / booted`.
 - The bootstrap body carries `run_id`.
 
 2. Tick chronology domain
 - Core exposes one canonical tick grant anchor.
-- The target anchor event is `beluna.core.stem / tick.granted`.
+- The target anchor event is `beluna.core.stem.tick / granted`.
 - The tick body carries `run_id`, `tick`, and `tick_seq`.
 - Moira uses this anchor plus trace id to build admitted tick chronology.
 
 3. Cortex domain
 - Core exposes concrete organ interval records with full inputs and outputs.
-- Stable organ event names are concrete, such as `primary.started` and `primary.finished`.
-- Primary phase records share a stable span for one tick's primary phase.
+- Cortex owner scopes include `beluna.core.cortex.primary`, `beluna.core.cortex.attention`, `beluna.core.cortex.cleanup`, `beluna.core.cortex.sense-helper`, `beluna.core.cortex.acts-helper`, and `beluna.core.cortex.goal-forest`.
+- Stable organ boundary event names are local to each owner lane, such as `started` and `finished`.
+- Primary phase records share the `primary` span for one tick's primary phase.
 - Related AI records remain reconstructable as transport and chat owner records.
 - Goal-forest inspection remains grounded in snapshots and runtime-owned mutation records.
 
 4. AI Gateway transport domain
-- Core exposes capability-neutral backend transport records under `beluna.core.ai-gateway`.
+- Core exposes capability-neutral backend transport records under `beluna.core.ai-gateway.transport`.
+- Transport event names include `request.started`, `attempt.failed`, and `request.completed` when those phases exist.
 - Transport records may carry backend id, model, capability, attempt/retry detail, provider request/response payloads, usage, and terminal error detail.
 - Transport request identity is `transport_request_id` in body.
 
 5. AI Gateway Chat domain
-- Core exposes chat thread/turn lifecycle under `beluna.core.ai-gateway.chat`.
-- Chat dispatch and commit are separate events: `turn.dispatched` and `turn.committed`.
+- Core exposes chat turn lifecycle under `beluna.core.ai-gateway.chat.turn` and chat thread lifecycle under `beluna.core.ai-gateway.chat.thread`.
+- Chat turn dispatch and commit are separate events: `dispatched` and `committed`.
 - Chat records own `thread_id`, `turn_id`, committed messages, dispatch payloads, tool/message payloads, finish reason, usage, and backend metadata.
 
 6. Stem domain
 - Core exposes afferent pathway activity, efferent pathway activity, proprioception changes, neural-signal catalog changes, and afferent rule lifecycle when those surfaces are explicit in Core.
+- Stem owner scopes include `beluna.core.stem.afferent-pathway`, `beluna.core.stem.efferent-pathway`, `beluna.core.stem.proprioception`, `beluna.core.stem.descriptor-catalog`, and `beluna.core.stem.afferent-rules`.
 - These records carry sense, act, descriptor, and endpoint identities where the event schema needs them.
 
 7. Spine domain
 - Core exposes adapter lifecycle, endpoint lifecycle, inbound sense ingress, outbound act routing/binding, and terminal delivery outcomes.
+- Spine owner scopes include `beluna.core.spine.adapter`, `beluna.core.spine.endpoint`, `beluna.core.spine.sense-ingress`, and `beluna.core.spine.act-routing`.
 - Spine event schemas decide whether act, endpoint, and descriptor ids live in attributes or body.
 
 ## Consumer Guarantees
@@ -91,7 +95,7 @@ Product TDD defines reconstructable domains and required correlations. Core Unit
 ## Compatibility Rule
 
 1. Dropping full raw request, response, signal, topology, or chat payload preservation is a breaking cross-unit change during early development.
-2. Changing `runtime.booted` or `tick.granted` anchor identity fields requires synchronized Core and Moira updates.
+2. Changing `beluna.core.main.runtime / booted` or `beluna.core.stem.tick / granted` anchor identity fields requires synchronized Core and Moira updates.
 3. Collapsing interval-boundary data downgrades the corresponding Moira projection and requires updating the owning docs.
 4. Core may evolve internal emit helpers and Moira may evolve Loom composition while the reconstruction guarantees remain intact.
 5. Breaking changes require synchronized updates to Product TDD, affected Unit TDD docs, and verification guardrails.

@@ -161,18 +161,18 @@ fn refresh_run_projection(conn: &duckdb::Connection, run_id: &str) -> Result<(),
           run_id, first_seen_at, last_seen_at, event_count, warning_count, error_count, latest_tick
         )
         WITH run_events AS (
-          SELECT raw_event_id, observed_at, severity_text, tick
+          SELECT run_id, raw_event_id, observed_at, severity_text, tick
           FROM raw_events
           WHERE run_id = ?
           UNION
-          SELECT raw_events.raw_event_id, raw_events.observed_at, raw_events.severity_text, ticks.tick
+          SELECT ticks.run_id, raw_events.raw_event_id, raw_events.observed_at, raw_events.severity_text, ticks.tick
           FROM raw_events
           JOIN ticks ON ticks.trace_id_hex IS NOT NULL
                     AND ticks.trace_id_hex = raw_events.trace_id_hex
           WHERE ticks.run_id = ?
         )
         SELECT
-          ?,
+          run_id,
           MIN(observed_at),
           MAX(observed_at),
           COUNT(*),
@@ -180,9 +180,9 @@ fn refresh_run_projection(conn: &duckdb::Connection, run_id: &str) -> Result<(),
           SUM(CASE WHEN LOWER(COALESCE(severity_text, '')) = 'error' THEN 1 ELSE 0 END),
           MAX(tick)
         FROM run_events
-        HAVING COUNT(*) > 0
+        GROUP BY run_id
         "#,
-        params![run_id, run_id, run_id],
+        params![run_id, run_id],
     )
     .map_err(|err| format!("failed to refresh run projection: {err}"))?;
     Ok(())
@@ -211,8 +211,8 @@ fn refresh_tick_projection(conn: &duckdb::Connection, run_id: &str) -> Result<()
         WHERE anchor.run_id = ?
           AND anchor.tick IS NOT NULL
           AND anchor.trace_id_hex IS NOT NULL
-          AND anchor.scope_name = 'beluna.core.stem'
-          AND anchor.event_name = 'tick.granted'
+          AND anchor.scope_name = 'beluna.core.stem.tick'
+          AND anchor.event_name = 'granted'
         GROUP BY anchor.run_id, anchor.tick, anchor.trace_id_hex
         "#,
         params![run_id],

@@ -13,13 +13,41 @@ import type { ChronologyEntry, ChronologyLane, ChronologyLaneType, RawEvent } fr
 import { compareChronologyEvents, eventPayloadRecord, parseObservedMs } from './raw-events'
 
 const LANE_TYPE_ORDER: Record<ChronologyLaneType, number> = {
-  tick: 0,
-  cortex: 1,
-  afferent: 2,
-  efferent: 3,
-  spine: 4,
-  misc: 5,
+  owner: 0,
+  tick: 1,
+  cortex: 2,
+  afferent: 3,
+  efferent: 4,
+  spine: 5,
+  misc: 6,
 }
+
+const CORE_OWNER_SCOPE_ORDER = [
+  'beluna.core.main.runtime',
+  'beluna.core.stem.tick',
+  'beluna.core.stem.afferent-pathway',
+  'beluna.core.stem.afferent-rules',
+  'beluna.core.stem.proprioception',
+  'beluna.core.stem.descriptor-catalog',
+  'beluna.core.cortex.primary',
+  'beluna.core.cortex.attention',
+  'beluna.core.cortex.cleanup',
+  'beluna.core.cortex.sense-helper',
+  'beluna.core.cortex.acts-helper',
+  'beluna.core.cortex.goal-forest',
+  'beluna.core.ai-gateway.chat.turn',
+  'beluna.core.ai-gateway.chat.thread',
+  'beluna.core.ai-gateway.transport',
+  'beluna.core.stem.efferent-pathway',
+  'beluna.core.spine.sense-ingress',
+  'beluna.core.spine.act-routing',
+  'beluna.core.spine.endpoint',
+  'beluna.core.spine.adapter',
+] as const
+
+const CORE_OWNER_SCOPE_ORDER_INDEX: ReadonlyMap<string, number> = new Map(
+  CORE_OWNER_SCOPE_ORDER.map((scope, index) => [scope, index]),
+)
 
 interface TimelineMetrics {
   positions: Map<string, number>
@@ -40,6 +68,15 @@ export interface CortexOrganInterval {
   firstEventIndex: number
 }
 
+interface OwnerInterval {
+  scopeName: string
+  laneKey: string
+  startEvent: RawEvent
+  endEvent: RawEvent | null
+  sourceEvents: RawEvent[]
+  firstEventIndex: number
+}
+
 export function buildChronology(rawEvents: RawEvent[], cortexIntervals: CortexOrganInterval[]) {
   const ordered = [...rawEvents].sort(compareChronologyEvents)
   if (!ordered.length) {
@@ -53,11 +90,50 @@ export function buildChronology(rawEvents: RawEvent[], cortexIntervals: CortexOr
   }
 
   const timeline = buildTimelineMetrics(ordered)
+  const rawEventIndex = new Map(ordered.map((event, index) => [event.rawEventId, index]))
+  const ownerIntervals = buildOwnerIntervals(ordered, rawEventIndex)
   const laneMap = new Map<
     string,
     Omit<ChronologyLane, 'entries' | 'eventCount'> & { entries: ChronologyEntry[]; firstEventIndex: number }
   >()
   const hiddenRawEventIds = new Set<string>()
+
+  for (const interval of ownerIntervals) {
+    for (const event of interval.sourceEvents) {
+      hiddenRawEventIds.add(event.rawEventId)
+    }
+
+    const startPosition = timeline.positions.get(interval.startEvent.rawEventId) ?? 0.05
+    const endPosition = interval.endEvent
+      ? timeline.positions.get(interval.endEvent.rawEventId) ?? clamp01(startPosition + 0.12)
+      : clamp01(startPosition + 0.1)
+    const startPayload = eventPayloadRecord(interval.startEvent)
+
+    appendChronologyEntry(laneMap, {
+      laneId: `owner:${interval.laneKey}`,
+      laneType: 'owner',
+      laneKey: interval.laneKey,
+      laneLabel: resolveLaneLabel('owner', interval.laneKey, startPayload, interval.startEvent),
+      laneSubtitle: resolveLaneSubtitle('owner', startPayload, interval.startEvent),
+      entry: {
+        rawEventId: interval.startEvent.rawEventId,
+        laneType: 'owner',
+        laneKey: interval.laneKey,
+        entryType: 'interval',
+        title: ownerIntervalTitle(interval),
+        subtitle: ownerIntervalSubtitle(interval),
+        family: interval.startEvent.family ?? interval.endEvent?.family ?? null,
+        observedAt: interval.startEvent.observedAt,
+        severityText: interval.endEvent?.severityText ?? interval.startEvent.severityText,
+        eventIndex: interval.firstEventIndex,
+        position: startPosition,
+        endPosition: Math.max(endPosition, Math.min(0.98, startPosition + 0.04)),
+        event: interval.endEvent ?? interval.startEvent,
+        sourceEvents: interval.sourceEvents,
+        relatedEvents: [],
+      },
+    })
+  }
 
   for (const interval of cortexIntervals) {
     for (const event of interval.sourceEvents) {
@@ -159,6 +235,12 @@ export function buildChronology(rawEvents: RawEvent[], cortexIntervals: CortexOr
       if (laneTypeOrder !== 0) {
         return laneTypeOrder
       }
+      if (left.laneType === 'owner' && right.laneType === 'owner') {
+        const ownerOrder = ownerLaneOrder(left.laneKey) - ownerLaneOrder(right.laneKey)
+        if (ownerOrder !== 0) {
+          return ownerOrder
+        }
+      }
       if (left.firstEventIndex !== right.firstEventIndex) {
         return left.firstEventIndex - right.firstEventIndex
       }
@@ -219,6 +301,98 @@ export function buildCortexOrganIntervals(
   }
 
   return intervals.sort((left, right) => left.firstEventIndex - right.firstEventIndex)
+}
+
+function buildOwnerIntervals(
+  orderedEvents: RawEvent[],
+  rawEventIndex: Map<string, number>,
+): OwnerInterval[] {
+  const openIntervals = new Map<string, RawEvent>()
+  const intervals: OwnerInterval[] = []
+
+  for (const event of orderedEvents) {
+    const scopeName = event.scopeName
+    const eventName = event.eventName
+    if (!scopeName?.startsWith('beluna.core.') || !eventName || !event.spanId) {
+      continue
+    }
+
+    const role = ownerBoundaryRole(eventName)
+    if (!role) {
+      continue
+    }
+
+    const key = `${scopeName}:${event.spanId}`
+    if (role === 'start') {
+      openIntervals.set(key, event)
+      continue
+    }
+
+    const startEvent = openIntervals.get(key)
+    if (!startEvent) {
+      continue
+    }
+
+    openIntervals.delete(key)
+    intervals.push({
+      scopeName,
+      laneKey: scopeName,
+      startEvent,
+      endEvent: event,
+      sourceEvents: [startEvent, event],
+      firstEventIndex: rawEventIndex.get(startEvent.rawEventId) ?? 0,
+    })
+  }
+
+  for (const startEvent of openIntervals.values()) {
+    const scopeName = startEvent.scopeName
+    if (!scopeName) {
+      continue
+    }
+    intervals.push({
+      scopeName,
+      laneKey: scopeName,
+      startEvent,
+      endEvent: null,
+      sourceEvents: [startEvent],
+      firstEventIndex: rawEventIndex.get(startEvent.rawEventId) ?? 0,
+    })
+  }
+
+  return intervals.sort((left, right) => left.firstEventIndex - right.firstEventIndex)
+}
+
+function ownerBoundaryRole(eventName: string): 'start' | 'end' | null {
+  switch (eventName) {
+    case 'started':
+    case 'request.started':
+    case 'dispatch.started':
+    case 'dispatched':
+      return 'start'
+    case 'finished':
+    case 'request.completed':
+    case 'dispatch.finished':
+    case 'committed':
+    case 'failed':
+      return 'end'
+    default:
+      return null
+  }
+}
+
+function ownerIntervalTitle(interval: OwnerInterval): string {
+  const start = interval.startEvent.eventName ?? 'started'
+  const end = interval.endEvent?.eventName
+  return end ? `${start} -> ${end}` : start
+}
+
+function ownerIntervalSubtitle(interval: OwnerInterval): string | null {
+  return [
+    interval.startEvent.spanId ? `span ${abbreviateId(interval.startEvent.spanId)}` : null,
+    interval.sourceEvents.length > 1 ? `${interval.sourceEvents.length} boundary events` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ') || null
 }
 
 function createCortexInterval(
@@ -374,16 +548,8 @@ function appendChronologyEntry(
 }
 
 function resolveLaneType(event: RawEvent, payload: Record<string, unknown>): ChronologyLaneType {
-  if (event.scopeName === 'beluna.core.stem' && event.eventName === 'tick.granted') {
-    return 'tick'
-  }
-
-  if (event.scopeName === 'beluna.core.cortex') {
-    return 'cortex'
-  }
-
-  if (event.scopeName === 'beluna.core.spine') {
-    return 'spine'
+  if (event.scopeName?.startsWith('beluna.core.')) {
+    return 'owner'
   }
 
   const family = event.family ?? ''
@@ -429,6 +595,8 @@ function resolveLaneKey(
   payload: Record<string, unknown>,
 ): string {
   switch (laneType) {
+    case 'owner':
+      return event.scopeName ?? event.rawEventId
     case 'tick':
       return event.traceId ? `trace:${event.traceId}` : `tick:${event.tick ?? '0'}`
     case 'cortex':
@@ -442,6 +610,18 @@ function resolveLaneKey(
     case 'misc':
       return event.spanId ?? firstString(payload, ['span_id', 'request_id']) ?? event.eventName ?? event.rawEventId
   }
+}
+
+function ownerLaneOrder(laneKey: string): number {
+  return CORE_OWNER_SCOPE_ORDER_INDEX.get(laneKey) ?? Number.MAX_SAFE_INTEGER
+}
+
+function abbreviateId(value: string): string {
+  if (value.length <= 22) {
+    return value
+  }
+
+  return `${value.slice(0, 10)}...${value.slice(-8)}`
 }
 
 function firstString(record: Record<string, unknown>, keys: string[]): string | null {

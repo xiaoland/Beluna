@@ -150,8 +150,8 @@ mod tests {
         emit_with_provider(
             &provider,
             OwnerLogEvent {
-                scope: OwnerScope::AiGateway,
-                event_name: "transport.request.completed",
+                scope: OwnerScope::AiGatewayTransport,
+                event_name: "request.completed",
                 tick: 7,
                 span_key: "request:test-1".to_string(),
                 severity: OwnerLogSeverity::Info,
@@ -163,8 +163,8 @@ mod tests {
         let records = records.lock().expect("capture processor lock poisoned");
         assert_eq!(records.len(), 1);
         let (record, scope) = &records[0];
-        assert_eq!(scope.name(), "beluna.core.ai-gateway");
-        assert_eq!(record.event_name(), Some("transport.request.completed"));
+        assert_eq!(scope.name(), "beluna.core.ai-gateway.transport");
+        assert_eq!(record.event_name(), Some("request.completed"));
         assert_eq!(record.severity_number(), Some(Severity::Info));
         assert!(record.trace_context().is_some());
         assert!(matches!(record.body(), Some(AnyValue::Map(_))));

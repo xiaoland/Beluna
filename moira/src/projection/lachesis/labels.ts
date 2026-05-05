@@ -136,6 +136,8 @@ export function resolveLaneLabel(
   event: RawEvent,
 ): string {
   switch (laneType) {
+    case 'owner':
+      return ownerScopeLabel(event.scopeName ?? laneKey)
     case 'tick':
       return `Tick ${event.tick ?? laneKey}`
     case 'cortex':
@@ -166,6 +168,8 @@ export function resolveLaneSubtitle(
   event: RawEvent,
 ): string | null {
   switch (laneType) {
+    case 'owner':
+      return [event.eventName, event.spanId ? abbreviateId(event.spanId) : null].filter(Boolean).join(' · ') || null
     case 'tick':
       return [stringify(payload.summary), event.traceId ? abbreviateId(event.traceId) : null].filter(Boolean).join(' · ') || stringify(payload.status)
     case 'cortex':
@@ -199,6 +203,10 @@ export function resolveLaneSubtitle(
 }
 
 export function chronologyTitle(event: RawEvent, payload: Record<string, unknown>): string {
+  if (event.scopeName?.startsWith('beluna.core.') && event.eventName) {
+    return event.eventName
+  }
+
   const summary = stringify(payload.summary)
   if (summary) {
     return summary
@@ -264,4 +272,10 @@ function abbreviateId(value: string): string {
 
 function schemaKey(event: RawEvent): string | null {
   return [event.scopeName, event.eventName].filter(Boolean).join(' / ') || null
+}
+
+function ownerScopeLabel(scopeName: string): string {
+  return scopeName.startsWith('beluna.core.')
+    ? scopeName.slice('beluna.core.'.length)
+    : scopeName
 }

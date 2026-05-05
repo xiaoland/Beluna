@@ -1,4 +1,5 @@
 export type ChronologyLaneType =
+  | 'owner'
   | 'tick'
   | 'cortex'
   | 'afferent'
