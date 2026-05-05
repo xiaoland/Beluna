@@ -12,52 +12,87 @@ pub fn emit_stem_tick(tick: u64, tick_seq: u64, status: &str) {
 
 #[allow(clippy::too_many_arguments)]
 pub fn emit_stem_afferent(
-    _kind: &str,
-    _descriptor_id: &str,
-    _endpoint_id: Option<&str>,
-    _sense_id: Option<&str>,
-    _tick_when_known: Option<u64>,
-    _sense_payload: Option<Value>,
-    _weight: Option<f64>,
-    _queue_state: Option<Value>,
-    _matched_rule_ids: Option<Value>,
-    _reason: Option<&str>,
+    kind: &str,
+    descriptor_id: &str,
+    endpoint_id: Option<&str>,
+    sense_id: Option<&str>,
+    tick_when_known: Option<u64>,
+    sense_payload: Option<Value>,
+    weight: Option<f64>,
+    queue_state: Option<Value>,
+    matched_rule_ids: Option<Value>,
+    reason: Option<&str>,
 ) {
+    owner_log::events::emit_stem_afferent_pathway(
+        kind,
+        descriptor_id,
+        endpoint_id,
+        sense_id,
+        tick_when_known,
+        sense_payload,
+        weight,
+        queue_state,
+        matched_rule_ids,
+        reason,
+    );
 }
 
 #[allow(clippy::too_many_arguments)]
 pub fn emit_stem_efferent(
-    _kind: &str,
-    _act_id: &str,
-    _descriptor_id: Option<&str>,
-    _endpoint_id: Option<&str>,
-    _act_payload: Option<Value>,
-    _queue_state: Option<Value>,
-    _tick_when_known: Option<u64>,
-    _continuity_decision: Option<&str>,
-    _terminal_outcome: Option<DispatchOutcomeClass>,
-    _reason: Option<Value>,
+    kind: &str,
+    act_id: &str,
+    descriptor_id: Option<&str>,
+    endpoint_id: Option<&str>,
+    act_payload: Option<Value>,
+    queue_state: Option<Value>,
+    tick_when_known: Option<u64>,
+    continuity_decision: Option<&str>,
+    terminal_outcome: Option<DispatchOutcomeClass>,
+    reason: Option<Value>,
 ) {
+    owner_log::events::emit_stem_efferent_pathway(
+        kind,
+        act_id,
+        descriptor_id,
+        endpoint_id,
+        act_payload,
+        queue_state,
+        tick_when_known,
+        continuity_decision,
+        terminal_outcome,
+        reason,
+    );
 }
 
-pub fn emit_stem_proprioception(_kind: &str, _tick: Option<u64>, _entries_or_keys: Value) {}
+pub fn emit_stem_proprioception(kind: &str, tick: Option<u64>, entries_or_keys: Value) {
+    owner_log::events::emit_stem_proprioception(kind, tick, entries_or_keys);
+}
 
 pub fn emit_stem_ns_catalog(
-    _tick: Option<u64>,
-    _catalog_version: &str,
-    _change_mode: DescriptorCatalogChangeMode,
-    _accepted_entries_or_routes: Value,
-    _rejected_entries_or_routes: Value,
-    _catalog_snapshot: Option<Value>,
+    tick: Option<u64>,
+    catalog_version: &str,
+    change_mode: DescriptorCatalogChangeMode,
+    accepted_entries_or_routes: Value,
+    rejected_entries_or_routes: Value,
+    catalog_snapshot: Option<Value>,
 ) {
+    owner_log::events::emit_stem_descriptor_catalog(
+        tick,
+        catalog_version,
+        change_mode,
+        accepted_entries_or_routes,
+        rejected_entries_or_routes,
+        catalog_snapshot,
+    );
 }
 
 pub fn emit_stem_afferent_rule(
-    _tick: Option<u64>,
-    _kind: &str,
-    _revision: u64,
-    _rule_id: &str,
-    _rule: Option<Value>,
-    _removed: Option<bool>,
+    tick: Option<u64>,
+    kind: &str,
+    revision: u64,
+    rule_id: &str,
+    rule: Option<Value>,
+    removed: Option<bool>,
 ) {
+    owner_log::events::emit_stem_afferent_rule(tick, kind, revision, rule_id, rule, removed);
 }

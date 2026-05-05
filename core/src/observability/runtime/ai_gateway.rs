@@ -21,7 +21,7 @@ pub struct AiGatewayRequestArgs {
 }
 
 pub fn emit_ai_gateway_request(args: AiGatewayRequestArgs) {
-    owner_log::events::emit_transport_request_completed(&args);
+    owner_log::events::emit_transport_request(&args);
 }
 
 pub struct AiGatewayChatTurnArgs {
@@ -43,8 +43,8 @@ pub struct AiGatewayChatTurnArgs {
 }
 
 pub fn emit_ai_gateway_chat_turn(args: AiGatewayChatTurnArgs) {
-    owner_log::events::emit_chat_turn_dispatched(&args);
-    owner_log::events::emit_chat_turn_committed(&args);
+    owner_log::events::emit_chat_turn_started(&args);
+    owner_log::events::emit_chat_turn_finished(&args);
 }
 
 pub struct AiGatewayChatThreadArgs {

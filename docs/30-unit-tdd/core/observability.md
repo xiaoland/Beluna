@@ -8,7 +8,7 @@ Loom composition and operator-facing investigation flows belong in `docs/30-unit
 ## Local Rules
 
 1. Core's first-party telemetry carrier is native OTLP Logs shape: resource attributes, instrumentation scope, `eventName`, trace/span context, log attributes, and structured log body.
-2. `resource` describes the Core process. Current service name is `beluna.core`.
+2. `resource` describes the Core process. Current service name is `beluna.core`; `service.instance.id` is the current `run_id` when the resource is built for a wake.
 3. `scope.name` identifies the Core owner that emitted the record.
 4. `eventName` identifies the event type under one scope. The schema key is `scope.name + eventName`.
 5. Records with the same schema key keep stable attributes and body schema.
@@ -23,6 +23,8 @@ Loom composition and operator-facing investigation flows belong in `docs/30-unit
 14. Ordinary Rust diagnostics can continue through `tracing` and `opentelemetry-appender-tracing`. The tracing file layer and tracing-to-OTLP bridge both obey `logging.filter`.
 15. First-party owner events use the Owner Log Emitter over the OpenTelemetry Logs API so structured body and owner scope remain explicit; this direct owner-log path is independent of the ordinary tracing filter.
 16. Core runtime first-party events use native owner-log emission. Historical legacy contract logs remain a Moira ingestion compatibility concern.
+17. Event vocabulary uses `started` and `finished` for lifecycle boundaries. Native first-party events do not use `completed` or `dispatched`.
+18. Dynamic Spine endpoint and adapter owner scopes use canonical OTLP-safe suffixes. Body keeps the original endpoint id or adapter name.
 
 ## Owner Scopes
 
@@ -31,27 +33,23 @@ Loom composition and operator-facing investigation flows belong in `docs/30-unit
 | `beluna.core.main.runtime` | boot, config, runtime lifecycle, exporter state |
 | `beluna.core.stem.tick` | tick grant and admitted-tick anchors |
 | `beluna.core.stem.afferent-pathway` | inbound sense pathway from Spine into Cortex-facing tick input |
-| `beluna.core.stem.afferent-rules` | afferent rule lifecycle and match decisions |
 | `beluna.core.stem.proprioception` | runtime self-state and environment observations |
 | `beluna.core.stem.descriptor-catalog` | neural-signal descriptor catalog changes and lookups |
+| `beluna.core.stem.efferent-pathway` | outbound act pathway from Cortex decisions toward Spine |
 | `beluna.core.cortex.primary` | primary cognition phase for a tick |
 | `beluna.core.cortex.attention` | attention and focus work within a tick |
 | `beluna.core.cortex.cleanup` | cleanup phase after primary cognition |
 | `beluna.core.cortex.sense-helper` | sense helper cognition work |
 | `beluna.core.cortex.acts-helper` | act helper cognition work |
 | `beluna.core.cortex.goal-forest` | goal-forest inspection and mutation records |
-| `beluna.core.ai-gateway.chat.turn` | chat turn lifecycle and rich chat payloads |
-| `beluna.core.ai-gateway.chat.thread` | chat thread lifecycle and thread-local state |
+| `beluna.core.ai-gateway.chat` | chat turn/thread lifecycle and rich chat payloads |
 | `beluna.core.ai-gateway.transport` | gateway transport, backend dispatch, capability-level request records |
-| `beluna.core.stem.efferent-pathway` | outbound act pathway from Cortex decisions toward Spine |
-| `beluna.core.spine.sense-ingress` | inbound sense ingress from endpoint/adapter surfaces |
-| `beluna.core.spine.act-routing` | outbound act routing, binding, and terminal delivery outcomes |
-| `beluna.core.spine.endpoint` | endpoint lifecycle and endpoint-local state |
-| `beluna.core.spine.adapter` | adapter lifecycle and adapter-local state |
+| `beluna.core.spine.endpoint.<endpoint-id-segment>` | endpoint lifecycle, sense ingress, and act terminal outcomes for one endpoint |
+| `beluna.core.spine.adapter.<adapter-name-segment>` | adapter lifecycle and adapter-local state for one adapter |
 
-## Current Event Surface
+## Target Event Surface
 
-The current native implementation covers boot/tick anchors, Cortex owner boundary records, AI Gateway transport/chat records, and Spine act delivery.
+The v1 native implementation targets boot/tick anchors, Stem pathway/state/catalog records, Cortex owner boundary records, AI Gateway transport/chat records, and dynamic Spine adapter/endpoint records.
 
 | Scope | `eventName` | Span key | Attribute keys | Body owns |
 |---|---|---|---|---|
@@ -64,11 +62,19 @@ The current native implementation covers boot/tick anchors, Cortex owner boundar
 | `beluna.core.cortex.sense-helper` | `started`; `finished` | `sense-helper` | none | sense helper input/output/error payloads, route, linked AI transport id, thread/turn ids when present |
 | `beluna.core.cortex.goal-forest` | `started`; `finished` | `goal-forest` | none | goal-forest helper input/output/error payloads, route, linked AI transport id, thread/turn ids when present |
 | `beluna.core.cortex.acts-helper` | `started`; `finished` | `acts-helper` | none | acts helper input/output/error payloads, route, linked AI transport id, thread/turn ids when present |
-| `beluna.core.ai-gateway.transport` | `request.completed` | `request:{transport_request_id}` | `ai.capability`; `ai.backend.id`; `ai.model` | transport request id, parent span id, organ id, attempt/retry metadata, usage, provider payloads, terminal error |
-| `beluna.core.ai-gateway.chat.turn` | `dispatched` | `turn:{thread_id}:{turn_id}` | none | chat/thread/turn ids, parent span id, organ id, transport request id, dispatch payload, metadata |
-| `beluna.core.ai-gateway.chat.turn` | `committed`; `failed` | `turn:{thread_id}:{turn_id}` | none | chat/thread/turn ids, parent span id, organ id, transport request id, committed messages or terminal error, finish reason, usage, backend metadata |
-| `beluna.core.ai-gateway.chat.thread` | `opened`; `derived`; `rewritten`; `turn.committed`; `snapshot` | `thread:{thread_id}` | none | thread id, source/kept/dropped turn ids, messages, turn summaries, context reason, continuation state |
-| `beluna.core.spine.act-routing` | `delivered` | `delivery:{act_id}` | `spine.act.id`; `spine.endpoint.id`; `spine.descriptor.id` | act delivery summary, binding kind, acknowledgement/reference data |
+| `beluna.core.ai-gateway.transport` | `request.started`; `request.finished`; `request.failed` | `request:{transport_request_id}` | `ai.capability`; `ai.backend.id`; `ai.model` | transport request id, parent span id, organ id, attempt/retry metadata, provider request/response payloads, usage, terminal error |
+| `beluna.core.ai-gateway.transport` | `attempt.failed` | `request:{transport_request_id}` | `ai.capability`; `ai.backend.id`; `ai.model` | attempt number, retry decision, provider error, request summary |
+| `beluna.core.ai-gateway.chat` | `turn.started`; `turn.finished`; `turn.failed` | `turn:{thread_id}:{turn_id}` | none | chat/thread/turn ids, parent span id, organ id, transport request id, turn start payload, final messages or terminal error, finish reason, usage, backend metadata |
+| `beluna.core.ai-gateway.chat` | `thread.opened`; `thread.derived`; `thread.rewritten`; `thread.snapshot` | `thread:{thread_id}` | none | thread id, source/kept/dropped turn ids, messages, turn summaries, context reason, continuation state |
+| `beluna.core.stem.afferent-pathway` | `sense.enqueued`; `sense.deferred`; `sense.released`; `sense.dropped` | `sense:{sense_id}` or `descriptor:{descriptor_id}` | none | sense/endpoint/descriptor ids, tick when known, sense payload, weight, queue state, matched rule ids, reason |
+| `beluna.core.stem.afferent-pathway` | `rules.added`; `rules.removed`; `rules.replaced` | `rule:{rule_id}` | none | rule id, revision, rule snapshot, removed flag |
+| `beluna.core.stem.proprioception` | `patched`; `dropped` | `state` | none | proprioception entry patch or dropped keys |
+| `beluna.core.stem.descriptor-catalog` | `snapshot`; `updated`; `dropped` | `version:{catalog_version}` | none | catalog version, accepted entries/routes, rejected entries/routes, optional catalog snapshot |
+| `beluna.core.stem.efferent-pathway` | `act.enqueued`; `act.started`; `act.finished`; `act.failed`; `act.dropped` | `act:{act_id}` | none | act/endpoint/descriptor ids, tick when known, act payload, queue state, continuity decision, terminal outcome, reason/reference |
+| `beluna.core.spine.endpoint.<endpoint-id-segment>` | `connected`; `registered`; `disconnected`; `dropped` | `endpoint` | none | endpoint id, canonical endpoint segment, adapter id/name, transition, channel/session, route summary, reason/error |
+| `beluna.core.spine.endpoint.<endpoint-id-segment>` | `sense.received` | `sense:{sense_id}` | optional `spine.descriptor.id` | sense/endpoint/descriptor ids, sense payload, reason |
+| `beluna.core.spine.endpoint.<endpoint-id-segment>` | `act.started`; `act.finished`; `act.rejected`; `act.lost` | `act:{act_id}` | `spine.act.id`; optional `spine.descriptor.id` | act routing summary, binding kind/channel, outcome, reason/reference, act payload |
+| `beluna.core.spine.adapter.<adapter-name-segment>` | `enabled`; `disabled`; `faulted` | `adapter` | none | adapter name/type, canonical adapter segment, lifecycle state, reason/error |
 
 ## Trace And Span Derivation
 
@@ -77,7 +83,8 @@ The current native implementation covers boot/tick anchors, Cortex owner boundar
 3. `beluna.core.main.runtime / booted` uses `tick = 0`.
 4. `beluna.core.stem.tick / granted` is the canonical tick anchor for live tick traces.
 5. Cortex owner boundary pairs share a scope-local organ span key, for example `primary`, `attention`, or `cleanup`.
-6. Per-turn chat detail is owned by `beluna.core.ai-gateway.chat.turn` spans.
+6. Per-turn chat detail is owned by `beluna.core.ai-gateway.chat` spans.
+7. Dynamic Spine endpoint and adapter scopes include canonical suffixes in `scope.name`; the span key avoids repeating the endpoint or adapter owner segment.
 
 ## Correlation Requirements
 
@@ -90,7 +97,8 @@ Core exposes stable native fields and event bodies so Moira can inspect one tick
 4. Paired interval records share the same span id through the same scope and span key.
 5. AI Gateway transport records expose `transport_request_id` in body and backend/model/capability attributes.
 6. AI Gateway Chat records expose `thread_id`, `turn_id`, and `transport_request_id` in body.
-7. Spine act delivery records expose act routing ids as event-specific attributes because the event's primary lookup surface is act delivery.
+7. Spine endpoint and adapter records expose original endpoint id or adapter name in body and use canonical dynamic owner scope suffixes for lane identity.
+8. Spine act records may expose `spine.act.id` as an event-specific attribute because act lookup is useful within endpoint lanes.
 
 ## Minimum Fixture Set
 
@@ -99,8 +107,10 @@ Core-side verification should cover:
 1. deterministic trace/span id derivation.
 2. `serde_json::Value` conversion into OTLP `AnyValue::Map`.
 3. one in-memory log exporter proof for owner scope, `eventName`, structured body, attributes, `trace_id`, and `span_id`.
-4. raw OTLP capture comparison for the eight-event first implementation surface.
+4. raw OTLP capture comparison for the target first-party owner event surface.
 5. absence of `ContractEvent` and `flatten_contract_event()` from the runtime emission path.
+6. dynamic Spine owner scope canonicalization with original endpoint id or adapter name preserved in body.
+7. native vocabulary guardrails for `started`/`finished` and absence of `completed`/`dispatched` in first-party event names.
 
 ## Change Discipline
 

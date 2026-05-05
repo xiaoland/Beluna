@@ -36,7 +36,7 @@ pub struct OpenTelemetryRuntime {
 }
 
 impl OpenTelemetryRuntime {
-    pub fn init(config: &ObservabilityConfig) -> Result<Self> {
+    pub fn init(config: &ObservabilityConfig, run_id: &str) -> Result<Self> {
         let mut runtime = Self {
             meter_provider: None,
             logger_provider: None,
@@ -44,9 +44,7 @@ impl OpenTelemetryRuntime {
             signal_states: Vec::with_capacity(3),
         };
 
-        let resource = Resource::builder()
-            .with_attributes(vec![KeyValue::new("service.name", OTEL_SERVICE_NAME)])
-            .build();
+        let resource = build_resource(run_id);
 
         runtime.init_metrics(config, &resource);
         runtime.init_logs(config, &resource);
@@ -289,5 +287,36 @@ impl OpenTelemetryRuntime {
         };
 
         self.signal_states.push(state);
+    }
+}
+
+fn build_resource(run_id: &str) -> Resource {
+    Resource::builder()
+        .with_attributes(vec![
+            KeyValue::new("service.name", OTEL_SERVICE_NAME),
+            KeyValue::new("service.instance.id", run_id.to_string()),
+        ])
+        .build()
+}
+
+#[cfg(test)]
+mod tests {
+    use opentelemetry::{Key, Value as OtelValue};
+
+    use super::*;
+
+    #[test]
+    fn resource_carries_core_service_and_run_identity() {
+        let resource = build_resource("run-123");
+
+        assert_resource_string(&resource, "service.name", "beluna.core");
+        assert_resource_string(&resource, "service.instance.id", "run-123");
+    }
+
+    fn assert_resource_string(resource: &Resource, key: &'static str, expected: &str) {
+        let Some(OtelValue::String(actual)) = resource.get(&Key::new(key)) else {
+            panic!("missing string resource attribute `{key}`");
+        };
+        assert_eq!(actual.as_str(), expected);
     }
 }

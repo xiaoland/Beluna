@@ -7,7 +7,7 @@ mod value;
 pub(crate) use emit::{
     OwnerLogAttribute, OwnerLogEvent, OwnerLogSeverity, emit, install_logger_provider,
 };
-pub(crate) use schema::OwnerScope;
+pub(crate) use schema::{OwnerScope, canonical_scope_segment};
 
 pub use events::emit_runtime_booted;
 pub use schema::{

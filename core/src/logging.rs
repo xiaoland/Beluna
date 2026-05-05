@@ -31,10 +31,15 @@ impl LoggingGuard {
     }
 }
 
+pub fn new_run_id() -> String {
+    Uuid::now_v7().to_string()
+}
+
 pub fn init_tracing(
     logging_config: &LoggingConfig,
     otlp_log_layer: Option<Box<dyn Layer<Registry> + Send + Sync>>,
     otlp_trace_layer: Option<Box<dyn Layer<Registry> + Send + Sync>>,
+    run_id: String,
 ) -> Result<LoggingGuard> {
     let log_dir = resolve_log_dir(&logging_config.dir)?;
     fs::create_dir_all(&log_dir)
@@ -75,7 +80,6 @@ pub fn init_tracing(
         .try_init()
         .context("failed to initialize tracing subscriber")?;
 
-    let run_id = Uuid::now_v7().to_string();
     tracing::info!(
         target: "logging",
         run_id = %run_id,

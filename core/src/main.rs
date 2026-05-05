@@ -17,7 +17,7 @@ use beluna::{
     config::{Config, TickMissedBehavior, generate_schema_json_pretty, write_schema_to_path},
     continuity::ContinuityEngine,
     cortex::{Cortex, CortexDeps, CortexRuntime, PhysicalStateReadPort},
-    logging::init_tracing,
+    logging::{init_tracing, new_run_id},
     observability::{otel::OpenTelemetryRuntime, owner_log, runtime as observability_runtime},
     spine::{Spine, shutdown_global_spine},
     stem::{
@@ -140,12 +140,14 @@ async fn main() -> Result<()> {
     };
     let config = Config::load(&config_path)
         .with_context(|| format!("failed to load config from {}", config_path.display()))?;
-    let observability_runtime = OpenTelemetryRuntime::init(&config.observability)
+    let run_id = new_run_id();
+    let observability_runtime = OpenTelemetryRuntime::init(&config.observability, &run_id)
         .context("failed to initialize OpenTelemetry runtime")?;
     let _logging_guard = init_tracing(
         &config.logging,
         observability_runtime.log_layer(),
         observability_runtime.trace_layer(),
+        run_id,
     )
     .context("failed to initialize tracing logging")?;
     observability_runtime::install_run_id(_logging_guard.run_id().to_string())

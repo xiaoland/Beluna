@@ -5,42 +5,73 @@ use crate::observability::owner_log;
 use super::{AdapterLifecycleState, DispatchOutcomeClass, EndpointLifecycleTransition};
 
 pub fn emit_spine_adapter_lifecycle(
-    _adapter_type: &str,
-    _adapter_id: &str,
-    _kind: AdapterLifecycleState,
-    _reason_or_error: Option<&str>,
+    adapter_type: &str,
+    adapter_id: &str,
+    kind: AdapterLifecycleState,
+    reason_or_error: Option<&str>,
 ) {
+    owner_log::events::emit_spine_adapter_lifecycle(
+        adapter_type,
+        adapter_id,
+        kind,
+        reason_or_error,
+    );
 }
 
 pub fn emit_spine_endpoint_lifecycle(
-    _endpoint_id: &str,
-    _adapter_id: Option<&str>,
-    _kind: EndpointLifecycleTransition,
-    _channel_or_session: Option<String>,
-    _route_summary: Option<Value>,
-    _reason_or_error: Option<&str>,
+    endpoint_id: &str,
+    adapter_id: Option<&str>,
+    kind: EndpointLifecycleTransition,
+    channel_or_session: Option<String>,
+    route_summary: Option<Value>,
+    reason_or_error: Option<&str>,
 ) {
+    owner_log::events::emit_spine_endpoint_lifecycle(
+        endpoint_id,
+        adapter_id,
+        kind,
+        channel_or_session,
+        route_summary,
+        reason_or_error,
+    );
 }
 
 pub fn emit_spine_sense_ingress(
-    _tick: u64,
-    _endpoint_id: &str,
-    _descriptor_id: Option<&str>,
-    _sense_id: &str,
-    _sense_payload: Value,
-    _reason: Option<&str>,
+    tick: u64,
+    endpoint_id: &str,
+    descriptor_id: Option<&str>,
+    sense_id: &str,
+    sense_payload: Value,
+    reason: Option<&str>,
 ) {
+    owner_log::events::emit_spine_sense_ingress(
+        tick,
+        endpoint_id,
+        descriptor_id,
+        sense_id,
+        sense_payload,
+        reason,
+    );
 }
 
 pub fn emit_spine_act_bind(
-    _tick: u64,
-    _act_id: &str,
-    _endpoint_id: Option<&str>,
-    _descriptor_id: Option<&str>,
-    _binding_kind: Option<&str>,
-    _channel_id: Option<u64>,
-    _act_payload: Option<Value>,
+    tick: u64,
+    act_id: &str,
+    endpoint_id: Option<&str>,
+    descriptor_id: Option<&str>,
+    binding_kind: Option<&str>,
+    channel_id: Option<u64>,
+    act_payload: Option<Value>,
 ) {
+    owner_log::events::emit_act_bound(
+        tick,
+        act_id,
+        endpoint_id,
+        descriptor_id,
+        binding_kind,
+        channel_id,
+        act_payload,
+    );
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -55,16 +86,15 @@ pub fn emit_spine_act_outcome(
     outcome: DispatchOutcomeClass,
     reason_or_reference: Option<Value>,
 ) {
-    owner_log::events::emit_act_delivered(
+    owner_log::events::emit_act_outcome(
         tick,
         act_id,
         endpoint_id,
         descriptor_id,
         binding_kind,
+        channel_id,
         act_payload.clone(),
         outcome,
         reason_or_reference.clone(),
     );
-
-    let _ = channel_id;
 }

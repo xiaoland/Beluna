@@ -4,9 +4,20 @@ use crate::observability::runtime::{
     AiGatewayChatThreadArgs, AiGatewayChatTurnArgs, AiGatewayRequestArgs, current_run_id,
 };
 
+mod spine;
+mod stem;
+
+pub(crate) use spine::{
+    emit_act_bound, emit_act_outcome, emit_spine_adapter_lifecycle, emit_spine_endpoint_lifecycle,
+    emit_spine_sense_ingress,
+};
+pub(crate) use stem::{
+    emit_stem_afferent_pathway, emit_stem_afferent_rule, emit_stem_descriptor_catalog,
+    emit_stem_efferent_pathway, emit_stem_proprioception,
+};
+
 use super::{
-    DispatchOutcomeClass, OrganResponseStatus, OwnerLogAttribute, OwnerLogEvent, OwnerLogSeverity,
-    OwnerScope, emit,
+    OrganResponseStatus, OwnerLogAttribute, OwnerLogEvent, OwnerLogSeverity, OwnerScope, emit,
 };
 
 pub fn emit_runtime_booted(config_path: String, signal_states: Value) {
@@ -105,14 +116,14 @@ pub(crate) fn emit_cortex_organ_finished(
     });
 }
 
-pub(crate) fn emit_transport_request_completed(args: &AiGatewayRequestArgs) {
-    if !matches!(args.kind.as_str(), "succeeded" | "failed") {
+pub(crate) fn emit_transport_request(args: &AiGatewayRequestArgs) {
+    let Some(event_name) = transport_request_event_name(&args.kind) else {
         return;
-    }
+    };
 
     emit(OwnerLogEvent {
         scope: OwnerScope::AiGatewayTransport,
-        event_name: "request.completed",
+        event_name,
         tick: args.tick,
         span_key: format!("request:{}", args.request_id),
         severity: severity_for_gateway_kind(&args.kind),
@@ -122,7 +133,7 @@ pub(crate) fn emit_transport_request_completed(args: &AiGatewayRequestArgs) {
             OwnerLogAttribute::string("ai.model", args.model.clone()),
         ],
         body: json!({
-            "summary": "AI Gateway transport request completed.",
+            "summary": format!("AI Gateway transport request {event_name}."),
             "transport_request_id": args.request_id,
             "parent_span_id": args.parent_span_id,
             "organ_id": args.organ_id,
@@ -137,33 +148,33 @@ pub(crate) fn emit_transport_request_completed(args: &AiGatewayRequestArgs) {
     });
 }
 
-pub(crate) fn emit_chat_turn_dispatched(args: &AiGatewayChatTurnArgs) {
+pub(crate) fn emit_chat_turn_started(args: &AiGatewayChatTurnArgs) {
     if args.status != "started" {
         return;
     }
 
     emit(OwnerLogEvent {
-        scope: OwnerScope::AiGatewayChatTurn,
-        event_name: "dispatched",
+        scope: OwnerScope::AiGatewayChat,
+        event_name: "turn.started",
         tick: args.tick,
         span_key: chat_turn_span_key(&args.thread_id, args.turn_id),
         severity: OwnerLogSeverity::Info,
         attributes: Vec::new(),
         body: json!({
-            "summary": "Chat turn dispatched to backend.",
+            "summary": "Chat turn started.",
             "chat_id": chat_id_from_metadata(&args.metadata),
             "thread_id": args.thread_id,
             "turn_id": args.turn_id,
             "parent_span_id": args.parent_span_id,
             "organ_id": args.organ_id,
             "transport_request_id": args.request_id,
-            "dispatch_payload": args.dispatch_payload,
+            "turn_start_payload": args.dispatch_payload,
             "metadata": args.metadata,
         }),
     });
 }
 
-pub(crate) fn emit_chat_turn_committed(args: &AiGatewayChatTurnArgs) {
+pub(crate) fn emit_chat_turn_finished(args: &AiGatewayChatTurnArgs) {
     if args.error.is_some() {
         emit_chat_turn_failed(args);
         return;
@@ -174,14 +185,14 @@ pub(crate) fn emit_chat_turn_committed(args: &AiGatewayChatTurnArgs) {
     };
 
     emit(OwnerLogEvent {
-        scope: OwnerScope::AiGatewayChatTurn,
-        event_name: "committed",
+        scope: OwnerScope::AiGatewayChat,
+        event_name: "turn.finished",
         tick: args.tick,
         span_key: chat_turn_span_key(&args.thread_id, args.turn_id),
         severity: OwnerLogSeverity::Info,
         attributes: Vec::new(),
         body: json!({
-            "summary": "Chat turn committed to thread.",
+            "summary": "Chat turn finished.",
             "chat_id": chat_id_from_metadata(&args.metadata),
             "thread_id": args.thread_id,
             "turn_id": args.turn_id,
@@ -199,8 +210,8 @@ pub(crate) fn emit_chat_turn_committed(args: &AiGatewayChatTurnArgs) {
 
 fn emit_chat_turn_failed(args: &AiGatewayChatTurnArgs) {
     emit(OwnerLogEvent {
-        scope: OwnerScope::AiGatewayChatTurn,
-        event_name: "failed",
+        scope: OwnerScope::AiGatewayChat,
+        event_name: "turn.failed",
         tick: args.tick,
         span_key: chat_turn_span_key(&args.thread_id, args.turn_id),
         severity: OwnerLogSeverity::Error,
@@ -214,7 +225,7 @@ fn emit_chat_turn_failed(args: &AiGatewayChatTurnArgs) {
             "organ_id": args.organ_id,
             "transport_request_id": args.request_id,
             "status": args.status,
-            "dispatch_payload": args.dispatch_payload,
+            "turn_start_payload": args.dispatch_payload,
             "metadata": args.metadata,
             "backend_metadata": args.backend_metadata,
             "error": args.error,
@@ -226,7 +237,7 @@ pub(crate) fn emit_chat_thread(args: &AiGatewayChatThreadArgs) {
     let event_name = chat_thread_event_name(&args.kind);
 
     emit(OwnerLogEvent {
-        scope: OwnerScope::AiGatewayChatThread,
+        scope: OwnerScope::AiGatewayChat,
         event_name,
         tick: args.tick,
         span_key: format!("thread:{}", args.thread_id),
@@ -251,46 +262,6 @@ pub(crate) fn emit_chat_thread(args: &AiGatewayChatThreadArgs) {
     });
 }
 
-pub(crate) fn emit_act_delivered(
-    tick: u64,
-    act_id: &str,
-    endpoint_id: Option<&str>,
-    descriptor_id: Option<&str>,
-    binding_kind: Option<&str>,
-    act_payload: Option<Value>,
-    outcome: DispatchOutcomeClass,
-    reason_or_reference: Option<Value>,
-) {
-    if !matches!(outcome, DispatchOutcomeClass::Acknowledged) {
-        return;
-    }
-    let (Some(endpoint_id), Some(descriptor_id)) = (endpoint_id, descriptor_id) else {
-        return;
-    };
-
-    emit(OwnerLogEvent {
-        scope: OwnerScope::SpineActRouting,
-        event_name: "delivered",
-        tick,
-        span_key: format!("delivery:{act_id}"),
-        severity: OwnerLogSeverity::Info,
-        attributes: vec![
-            OwnerLogAttribute::string("spine.act.id", act_id),
-            OwnerLogAttribute::string("spine.endpoint.id", endpoint_id),
-            OwnerLogAttribute::string("spine.descriptor.id", descriptor_id),
-        ],
-        body: json!({
-            "summary": "Spine delivered act to endpoint.",
-            "delivery": {
-                "binding_kind": binding_kind,
-                "acknowledged": true,
-                "reference": reason_or_reference,
-            },
-            "act_payload": act_payload,
-        }),
-    });
-}
-
 fn severity_for_organ_status(status: OrganResponseStatus) -> OwnerLogSeverity {
     match status {
         OrganResponseStatus::Ok => OwnerLogSeverity::Info,
@@ -301,7 +272,18 @@ fn severity_for_organ_status(status: OrganResponseStatus) -> OwnerLogSeverity {
 fn severity_for_gateway_kind(kind: &str) -> OwnerLogSeverity {
     match kind {
         "failed" => OwnerLogSeverity::Error,
+        "attempt_failed" => OwnerLogSeverity::Warn,
         _ => OwnerLogSeverity::Info,
+    }
+}
+
+fn transport_request_event_name(kind: &str) -> Option<&'static str> {
+    match kind {
+        "start" => Some("request.started"),
+        "attempt_failed" => Some("attempt.failed"),
+        "succeeded" => Some("request.finished"),
+        "failed" => Some("request.failed"),
+        _ => None,
     }
 }
 
@@ -328,11 +310,10 @@ fn cortex_organ_span_key(organ_id: &str) -> String {
 
 fn chat_thread_event_name(kind: &str) -> &'static str {
     match kind {
-        "opened" => "opened",
-        "derived" => "derived",
-        "rewritten" => "rewritten",
-        "turn_committed" => "turn.committed",
-        _ => "snapshot",
+        "opened" => "thread.opened",
+        "derived" => "thread.derived",
+        "rewritten" => "thread.rewritten",
+        _ => "thread.snapshot",
     }
 }
 
@@ -342,4 +323,31 @@ fn chat_turn_span_key(thread_id: &str, turn_id: u64) -> String {
 
 fn chat_id_from_metadata(metadata: &Value) -> Option<&str> {
     metadata.get("chat_id").and_then(Value::as_str)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn maps_ai_gateway_kinds_to_native_event_names() {
+        assert_eq!(
+            transport_request_event_name("start"),
+            Some("request.started")
+        );
+        assert_eq!(
+            transport_request_event_name("attempt_failed"),
+            Some("attempt.failed")
+        );
+        assert_eq!(
+            transport_request_event_name("succeeded"),
+            Some("request.finished")
+        );
+        assert_eq!(
+            transport_request_event_name("failed"),
+            Some("request.failed")
+        );
+        assert_eq!(chat_thread_event_name("opened"), "thread.opened");
+        assert_eq!(chat_thread_event_name("turn_committed"), "thread.snapshot");
+    }
 }

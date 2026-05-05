@@ -52,6 +52,7 @@ impl OwnerLogAttributeValue {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum OwnerLogSeverity {
     Info,
+    Warn,
     Error,
 }
 
@@ -59,6 +60,7 @@ impl OwnerLogSeverity {
     fn as_otel(self) -> Severity {
         match self {
             OwnerLogSeverity::Info => Severity::Info,
+            OwnerLogSeverity::Warn => Severity::Warn,
             OwnerLogSeverity::Error => Severity::Error,
         }
     }
@@ -81,8 +83,9 @@ pub(crate) fn emit(event: OwnerLogEvent) {
 }
 
 fn emit_with_provider(provider: &SdkLoggerProvider, event: OwnerLogEvent) {
-    let scope_name = event.scope.as_str();
-    let logger = provider.logger_with_scope(InstrumentationScope::builder(scope_name).build());
+    let scope_name = event.scope.name();
+    let logger =
+        provider.logger_with_scope(InstrumentationScope::builder(scope_name.clone()).build());
     let mut record = logger.create_log_record();
 
     record.set_event_name(event.event_name);
@@ -91,7 +94,12 @@ fn emit_with_provider(provider: &SdkLoggerProvider, event: OwnerLogEvent) {
     record.set_body(json_to_any(event.body));
     record.set_trace_context(
         ids::trace_id(current_run_id(), event.tick),
-        ids::span_id(current_run_id(), event.tick, scope_name, &event.span_key),
+        ids::span_id(
+            current_run_id(),
+            event.tick,
+            scope_name.as_ref(),
+            &event.span_key,
+        ),
         Some(TraceFlags::SAMPLED),
     );
 
@@ -151,12 +159,12 @@ mod tests {
             &provider,
             OwnerLogEvent {
                 scope: OwnerScope::AiGatewayTransport,
-                event_name: "request.completed",
+                event_name: "request.finished",
                 tick: 7,
                 span_key: "request:test-1".to_string(),
                 severity: OwnerLogSeverity::Info,
                 attributes: vec![OwnerLogAttribute::string("ai.backend.id", "test")],
-                body: json!({ "summary": "request completed" }),
+                body: json!({ "summary": "request finished" }),
             },
         );
 
@@ -164,7 +172,7 @@ mod tests {
         assert_eq!(records.len(), 1);
         let (record, scope) = &records[0];
         assert_eq!(scope.name(), "beluna.core.ai-gateway.transport");
-        assert_eq!(record.event_name(), Some("request.completed"));
+        assert_eq!(record.event_name(), Some("request.finished"));
         assert_eq!(record.severity_number(), Some(Severity::Info));
         assert!(record.trace_context().is_some());
         assert!(matches!(record.body(), Some(AnyValue::Map(_))));
