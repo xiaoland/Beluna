@@ -14,7 +14,7 @@ use crate::{
         helpers::{self, CognitionOrgan},
         prompts,
     },
-    observability::{contract::OrganResponseStatus, runtime as observability_runtime},
+    observability::runtime::{self as observability_runtime, OrganResponseStatus},
     stem::DeferralRuleAddInput,
 };
 

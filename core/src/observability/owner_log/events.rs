@@ -1,11 +1,11 @@
 use serde_json::{Value, json};
 
-use crate::observability::{
-    contract::{DispatchOutcomeClass, OrganResponseStatus},
-    runtime::{AiGatewayChatTurnArgs, AiGatewayRequestArgs, current_run_id},
-};
+use crate::observability::runtime::{AiGatewayChatTurnArgs, AiGatewayRequestArgs, current_run_id};
 
-use super::{OwnerLogAttribute, OwnerLogEvent, OwnerLogSeverity, OwnerScope, emit};
+use super::{
+    DispatchOutcomeClass, OrganResponseStatus, OwnerLogAttribute, OwnerLogEvent, OwnerLogSeverity,
+    OwnerScope, emit,
+};
 
 pub fn emit_runtime_booted(config_path: String, signal_states: Value) {
     emit(OwnerLogEvent {
@@ -18,6 +18,7 @@ pub fn emit_runtime_booted(config_path: String, signal_states: Value) {
         body: json!({
             "summary": "Core runtime booted.",
             "run_id": current_run_id(),
+            "tick": 0,
             "config_path": config_path,
             "otlp_signal_states": signal_states,
         }),

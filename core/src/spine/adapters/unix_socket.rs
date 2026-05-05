@@ -21,7 +21,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::Instrument;
 
 use crate::{
-    observability::{contract::AdapterLifecycleState, runtime as observability_runtime},
+    observability::runtime::{self as observability_runtime, AdapterLifecycleState},
     spine::{AdapterContext, SpineAdapterPort, types::NeuralSignalDescriptor},
     types::{Act, Sense, default_sense_weight, is_uuid_v4, is_uuid_v7},
 };

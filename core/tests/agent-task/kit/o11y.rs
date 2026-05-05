@@ -13,7 +13,7 @@ use tracing::{
 use tracing_subscriber::{Layer, layer::Context, layer::SubscriberExt, util::SubscriberInitExt};
 
 #[derive(Clone)]
-pub struct ContractEventCapture {
+pub struct LegacyContractLogCapture {
     inner: Arc<CaptureInner>,
     start_index: usize,
     installed: bool,
@@ -29,7 +29,7 @@ struct CaptureInner {
     events: Mutex<Vec<Value>>,
 }
 
-struct ContractEventLayer {
+struct LegacyContractLogLayer {
     inner: Arc<CaptureInner>,
 }
 
@@ -40,11 +40,11 @@ struct FieldVisitor {
 
 static GLOBAL_CAPTURE: OnceLock<GlobalCapture> = OnceLock::new();
 
-impl ContractEventCapture {
+impl LegacyContractLogCapture {
     pub fn start() -> Self {
         let global = GLOBAL_CAPTURE.get_or_init(|| {
             let inner = Arc::new(CaptureInner::default());
-            let layer = ContractEventLayer {
+            let layer = LegacyContractLogLayer {
                 inner: Arc::clone(&inner),
             };
             let installed = tracing_subscriber::registry()
@@ -90,7 +90,7 @@ impl CaptureInner {
     }
 }
 
-impl<S> Layer<S> for ContractEventLayer
+impl<S> Layer<S> for LegacyContractLogLayer
 where
     S: Subscriber,
 {
@@ -155,7 +155,7 @@ impl FieldVisitor {
     }
 }
 
-pub fn summarize_ai_gateway_events(events: &[Value]) -> Result<Value> {
+pub fn summarize_ai_gateway_contract_logs(events: &[Value]) -> Result<Value> {
     let mut family_counts = BTreeMap::<String, usize>::new();
     let mut request_kinds = BTreeMap::<String, usize>::new();
     let mut turn_statuses = BTreeMap::<String, usize>::new();

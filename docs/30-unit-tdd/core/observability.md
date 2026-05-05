@@ -21,7 +21,7 @@ Loom composition and operator-facing investigation flows belong in `docs/30-unit
 12. Event result semantics come from `eventName`, severity, and event-specific body/outcome fields.
 13. Domain ids such as `sense_id`, `act_id`, `descriptor_id`, `endpoint_id`, `thread_id`, and `turn_id` stay local to the owning event schema. Body or attributes placement is an event-schema choice.
 14. Ordinary Rust diagnostics can continue through `tracing` and `opentelemetry-appender-tracing`. First-party owner events use the Owner Log Emitter over the OpenTelemetry Logs API so structured body and owner scope remain explicit.
-15. Legacy `ContractEvent` and family flattening may coexist temporarily during migration. The target source of truth is the native OTLP event surface below.
+15. Core runtime first-party events use native owner-log emission. Historical legacy contract logs remain a Moira ingestion compatibility concern.
 
 ## Owner Scopes
 
@@ -34,9 +34,9 @@ Loom composition and operator-facing investigation flows belong in `docs/30-unit
 | `beluna.core.ai-gateway.chat` | chat thread/turn lifecycle and rich chat payloads |
 | `beluna.core.spine` | adapter lifecycle, endpoint lifecycle, sense ingress, act routing/delivery |
 
-## First Implementation Event Surface
+## Current Event Surface
 
-Slice 2 starts with eight first-party owner event schemas.
+The first native implementation covers eight first-party owner event schemas.
 
 | Scope | `eventName` | Span key | Attribute keys | Body owns |
 |---|---|---|---|---|
@@ -79,7 +79,7 @@ Core-side verification should cover:
 2. `serde_json::Value` conversion into OTLP `AnyValue::Map`.
 3. one in-memory log exporter proof for owner scope, `eventName`, structured body, attributes, `trace_id`, and `span_id`.
 4. raw OTLP capture comparison for the eight-event first implementation surface.
-5. legacy `ContractEvent` path coexistence during migration.
+5. absence of `ContractEvent` and `flatten_contract_event()` from the runtime emission path.
 
 ## Change Discipline
 

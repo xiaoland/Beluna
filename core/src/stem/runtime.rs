@@ -9,7 +9,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    observability::{contract::DescriptorCatalogChangeMode, runtime as observability_runtime},
+    observability::runtime::{self as observability_runtime, DescriptorCatalogChangeMode},
     types::{
         NeuralSignalDescriptor, NeuralSignalDescriptorCatalog, NeuralSignalDescriptorDropCommit,
         NeuralSignalDescriptorDropPatch, NeuralSignalDescriptorDropRejection,

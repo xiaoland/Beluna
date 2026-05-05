@@ -64,9 +64,6 @@ impl LachesisStore {
             CREATE INDEX IF NOT EXISTS idx_raw_events_run_tick
             ON raw_events(run_id, tick, observed_at);
 
-            CREATE INDEX IF NOT EXISTS idx_raw_events_trace
-            ON raw_events(trace_id_hex, observed_at);
-
             CREATE TABLE IF NOT EXISTS runs (
               run_id TEXT PRIMARY KEY,
               first_seen_at TEXT NOT NULL,
@@ -96,6 +93,9 @@ impl LachesisStore {
             ALTER TABLE raw_events ADD COLUMN IF NOT EXISTS span_id_hex TEXT;
             ALTER TABLE raw_events ADD COLUMN IF NOT EXISTS trace_flags INTEGER;
             ALTER TABLE ticks ADD COLUMN IF NOT EXISTS trace_id_hex TEXT;
+
+            CREATE INDEX IF NOT EXISTS idx_raw_events_trace
+            ON raw_events(trace_id_hex, observed_at);
 
             CREATE INDEX IF NOT EXISTS idx_ticks_trace
             ON ticks(trace_id_hex);

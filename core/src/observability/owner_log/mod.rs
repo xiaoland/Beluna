@@ -10,3 +10,7 @@ pub(crate) use emit::{
 pub(crate) use schema::OwnerScope;
 
 pub use events::emit_runtime_booted;
+pub use schema::{
+    AdapterLifecycleState, DescriptorCatalogChangeMode, DispatchOutcomeClass,
+    EndpointLifecycleTransition, OrganResponseStatus,
+};

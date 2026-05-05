@@ -49,6 +49,7 @@ Current discussion identified several linked smells:
 - [AI-GATEWAY-CHAT-BOUNDARY.md](./AI-GATEWAY-CHAT-BOUNDARY.md): current `request_id` implementation evidence and target chat payload boundary.
 - [SLICE-3-MOIRA-NATIVE-PROJECTION.md](./SLICE-3-MOIRA-NATIVE-PROJECTION.md): Slice 3 native Moira projection Explore notes, including the thin Moira candidate.
 - [SLICE-4-LEGACY-COMPATIBILITY.md](./SLICE-4-LEGACY-COMPATIBILITY.md): Slice 4 legacy compatibility marker and raw drilldown notes.
+- [SLICE-5-CONTRACT-EVENT-REMOVAL.md](./SLICE-5-CONTRACT-EVENT-REMOVAL.md): Slice 5 Core runtime removal of `ContractEvent` and flattening.
 - [MODEL-CLAIMS.md](./MODEL-CLAIMS.md): current claims and proposed target semantics.
 - [OPEN-QUESTIONS.md](./OPEN-QUESTIONS.md): decisions that need human confirmation before durable docs or implementation.
 - [MIGRATION-SLICES.md](./MIGRATION-SLICES.md): possible implementation slices after the model is confirmed.
@@ -58,6 +59,6 @@ Current discussion identified several linked smells:
 
 ## Active Mode
 
-Execute / verified. Slice 2 native Core owner log emission, Slice 3 raw-first Moira native projection, and Slice 4 legacy compatibility markers have been applied in this worktree.
+Execute / verified. Slice 2 native Core owner log emission, Slice 3 raw-first Moira native projection, Slice 4 legacy compatibility markers, and Slice 5 Core runtime `ContractEvent` removal have been applied in this worktree.
 
-Remaining work starts with `ContractEvent` shrink/removal.
+Remaining work starts with additive native owner event expansion for the currently no-op wrapper surfaces.

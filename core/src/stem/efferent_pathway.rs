@@ -10,7 +10,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     continuity::{ContinuityEngine, DispatchContext as ContinuityDispatchContext},
-    observability::{contract::DispatchOutcomeClass, runtime as observability_runtime},
+    observability::runtime::{self as observability_runtime, DispatchOutcomeClass},
     spine::{ActDispatchResult, Spine},
     types::{Act, DispatchDecision},
 };

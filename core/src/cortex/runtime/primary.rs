@@ -31,8 +31,8 @@ use crate::{
         types::{CognitionState, CortexControlDirective, CortexOutput, ReactionLimits},
     },
     observability::{
-        contract::OrganResponseStatus, metrics as observability_metrics,
-        runtime as observability_runtime,
+        metrics as observability_metrics,
+        runtime::{self as observability_runtime, OrganResponseStatus},
     },
     spine::ActDispatchResult,
     stem::{ActProducerHandle, AfferentRuleControlPort, EfferentActEnvelope},

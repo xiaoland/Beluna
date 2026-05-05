@@ -113,6 +113,8 @@ Verification:
 
 ## Slice 5: Remove ContractEvent God Object
 
+Status: completed in [SLICE-5-CONTRACT-EVENT-REMOVAL.md](./SLICE-5-CONTRACT-EVENT-REMOVAL.md).
+
 Goal: retire the central all-family enum after owner emitters and Moira native projection are stable.
 
 Likely changes:
@@ -124,9 +126,9 @@ Likely changes:
 
 Verification:
 
-1. adding one owner event touches only that owner plus targeted fixtures.
-2. Moira projection uses OTLP-native fields.
-3. durable docs reflect the new source of truth.
+1. `ContractEvent`, `emit_contract_event()`, and `flatten_contract_event()` are absent from `core/src`.
+2. runtime callsites use observability classification enums re-exported from `observability::runtime`.
+3. Core tests pass with native owner logs as the runtime first-party path.
 
 ## Slice 6: Durable Documentation Promotion
 

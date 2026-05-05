@@ -14,9 +14,8 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     config::SpineRuntimeConfig,
-    observability::{
-        contract::{DispatchOutcomeClass, EndpointLifecycleTransition},
-        runtime as observability_runtime,
+    observability::runtime::{
+        self as observability_runtime, DispatchOutcomeClass, EndpointLifecycleTransition,
     },
     spine::{
         SpineExecutionMode,

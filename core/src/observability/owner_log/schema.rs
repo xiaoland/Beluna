@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum OwnerScope {
     Main,
@@ -19,4 +21,44 @@ impl OwnerScope {
             OwnerScope::Spine => "beluna.core.spine",
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OrganResponseStatus {
+    Ok,
+    Error,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DispatchOutcomeClass {
+    Acknowledged,
+    Rejected,
+    Lost,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DescriptorCatalogChangeMode {
+    Snapshot,
+    Update,
+    Drop,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AdapterLifecycleState {
+    Enabled,
+    Disabled,
+    Faulted,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EndpointLifecycleTransition {
+    Connected,
+    Disconnected,
+    Registered,
+    Dropped,
 }
