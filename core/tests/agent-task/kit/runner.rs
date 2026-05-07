@@ -42,7 +42,6 @@ use super::{
     case::{AgentTaskCase, DescriptorSpec, EndpointSpec},
     endpoints::{AckRecordingEndpoint, TickClock},
     evidence::EvidenceJournal,
-    o11y::{LegacyContractLogCapture, summarize_ai_gateway_contract_logs},
     oracle::{OracleEngine, RunResult, assert_no_oracle_internal_error},
     workspace::{CaseWorkspace, FileTreeDiff, FileTreeSnapshot},
 };
@@ -93,7 +92,6 @@ impl AgentTaskRunner {
             .with_context(|| format!("failed to create artifact dir {}", artifact_dir.display()))?;
 
         let journal = EvidenceJournal::default();
-        let o11y_capture = start_o11y_capture(&mode, &journal);
         let workspace = CaseWorkspace::create(&artifact_dir)?;
         workspace.materialize(&case.world.files)?;
         let _cwd_guard = bind_case_working_directory(case, &workspace, &journal)?;
@@ -214,10 +212,6 @@ impl AgentTaskRunner {
         assert_no_oracle_internal_error(&failures)?;
         let passed = failures.is_empty();
         record_ai_boundary_journal(&ai_runtime, &journal).await;
-        let contract_events = o11y_capture
-            .as_ref()
-            .map(LegacyContractLogCapture::events)
-            .unwrap_or_default();
         write_artifacts(&RunArtifacts {
             artifact_dir: artifact_dir.clone(),
             case,
@@ -230,8 +224,6 @@ impl AgentTaskRunner {
             before_snapshot: &before_snapshot,
             after_snapshot: &after_snapshot,
             diff: &diff,
-            contract_events: &contract_events,
-            write_o11y_artifacts: o11y_capture.is_some(),
         })?;
 
         Ok(RunResult {
@@ -245,26 +237,6 @@ impl AgentTaskRunner {
 impl Drop for WorkingDirectoryGuard {
     fn drop(&mut self) {
         let _ = env::set_current_dir(&self.previous);
-    }
-}
-
-fn start_o11y_capture(
-    mode: &RunMode<'_>,
-    journal: &EvidenceJournal,
-) -> Option<LegacyContractLogCapture> {
-    match mode {
-        RunMode::Replay => None,
-        RunMode::Live { .. } => {
-            let capture = LegacyContractLogCapture::start();
-            journal.record(
-                "o11y.capture.started",
-                json!({
-                    "source": "tracing.observability.contract.legacy",
-                    "installed": capture.installed(),
-                }),
-            );
-            Some(capture)
-        }
     }
 }
 
@@ -776,8 +748,6 @@ struct RunArtifacts<'a> {
     before_snapshot: &'a FileTreeSnapshot,
     after_snapshot: &'a FileTreeSnapshot,
     diff: &'a FileTreeDiff,
-    contract_events: &'a [Value],
-    write_o11y_artifacts: bool,
 }
 
 fn write_artifacts(input: &RunArtifacts<'_>) -> Result<()> {
@@ -800,21 +770,6 @@ fn write_artifacts(input: &RunArtifacts<'_>) -> Result<()> {
         input.artifact_dir.join("world-diff.json"),
         serde_json::to_vec_pretty(input.diff)?,
     )?;
-    if input.write_o11y_artifacts {
-        let mut contract_jsonl = String::new();
-        for event in input.contract_events {
-            contract_jsonl.push_str(&serde_json::to_string(event)?);
-            contract_jsonl.push('\n');
-        }
-        fs::write(
-            input.artifact_dir.join("o11y-contract-events.jsonl"),
-            contract_jsonl,
-        )?;
-        fs::write(
-            input.artifact_dir.join("ai-gateway-summary.json"),
-            serde_json::to_vec_pretty(&summarize_ai_gateway_contract_logs(input.contract_events)?)?,
-        )?;
-    }
     fs::write(
         input.artifact_dir.join("result.json"),
         serde_json::to_vec_pretty(&json!({
@@ -827,7 +782,6 @@ fn write_artifacts(input: &RunArtifacts<'_>) -> Result<()> {
             "wall_time_ms": input.elapsed.as_millis() as u64,
             "tick_count": input.tick_count,
             "event_count": events.len(),
-            "o11y_contract_event_count": input.contract_events.len(),
         }))?,
     )?;
     Ok(())

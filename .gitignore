@@ -28,6 +28,7 @@ __pycache__/
 !.vscode/launch.example.jsonc
 !.vscode/tasks.example.jsonc
 .firecrawl
+scratch/
 
 # Local runtime/debug artifacts
 .env

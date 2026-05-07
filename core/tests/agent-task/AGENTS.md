@@ -19,7 +19,6 @@ core/tests/agent-task/
 │   ├── case.rs
 │   ├── endpoints.rs
 │   ├── evidence.rs
-│   ├── o11y.rs
 │   ├── oracle.rs
 │   ├── runner.rs
 │   └── workspace.rs
@@ -77,8 +76,6 @@ Expected artifacts include:
 - `result.json`: pass/fail, wall time, tick count, event counts
 - `evidence.jsonl`: harness evidence stream
 - `world-before.json`, `world-after.json`, `world-diff.json`: workspace oracle artifacts
-- `o11y-contract-events.jsonl`: live `observability.contract` events when live capture is enabled
-- `ai-gateway-summary.json`: live AI Gateway request and chat-turn summary
 
 When a live run fails, inspect artifacts before changing prompts, descriptors, endpoint act shapes, or tick budgets.
 
@@ -97,7 +94,7 @@ Use secondary evidence for diagnosis:
 - emitted endpoint senses
 - world diff
 - AI Gateway turn transcript
-- Cortex, Stem, or Spine contract events
+- Cortex, Stem, Spine, or AI Gateway owner-log records when captured by a dedicated observability harness
 
 ## Oracle Rules
 
@@ -160,7 +157,7 @@ Good primitive examples:
 
 - workspace materialization
 - file tree snapshots and diffs
-- contract event capture
+- owner-log capture
 - generic evidence matching
 - common file content expectations
 
