@@ -2,26 +2,32 @@
 
 ## External Interface
 
-1. Desktop application entrypoint:
-- Tauri desktop app exposing Loom as the local operator UI.
+1. Host runtime API:
+- Embedded Moira backend runtime consumed by Beluna Human Interface hosts.
+- Typed Clotho, Lachesis, and Atropos query/operation surfaces.
+- Runtime status and event/pulse delivery for host-native Loom UI.
+- Apple Universal is the first host for the minimum native Loom surface.
 
-2. Artifact preparation interface:
+2. Transitional desktop entrypoint:
+- Current Tauri/Vue app remains a migration container while backend runtime extraction and Apple coverage land.
+
+3. Artifact preparation interface:
 - GitHub Releases discovery for published Core artifacts.
 - Trusted checksum file: `SHA256SUMS`.
 - Trusted Core archive pattern: `beluna-core-<rust-target-triple>.tar.gz`.
 - Current macOS-first expected asset: `beluna-core-aarch64-apple-darwin.tar.gz`.
-- The published archive may contain executable `beluna`; archive basename and embedded executable basename are not required to match exactly.
+- The published archive may contain executable `beluna`; archive basename and embedded executable basename may differ.
 - Local source-folder input accepts a Beluna repo root or `core/` crate root for explicit development forge before launch.
 - App-local JSONC profile documents managed under Clotho-owned profile ids.
 
-3. Lifecycle supervision interface:
+4. Lifecycle supervision interface:
 - Wake local Core with a selected Clotho launch target and JSONC profile.
 - Graceful stop for supervised Core.
 - Explicit force-kill behind second confirmation.
 
-4. Observability interface:
+5. Observability interface:
 - Local OTLP gRPC logs receiver.
-- Raw-event query and live-subscription interfaces for Loom.
+- Raw-event query and live-pulse interfaces for host-native Loom.
 - Minimum guaranteed log-backed Loom surfaces:
   - wake list
   - tick list
@@ -39,7 +45,9 @@
 3. Core startup/shutdown semantics remain Core-owned even when Moira supervises the process locally.
 4. Legacy Core contract logs remain readable through Lachesis compatibility normalization during the migration period.
 
-## Cleanup-Stage Constraint
+## Embedding Constraint
 
-1. The cleanup stage may restructure internal backend modules, state containers, and frontend layers without changing the current log-backed Loom surfaces or current Tauri observability command names.
-2. New Clotho and Atropos command surfaces should land only after the internal backend split `app / clotho / lachesis / atropos` is established well enough that those features do not extend the current Lachesis-heavy modules as catch-all owners.
+1. The host API exposes Moira-owned behavior through typed runtime boundaries.
+2. Apple Universal first slice uses a process-local embedded Moira runtime.
+3. Cross-client Owner/Attach authority coordination belongs to later design.
+4. Host-native Loom UI may choose its own layout while preserving Moira-owned query/control semantics.

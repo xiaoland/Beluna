@@ -5,10 +5,10 @@
 | Technical Unit | Code Container | Packaging Shape | Mapping Rationale |
 |---|---|---|---|
 | `core` | `core/` | Rust crate/binary workspace | Runtime authority and tight internal subsystem coordination require one cohesive container. |
-| `cli` | `cli/` | Rust crate/application | Independent endpoint surface with lightweight lifecycle and protocol-focused concerns. |
-| `apple-universal` | `apple-universal/` | Swift app workspace | Platform-specific UX and lifecycle concerns justify separate app container. |
-| `moira` | `moira/` | Tauri desktop app with embedded Rust backend | Local control-plane supervision, artifact management, and observability storage/query justify a dedicated desktop container while preserving core authority boundaries. |
+| `cli` | `cli/` | Rust Human Interface application | Terminal UX and endpoint protocol workflows stay lightweight; Moira hosting is future-scope. |
+| `apple-universal` | `apple-universal/` | Swift Human Interface app workspace | Apple-native UX and lifecycle concerns justify a platform app container; this container hosts the first minimum native Moira Loom. |
+| `moira` | `moira/` | Rust backend/runtime package with transitional Tauri/Vue container | Local control-plane supervision, artifact management, and observability storage/query belong in a library-first runtime. The current Tauri/Vue app is extraction source and transitional evidence. |
 
 ## Mapping Rule
 
-A code container is a storage/deployment boundary, not architecture truth by itself. Product TDD owns this mapping and its rationale.
+A code container is a storage/deployment boundary. Product TDD owns architecture mapping and rationale.

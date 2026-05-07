@@ -6,22 +6,30 @@ Beluna currently has four technical units.
 
 1. `core`
 - Runtime authority and composition root.
-- Owns cognition execution, routing, persistence, resource control, and observability export.
+- Owns cognition execution, routing, persistence, resource control, endpoint protocol authority, and observability export.
 
 2. `cli`
-- Minimal terminal-oriented external body endpoint.
-- Uses core endpoint protocol; does not own core domain authority.
+- Terminal-oriented Beluna Human Interface.
+- Uses Core endpoint protocol for body interaction.
+- Future Moira hosting belongs to a separate task slice.
 
 3. `apple-universal`
-- Apple ecosystem external body endpoint UX.
-- Uses core endpoint protocol; does not own core domain authority.
+- Apple ecosystem Beluna Human Interface.
+- Uses Core endpoint protocol for body interaction.
+- Hosts the first minimum native Moira Loom surface through an embedded Moira backend runtime.
 
 4. `moira`
-- Local control-plane and observability unit for Beluna runtime operation.
-- Prepares local Core artifacts/profiles, supervises local Core lifecycle, ingests Core OTLP logs, and provides human-facing inspection/control through Loom.
-- Does not own core runtime authority, config shape authority, endpoint protocol authority, or observability emission policy.
+- Library-first local control-plane and observability runtime unit for Beluna operation.
+- Prepares local Core artifacts/profiles, supervises local Core lifecycle, ingests Core OTLP logs, and exposes host-facing control/query APIs.
+- Loom is the operator-facing experience implemented by Human Interface hosts. The current Tauri/Vue Loom is a transitional implementation while Apple Universal receives the first native minimum Loom surface.
 
-## Core Internal Subsystems (Inside `core` Unit)
+## Authority Summary
+
+- Core retains runtime behavior, config shape, endpoint protocol, and observability emission authority.
+- Moira owns local preparation, supervision, observability ingestion/storage/query/projection, and future sandbox/ledger platform adapters.
+- Human Interface units own platform-native UX, endpoint interaction presentation, and any host-native Loom surface.
+
+## Core Internal Subsystems
 
 - `cortex`
 - `stem`

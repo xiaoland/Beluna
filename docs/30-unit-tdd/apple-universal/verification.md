@@ -4,7 +4,7 @@
 
 This file defines Apple Universal local verification contracts and evidence expectations.
 
-It does not redefine cross-unit contracts, system authority ownership, or decomposition policy.
+Cross-unit contracts, system authority ownership, and decomposition policy live in Product TDD.
 
 ## Local Verification Contracts
 
@@ -21,14 +21,24 @@ It does not redefine cross-unit contracts, system authority ownership, or decomp
 - Evidence homes: `apple-universal/BelunaApp/App/LocalSenseActHistoryStore.swift`, `ChatViewModel` tests when behavior changes.
 
 4. UI responsiveness contract:
-- Network/protocol operations remain off main thread and do not block interaction surfaces.
+- Network/protocol operations remain off main thread and interaction surfaces stay responsive.
 - Evidence homes: runtime behavior checks and targeted unit/UI tests for reconnect and large-history scenarios.
+
+5. Minimum Moira Loom contract:
+- Settings-integrated operations panel shows embedded Moira runtime status, receiver status, and resource conflicts.
+- Wake list, tick list, and selected tick raw-first inspection are available through Moira host APIs.
+- Evidence homes: `apple-universal/BelunaApp/App` or future Apple UI owners, Moira binding DTO tests, and targeted view-state tests.
+
+6. Socket discovery contract:
+- Configured path, recent successful path, app-local runtime candidate, deployment-supported platform candidates, and Moira-reported paths are available where supported.
+- Evidence homes: socket discovery model tests and settings UI smoke checks.
 
 ## Expected Guardrails
 
 1. Protocol shape changes require synchronized updates to Product TDD contract docs and endpoint unit docs.
-2. Reconnect and pagination regressions must be validated in failure-oriented scenarios, not only nominal flows.
+2. Reconnect and pagination regressions must be validated in nominal and failure-oriented scenarios.
 3. Local persistence format/logic changes must include restore compatibility checks.
+4. Moira UI integration must keep body endpoint connection behavior covered by lifecycle checks.
 
 ## Escalation Rules
 

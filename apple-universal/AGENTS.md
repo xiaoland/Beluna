@@ -1,6 +1,6 @@
-# AGENTS.md of Beluna Apple Universal App
+# AGENTS.md of Beluna Apple Universal
 
-Beluna Apple Universal App is the app that bridges human interaction with Beluna Core in Apple ecosystem.
+Beluna Apple Universal is the Apple ecosystem Beluna Human Interface.
 
 ## Tech Stacks
 
@@ -10,9 +10,11 @@ Beluna Apple Universal App is the app that bridges human interaction with Beluna
 
 ## Boundary and Quality Rules
 
-- Keep desktop logic as a Body Endpoint of Core; do not re-implement Core domain logic in desktop.
+- Own Apple-native endpoint UX and the first minimum native Moira Loom.
+- Core retains runtime behavior, endpoint protocol authority, and observability emission semantics.
+- Moira retains local preparation, supervision, observability ingestion/storage/query/projection, and future platform adapter semantics.
 - Treat socket protocol compatibility as a contract; prefer explicit typed request/response mapping.
-- Keep UI responsive: socket I/O and parsing must not block the main thread.
+- Keep UI responsive: socket I/O, Moira runtime calls, and parsing stay off the main thread.
 - Add tests for protocol decoding/encoding and connection lifecycle behavior where practical.
 
 ## Design Sources
@@ -33,3 +35,12 @@ Beluna Apple Universal App is the app that bridges human interaction with Beluna
 - Connection lifecycle and reconnection behavior under failure.
 - Main-thread responsiveness under socket I/O and parsing load.
 - Local persistence and history pagination behavior for large chat state.
+- Settings-integrated Moira Loom ownership boundaries.
+- Resource conflict presentation for embedded process-local Moira runtime.
+
+## Issue 30 Direction
+
+1. The first Moira Loom surface lands as a Settings-integrated operations panel.
+2. Apple Universal first uses process-local embedded Moira runtime.
+3. Body endpoint socket discovery remains a first-class path for Core processes started elsewhere.
+4. Source cleanup should establish dedicated Settings sections and smaller state owners before adding Moira UI.
