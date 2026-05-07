@@ -1,7 +1,6 @@
 use std::{net::SocketAddr, path::Path, sync::Arc};
 
-use tauri::AppHandle;
-
+use crate::MoiraEventSink;
 use crate::lachesis::{
     model::{ReceiverStatus, RunSummary, TickDetail, TickSummary},
     receiver::{ReceiverState, start_otlp_logs_receiver},
@@ -24,12 +23,12 @@ impl LachesisService {
         Ok(Arc::new(Self { store, receiver }))
     }
 
-    pub async fn start_receiver(&self, endpoint: SocketAddr, app_handle: AppHandle) {
+    pub async fn start_receiver(&self, endpoint: SocketAddr, event_sink: Arc<dyn MoiraEventSink>) {
         start_otlp_logs_receiver(
             endpoint,
             self.receiver.clone(),
             self.store.clone(),
-            app_handle,
+            event_sink,
         )
         .await;
     }

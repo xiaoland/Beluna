@@ -1,16 +1,16 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use tauri::{AppHandle, Manager, RunEvent};
-
-use crate::{
-    app::state::{AppPaths, AppState},
-    atropos::AtroposService,
-    clotho::ClothoService,
-    lachesis::LachesisService,
+use moira_runtime::{
+    MoiraEvent, MoiraEventSink, MoiraPaths, MoiraRuntime, MoiraRuntimeConfig, MoiraTask,
+    MoiraTaskSpawner,
 };
+use tauri::{AppHandle, Emitter, Manager, RunEvent};
+
+use crate::app::state::AppState;
 
 const OTLP_ENDPOINT: &str = "127.0.0.1:4317";
+const LACHESIS_UPDATED_EVENT: &str = "lachesis-updated";
 
 pub fn run() {
     tauri::Builder::default()
@@ -24,17 +24,10 @@ pub fn run() {
             .map_err(|error| -> Box<dyn std::error::Error> { error.into() })?;
 
             let managed = app.state::<AppState>();
-            let lachesis = managed.lachesis.clone();
-            let app_handle = app.handle().clone();
-
-            tauri::async_runtime::spawn(async move {
-                lachesis
-                    .start_receiver(
-                        parse_endpoint(OTLP_ENDPOINT).expect("valid OTLP endpoint"),
-                        app_handle,
-                    )
-                    .await;
-            });
+            let runtime = managed.runtime.clone();
+            tauri::async_runtime::block_on(runtime.status()).map_err(
+                |error| -> Box<dyn std::error::Error> { error.to_string().into() },
+            )?;
 
             Ok(())
         })
@@ -62,7 +55,7 @@ pub fn run() {
         .run(|app_handle, event| {
             if let RunEvent::ExitRequested { .. } = event {
                 let managed = app_handle.state::<AppState>();
-                if let Err(err) = tauri::async_runtime::block_on(managed.atropos.stop_if_running()) {
+                if let Err(err) = tauri::async_runtime::block_on(managed.runtime.shutdown()) {
                     tracing::warn!(target: "moira::atropos", error = %err, "failed_to_request_stop_on_app_exit");
                 }
             }
@@ -74,19 +67,45 @@ async fn initialize_state(app: &AppHandle) -> Result<AppState, String> {
         .path()
         .app_local_data_dir()
         .map_err(|err| format!("failed to resolve Moira app data directory: {err}"))?;
-    let paths = AppPaths::from_root(app_root);
-    paths.ensure_dirs()?;
+    let runtime = MoiraRuntime::open(MoiraRuntimeConfig {
+        paths: MoiraPaths::from_root(app_root),
+        receiver_bind: parse_endpoint(OTLP_ENDPOINT)?,
+        event_sink: Arc::new(TauriEventSink {
+            app_handle: app.clone(),
+        }),
+        task_spawner: Arc::new(TauriTaskSpawner),
+    })
+    .await
+    .map_err(|error| error.to_string())?;
 
-    let clotho = Arc::new(ClothoService::new(paths.clone()));
-    let lachesis =
-        LachesisService::open(paths.telemetry_db_path(), OTLP_ENDPOINT.to_string()).await?;
-    let atropos = Arc::new(AtroposService::new(paths, clotho.clone(), lachesis.clone()));
-
-    Ok(AppState::new(clotho, lachesis, atropos))
+    Ok(AppState::new(runtime))
 }
 
 fn parse_endpoint(endpoint: &str) -> Result<SocketAddr, String> {
     endpoint
         .parse::<SocketAddr>()
         .map_err(|err| format!("invalid OTLP endpoint `{endpoint}`: {err}"))
+}
+
+struct TauriEventSink {
+    app_handle: AppHandle,
+}
+
+impl MoiraEventSink for TauriEventSink {
+    fn emit(&self, event: MoiraEvent) {
+        match event {
+            MoiraEvent::LachesisUpdated(pulse) => {
+                let _ = self.app_handle.emit(LACHESIS_UPDATED_EVENT, pulse);
+            }
+            MoiraEvent::ResourceStatusChanged(_) | MoiraEvent::CoreSupervisionChanged(_) => {}
+        }
+    }
+}
+
+struct TauriTaskSpawner;
+
+impl MoiraTaskSpawner for TauriTaskSpawner {
+    fn spawn(&self, task: MoiraTask) {
+        tauri::async_runtime::spawn(task);
+    }
 }

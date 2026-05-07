@@ -38,9 +38,9 @@ Verification:
 - Focused tests cover any extracted non-UI logic.
 - The Settings surface has an explicit insertion point for Moira Status and Local Observability sections.
 
-## Slice 2: Runtime API Boundary
+## Slice 2A: Runtime API Boundary Packet
 
-Goal: introduce a host-independent Moira runtime API sized for the Apple Universal minimum Loom and process-local resource status.
+Goal: define the host-independent Moira runtime API sized for the Apple Universal minimum Loom and process-local resource status before moving Rust code.
 
 Candidate shape:
 
@@ -56,20 +56,74 @@ Candidate shape:
 
 Verification:
 
+- Task packet records the current seams, DTO shape, and extraction map.
+- Runtime API keeps Core authority boundaries intact.
+- Slice 2B can start from a bounded file map and verification gate.
+
+Primary artifacts:
+
+- `RUNTIME-API-BOUNDARY.md`
+- `RUNTIME-API-DTO-SKETCH.md`
+- `RUNTIME-API-EXTRACTION-MAP.md`
+
+## Slice 2B: Runtime API Implementation
+
+Goal: introduce the host-independent Rust runtime API and keep the current Tauri app as a thin adapter during the transition.
+
+Status: implemented locally.
+
+Candidate shape:
+
+- `moira/runtime` workspace crate
+- `MoiraRuntime`
+- `MoiraRuntimeConfig`
+- `MoiraPaths`
+- `MoiraEvent`
+- `MoiraEventSink`
+- `MoiraTaskSpawner`
+- typed facades for Clotho, Lachesis, and Atropos commands/queries
+
+Verification:
+
 - Backend compiles with service code reachable through host-independent API.
 - Tauri-specific types live in adapter modules during the transition window.
 - Unit tests can instantiate runtime services through direct Rust test harnesses.
 - Unit tests cover resource-claim success and conflict reporting.
 
-## Slice 3: Moira Runtime Extraction And Tauri Removal Prep
+Implemented verification:
 
-Goal: extract reusable Moira runtime code from the current Tauri app container and prepare full Tauri/Vue removal after Apple coverage.
+- `cargo check --manifest-path moira/runtime/Cargo.toml --locked`
+- `cargo test --manifest-path moira/runtime/Cargo.toml --locked`
+- `cargo check --manifest-path moira/src-tauri/Cargo.toml --locked`
+
+## Slice 2C: Runtime Integration Tests
+
+Goal: add critical public-boundary tests for `moira/runtime` before Apple binding work.
+
+Status: implemented locally.
+
+Coverage:
+
+- runtime open, directory creation, receiver readiness, and resource status
+- receiver bind conflict as `MoiraResourceState::Conflict`
+- Clotho known local build registration plus profile-backed wake preparation
+- Lachesis OTLP ingest through a tonic client, including run/tick/detail projections
+- Atropos wake and graceful stop of a Unix process fixture
+
+Implemented verification:
+
+- `cargo test --manifest-path moira/runtime/Cargo.toml --locked`
+- `cargo check --manifest-path moira/src-tauri/Cargo.toml --locked`
+
+## Slice 3: Tauri Removal Prep
+
+Goal: prepare full Tauri/Vue removal after Apple coverage by shrinking the remaining transitional adapter and frontend dependency surface.
 
 Targets:
 
-- Replace `tauri::AppHandle` event emission with `MoiraEventSink`.
-- Replace `tauri::async_runtime::spawn` with an injected task spawner or Tokio-owned runtime service.
 - Keep command facades thin during the transition.
+- Keep Tauri event/task handling inside adapter code.
+- List remaining Tauri/Vue deletion candidates with Apple replacement coverage.
 
 Verification:
 

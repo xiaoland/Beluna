@@ -1,5 +1,14 @@
 # Open Questions
 
+## Slice 2A Working Answers
+
+1. Minimum stable runtime API: a process-local `MoiraRuntime` handle with explicit paths, receiver configuration, status, shutdown, and owner facades for Clotho, Lachesis, and Atropos.
+2. API organization: use mythic owner facades for the first Rust extraction because the current service boundaries already match them.
+3. Live pulses: represent them as framework-neutral `MoiraEvent` values through an event sink; Apple Universal can start with polling for the first UI slice.
+4. Cancellation and shutdown: expose runtime shutdown that routes Core process cleanup through Atropos and returns resource status.
+5. Resource conflict surface: include OTLP receiver bind state, telemetry store open state, and Atropos supervision state in first runtime status DTOs.
+6. Rust extraction path: create a host-independent `moira/runtime` crate before Swift binding work. This is implemented in Slice 2B.
+
 ## Task Scope
 
 1. Should this issue include wake/stop controls in Apple Universal, or stop at status plus observability browsing?

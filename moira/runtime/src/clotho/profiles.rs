@@ -107,14 +107,14 @@ mod tests {
 
     use uuid::Uuid;
 
-    use crate::app::state::AppPaths;
+    use crate::MoiraPaths;
 
     use super::{super::model::SaveProfileDocumentRequest, ClothoService};
 
     #[test]
     fn save_list_and_load_profile_documents_round_trip() {
         let sandbox = TestSandbox::new();
-        let paths = AppPaths::from_root(sandbox.root.clone());
+        let paths = MoiraPaths::from_root(sandbox.root.clone());
         paths.ensure_dirs().expect("app paths should initialize");
 
         let service = ClothoService::new(paths);
@@ -145,7 +145,7 @@ mod tests {
     #[test]
     fn list_profile_documents_skips_non_jsonc_files() {
         let sandbox = TestSandbox::new();
-        let paths = AppPaths::from_root(sandbox.root.clone());
+        let paths = MoiraPaths::from_root(sandbox.root.clone());
         paths.ensure_dirs().expect("app paths should initialize");
 
         fs::write(paths.profiles_dir().join("notes.txt"), "ignore").expect("fixture should write");

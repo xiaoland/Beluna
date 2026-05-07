@@ -1047,7 +1047,7 @@ mod tests {
     use tar::{Builder, Header};
     use uuid::Uuid;
 
-    use crate::app::state::AppPaths;
+    use crate::MoiraPaths;
 
     use super::*;
 
@@ -1061,7 +1061,7 @@ mod tests {
         );
         let cargo_bin = sandbox.create_fake_cargo();
 
-        let paths = AppPaths::from_root(sandbox.root.join("app-data"));
+        let paths = MoiraPaths::from_root(sandbox.root.join("app-data"));
         paths.ensure_dirs().expect("app paths should initialize");
         let service = ClothoService::with_dependencies(
             paths,
@@ -1110,7 +1110,7 @@ mod tests {
     #[tokio::test]
     async fn install_published_release_creates_isolated_manifest_and_resolves() {
         let sandbox = TestSandbox::new();
-        let paths = AppPaths::from_root(sandbox.root.join("app-data"));
+        let paths = MoiraPaths::from_root(sandbox.root.join("app-data"));
         paths.ensure_dirs().expect("app paths should initialize");
 
         let archive_name = archive_asset_name(SUPPORTED_RELEASE_TARGET);
@@ -1166,7 +1166,7 @@ mod tests {
     #[tokio::test]
     async fn install_published_release_rejects_checksum_mismatch() {
         let sandbox = TestSandbox::new();
-        let paths = AppPaths::from_root(sandbox.root.join("app-data"));
+        let paths = MoiraPaths::from_root(sandbox.root.join("app-data"));
         paths.ensure_dirs().expect("app paths should initialize");
 
         let archive_name = archive_asset_name(SUPPORTED_RELEASE_TARGET);
@@ -1197,7 +1197,7 @@ mod tests {
     #[tokio::test]
     async fn install_published_release_rejects_archive_without_executable() {
         let sandbox = TestSandbox::new();
-        let paths = AppPaths::from_root(sandbox.root.join("app-data"));
+        let paths = MoiraPaths::from_root(sandbox.root.join("app-data"));
         paths.ensure_dirs().expect("app paths should initialize");
 
         let archive_name = archive_asset_name(SUPPORTED_RELEASE_TARGET);
@@ -1229,7 +1229,7 @@ mod tests {
     #[test]
     fn register_and_prepare_known_local_build_round_trip() {
         let sandbox = TestSandbox::new();
-        let paths = AppPaths::from_root(sandbox.root.join("app-data"));
+        let paths = MoiraPaths::from_root(sandbox.root.join("app-data"));
         paths.ensure_dirs().expect("app paths should initialize");
 
         let executable_path = sandbox.create_file("fixtures/builds/dev-core/bin/beluna");

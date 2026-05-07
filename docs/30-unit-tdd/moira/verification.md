@@ -19,17 +19,24 @@
 
 ## Rust Build Checks
 
-1. Local Moira backend verification passes with `cargo check --manifest-path moira/src-tauri/Cargo.toml --locked`.
-2. DuckDB bundled verification is explicit through `cargo check --manifest-path moira/src-tauri/Cargo.toml --locked --features duckdb-bundled`.
-3. Cargo metadata for the default Moira feature set resolves DuckDB with the prebuilt DuckDB path.
-4. Cargo metadata with `--features duckdb-bundled` resolves `duckdb/bundled` and `libduckdb-sys/bundled`.
+1. Local Moira runtime verification passes with `cargo check --manifest-path moira/runtime/Cargo.toml --locked`.
+2. Local Moira runtime tests pass with `cargo test --manifest-path moira/runtime/Cargo.toml --locked`.
+3. Transitional Tauri adapter verification passes with `cargo check --manifest-path moira/src-tauri/Cargo.toml --locked`.
+4. DuckDB bundled verification is explicit through the runtime and adapter checks with `--features duckdb-bundled`.
+5. Cargo metadata for the default Moira feature set resolves DuckDB with the prebuilt DuckDB path.
+6. Cargo metadata with `--features duckdb-bundled` resolves `duckdb/bundled` and `libduckdb-sys/bundled`.
 
 ## Embedded Runtime Checks
 
 1. Moira backend runtime can be constructed from host-provided paths.
-2. Apple Universal can consume the narrow Moira host API needed for minimum Loom.
-3. Process-local resource conflicts surface as runtime status.
-4. Body endpoint socket discovery remains usable when Core is already listening from another launch path.
+2. `MoiraRuntime` reports receiver bind conflicts through resource status.
+3. `moira/runtime/tests/runtime_open.rs` covers runtime open, directory creation, receiver readiness, and receiver bind conflict status.
+4. `moira/runtime/tests/clotho_prepare.rs` covers Clotho registration and profile-backed wake preparation through the public runtime boundary.
+5. `moira/runtime/tests/lachesis_ingest.rs` covers OTLP ingest through a tonic client and verifies run/tick/detail projections.
+6. `moira/runtime/tests/atropos_supervision.rs` covers Unix process wake and graceful stop through Atropos.
+7. Apple Universal can consume the narrow Moira host API needed for minimum Loom.
+8. Process-local resource conflicts surface as runtime status.
+9. Body endpoint socket discovery remains usable when Core is already listening from another launch path.
 
 ## Observability Checks
 

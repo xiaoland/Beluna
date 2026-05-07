@@ -3,7 +3,7 @@ use std::{process::ExitStatus, sync::Arc, time::Duration};
 use tokio::{process::Child, sync::Mutex, time::sleep};
 
 use crate::{
-    app::state::AppPaths,
+    MoiraPaths, MoiraTaskSpawner,
     clotho::{
         ClothoService,
         model::{PreparedRuntimeWakeInput, WakeInputRequest},
@@ -19,9 +19,10 @@ const MONITOR_INTERVAL: Duration = Duration::from_millis(250);
 
 pub struct AtroposService {
     #[allow(dead_code)]
-    paths: AppPaths,
+    paths: MoiraPaths,
     clotho: Arc<ClothoService>,
     lachesis: Arc<LachesisService>,
+    task_spawner: Arc<dyn MoiraTaskSpawner>,
     state: Arc<Mutex<RuntimeState>>,
 }
 struct RuntimeState {
@@ -74,20 +75,22 @@ impl RuntimeState {
 }
 impl AtroposService {
     pub fn new(
-        paths: AppPaths,
+        paths: MoiraPaths,
         clotho: Arc<ClothoService>,
         lachesis: Arc<LachesisService>,
+        task_spawner: Arc<dyn MoiraTaskSpawner>,
     ) -> Self {
         Self {
             paths,
             clotho,
             lachesis,
+            task_spawner,
             state: Arc::new(Mutex::new(RuntimeState::new())),
         }
     }
 
     #[allow(dead_code)]
-    pub fn paths(&self) -> &AppPaths {
+    pub fn paths(&self) -> &MoiraPaths {
         &self.paths
     }
     pub async fn runtime_status(&self) -> Result<RuntimeStatus, String> {
@@ -230,7 +233,7 @@ impl AtroposService {
     }
     fn spawn_monitor(&self) {
         let state = self.state.clone();
-        tauri::async_runtime::spawn(async move {
+        self.task_spawner.spawn(Box::pin(async move {
             loop {
                 let should_stop = {
                     let mut guard = state.lock().await;
@@ -242,7 +245,7 @@ impl AtroposService {
                 }
                 sleep(MONITOR_INTERVAL).await;
             }
-        });
+        }));
     }
 }
 

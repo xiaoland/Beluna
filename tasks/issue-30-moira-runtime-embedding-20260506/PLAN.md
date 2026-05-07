@@ -39,7 +39,7 @@
   - Moira runtime API shape forces Core config schema authority into Moira.
   - Runtime resource conflicts become ambiguous in the Apple UI.
   - Platform adapter boundaries become unclear enough to block shared runtime testing.
-  - A deletion slice would leave the repo with no working operator path before the Apple host is ready.
+  - A deletion slice would remove the working operator path before the Apple host is ready.
 - Promotion Candidates:
   - Product TDD update: unit/container mapping separates Moira as a technical unit from its former Tauri container.
   - Product TDD update: endpoint clients become Beluna Human Interface clients where they host human-facing operation.
@@ -64,3 +64,7 @@
   - Moira backend remains the owner of future sandbox and ledger supervision, mediated by platform adapters.
 - final outcome:
   - Slice 0 promoted the architecture restatement into Product TDD, Moira Unit TDD, Apple Universal Unit TDD, and local AGENTS files.
+  - Slice 1 prepared Apple Universal Settings boundaries and removed process singleton guarding.
+  - Slice 2A recorded the Moira runtime API boundary, DTO sketch, and extraction map as task-packet artifacts.
+  - Slice 2B introduced `moira/runtime`, moved Clotho/Lachesis/Atropos backend owners into it, and turned `moira/src-tauri` into a transitional adapter over `MoiraRuntime`.
+  - Slice 2C added public-boundary integration tests for runtime open/status, receiver conflict, Clotho wake preparation, Lachesis OTLP ingest, and Atropos process supervision.

@@ -2818,6 +2818,16 @@ dependencies = [
 name = "moira"
 version = "0.1.0"
 dependencies = [
+ "moira-runtime",
+ "tauri",
+ "tauri-build",
+ "tracing",
+]
+
+[[package]]
+name = "moira-runtime"
+version = "0.1.0"
+dependencies = [
  "async-trait",
  "dotenvy",
  "duckdb",
@@ -2830,8 +2840,6 @@ dependencies = [
  "serde_json",
  "sha2",
  "tar",
- "tauri",
- "tauri-build",
  "thiserror 2.0.18",
  "time",
  "tokio",

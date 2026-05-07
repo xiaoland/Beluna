@@ -2,7 +2,7 @@
 
 ## Startup
 
-1. A host app creates a Moira runtime with explicit local paths and platform adapter selection.
+1. A host app creates `MoiraRuntime` with explicit local paths, receiver bind address, event sink, task spawner, and later platform adapter selection.
 2. The runtime loads local Clotho preparation state and Atropos supervision state.
 3. The runtime initializes the local OTLP logs receiver and storage backend.
 4. The host exposes Loom UI after Moira runtime status and resource status are available.
@@ -29,15 +29,16 @@
 1. Local Rust builds share the repo-root Cargo target directory configured by `.cargo/config.toml`.
 2. Local Moira backend builds use the prebuilt DuckDB library path through `DUCKDB_DOWNLOAD_LIB=1`.
 3. macOS debug Moira binaries embed `@loader_path/deps` as a runtime search path so the prebuilt DuckDB dylib in `target/debug/deps` is visible to VSCode Launch and direct binary startup.
-4. Routine local backend verification runs `cargo check --manifest-path moira/src-tauri/Cargo.toml --locked` from the repo root.
-5. Source-bundled DuckDB verification runs `cargo check --manifest-path moira/src-tauri/Cargo.toml --locked --features duckdb-bundled`.
-6. Local Rust storage preview runs `bash scripts/rust-storage-maintenance.sh sweep-all-dry-run`.
-7. Local Rust storage cleanup runs `bash scripts/rust-storage-maintenance.sh sweep-all`.
+4. Routine runtime verification runs `cargo check --manifest-path moira/runtime/Cargo.toml --locked` and `cargo test --manifest-path moira/runtime/Cargo.toml --locked`.
+5. Routine Tauri adapter verification runs `cargo check --manifest-path moira/src-tauri/Cargo.toml --locked` from the repo root.
+6. Source-bundled DuckDB verification runs the same runtime and adapter checks with `--features duckdb-bundled`.
+7. Local Rust storage preview runs `bash scripts/rust-storage-maintenance.sh sweep-all-dry-run`.
+8. Local Rust storage cleanup runs `bash scripts/rust-storage-maintenance.sh sweep-all`.
 
 ## Embedded Runtime Flow
 
-1. Apple Universal embeds Moira backend as the first Human Interface host.
-2. The first Apple implementation uses process-local Moira runtime.
+1. Apple Universal embeds `moira/runtime` as the first Human Interface host.
+2. The first Apple implementation uses process-local `MoiraRuntime`.
 3. Resource conflicts surface as runtime status.
 4. Body endpoint socket discovery remains available for Core processes started by another process or prior session.
 5. Future Owner/Attach coordination can promote one local Moira authority per user/session or configured scope.

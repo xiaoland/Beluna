@@ -16,13 +16,25 @@ The execution scope for this issue is intentionally narrow: implement the minimu
 - [APPLE-UNIVERSAL-LOOM.md](./APPLE-UNIVERSAL-LOOM.md): minimum Apple Universal Loom scope and UI integration questions.
 - [APPLE-UNIVERSAL-UI-INTEGRATION.md](./APPLE-UNIVERSAL-UI-INTEGRATION.md): Apple Universal navigation, body endpoint, and Moira Loom integration design notes.
 - [APPLE-UNIVERSAL-CLEANUP.md](./APPLE-UNIVERSAL-CLEANUP.md): Apple Universal source cleanup scope before Moira UI integration.
+- [RUNTIME-API-BOUNDARY.md](./RUNTIME-API-BOUNDARY.md): Slice 2A host-independent Moira runtime boundary.
+- [RUNTIME-API-DTO-SKETCH.md](./RUNTIME-API-DTO-SKETCH.md): typed DTO sketch for the runtime host API.
+- [RUNTIME-API-EXTRACTION-MAP.md](./RUNTIME-API-EXTRACTION-MAP.md): current Tauri command/service extraction map.
+- [RUNTIME-API-IMPLEMENTATION.md](./RUNTIME-API-IMPLEMENTATION.md): Slice 2B runtime crate implementation notes and verification.
+- [RUNTIME-INTEGRATION-TESTS.md](./RUNTIME-INTEGRATION-TESTS.md): first critical integration tests for `moira/runtime`.
 - [OPEN-QUESTIONS.md](./OPEN-QUESTIONS.md): unresolved technical and product decisions.
 
 ## Current Packet Status
 
-Mode: Slice 1 Apple Universal source cleanup implemented locally.
+Mode: Slice 2C runtime integration tests completed locally.
 
 Latest local verification:
+
+- `cargo check --manifest-path moira/runtime/Cargo.toml --locked`
+- `cargo test --manifest-path moira/runtime/Cargo.toml --locked`
+- `cargo check --manifest-path moira/src-tauri/Cargo.toml --locked`
+- Result: passed on 2026-05-07.
+
+Previous Apple Universal verification:
 
 - `xcodebuild test -project apple-universal/BelunaApp.xcodeproj -scheme BelunaApp -destination 'platform=macOS' -only-testing:BelunaAppTests`
 - Result: passed on 2026-05-07.

@@ -4,12 +4,14 @@
 
 1. Host runtime API:
 - Embedded Moira backend runtime consumed by Beluna Human Interface hosts.
+- Rust crate: `moira/runtime`.
+- Primary handle: `MoiraRuntime`, opened from host-provided `MoiraRuntimeConfig`.
 - Typed Clotho, Lachesis, and Atropos query/operation surfaces.
-- Runtime status and event/pulse delivery for host-native Loom UI.
+- Runtime status, resource status, and event/pulse delivery for host-native Loom UI.
 - Apple Universal is the first host for the minimum native Loom surface.
 
 2. Transitional desktop entrypoint:
-- Current Tauri/Vue app remains a migration container while backend runtime extraction and Apple coverage land.
+- Current Tauri/Vue app remains a migration container over `moira/runtime` while Apple coverage lands.
 
 3. Artifact preparation interface:
 - GitHub Releases discovery for published Core artifacts.
@@ -48,6 +50,7 @@
 ## Embedding Constraint
 
 1. The host API exposes Moira-owned behavior through typed runtime boundaries.
-2. Apple Universal first slice uses a process-local embedded Moira runtime.
-3. Cross-client Owner/Attach authority coordination belongs to later design.
-4. Host-native Loom UI may choose its own layout while preserving Moira-owned query/control semantics.
+2. Hosts provide explicit Moira paths, receiver bind address, event sink, and task spawner.
+3. Apple Universal first slice uses a process-local embedded Moira runtime.
+4. Cross-client Owner/Attach authority coordination belongs to later design.
+5. Host-native Loom UI may choose its own layout while preserving Moira-owned query/control semantics.

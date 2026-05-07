@@ -8,7 +8,6 @@ use opentelemetry_proto::tonic::{
     common::v1::{AnyValue, KeyValue, any_value::Value as OtlpValue},
 };
 use serde_json::{Map, Value, json};
-use tauri::AppHandle;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use tokio::net::TcpListener;
 use tokio::sync::RwLock;
@@ -17,11 +16,10 @@ use tonic::{Request, Response, Status, transport::Server};
 use uuid::Uuid;
 
 use crate::lachesis::{
-    model::ReceiverStatus,
-    normalize::normalize_export,
-    pulse::{emit_lachesis_updated, empty_ingest_pulse},
+    model::ReceiverStatus, normalize::normalize_export, pulse::empty_ingest_pulse,
     store::LachesisStore,
 };
+use crate::{MoiraEvent, MoiraEventSink};
 
 #[derive(Debug, Clone)]
 pub struct ReceiverSnapshot {
@@ -94,9 +92,9 @@ pub async fn start_otlp_logs_receiver(
     endpoint: SocketAddr,
     receiver: Arc<ReceiverState>,
     store: Arc<LachesisStore>,
-    app_handle: AppHandle,
+    event_sink: Arc<dyn MoiraEventSink>,
 ) {
-    let service = LachesisLogsService::new(receiver.clone(), store, app_handle.clone());
+    let service = LachesisLogsService::new(receiver.clone(), store, event_sink.clone());
     let listener = match TcpListener::bind(endpoint).await {
         Ok(listener) => {
             receiver.mark_listening().await;
@@ -105,7 +103,7 @@ pub async fn start_otlp_logs_receiver(
         Err(err) => {
             let message = format!("OTLP logs receiver failed to bind: {err}");
             receiver.mark_faulted(message).await;
-            emit_lachesis_updated(&app_handle, empty_ingest_pulse());
+            event_sink.emit(MoiraEvent::LachesisUpdated(empty_ingest_pulse()));
             return;
         }
     };
@@ -119,7 +117,7 @@ pub async fn start_otlp_logs_receiver(
         Err(err) => {
             let message = format!("OTLP logs receiver faulted: {err}");
             receiver.mark_faulted(message).await;
-            emit_lachesis_updated(&app_handle, empty_ingest_pulse());
+            event_sink.emit(MoiraEvent::LachesisUpdated(empty_ingest_pulse()));
         }
     }
 }
@@ -127,15 +125,19 @@ pub async fn start_otlp_logs_receiver(
 struct LachesisLogsService {
     receiver: Arc<ReceiverState>,
     store: Arc<LachesisStore>,
-    app_handle: AppHandle,
+    event_sink: Arc<dyn MoiraEventSink>,
 }
 
 impl LachesisLogsService {
-    fn new(receiver: Arc<ReceiverState>, store: Arc<LachesisStore>, app_handle: AppHandle) -> Self {
+    fn new(
+        receiver: Arc<ReceiverState>,
+        store: Arc<LachesisStore>,
+        event_sink: Arc<dyn MoiraEventSink>,
+    ) -> Self {
         Self {
             receiver,
             store,
-            app_handle,
+            event_sink,
         }
     }
 }
@@ -164,13 +166,12 @@ impl LogsService for LachesisLogsService {
                 .await;
         }
 
-        emit_lachesis_updated(
-            &self.app_handle,
+        self.event_sink.emit(MoiraEvent::LachesisUpdated(
             crate::lachesis::model::IngestPulse {
                 touched_run_ids: outcome.touched_run_ids,
                 last_batch_at: outcome.last_batch_at,
             },
-        );
+        ));
 
         Ok(Response::new(ExportLogsServiceResponse {
             partial_success: None,

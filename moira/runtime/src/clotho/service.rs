@@ -4,7 +4,7 @@ use std::{
     sync::Arc,
 };
 
-use crate::app::state::AppPaths;
+use crate::MoiraPaths;
 
 use super::{
     artifacts::{GitHubReleaseProvider, ReleaseProvider},
@@ -13,13 +13,13 @@ use super::{
 };
 
 pub struct ClothoService {
-    paths: AppPaths,
+    paths: MoiraPaths,
     cargo_bin: PathBuf,
     release_provider: Arc<dyn ReleaseProvider>,
 }
 
 impl ClothoService {
-    pub fn new(paths: AppPaths) -> Self {
+    pub fn new(paths: MoiraPaths) -> Self {
         Self::with_dependencies(
             paths,
             PathBuf::from("cargo"),
@@ -28,7 +28,7 @@ impl ClothoService {
     }
 
     pub(super) fn with_dependencies(
-        paths: AppPaths,
+        paths: MoiraPaths,
         cargo_bin: PathBuf,
         release_provider: Arc<dyn ReleaseProvider>,
     ) -> Self {
@@ -39,7 +39,7 @@ impl ClothoService {
         }
     }
 
-    pub fn paths(&self) -> &AppPaths {
+    pub fn paths(&self) -> &MoiraPaths {
         &self.paths
     }
 
