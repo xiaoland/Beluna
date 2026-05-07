@@ -30,7 +30,7 @@ final class ChatViewModel: ObservableObject {
     }
 
     var canApplySocketPath: Bool {
-        let normalized = Self.normalizeSocketPath(socketPathDraft)
+        let normalized = SocketPathSettings.normalize(socketPathDraft)
         return !normalized.isEmpty && normalized != socketPath
     }
 
@@ -113,44 +113,33 @@ final class ChatViewModel: ObservableObject {
     private var handledActionIDs = Set<String>()
     private var handledActionOrder: [String] = []
 
-    private var messageBuffer: [ChatMessage] = []
-    private var visibleMessageRange: Range<Int> = 0..<0
+    private var messageBuffer: MessageBuffer
     private var persistedSenseActMessagesCache: [ChatMessage] = []
 
     private let handledActionLimit = 256
 
-    private static let defaultSocketPath = "/tmp/beluna.sock"
     private static let defaultMessageCapacity = 1000
-    private static let minimumMessageCapacity = 100
-    private static let maximumMessageCapacity = 20_000
+    private nonisolated static let minimumMessageCapacity = 100
+    private nonisolated static let maximumMessageCapacity = 20_000
     private static let messagePageSize = 80
 
-    private static let socketPathDefaultsKey = "beluna.apple-universal.socket_path"
-    private static let autoConnectDefaultsKey = "beluna.apple-universal.auto_connect"
     private static let messageCapacityDefaultsKey = "beluna.apple-universal.message_capacity"
 
     init(socketPath: String? = nil) {
-        let persistedSocketPath = Self.normalizeSocketPath(
-            UserDefaults.standard.string(forKey: Self.socketPathDefaultsKey)
-        )
-        let requestedSocketPath = Self.normalizeSocketPath(socketPath)
-        let resolvedSocketPath = requestedSocketPath.isEmpty ? persistedSocketPath : requestedSocketPath
-        let initialSocketPath = resolvedSocketPath.isEmpty ? Self.defaultSocketPath : resolvedSocketPath
-
-        let persistedAutoConnect = UserDefaults.standard.object(forKey: Self.autoConnectDefaultsKey) as? Bool
-        let initialAutoConnect = persistedAutoConnect ?? !AppRuntimeEnvironment.isXcodeSession
+        let socketSettings = SocketPathSettings.load(requestedSocketPath: socketPath)
 
         let persistedMessageCapacity = Self.normalizeMessageCapacity(
             UserDefaults.standard.object(forKey: Self.messageCapacityDefaultsKey) as? Int
         )
         let initialMessageCapacity = persistedMessageCapacity ?? Self.defaultMessageCapacity
 
-        self.bodyEndpointClient = UnixSocketBodyEndpointClient(socketPath: initialSocketPath)
+        self.bodyEndpointClient = UnixSocketBodyEndpointClient(socketPath: socketSettings.socketPath)
         self.localSenseActHistoryStore = LocalSenseActHistoryStore()
+        self.messageBuffer = MessageBuffer(pageSize: Self.messagePageSize)
 
-        self.socketPath = initialSocketPath
-        self.socketPathDraft = initialSocketPath
-        self.isConnectionEnabled = initialAutoConnect
+        self.socketPath = socketSettings.socketPath
+        self.socketPathDraft = socketSettings.socketPath
+        self.isConnectionEnabled = socketSettings.isConnectionEnabled
 
         self.messageCapacity = initialMessageCapacity
         self.messageCapacityDraft = String(initialMessageCapacity)
@@ -161,7 +150,7 @@ final class ChatViewModel: ObservableObject {
         appendBufferedMessage(
             ChatMessage(
                 role: .system,
-                text: initialMessageText(initialAutoConnect: initialAutoConnect)
+                text: initialMessageText(initialAutoConnect: socketSettings.isConnectionEnabled)
             ),
             preferredAutoScroll: true
         )
@@ -193,7 +182,7 @@ final class ChatViewModel: ObservableObject {
     }
 
     func applySocketPathDraft() {
-        let normalized = Self.normalizeSocketPath(socketPathDraft)
+        let normalized = SocketPathSettings.normalize(socketPathDraft)
         guard !normalized.isEmpty, normalized != socketPath else {
             return
         }
@@ -221,8 +210,7 @@ final class ChatViewModel: ObservableObject {
         messageCapacity = normalized
         messageCapacityDraft = String(normalized)
         persistMessageBufferSettings()
-        trimMessageBufferToCapacity(preferLatestWindow: true)
-        publishVisibleMessages(autoScrollToLatest: true)
+        applyMessageWindow(messageBuffer.setCapacity(normalized))
         persistLocalSenseActHistoryIfNeeded()
         appendSystemMessage("Message buffer capacity set to \(normalized).")
     }
@@ -232,12 +220,10 @@ final class ChatViewModel: ObservableObject {
 
         handledActionIDs.removeAll(keepingCapacity: false)
         handledActionOrder.removeAll(keepingCapacity: false)
-        messageBuffer.removeAll(keepingCapacity: false)
-        visibleMessageRange = 0..<0
+        applyMessageWindow(messageBuffer.clear())
 
         persistedSenseActMessagesCache.removeAll(keepingCapacity: false)
         persistedSenseActMessageCount = 0
-        publishVisibleMessages(autoScrollToLatest: false)
 
         appendSystemMessage("Local Sense/Act history was cleared.")
     }
@@ -487,128 +473,36 @@ final class ChatViewModel: ObservableObject {
     }
 
     private func appendBufferedMessage(_ message: ChatMessage, preferredAutoScroll: Bool? = nil) {
-        let shouldAutoScroll = preferredAutoScroll ?? isShowingLatestMessageWindow
-        let previousVisibleCount = visibleMessageRange.count
-
-        messageBuffer.append(message)
-        trimMessageBufferToCapacity(preferLatestWindow: shouldAutoScroll)
-
-        if messageBuffer.isEmpty {
-            visibleMessageRange = 0..<0
-            publishVisibleMessages(autoScrollToLatest: false)
-            persistLocalSenseActHistoryIfNeeded()
-            return
-        }
-
-        if shouldAutoScroll || visibleMessageRange.isEmpty {
-            let desiredVisibleCount = max(previousVisibleCount, Self.messagePageSize)
-            let end = messageBuffer.count
-            let start = max(0, end - desiredVisibleCount)
-            visibleMessageRange = start..<end
-            publishVisibleMessages(autoScrollToLatest: true)
-            persistLocalSenseActHistoryIfNeeded()
-            return
-        }
-
-        publishVisibleMessages(autoScrollToLatest: false)
+        let window = messageBuffer.append(
+            message,
+            capacity: messageCapacity,
+            preferredAutoScroll: preferredAutoScroll
+        )
+        applyMessageWindow(window)
         persistLocalSenseActHistoryIfNeeded()
     }
 
     private func loadOlderMessagePageIfNeeded() {
-        guard visibleMessageRange.lowerBound > 0 else {
-            return
-        }
-
-        let newLowerBound = max(0, visibleMessageRange.lowerBound - Self.messagePageSize)
-        visibleMessageRange = newLowerBound..<visibleMessageRange.upperBound
-        publishVisibleMessages(autoScrollToLatest: false)
+        applyMessageWindow(messageBuffer.loadOlderPageIfNeeded())
     }
 
     private func loadNewerMessagePageIfNeeded() {
-        guard visibleMessageRange.upperBound < messageBuffer.count else {
-            return
-        }
-
-        let newUpperBound = min(messageBuffer.count, visibleMessageRange.upperBound + Self.messagePageSize)
-        visibleMessageRange = visibleMessageRange.lowerBound..<newUpperBound
-        publishVisibleMessages(autoScrollToLatest: false)
+        applyMessageWindow(messageBuffer.loadNewerPageIfNeeded())
     }
 
-    private func trimMessageBufferToCapacity(preferLatestWindow: Bool) {
-        guard messageBuffer.count > messageCapacity else {
-            return
-        }
-
-        let overflow = messageBuffer.count - messageCapacity
-        messageBuffer.removeFirst(overflow)
-
-        let shiftedLowerBound = max(0, visibleMessageRange.lowerBound - overflow)
-        let shiftedUpperBound = max(shiftedLowerBound, visibleMessageRange.upperBound - overflow)
-        visibleMessageRange = shiftedLowerBound..<min(shiftedUpperBound, messageBuffer.count)
-
-        guard !messageBuffer.isEmpty else {
-            visibleMessageRange = 0..<0
-            return
-        }
-
-        if preferLatestWindow {
-            let desiredVisibleCount = max(visibleMessageRange.count, Self.messagePageSize)
-            let end = messageBuffer.count
-            let start = max(0, end - desiredVisibleCount)
-            visibleMessageRange = start..<end
-            return
-        }
-
-        if visibleMessageRange.isEmpty {
-            let end = min(messageBuffer.count, Self.messagePageSize)
-            let start = max(0, end - Self.messagePageSize)
-            visibleMessageRange = start..<end
-        }
-    }
-
-    private func publishVisibleMessages(autoScrollToLatest: Bool) {
-        guard !messageBuffer.isEmpty else {
-            visibleMessageRange = 0..<0
-            messages = []
-            bufferedMessageCount = 0
-            visibleMessageCount = 0
-            hasOlderBufferedMessages = false
-            hasNewerBufferedMessages = false
-            return
-        }
-
-        let clampedLowerBound = min(max(0, visibleMessageRange.lowerBound), messageBuffer.count)
-        let clampedUpperBound = min(max(clampedLowerBound, visibleMessageRange.upperBound), messageBuffer.count)
-        visibleMessageRange = clampedLowerBound..<clampedUpperBound
-
-        messages = Array(messageBuffer[visibleMessageRange])
-        bufferedMessageCount = messageBuffer.count
-        visibleMessageCount = messages.count
-        hasOlderBufferedMessages = visibleMessageRange.lowerBound > 0
-        hasNewerBufferedMessages = visibleMessageRange.upperBound < messageBuffer.count
-
-        if autoScrollToLatest, let latestID = messages.last?.id {
+    private func applyMessageWindow(_ window: MessageBufferWindow) {
+        messages = window.messages
+        bufferedMessageCount = window.bufferedMessageCount
+        visibleMessageCount = window.visibleMessageCount
+        hasOlderBufferedMessages = window.hasOlderBufferedMessages
+        hasNewerBufferedMessages = window.hasNewerBufferedMessages
+        if let latestID = window.autoScrollMessageID {
             latestMessageIDForAutoScroll = latestID
         }
     }
 
-    private var isShowingLatestMessageWindow: Bool {
-        visibleMessageRange.upperBound == messageBuffer.count
-    }
-
     private func restoreMessageBuffer(from restoredMessages: [ChatMessage]) {
-        guard !restoredMessages.isEmpty else {
-            persistedSenseActMessagesCache = []
-            persistedSenseActMessageCount = 0
-            return
-        }
-
-        messageBuffer = restoredMessages
-        let end = messageBuffer.count
-        let start = max(0, end - Self.messagePageSize)
-        visibleMessageRange = start..<end
-        publishVisibleMessages(autoScrollToLatest: false)
-
+        applyMessageWindow(messageBuffer.restore(restoredMessages))
         persistedSenseActMessagesCache = currentPersistedSenseActMessages()
         persistedSenseActMessageCount = persistedSenseActMessagesCache.count
     }
@@ -626,20 +520,18 @@ final class ChatViewModel: ObservableObject {
     }
 
     private func currentPersistedSenseActMessages() -> [ChatMessage] {
-        messageBuffer.filter { $0.signalOrigin == .sense || $0.signalOrigin == .act }
+        messageBuffer.persistedSenseActMessages
     }
 
     private func persistConnectionSettings() {
-        UserDefaults.standard.set(socketPath, forKey: Self.socketPathDefaultsKey)
-        UserDefaults.standard.set(isConnectionEnabled, forKey: Self.autoConnectDefaultsKey)
+        SocketPathSettings.persist(
+            socketPath: socketPath,
+            isConnectionEnabled: isConnectionEnabled
+        )
     }
 
     private func persistMessageBufferSettings() {
         UserDefaults.standard.set(messageCapacity, forKey: Self.messageCapacityDefaultsKey)
-    }
-
-    private nonisolated static func normalizeSocketPath(_ value: String?) -> String {
-        (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private nonisolated static func normalizeMessageCapacity(_ value: String?) -> Int? {
@@ -685,7 +577,7 @@ final class ChatViewModel: ObservableObject {
     }
 
     private func appendMessage(role: ChatRole, text: String) {
-        if let last = messageBuffer.last, last.role == role, last.text == text {
+        if messageBuffer.lastMessageMatches(role: role, text: text) {
             return
         }
 

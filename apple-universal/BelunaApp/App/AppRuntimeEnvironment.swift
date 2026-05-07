@@ -14,8 +14,4 @@ enum AppRuntimeEnvironment {
         }
         return false
     }
-
-    static var needsManualActivationPolicy: Bool {
-        !Bundle.main.bundlePath.hasSuffix(".app")
-    }
 }

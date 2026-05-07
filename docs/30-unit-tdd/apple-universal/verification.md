@@ -14,6 +14,7 @@ Cross-unit contracts, system authority ownership, and decomposition policy live 
 
 2. Protocol compatibility contract:
 - Request/response encoding/decoding and correlation metadata handling remain typed and explicit.
+- Core-assigned runtime endpoint id behavior remains covered when endpoint-name handling changes.
 - Evidence homes: `apple-universal/BelunaApp/BodyEndpoint/*`, protocol decode/encode tests.
 
 3. Local history contract:
@@ -24,12 +25,16 @@ Cross-unit contracts, system authority ownership, and decomposition policy live 
 - Network/protocol operations remain off main thread and interaction surfaces stay responsive.
 - Evidence homes: runtime behavior checks and targeted unit/UI tests for reconnect and large-history scenarios.
 
-5. Minimum Moira Loom contract:
+5. Multi-instance contract:
+- App launch must allow concurrent Apple Universal instances. Runtime resource conflicts must surface through Core/Moira status rather than app process termination.
+- Evidence homes: app launch smoke checks, UI test launch checks, and future multi-instance endpoint registration tests.
+
+6. Minimum Moira Loom contract:
 - Settings-integrated operations panel shows embedded Moira runtime status, receiver status, and resource conflicts.
 - Wake list, tick list, and selected tick raw-first inspection are available through Moira host APIs.
 - Evidence homes: `apple-universal/BelunaApp/App` or future Apple UI owners, Moira binding DTO tests, and targeted view-state tests.
 
-6. Socket discovery contract:
+7. Socket discovery contract:
 - Configured path, recent successful path, app-local runtime candidate, deployment-supported platform candidates, and Moira-reported paths are available where supported.
 - Evidence homes: socket discovery model tests and settings UI smoke checks.
 

@@ -60,8 +60,7 @@ struct BelunaAppTests {
             Issue.record("missing sense descriptor \(bodyEndpointSensePresentMessageTextSuccessDescriptorID)")
             return
         }
-        #expect(successSense.payloadSchema.objectValue?["type"]?.stringValue == "object")
-        #expect(successSense.payloadSchema.objectValue?["additionalProperties"] == nil)
+        #expect(successSense.payloadSchema.objectValue?["type"]?.stringValue == "string")
 
         guard let failureSense = descriptor(
             withID: bodyEndpointSensePresentMessageTextFailureDescriptorID,
@@ -70,8 +69,7 @@ struct BelunaAppTests {
             Issue.record("missing sense descriptor \(bodyEndpointSensePresentMessageTextFailureDescriptorID)")
             return
         }
-        #expect(failureSense.payloadSchema.objectValue?["type"]?.stringValue == "object")
-        #expect(failureSense.payloadSchema.objectValue?["additionalProperties"] == nil)
+        #expect(failureSense.payloadSchema.objectValue?["type"]?.stringValue == "string")
     }
 
     @Test func actAckEnvelopeMatchesCoreContract() throws {
@@ -84,7 +82,7 @@ struct BelunaAppTests {
         #expect(envelope.timestamp > 0)
     }
 
-    @Test func succeededSenseUsesMetadataForActID() throws {
+    @Test func succeededSenseUsesBodyActID() throws {
         let action = InboundActWire(
             actID: "0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a",
             endpointID: runtimeBodyEndpointID,
@@ -96,11 +94,11 @@ struct BelunaAppTests {
         #expect(envelope.method == "sense")
         #expect(envelope.body.neuralSignalDescriptorID == bodyEndpointSensePresentMessageTextSuccessDescriptorID)
         #expect(UUID(uuidString: envelope.body.senseID) != nil)
-        #expect(envelope.body.payload.objectValue == [:])
-        #expect(envelope.body.metadata?.objectValue?["act_instance_id"]?.stringValue == action.actID)
+        #expect(envelope.body.payload == "presentation_result status=success")
+        #expect(envelope.body.actInstanceID == action.actID)
     }
 
-    @Test func rejectedSenseIncludesReasonCodeAndMetadataActID() throws {
+    @Test func rejectedSenseIncludesReasonCodeAndBodyActID() throws {
         let action = InboundActWire(
             actID: "0194f1f3-cc2f-7aa7-8d4c-486f9f2f7c0a",
             endpointID: runtimeBodyEndpointID,
@@ -112,8 +110,8 @@ struct BelunaAppTests {
         #expect(envelope.method == "sense")
         #expect(envelope.body.neuralSignalDescriptorID == bodyEndpointSensePresentMessageTextFailureDescriptorID)
         #expect(UUID(uuidString: envelope.body.senseID) != nil)
-        #expect(envelope.body.payload.objectValue?["reason_code"]?.stringValue == "invalid_payload")
-        #expect(envelope.body.metadata?.objectValue?["act_instance_id"]?.stringValue == action.actID)
+        #expect(envelope.body.payload == "presentation_result status=failure reason_code=invalid_payload")
+        #expect(envelope.body.actInstanceID == action.actID)
     }
 
     @Test func decodesCoreActEnvelope() throws {
@@ -153,8 +151,8 @@ struct BelunaAppTests {
 
         #expect(envelope.method == "sense")
         #expect(envelope.body.neuralSignalDescriptorID == bodyEndpointSenseUserMessageTextDescriptorID)
-        #expect(envelope.body.payload.stringValue == "hello")
-        #expect(envelope.body.metadata == nil)
+        #expect(envelope.body.payload == "hello")
+        #expect(envelope.body.actInstanceID == nil)
         #expect(uuidVersion(senseUUID) == 4)
     }
 
@@ -183,6 +181,71 @@ struct BelunaAppTests {
     @Test func extractPresentedTextReturnsTrimmedText() throws {
         let text = try extractPresentedText(from: .string("  hello  "))
         #expect(text == "hello")
+    }
+
+    @Test func messageBufferRestoresLatestWindowAndLoadsOlderMessages() {
+        var buffer = MessageBuffer(pageSize: 3)
+        let messages = (0..<6).map { index in
+            ChatMessage(role: .user, text: "message-\(index)")
+        }
+
+        var window = buffer.restore(messages)
+        #expect(window.messages.map(\.text) == ["message-3", "message-4", "message-5"])
+        #expect(window.bufferedMessageCount == 6)
+        #expect(window.visibleMessageCount == 3)
+        #expect(window.hasOlderBufferedMessages)
+        #expect(!window.hasNewerBufferedMessages)
+
+        window = buffer.loadOlderPageIfNeeded()
+        #expect(window.messages.map(\.text) == [
+            "message-0",
+            "message-1",
+            "message-2",
+            "message-3",
+            "message-4",
+            "message-5"
+        ])
+        #expect(!window.hasOlderBufferedMessages)
+        #expect(!window.hasNewerBufferedMessages)
+    }
+
+    @Test func messageBufferTrimsToCapacityAndKeepsPersistedSenseActMessages() {
+        var buffer = MessageBuffer(pageSize: 2)
+
+        _ = buffer.append(ChatMessage(role: .system, text: "system"), capacity: 3)
+        _ = buffer.append(ChatMessage(role: .user, signalOrigin: .sense, text: "sense"), capacity: 3)
+        _ = buffer.append(ChatMessage(role: .assistant, signalOrigin: .act, text: "act"), capacity: 3)
+        let window = buffer.append(ChatMessage(role: .user, signalOrigin: .sense, text: "latest"), capacity: 3)
+
+        #expect(window.messages.map(\.text) == ["act", "latest"])
+        #expect(window.bufferedMessageCount == 3)
+        #expect(buffer.persistedSenseActMessages.map(\.text) == ["sense", "act", "latest"])
+    }
+
+    @Test func socketPathSettingsUsesRequestedPathAndPersistsSelection() {
+        let suiteName = "BelunaAppTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        var settings = SocketPathSettings.load(
+            requestedSocketPath: "  /tmp/requested.sock  ",
+            userDefaults: defaults
+        )
+        #expect(settings.socketPath == "/tmp/requested.sock")
+
+        SocketPathSettings.persist(
+            socketPath: "/tmp/persisted.sock",
+            isConnectionEnabled: false,
+            userDefaults: defaults
+        )
+        settings = SocketPathSettings.load(
+            requestedSocketPath: nil,
+            userDefaults: defaults
+        )
+        #expect(settings.socketPath == "/tmp/persisted.sock")
+        #expect(!settings.isConnectionEnabled)
     }
 
     private func uuidVersion(_ uuid: UUID) -> Int {

@@ -20,6 +20,18 @@ The execution scope for this issue is intentionally narrow: implement the minimu
 
 ## Current Packet Status
 
-Mode: Slice 0 durable restatement applied.
+Mode: Slice 1 Apple Universal source cleanup implemented locally.
+
+Latest local verification:
+
+- `xcodebuild test -project apple-universal/BelunaApp.xcodeproj -scheme BelunaApp -destination 'platform=macOS' -only-testing:BelunaAppTests`
+- Result: passed on 2026-05-07.
+- Real app smoke test with Computer Use: app launched from the Xcode build product, main window rendered, Settings opened through the toolbar gear button, and Connection / Chat / Status / Moira sections rendered.
+
+Full scheme note:
+
+- `xcodebuild test -project apple-universal/BelunaApp.xcodeproj -scheme BelunaApp -destination 'platform=macOS'`
+- Result: passed on 2026-05-07 after removing Apple Universal process singleton guarding.
+- Follow-up decision: Apple Universal process singleton guarding was removed. Core/Spine-assigned runtime endpoint ids now carry the multi-instance disambiguation responsibility.
 
 This packet is tactical. Durable truths should be promoted into Product TDD and affected Unit TDD docs after human confirmation.

@@ -6,14 +6,9 @@
 //
 
 import SwiftUI
-import AppKit
 
 @main
 struct BelunaAppApp: App {
-    init() {
-        AppRuntimeGuard.shared.bootstrapOrTerminate()
-    }
-
     @StateObject private var viewModel = ChatViewModel()
 
     var body: some Scene {

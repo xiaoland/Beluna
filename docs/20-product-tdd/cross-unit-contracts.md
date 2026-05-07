@@ -16,6 +16,8 @@ System-level contracts between units are authoritative here.
 3. Identity contract
 - Endpoint and signal identity remains explicit, including fully qualified signal IDs.
 - Correlated result senses include `act_instance_id` correlation semantics.
+- Body endpoint clients submit `endpoint_name` during auth. Core/Spine assigns the runtime `body_endpoint_id` used for descriptor registration, sense attribution, and act routing.
+- Multiple Human Interface client processes may register the same `endpoint_name`; runtime routing remains disambiguated by Core-assigned endpoint ids.
 
 4. Configuration contract
 - `core` typed config boundary is the shape authority.

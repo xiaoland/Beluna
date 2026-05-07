@@ -23,10 +23,9 @@
 ## Runtime Multiplicity
 
 1. Which resource conflicts should the Apple minimum UI surface: OTLP receiver bind, DuckDB write access, Atropos process ownership, or all of them?
-2. Should Apple Universal keep its current single-instance guard for the first task implementation?
-3. Which Core socket candidates should the body endpoint UI discover by default?
-4. Should socket discovery include configured path, recent successful path, `/var/run/beluna.sock`-style platform candidates, and app-local runtime candidates?
-5. Which issue should own future Owner/Attach authority coordination?
+2. Which Core socket candidates should the body endpoint UI discover by default?
+3. Should socket discovery include configured path, recent successful path, `/var/run/beluna.sock`-style platform candidates, and app-local runtime candidates?
+4. Which issue should own future Owner/Attach authority coordination?
 
 ## Product/UI
 

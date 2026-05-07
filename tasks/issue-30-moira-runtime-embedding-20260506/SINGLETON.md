@@ -24,8 +24,10 @@ This task uses a smaller model:
 - Apple Universal runs a process-local Moira runtime.
 - Attach mode belongs to a later task packet.
 - Multiple clients may each include Moira backend code.
+- Multiple Apple Universal app instances may run concurrently.
 - Resource conflicts are reported through runtime status.
 - Body endpoint socket discovery stays available as a direct client capability.
+- Core/Spine assigns a runtime body endpoint id for each authenticated body endpoint session, even when clients submit the same endpoint name.
 
 For example, Apple Universal can still connect to a configured or discovered Core socket when Core was started by another process.
 
@@ -77,10 +79,9 @@ Reasons:
 ## Future Questions
 
 1. Should the owner be tied to the app process lifetime or a helper process lifetime?
-2. Should Apple Universal keep its current single-instance guard once Moira authority coordination exists?
-3. Should the authority endpoint live under Application Support, Caches, or a runtime directory?
-4. How should stale lock recovery prove the old owner has exited?
-5. Should attach-mode calls use a private Unix socket protocol, XPC on macOS, or a Rust-owned IPC protocol?
+2. Should the authority endpoint live under Application Support, Caches, or a runtime directory?
+3. How should stale lock recovery prove the old owner has exited?
+4. Should attach-mode calls use a private Unix socket protocol, XPC on macOS, or a Rust-owned IPC protocol?
 
 ## Current Task Verification Ideas
 

@@ -14,6 +14,7 @@ Beluna Apple Universal is the Apple ecosystem Beluna Human Interface.
 - Core retains runtime behavior, endpoint protocol authority, and observability emission semantics.
 - Moira retains local preparation, supervision, observability ingestion/storage/query/projection, and future platform adapter semantics.
 - Treat socket protocol compatibility as a contract; prefer explicit typed request/response mapping.
+- Allow multiple Apple Universal app instances; Core-assigned runtime endpoint ids disambiguate authenticated body endpoint sessions.
 - Keep UI responsive: socket I/O, Moira runtime calls, and parsing stay off the main thread.
 - Add tests for protocol decoding/encoding and connection lifecycle behavior where practical.
 
@@ -35,6 +36,7 @@ Beluna Apple Universal is the Apple ecosystem Beluna Human Interface.
 - Connection lifecycle and reconnection behavior under failure.
 - Main-thread responsiveness under socket I/O and parsing load.
 - Local persistence and history pagination behavior for large chat state.
+- Multiple app instances sharing local settings/history while Core assigns distinct runtime endpoint ids.
 - Settings-integrated Moira Loom ownership boundaries.
 - Resource conflict presentation for embedded process-local Moira runtime.
 

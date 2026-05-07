@@ -1,6 +1,7 @@
 # SwiftPM/Xcode build output
 .swiftpm/
 .build/
+.derived-data/
 build/
 DerivedData/
 

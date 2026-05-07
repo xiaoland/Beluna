@@ -15,6 +15,7 @@
 3. Apple Universal owns Apple-native presentation, interaction flow, endpoint socket discovery, and app-local UI state.
 4. Keep protocol compatibility explicit and typed.
 5. Keep socket I/O, Moira runtime calls, and decoding off the main thread to preserve UI responsiveness.
+6. Allow multiple Apple Universal app instances. Core/Spine assigns runtime body endpoint ids for each authenticated socket session.
 
 ## First Moira Loom Shape
 
@@ -55,3 +56,4 @@ Apple Universal source cleanup is part of the Moira integration path.
 3. Body endpoint wire protocol stays under `BodyEndpoint`.
 4. Moira DTOs and runtime calls belong under a Moira-owned app namespace.
 5. `ContentView.swift` is a placeholder cleanup candidate because app entry currently uses `ChatView`.
+6. App process singleton guards are outside the Apple Universal boundary. Runtime resource conflicts belong to Core or Moira-owned coordination surfaces.

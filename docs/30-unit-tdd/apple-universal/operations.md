@@ -9,3 +9,4 @@
 7. Surface Moira runtime resource conflicts as operator-visible status.
 8. Keep body endpoint connection usable when Core is already listening from another launch path.
 9. Keep Moira operations UI grouped with connection and runtime status in the first slice.
+10. Permit multiple Apple Universal instances; rely on Core-assigned endpoint ids and future user-configured endpoint names for runtime disambiguation.

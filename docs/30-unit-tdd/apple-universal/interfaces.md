@@ -5,6 +5,8 @@
 1. Unix socket NDJSON client to Core endpoint.
 2. Endpoint identity and descriptor registration for chat presentation.
 3. Correlated result senses include `act_instance_id` metadata/body field as defined by protocol contract.
+4. Apple Universal submits a configured endpoint name; Core/Spine returns an assigned runtime endpoint id through routing behavior.
+5. Multiple app instances may authenticate concurrently, each receiving a distinct Core-assigned runtime endpoint id.
 
 ## Moira Host Interface
 
