@@ -4,14 +4,18 @@ use std::{
     os::raw::c_char,
     path::PathBuf,
     ptr,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, MutexGuard},
 };
 
 use moira_runtime::{
-    MoiraPaths, MoiraRuntime, MoiraRuntimeConfig, NoopEventSink, TokioTaskSpawner,
+    MoiraLoomSelection, MoiraPaths, MoiraRuntime, MoiraRuntimeConfig, NoopEventSink,
+    TokioTaskSpawner,
 };
 
 static RUNTIME: Mutex<Option<FfiRuntime>> = Mutex::new(None);
+
+#[cfg(test)]
+mod tests;
 
 struct FfiRuntime {
     root_dir: PathBuf,
@@ -31,6 +35,30 @@ pub extern "C" fn moira_runtime_status_json(
     clear_out(out_error);
 
     match status_json(root_dir, receiver_bind) {
+        Ok(json) => {
+            write_out(out_json, json);
+            0
+        }
+        Err(error) => {
+            write_out(out_error, error);
+            1
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn moira_runtime_loom_json(
+    root_dir: *const c_char,
+    receiver_bind: *const c_char,
+    selected_run_id: *const c_char,
+    selected_tick: *const c_char,
+    out_json: *mut *mut c_char,
+    out_error: *mut *mut c_char,
+) -> i32 {
+    clear_out(out_json);
+    clear_out(out_error);
+
+    match loom_json(root_dir, receiver_bind, selected_run_id, selected_tick) {
         Ok(json) => {
             write_out(out_json, json);
             0
@@ -74,6 +102,47 @@ pub extern "C" fn moira_runtime_string_free(value: *mut c_char) {
 }
 
 fn status_json(root_dir: *const c_char, receiver_bind: *const c_char) -> Result<String, String> {
+    let guard = ensure_runtime(root_dir, receiver_bind)?;
+    let runtime = guard
+        .as_ref()
+        .ok_or_else(|| "Moira runtime failed to initialize".to_string())?;
+    let status = runtime
+        .tokio
+        .block_on(runtime.runtime.status())
+        .map_err(|err| err.to_string())?;
+
+    serde_json::to_string(&status)
+        .map_err(|err| format!("failed to encode Moira runtime status: {err}"))
+}
+
+fn loom_json(
+    root_dir: *const c_char,
+    receiver_bind: *const c_char,
+    selected_run_id: *const c_char,
+    selected_tick: *const c_char,
+) -> Result<String, String> {
+    let selected_run_id = read_optional_string(selected_run_id, "selected_run_id")?;
+    let selected_tick = read_optional_u64(selected_tick, "selected_tick")?;
+    let guard = ensure_runtime(root_dir, receiver_bind)?;
+    let runtime = guard
+        .as_ref()
+        .ok_or_else(|| "Moira runtime failed to initialize".to_string())?;
+    let snapshot = runtime
+        .tokio
+        .block_on(runtime.runtime.loom_snapshot(MoiraLoomSelection {
+            run_id: selected_run_id,
+            tick: selected_tick,
+        }))
+        .map_err(|err| err.to_string())?;
+
+    serde_json::to_string(&snapshot)
+        .map_err(|err| format!("failed to encode Moira Loom snapshot: {err}"))
+}
+
+fn ensure_runtime(
+    root_dir: *const c_char,
+    receiver_bind: *const c_char,
+) -> Result<MutexGuard<'static, Option<FfiRuntime>>, String> {
     let root_dir = read_path(root_dir, "root_dir")?;
     let receiver_bind = read_socket_addr(receiver_bind, "receiver_bind")?;
     let mut guard = RUNTIME
@@ -110,16 +179,7 @@ fn status_json(root_dir: *const c_char, receiver_bind: *const c_char) -> Result<
         });
     }
 
-    let runtime = guard
-        .as_ref()
-        .ok_or_else(|| "Moira runtime failed to initialize".to_string())?;
-    let status = runtime
-        .tokio
-        .block_on(runtime.runtime.status())
-        .map_err(|err| err.to_string())?;
-
-    serde_json::to_string(&status)
-        .map_err(|err| format!("failed to encode Moira runtime status: {err}"))
+    Ok(guard)
 }
 
 fn shutdown_json() -> Result<String, String> {
@@ -167,6 +227,31 @@ fn read_string(value: *const c_char, label: &str) -> Result<String, String> {
         .map_err(|err| format!("{label} must be valid UTF-8: {err}"))
 }
 
+fn read_optional_string(value: *const c_char, label: &str) -> Result<Option<String>, String> {
+    if value.is_null() {
+        return Ok(None);
+    }
+
+    let value = read_string(value, label)?;
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(trimmed.to_string()))
+    }
+}
+
+fn read_optional_u64(value: *const c_char, label: &str) -> Result<Option<u64>, String> {
+    let Some(value) = read_optional_string(value, label)? else {
+        return Ok(None);
+    };
+
+    value
+        .parse::<u64>()
+        .map(Some)
+        .map_err(|err| format!("invalid {label} `{value}`: {err}"))
+}
+
 fn clear_out(out: *mut *mut c_char) {
     if out.is_null() {
         return;
@@ -188,51 +273,5 @@ fn write_out(out: *mut *mut c_char, value: String) {
 
     unsafe {
         *out = value.into_raw();
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::{ffi::CString, net::TcpListener, ptr};
-
-    use super::{
-        moira_runtime_shutdown_json, moira_runtime_status_json, moira_runtime_string_free,
-    };
-
-    #[test]
-    fn status_json_opens_runtime_and_returns_snapshot() {
-        let root = std::env::temp_dir().join(format!(
-            "moira-ffi-test-{}",
-            std::process::id()
-        ));
-        let listener = TcpListener::bind("127.0.0.1:0").expect("free port should bind");
-        let bind = listener.local_addr().expect("free port should have addr");
-        drop(listener);
-
-        let root = CString::new(root.to_string_lossy().to_string()).expect("root is c string");
-        let bind = CString::new(bind.to_string()).expect("bind is c string");
-        let mut json = ptr::null_mut();
-        let mut error = ptr::null_mut();
-
-        let code = moira_runtime_status_json(root.as_ptr(), bind.as_ptr(), &mut json, &mut error);
-
-        assert_eq!(code, 0);
-        assert!(error.is_null());
-        assert!(!json.is_null());
-
-        unsafe {
-            let json_text = std::ffi::CStr::from_ptr(json)
-                .to_string_lossy()
-                .to_string();
-            assert!(json_text.contains("\"lifecycle\""));
-            moira_runtime_string_free(json);
-        }
-
-        let mut shutdown_json = ptr::null_mut();
-        let mut shutdown_error = ptr::null_mut();
-        let shutdown_code = moira_runtime_shutdown_json(&mut shutdown_json, &mut shutdown_error);
-        assert_eq!(shutdown_code, 0);
-        moira_runtime_string_free(shutdown_json);
-        moira_runtime_string_free(shutdown_error);
     }
 }

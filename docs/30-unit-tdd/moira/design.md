@@ -21,7 +21,7 @@ Moira provides Beluna's first-party local control-plane runtime for:
 
 1. Current Rust backend code realizes Lachesis local ingestion, storage, query, and inspection for one wake and one selected tick.
 2. The backend owner split is explicit in code: `moira/runtime` owns `clotho`, `lachesis`, `atropos`, and the host-facing `runtime` API.
-3. `moira/ffi` owns the first narrow C ABI proof for Apple Universal, currently exposing runtime status JSON from a process-local `MoiraRuntime`.
+3. `moira/ffi` owns the first narrow C ABI proof for Apple Universal, currently exposing runtime status JSON and a minimum Loom snapshot JSON from a process-local `MoiraRuntime`.
 4. The Tauri container under `moira/src-tauri` is a transitional adapter that resolves Tauri app paths, installs a Tauri event sink/task spawner, and exposes existing command names.
 5. Clotho currently owns launch-target preparation plus app-local JSONC profile-document list/load/save. `profile_id` is a logical Clotho key that maps to app-local `profiles/<profile-id>.jsonc`.
 6. Atropos currently owns runtime status, wake, graceful stop, force-kill, and app-exit stop wiring for the supervised Core process.
@@ -45,7 +45,7 @@ Moira provides Beluna's first-party local control-plane runtime for:
 4. `host API`
 - Owns the stable surface exposed to host apps, including typed queries, operations, runtime status, and event/pulse delivery.
 - Current Rust implementation lives in `moira/runtime/src/runtime` as `MoiraRuntime`, `MoiraRuntimeConfig`, `MoiraPaths`, `MoiraEventSink`, and `MoiraTaskSpawner`.
-- Current Apple proof adapter lives in `moira/ffi` and bridges `MoiraRuntime.status()` as C ABI status JSON.
+- Current Apple proof adapter lives in `moira/ffi` and bridges `MoiraRuntime.status()` plus `MoiraRuntime::loom_snapshot(selection)` as C ABI JSON.
 - Apple Universal macOS builds package the current FFI adapter as bundled runtime dylibs through the host app target.
 - Apple Universal consumes the first narrow host API needed for Settings-integrated minimum Loom.
 
@@ -66,7 +66,8 @@ Apple Universal first-slice Loom uses a Settings-integrated operations panel wit
 1. Connection and body endpoint socket discovery.
 2. Core control context through Clotho and Atropos.
 3. Moira runtime and Lachesis receiver status.
-4. Wake list, tick list, and selected tick raw-first inspection.
+4. Launch-target/profile read context.
+5. Wake list, tick list, and selected tick raw-first inspection.
 
 The current frontend layering in `moira/src` remains useful as migration input:
 

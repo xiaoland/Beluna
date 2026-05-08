@@ -51,6 +51,22 @@ struct MoiraRuntimeBindingTests {
     }
 
     @MainActor
+    @Test func moiraOperationsViewModelLoadsLoomSelection() async {
+        let loom = MoiraRuntimeBindingFixtures.loomSnapshot()
+        let viewModel = MoiraOperationsViewModel(
+            client: StaticMoiraRuntimeClient(loomSnapshot: loom)
+        )
+
+        await viewModel.refreshNow()
+
+        #expect(viewModel.selectedRunID == "run-1")
+        #expect(viewModel.selectedTick == 3)
+        #expect(viewModel.rawEvents.map(\.rawEventID) == ["evt-1"])
+        #expect(viewModel.selectedLaunchTargetID == "knownLocalBuild:dev-core")
+        #expect(viewModel.selectedProfileID == "default")
+    }
+
+    @MainActor
     @Test func moiraOperationsViewModelKeepsSnapshotAndReportsRefreshError() async {
         let viewModel = MoiraOperationsViewModel(client: FailingMoiraRuntimeClient())
 
@@ -105,6 +121,21 @@ struct MoiraRuntimeBindingTests {
         #expect(snapshot.attentionResources.map(\.state) == [.conflict])
     }
 
+    @Test func decodesMoiraLoomSnapshotJSON() throws {
+        let snapshot = try JSONDecoder().decode(
+            MoiraLoomSnapshot.self,
+            from: Data(MoiraRuntimeBindingFixtures.loomJSON.utf8)
+        )
+
+        #expect(snapshot.status.lifecycle == .ready)
+        #expect(snapshot.launchTargets.first?.label == "Dev Core")
+        #expect(snapshot.profiles.first?.profileID == "default")
+        #expect(snapshot.runs.first?.runID == "run-1")
+        #expect(snapshot.selectedRunID == "run-1")
+        #expect(snapshot.selectedTick == 3)
+        #expect(snapshot.tickDetail?.raw.first?.eventName == "started")
+    }
+
 #if os(macOS)
     @Test func dynamicClientLoadsBundledMoiraFFI() throws {
         let fileManager = FileManager.default
@@ -134,20 +165,26 @@ struct MoiraRuntimeBindingTests {
             _ = try? library.shutdownResources()
         }
 
-        let snapshot = try library.statusSnapshot(configuration: MoiraRuntimeConfiguration(
-            rootDirectoryPath: rootURL.path,
-            receiverBind: "127.0.0.1:0"
-        ))
+        let snapshot = try library.loomSnapshot(
+            configuration: MoiraRuntimeConfiguration(
+                rootDirectoryPath: rootURL.path,
+                receiverBind: "127.0.0.1:0"
+            ),
+            selection: .none
+        )
 
-        #expect(snapshot.lifecycle == .ready)
-        #expect(snapshot.resources.contains { $0.kind == .otlpReceiver })
-        #expect(snapshot.receiver.dbPath.hasPrefix(rootURL.path))
+        #expect(snapshot.status.lifecycle == .ready)
+        #expect(snapshot.status.resources.contains { $0.kind == .otlpReceiver })
+        #expect(snapshot.status.receiver.dbPath.hasPrefix(rootURL.path))
+        #expect(snapshot.runs.isEmpty)
+        #expect(snapshot.tickDetail == nil)
     }
 #endif
+
 }
 
 private struct FailingMoiraRuntimeClient: MoiraRuntimeClient {
-    func loadSnapshot() async throws -> MoiraRuntimeSnapshot {
+    func loadLoomSnapshot(selection: MoiraLoomSelection) async throws -> MoiraLoomSnapshot {
         throw MoiraRuntimeClientFixtureError.fixtureFailure
     }
 }

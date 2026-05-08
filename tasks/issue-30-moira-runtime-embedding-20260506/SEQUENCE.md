@@ -179,6 +179,8 @@ Packaging proof:
 
 Goal: implement the minimum Apple-native Loom workflow for this task.
 
+Status: implemented locally for read/query surfaces.
+
 Minimum surface:
 
 - Runtime/receiver status.
@@ -192,6 +194,21 @@ Verification:
 - Apple Universal can browse Moira-owned local observability state.
 - The UI is SwiftUI-native and keeps socket I/O plus Moira calls off the main thread.
 - Focused tests cover binding DTO decoding and view-model state transitions where practical.
+
+Implemented verification:
+
+- `cargo check -p moira-ffi --locked`
+- `cargo test -p moira-ffi --locked`
+- `cargo test --manifest-path moira/runtime/Cargo.toml --locked`
+- `bash -n apple-universal/script/build_moira_ffi.sh`
+- `plutil -lint apple-universal/BelunaApp.xcodeproj/project.pbxproj`
+- `xcodebuild test -project apple-universal/BelunaApp.xcodeproj -scheme BelunaApp -destination 'platform=macOS' -only-testing:BelunaAppTests/MoiraRuntimeBindingTests`
+
+Implementation proof:
+
+- `MoiraRuntime::loom_snapshot(selection)` aggregates runtime status, Clotho launch targets/profiles, Lachesis wake/tick summaries, and selected tick raw detail.
+- `moira_runtime_loom_json` exposes that snapshot through the first Apple FFI adapter.
+- Apple Universal decodes `MoiraLoomSnapshot`, keeps selection state in `MoiraOperationsViewModel`, and renders the first Settings-integrated Loom read/query panel.
 
 ## Slice 6: Tauri/Vue Loom Retirement Gate
 

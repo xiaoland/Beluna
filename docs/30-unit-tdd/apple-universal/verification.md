@@ -32,11 +32,12 @@ Cross-unit contracts, system authority ownership, and decomposition policy live 
 6. Minimum Moira Loom contract:
 - Settings-integrated operations panel shows embedded Moira runtime status, receiver status, and degraded/conflict/fault resources.
 - Wake list, tick list, and selected tick raw-first inspection are available through Moira host APIs.
-- Evidence homes: `apple-universal/BelunaApp/App`, `apple-universal/BelunaApp/Moira`, `apple-universal/BelunaAppTests/MoiraRuntimeBindingTests.swift`, Moira binding DTO tests, and targeted view-state tests.
+- Launch-target/profile read context is available inside the first Core context section.
+- Evidence homes: `apple-universal/BelunaApp/App`, `apple-universal/BelunaApp/Moira`, `apple-universal/BelunaAppTests/MoiraRuntimeBindingTests.swift`, `apple-universal/BelunaAppTests/MoiraRuntimeBindingFixtures.swift`, Moira binding DTO tests, and targeted view-state tests.
 
 7. Moira FFI packaging contract:
 - macOS BelunaApp builds run the Moira FFI build script, bundle required Rust dylibs in `Contents/Frameworks`, and keep the app signature valid.
-- Evidence homes: `apple-universal/script/build_moira_ffi.sh`, `apple-universal/BelunaApp.xcodeproj/project.pbxproj`, `codesign --verify`, `otool`, and `dynamicClientLoadsBundledMoiraFFI`.
+- Evidence homes: `apple-universal/script/build_moira_ffi.sh`, `apple-universal/BelunaApp.xcodeproj/project.pbxproj`, `codesign --verify`, `otool`, and `dynamicClientLoadsBundledMoiraFFI`, including the bundled `moira_runtime_loom_json` path.
 
 8. Socket discovery contract:
 - Configured path, recent successful path, app-local runtime candidate, deployment-supported platform candidates, and Moira-reported paths are available where supported.

@@ -72,6 +72,18 @@ Sections:
   - trace/span ids
   - body/attributes/resource drilldown
 
+## Implemented Slice 5 Surface
+
+Apple Universal now renders the first minimum Loom read/query surface inside Settings.
+
+Implemented pieces:
+
+- `MoiraRuntime::loom_snapshot(selection)` is the backend aggregate query for the first native Loom payload.
+- `moira_runtime_loom_json` exposes the aggregate payload through the Apple FFI adapter.
+- `MoiraLoomSnapshot` and `MoiraLoomSelection` are the Swift DTO boundary for the first read/query slice.
+- `MoiraOperationsViewModel` owns session-local launch-target, profile, wake, and tick selections.
+- `MoiraOperationsSection` renders runtime/receiver status, Core context, wake/tick pickers, and selected tick raw records.
+
 ## UI Questions
 
 1. Should Moira controls share visual hierarchy with endpoint connection controls?
@@ -92,6 +104,7 @@ Sections:
 
 - View-model tests for status loading, run selection, tick selection, and error state.
 - Binding DTO decoding tests.
+- Bundled FFI integration test calling the real Loom snapshot ABI.
 - Manual macOS smoke path:
   1. open Apple Universal
   2. open Loom surface

@@ -2,9 +2,11 @@ import Foundation
 
 @MainActor
 final class MoiraOperationsViewModel: ObservableObject {
-    @Published private(set) var snapshot: MoiraRuntimeSnapshot
+    @Published private(set) var snapshot: MoiraLoomSnapshot
     @Published private(set) var isRefreshing = false
     @Published private(set) var lastErrorText: String?
+    @Published private(set) var selectedLaunchTargetID = ""
+    @Published private(set) var selectedProfileID = ""
 
     private let client: any MoiraRuntimeClient
 
@@ -14,31 +16,67 @@ final class MoiraOperationsViewModel: ObservableObject {
     }
 
     var runtimeStatusText: String {
-        snapshot.lifecycle.rawValue
+        snapshot.status.lifecycle.rawValue
     }
 
     var receiverStatusText: String {
-        snapshot.receiver.wakeState
+        snapshot.status.receiver.wakeState
     }
 
     var coreStatusText: String {
-        snapshot.core.phase
+        snapshot.status.core.phase
     }
 
     var eventCountText: String {
-        "\(snapshot.receiver.rawEventCount)"
+        "\(snapshot.status.receiver.rawEventCount)"
     }
 
     var wakeCountText: String {
-        "\(snapshot.receiver.wakeCount)"
+        "\(snapshot.status.receiver.wakeCount)"
     }
 
     var tickCountText: String {
-        "\(snapshot.receiver.tickCount)"
+        "\(snapshot.status.receiver.tickCount)"
     }
 
     var canRefresh: Bool {
         !isRefreshing
+    }
+
+    var selectedRunID: String? {
+        snapshot.selectedRunID
+    }
+
+    var selectedTick: UInt64? {
+        snapshot.selectedTick
+    }
+
+    var selectedRunBindingValue: String {
+        snapshot.selectedRunID ?? ""
+    }
+
+    var selectedTickBindingValue: String {
+        snapshot.selectedTick.map(String.init) ?? ""
+    }
+
+    var rawEvents: [MoiraEventRecord] {
+        snapshot.tickDetail?.raw ?? []
+    }
+
+    var hasLaunchTargets: Bool {
+        !snapshot.launchTargets.isEmpty
+    }
+
+    var hasProfiles: Bool {
+        !snapshot.profiles.isEmpty
+    }
+
+    var hasRuns: Bool {
+        !snapshot.runs.isEmpty
+    }
+
+    var hasTicks: Bool {
+        !snapshot.ticks.isEmpty
     }
 
     func refresh() {
@@ -47,7 +85,33 @@ final class MoiraOperationsViewModel: ObservableObject {
         }
     }
 
+    func selectLaunchTarget(id: String) {
+        selectedLaunchTargetID = id
+    }
+
+    func selectProfile(id: String) {
+        selectedProfileID = id
+    }
+
+    func selectRun(id: String) {
+        let selected = id.isEmpty ? nil : id
+        Task {
+            await refreshNow(selection: MoiraLoomSelection(runID: selected, tick: nil))
+        }
+    }
+
+    func selectTick(value: String) {
+        let selectedTick = UInt64(value)
+        Task {
+            await refreshNow(selection: MoiraLoomSelection(runID: selectedRunID, tick: selectedTick))
+        }
+    }
+
     func refreshNow() async {
+        await refreshNow(selection: MoiraLoomSelection(runID: selectedRunID, tick: selectedTick))
+    }
+
+    private func refreshNow(selection: MoiraLoomSelection) async {
         guard !isRefreshing else {
             return
         }
@@ -58,12 +122,27 @@ final class MoiraOperationsViewModel: ObservableObject {
         }
 
         do {
-            var loaded = try await client.loadSnapshot()
+            var loaded = try await client.loadLoomSnapshot(selection: selection)
             loaded.updatedAt = Date()
             snapshot = loaded
+            syncSelections()
             lastErrorText = nil
         } catch {
             lastErrorText = String(describing: error)
+        }
+    }
+
+    private func syncSelections() {
+        if selectedLaunchTargetID.isEmpty, let firstTarget = snapshot.launchTargets.first {
+            selectedLaunchTargetID = firstTarget.id
+        } else if !snapshot.launchTargets.contains(where: { $0.id == selectedLaunchTargetID }) {
+            selectedLaunchTargetID = snapshot.launchTargets.first?.id ?? ""
+        }
+
+        if selectedProfileID.isEmpty, let firstProfile = snapshot.profiles.first {
+            selectedProfileID = firstProfile.id
+        } else if !snapshot.profiles.contains(where: { $0.id == selectedProfileID }) {
+            selectedProfileID = snapshot.profiles.first?.id ?? ""
         }
     }
 }

@@ -64,5 +64,6 @@ Apple Universal source cleanup is part of the Moira integration path.
 2. `MoiraRuntimeClient` is the app-facing binding protocol for Moira runtime snapshots.
 3. `MoiraOperationsViewModel` owns Settings-integrated Moira status state and keeps refresh work async.
 4. `SettingView` receives Moira state explicitly instead of routing Moira operations through `ChatViewModel`.
-5. The current macOS default client attempts to load `libmoira_ffi.dylib`, calls the C ABI status proof, and maps Rust JSON into `MoiraRuntimeSnapshot`.
-6. The default client reports an unavailable snapshot when the local Rust dylib is absent, keeping Settings usable during packaging work.
+5. The current macOS default client attempts to load `libmoira_ffi.dylib`, calls the C ABI status and minimum Loom snapshot proofs, and maps Rust JSON into Swift DTOs.
+6. The first Loom payload uses `MoiraLoomSnapshot` for runtime status, launch targets, profiles, wakes, ticks, and selected tick raw records.
+7. The default client reports an unavailable snapshot when the local Rust dylib is absent, keeping Settings usable during packaging work.

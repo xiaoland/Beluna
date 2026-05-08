@@ -26,16 +26,15 @@ The execution scope for this issue is intentionally narrow: implement the minimu
 
 ## Current Packet Status
 
-Mode: Apple Universal Rust adapter and macOS Xcode packaging proof completed locally.
+Mode: Slice 5 Apple Universal minimum Loom read/query surface completed locally.
 
-Latest local verification:
+Recorded local verification:
 
 - `cargo check --manifest-path moira/runtime/Cargo.toml --locked`
 - `cargo test --manifest-path moira/runtime/Cargo.toml --locked`
 - `cargo check --manifest-path moira/src-tauri/Cargo.toml --locked`
 - `cargo check -p moira-ffi --locked`
 - `cargo test -p moira-ffi --locked`
-- `cargo build -p moira-ffi --lib --locked`
 - `bash -n apple-universal/script/build_moira_ffi.sh`
 - `plutil -lint apple-universal/BelunaApp.xcodeproj/project.pbxproj`
 - `xcodebuild test -project apple-universal/BelunaApp.xcodeproj -scheme BelunaApp -destination 'platform=macOS' -only-testing:BelunaAppTests`
@@ -47,11 +46,17 @@ Latest local verification:
 - `xcodebuild test -project apple-universal/BelunaApp.xcodeproj -scheme BelunaApp -destination 'platform=macOS' -only-testing:BelunaAppTests/MoiraRuntimeBindingTests`
 - Result: passed on 2026-05-08.
 
+Latest Slice 5 proof:
+
+- `MoiraRuntime::loom_snapshot(selection)` aggregates runtime status, launch targets, profiles, wakes, ticks, and selected tick raw records.
+- `moira_runtime_loom_json` exposes that snapshot through the Apple FFI boundary.
+- `MoiraOperationsSection` renders the minimum Settings-integrated Loom surface through `MoiraOperationsViewModel`.
+
 Latest bundle proof:
 
 - `BelunaApp.app/Contents/Frameworks/libmoira_ffi.dylib` is bundled, signed, and has install name `@rpath/libmoira_ffi.dylib`.
 - `BelunaApp.app/Contents/Frameworks/libduckdb.dylib` is bundled and signed for DuckDB runtime loading.
-- `dynamicClientLoadsBundledMoiraFFI` opens the bundled FFI dylib, calls real `MoiraRuntime.status()`, and shuts the FFI runtime down through `moira_runtime_shutdown_json`.
+- `dynamicClientLoadsBundledMoiraFFI` opens the bundled FFI dylib, calls real `MoiraRuntime::loom_snapshot(selection)`, and shuts the FFI runtime down through `moira_runtime_shutdown_json`.
 
 Latest full Apple scheme attempt:
 

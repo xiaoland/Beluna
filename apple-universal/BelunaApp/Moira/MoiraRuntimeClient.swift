@@ -1,22 +1,46 @@
 import Foundation
 
 protocol MoiraRuntimeClient: Sendable {
-    func loadSnapshot() async throws -> MoiraRuntimeSnapshot
+    func loadLoomSnapshot(selection: MoiraLoomSelection) async throws -> MoiraLoomSnapshot
 }
 
 struct UnavailableMoiraRuntimeClient: MoiraRuntimeClient {
     var reason: String
 
-    func loadSnapshot() async throws -> MoiraRuntimeSnapshot {
-        MoiraRuntimeSnapshot.unavailable(reason: reason)
+    func loadLoomSnapshot(selection: MoiraLoomSelection) async throws -> MoiraLoomSnapshot {
+        MoiraLoomSnapshot.unavailable(reason: reason)
     }
 }
 
 struct StaticMoiraRuntimeClient: MoiraRuntimeClient {
-    var snapshot: MoiraRuntimeSnapshot
+    var snapshot: MoiraLoomSnapshot
 
-    func loadSnapshot() async throws -> MoiraRuntimeSnapshot {
+    init(snapshot: MoiraRuntimeSnapshot) {
+        self.snapshot = .statusOnly(snapshot)
+    }
+
+    init(loomSnapshot: MoiraLoomSnapshot) {
+        self.snapshot = loomSnapshot
+    }
+
+    func loadLoomSnapshot(selection: MoiraLoomSelection) async throws -> MoiraLoomSnapshot {
         snapshot
+    }
+}
+
+private extension MoiraLoomSnapshot {
+    static func statusOnly(_ status: MoiraRuntimeSnapshot) -> Self {
+        Self(
+            status: status,
+            launchTargets: [],
+            profiles: [],
+            runs: [],
+            selectedRunID: nil,
+            ticks: [],
+            selectedTick: nil,
+            tickDetail: nil,
+            updatedAt: nil
+        )
     }
 }
 

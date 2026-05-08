@@ -70,3 +70,4 @@
   - Slice 2C added public-boundary integration tests for runtime open/status, receiver conflict, Clotho wake preparation, Lachesis OTLP ingest, and Atropos process supervision.
   - Apple Universal host integration added a Swift Moira namespace, `MoiraRuntimeClient`, `MoiraOperationsViewModel`, Settings integration, and focused view-model tests.
   - Apple Universal Rust adapter proof added `moira/ffi`, dynamic Swift loading for `libmoira_ffi.dylib`, and DTO decoding tests for `MoiraRuntime.status()` JSON.
+  - Slice 5 added the minimum Apple-native Loom read/query surface: runtime/receiver status, launch-target/profile context, wake list, tick list, and selected tick raw records through `MoiraRuntime::loom_snapshot(selection)` and `moira_runtime_loom_json`.

@@ -1,10 +1,12 @@
 mod events;
+mod loom;
 mod paths;
 mod service;
 mod status;
 mod task;
 
 pub use events::{MoiraEvent, MoiraEventSink, NoopEventSink};
+pub use loom::{MoiraLoomSelection, MoiraLoomSnapshot};
 pub use paths::MoiraPaths;
 pub use service::{MoiraRuntime, MoiraRuntimeConfig, MoiraRuntimeError, MoiraShutdownOutcome};
 pub use status::{

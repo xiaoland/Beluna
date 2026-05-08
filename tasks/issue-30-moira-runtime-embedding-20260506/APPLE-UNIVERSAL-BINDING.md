@@ -11,24 +11,28 @@ New Swift namespace:
 Files:
 
 - `MoiraRuntimeModels.swift`
+- `MoiraLoomModels.swift`
 - `MoiraRuntimeClient.swift`
 - `MoiraRuntimeDynamicClient.swift`
+- `MoiraRuntimeDynamicLibrary.swift`
 - `MoiraOperationsViewModel.swift`
+- `MoiraOperationsSection.swift`
+- `MoiraEventRecordRow.swift`
 - `apple-universal/script/build_moira_ffi.sh`
 
 Settings integration:
 
 - `BelunaAppApp` owns a `MoiraOperationsViewModel`.
 - `SettingView` receives the Moira view model explicitly.
-- `MoiraOperationsSection` shows runtime lifecycle, receiver state, Core phase, counts, and degraded/conflict/fault resources.
+- `MoiraOperationsSection` shows runtime lifecycle, receiver state, Core phase, launch-target/profile context, wake/tick selection, selected tick raw records, counts, and degraded/conflict/fault resources.
 
 ## Boundary Decision
 
 Apple UI depends on `MoiraRuntimeClient`.
 
-The current macOS default client attempts to load `libmoira_ffi.dylib` and resolve `moira_runtime_status_json`.
+The current macOS default client attempts to load `libmoira_ffi.dylib` and resolve `moira_runtime_status_json`, `moira_runtime_loom_json`, and `moira_runtime_shutdown_json`.
 
-SwiftUI state, refresh behavior, and tests remain independent from ABI mechanics because the C ABI is hidden behind `DynamicMoiraRuntimeClient`.
+SwiftUI state, refresh behavior, and tests remain independent from ABI mechanics because the C ABI is hidden behind `DynamicMoiraRuntimeClient` and `MoiraRuntimeDynamicLibrary`.
 
 The dynamic loader searches:
 
@@ -69,11 +73,20 @@ Passed on 2026-05-08:
 - `xcodebuild test -project apple-universal/BelunaApp.xcodeproj -scheme BelunaApp -destination 'platform=macOS' -only-testing:BelunaAppTests/MoiraRuntimeBindingTests`
 - `xcodebuild test -project apple-universal/BelunaApp.xcodeproj -scheme BelunaApp -destination 'platform=macOS' -only-testing:BelunaAppTests`
 
+Slice 5 verification on 2026-05-08:
+
+- `cargo check -p moira-ffi --locked`
+- `cargo test -p moira-ffi --locked`
+- `cargo test --manifest-path moira/runtime/Cargo.toml --locked`
+- `bash -n apple-universal/script/build_moira_ffi.sh`
+- `plutil -lint apple-universal/BelunaApp.xcodeproj/project.pbxproj`
+- `xcodebuild test -project apple-universal/BelunaApp.xcodeproj -scheme BelunaApp -destination 'platform=macOS' -only-testing:BelunaAppTests/MoiraRuntimeBindingTests`
+
 Bundle inspection on 2026-05-08:
 
-- `libmoira_ffi.dylib`: bundled, signed, `@rpath/libmoira_ffi.dylib`, exports `moira_runtime_status_json`, `moira_runtime_shutdown_json`, and `moira_runtime_string_free`.
+- `libmoira_ffi.dylib`: bundled, signed, `@rpath/libmoira_ffi.dylib`, exports `moira_runtime_status_json`, `moira_runtime_loom_json`, `moira_runtime_shutdown_json`, and `moira_runtime_string_free`.
 - `libduckdb.dylib`: bundled and signed for the `@rpath/libduckdb.dylib` dependency.
-- `dynamicClientLoadsBundledMoiraFFI` proves the Xcode-built test host can load the bundled dylib and call real Moira runtime status.
+- `dynamicClientLoadsBundledMoiraFFI` proves the Xcode-built test host can load the bundled dylib and call the real Moira Loom snapshot API.
 
 Latest full Apple scheme attempt:
 
@@ -89,15 +102,17 @@ Focused test runner note:
 Focused tests added:
 
 - `moiraOperationsViewModelLoadsRuntimeSnapshot`
+- `moiraOperationsViewModelLoadsLoomSelection`
 - `moiraOperationsViewModelKeepsSnapshotAndReportsRefreshError`
 - `decodesMoiraRuntimeStatusJSON`
+- `decodesMoiraLoomSnapshotJSON`
 - `dynamicClientLoadsBundledMoiraFFI`
 
 ## Next Binding Step
 
-Grow the host API beyond runtime status:
+Grow the host API beyond the first read/query snapshot:
 
-- Clotho launch target and profile read surfaces.
-- Lachesis wake/tick list and raw record query surfaces.
 - Atropos wake/stop operation surfaces.
-- Future typed binding generation when the Loom API grows beyond the first status proof.
+- Clotho launch-target/profile mutation surfaces.
+- Live update or pulse delivery for wake/tick refresh.
+- Future typed binding generation when the Loom API grows beyond the first JSON proof.

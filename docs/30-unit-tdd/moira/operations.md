@@ -6,6 +6,7 @@
 2. The runtime loads local Clotho preparation state and Atropos supervision state.
 3. The runtime initializes the local OTLP logs receiver and storage backend.
 4. The host exposes Loom UI after Moira runtime status and resource status are available.
+5. The host can request `MoiraRuntime::loom_snapshot(selection)` for the minimum read/query surface.
 
 ## Wake Flow
 
@@ -41,7 +42,8 @@
 2. The first Apple implementation uses process-local `MoiraRuntime`.
 3. Resource conflicts surface as runtime status.
 4. Body endpoint socket discovery remains available for Core processes started by another process or prior session.
-5. Future Owner/Attach coordination can promote one local Moira authority per user/session or configured scope.
+5. Apple Universal currently consumes a JSON FFI adapter for status and minimum Loom snapshots.
+6. Future Owner/Attach coordination can promote one local Moira authority per user/session or configured scope.
 
 ## Observability Flow
 
@@ -50,7 +52,8 @@
 3. Project the baseline read models needed for Loom wake list and tick timeline.
 4. Project any additional chronology, interval-pairing, or targeted lookup indexes that materially improve operator-facing browsing, with raw storage as source of truth.
 5. Resolve the selected tick through Cortex View first, using timeline or narrative mode for handled ticks, then sectional Stem / Spine investigation, and finally source-grounded raw-event inspection.
-6. Surface metrics/traces exporter status and handoff links.
+6. Aggregate the first host-facing Loom snapshot from runtime status, Clotho context, Lachesis wake/tick summaries, and selected tick raw detail.
+7. Surface metrics/traces exporter status and handoff links.
 
 ## Shutdown
 

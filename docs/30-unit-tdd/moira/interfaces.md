@@ -7,9 +7,9 @@
 - Rust crate: `moira/runtime`.
 - Primary handle: `MoiraRuntime`, opened from host-provided `MoiraRuntimeConfig`.
 - Typed Clotho, Lachesis, and Atropos query/operation surfaces.
-- Runtime status, resource status, and event/pulse delivery for host-native Loom UI.
+- Runtime status, resource status, minimum Loom snapshot queries, and event/pulse delivery for host-native Loom UI.
 - Apple Universal is the first host for the minimum native Loom surface.
-- First Apple binding proof: `moira/ffi` builds `libmoira_ffi.dylib` and exposes `moira_runtime_status_json` plus string-freeing ABI.
+- First Apple binding proof: `moira/ffi` builds `libmoira_ffi.dylib` and exposes `moira_runtime_status_json`, `moira_runtime_loom_json`, `moira_runtime_shutdown_json`, plus string-freeing ABI.
 - Apple Universal macOS packaging bundles `libmoira_ffi.dylib` and DuckDB's `libduckdb.dylib` into the host app's `Contents/Frameworks`.
 
 2. Transitional desktop entrypoint:
@@ -32,6 +32,7 @@
 5. Observability interface:
 - Local OTLP gRPC logs receiver.
 - Raw-event query and live-pulse interfaces for host-native Loom.
+- Aggregate minimum Loom snapshot through `MoiraRuntime::loom_snapshot(selection)`, combining runtime status, Clotho launch targets/profiles, Lachesis wake/tick summaries, and selected tick raw detail.
 - Minimum guaranteed log-backed Loom surfaces:
   - wake list
   - tick list
@@ -56,4 +57,4 @@
 3. Apple Universal first slice uses a process-local embedded Moira runtime.
 4. Cross-client Owner/Attach authority coordination belongs to later design.
 5. Host-native Loom UI may choose its own layout while preserving Moira-owned query/control semantics.
-6. The C ABI proof returns JSON for the first status slice; broader Loom APIs should move toward typed binding ownership as the surface grows.
+6. The C ABI proof returns JSON for the first status and minimum Loom snapshot slices; broader Loom APIs should move toward typed binding ownership as the surface grows.

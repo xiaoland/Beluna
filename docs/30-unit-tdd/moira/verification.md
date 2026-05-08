@@ -37,6 +37,7 @@
 7. Apple Universal can consume the narrow Moira host API needed for minimum Loom.
 8. Process-local resource conflicts surface as runtime status.
 9. Body endpoint socket discovery remains usable when Core is already listening from another launch path.
+10. `moira_runtime_loom_json` returns the minimum operator snapshot through the FFI boundary.
 
 ## Observability Checks
 
@@ -57,6 +58,7 @@
 1. Moira Clotho preparation and Atropos supervision logic in the Moira backend runtime.
 2. Core OTLP event-shape tests, [Core Observability](../core/observability.md), contract fixtures, and config validation guardrails.
 3. Live end-to-end operator walkthroughs remain valid evidence for wake/stop and browse-surface checks while the current local read models and control-plane slices continue to stabilize.
+4. `moira/ffi/src/tests.rs` covers the status JSON and minimum Loom snapshot JSON C ABI surfaces.
 
 ## Current Architecture Checks
 
