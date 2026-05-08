@@ -12,7 +12,9 @@
 ## Task Scope
 
 1. Should this issue include wake/stop controls in Apple Universal, or stop at status plus observability browsing?
+- Current answer: Apple Core Control owns wake/stop/force-kill as a follow-on packet.
 2. Should this issue include Clotho write operations, or read-only launch/profile context?
+- Current answer: this issue keeps read-only launch/profile context. Apple Core Control owns selection for wake, and Apple Clotho Management owns mutation UI.
 3. Should Tauri/Vue deletion happen in this issue after Apple minimum coverage, or become a follow-on issue?
 - Current Slice 6 answer: deletion belongs in this issue after the contract-based retirement gate. Useful legacy ideas move to follow-on owners.
 
@@ -40,6 +42,7 @@
 ## Product/UI
 
 1. Where should the minimum Loom surface live in Apple Universal navigation?
+- Current answer: the minimum proof lives in Settings; follow-on work splits Core Control and O11y / Lachesis into panels parallel to Settings while Settings retains Moira configuration.
 2. Which Moira data should be visible in the first viewport?
 3. What is the first acceptable raw event inspection interaction on macOS?
 4. What is the iOS/iPadOS story for the same minimum surface?
@@ -48,6 +51,9 @@
 
 1. Which issue should own CLI hosting?
 2. Which issue should own Windows hosting?
-3. Which issue should own full Apple-native Loom UX?
-4. Which issue should own sandbox platform adapters?
-5. Which issue should own ledger platform adapters?
+3. Apple Core Control owns Clotho/Atropos operation UI as a standalone panel.
+4. Apple O11y / Lachesis owns observability and investigation UI as a standalone panel.
+5. Apple Clotho Management owns launch-target and profile mutation UI.
+6. Which issue should own full Apple-native Loom UX composition across those panels?
+7. Which issue should own sandbox platform adapters?
+8. Which issue should own ledger platform adapters?

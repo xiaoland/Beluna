@@ -93,3 +93,8 @@ Previous full scheme note:
 - Follow-up decision: Apple Universal process singleton guarding was removed. Core/Spine-assigned runtime endpoint ids now carry the multi-instance disambiguation responsibility.
 
 This packet is tactical. Durable truths should be promoted into Product TDD and affected Unit TDD docs after human confirmation.
+
+## Follow-On Packets
+
+- [Apple Core Control](../issue-30-apple-core-control-20260508/README.md): standalone Apple-native Core Control panel for wake, stop, force-kill, and terminal supervision state through embedded Moira.
+- [Apple O11y / Lachesis](../issue-30-apple-o11y-lachesis-20260508/README.md): Apple-native observability and investigation panel for wake/tick browsing, raw event inspection, Cortex timeline, and owner-specific drilldown.

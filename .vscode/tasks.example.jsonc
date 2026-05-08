@@ -92,38 +92,56 @@
             "problemMatcher": []
         },
         {
-            "label": "moira:check-backend",
+            "label": "moira:check-runtime",
             "type": "process",
             "command": "/usr/bin/env",
             "args": [
                 "cargo",
                 "check",
                 "--manifest-path",
-                "src-tauri/Cargo.toml",
+                "moira/runtime/Cargo.toml",
                 "--locked"
             ],
             "options": {
-                "cwd": "${workspaceFolder}/moira"
+                "cwd": "${workspaceFolder}"
             },
             "problemMatcher": [
                 "$rustc"
             ]
         },
         {
-            "label": "moira:check-backend-bundled",
+            "label": "moira:check-runtime-bundled",
             "type": "process",
             "command": "/usr/bin/env",
             "args": [
                 "cargo",
                 "check",
                 "--manifest-path",
-                "src-tauri/Cargo.toml",
+                "moira/runtime/Cargo.toml",
                 "--locked",
                 "--features",
                 "duckdb-bundled"
             ],
             "options": {
-                "cwd": "${workspaceFolder}/moira"
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [
+                "$rustc"
+            ]
+        },
+        {
+            "label": "moira:check-ffi",
+            "type": "process",
+            "command": "/usr/bin/env",
+            "args": [
+                "cargo",
+                "check",
+                "-p",
+                "moira-ffi",
+                "--locked"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
             },
             "problemMatcher": [
                 "$rustc"
@@ -221,6 +239,32 @@
                 "cwd": "${workspaceFolder}"
             },
             "problemMatcher": []
+        },
+        {
+            "label": "apple:build-macos",
+            "type": "process",
+            "command": "/usr/bin/env",
+            "args": [
+                "xcodebuild",
+                "-project",
+                "${workspaceFolder}/apple-universal/BelunaApp.xcodeproj",
+                "-scheme",
+                "BelunaApp",
+                "-configuration",
+                "Debug",
+                "-destination",
+                "platform=macOS",
+                "-derivedDataPath",
+                "${workspaceFolder}/apple-universal/.derived-data",
+                "CODE_SIGNING_ALLOWED=NO",
+                "CODE_SIGNING_REQUIRED=NO",
+                "build"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [],
+            "group": "build"
         }
     ]
 }

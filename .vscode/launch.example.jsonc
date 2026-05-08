@@ -14,6 +14,14 @@
             "cwd": "${workspaceFolder}",
             "envFile": "${workspaceFolder}/.env",
             "preLaunchTask": "prepare-debug-core"
+        },
+        {
+            "name": "Debug Apple Universal",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/apple-universal/.derived-data/Build/Products/Debug/BelunaApp.app/Contents/MacOS/BelunaApp",
+            "cwd": "${workspaceFolder}/apple-universal",
+            "preLaunchTask": "apple:build-macos"
         }
     ]
 }
