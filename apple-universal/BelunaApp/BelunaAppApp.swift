@@ -23,6 +23,11 @@ struct BelunaAppApp: App {
             SidebarCommands() // macOS 特有的菜单栏命令
         }
 
+        Window("Core Control", id: "core-control") {
+            MoiraCoreControlPanel(viewModel: moiraViewModel)
+        }
+        .defaultSize(width: 640, height: 560)
+
         Settings {
             SettingView(viewModel: viewModel, moiraViewModel: moiraViewModel)
         }

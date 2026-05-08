@@ -36,11 +36,17 @@ Cross-unit contracts, system authority ownership, and decomposition policy live 
 - Acceptance follows the issue #30 minimum Apple contract and Apple-native host design.
 - Evidence homes: `apple-universal/BelunaApp/App`, `apple-universal/BelunaApp/Moira`, `apple-universal/BelunaAppTests/MoiraRuntimeBindingTests.swift`, `apple-universal/BelunaAppTests/MoiraRuntimeBindingFixtures.swift`, Moira binding DTO tests, and targeted view-state tests.
 
-7. Moira FFI packaging contract:
-- macOS BelunaApp builds run the Moira FFI build script, bundle required Rust dylibs in `Contents/Frameworks`, and keep the app signature valid.
-- Evidence homes: `apple-universal/script/build_moira_ffi.sh`, `apple-universal/BelunaApp.xcodeproj/project.pbxproj`, `codesign --verify`, `otool`, and `dynamicClientLoadsBundledMoiraFFI`, including the bundled `moira_runtime_loom_json` path.
+7. Apple Moira panel split contract:
+- Core Control owns Clotho/Atropos operation UI as a panel parallel to Settings.
+- O11y / Lachesis owns observability browsing and investigation UI as a panel parallel to Settings.
+- Settings owns Moira configuration, receiver/socket defaults, refresh policy, diagnostics policy, and host-local preferences.
+- Evidence homes: `MoiraCoreControlPanel`, `MoiraOperationsViewModel` lifecycle operation tests, follow-on task packets, Apple navigation/view-model tests, and panel-level UI smoke checks.
 
-8. Socket discovery contract:
+8. Moira FFI packaging contract:
+- macOS BelunaApp builds run the Moira FFI build script, bundle required Rust dylibs in `Contents/Frameworks`, and keep the app signature valid.
+- Evidence homes: `apple-universal/script/build_moira_ffi.sh`, `apple-universal/BelunaApp.xcodeproj/project.pbxproj`, `codesign --verify`, `otool`, and `dynamicClientLoadsBundledMoiraFFI`, including the bundled `moira_runtime_loom_json` and lifecycle symbol paths.
+
+9. Socket discovery contract:
 - Configured path, recent successful path, app-local runtime candidate, deployment-supported platform candidates, and Moira-reported paths are available where supported.
 - Evidence homes: socket discovery model tests and settings UI smoke checks.
 

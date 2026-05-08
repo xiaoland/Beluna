@@ -9,17 +9,17 @@
 ## First Scope
 
 1. Runtime and FFI surface
-- Expose the minimum Atropos lifecycle operations needed by Apple Universal.
+- Expose the minimum Atropos lifecycle operations needed by Apple Universal. Current slice adds `moira_runtime_wake_json`, `moira_runtime_stop_json`, and `moira_runtime_force_kill_json`.
 - Reuse existing Clotho launch-target and profile preparation semantics.
 - Return JSON DTOs that preserve runtime status, resource status, terminal reason, and operation errors.
 
 2. Apple binding
-- Extend `DynamicMoiraRuntimeClient` with lifecycle methods.
+- Extend `DynamicMoiraRuntimeClient` with lifecycle methods. Current slice routes wake, stop, and force-kill through the dynamic dylib adapter.
 - Decode operation results into typed Swift DTOs.
 - Keep Rust calls on background execution paths.
 
 3. Apple UI
-- Add a first-class Core Control panel beside Settings in Apple Universal navigation.
+- Add a first-class Core Control panel beside Settings in Apple Universal navigation. Current slice adds a `Core Control` window opened from the main chat header.
 - Keep Settings focused on Moira configuration such as runtime paths, receiver bind address, socket candidates, refresh policy, and diagnostics.
 - Add launch-target/profile selection context sized for wake.
 - Add wake controls using the currently selected launch target and optional profile.
@@ -28,8 +28,8 @@
 - Surface receiver/resource conflicts and terminal supervision state in the Core Control panel.
 
 4. Tests
-- Add Moira FFI tests for wake/stop/force-kill JSON operations where process fixtures are practical.
-- Add Apple view-model tests for wake, stop, force-kill confirmation, error preservation, and refresh after operation.
+- Add Moira FFI tests for wake/stop/force-kill JSON operations where process fixtures are practical. Current slice covers typed wake request routing and no-running Core stop/force-kill errors.
+- Add Apple view-model tests for wake, stop, force-kill confirmation, error preservation, and refresh after operation. Current slice covers wake routing, stop/force-kill routing, missing launch-target error, JSON encoding, and bundled lifecycle symbol loading.
 - Keep existing body endpoint socket discovery behavior intact.
 
 ## Scope Boundaries
@@ -43,7 +43,7 @@
 
 ## Open Decisions
 
-1. Whether the first wake UI uses only existing launch targets and profiles, or also accepts a raw executable path.
+1. Current slice uses existing launch targets and profiles only. Raw executable path input belongs to Apple Clotho Management or a later Core Control expansion.
 2. How Apple Universal should persist selected launch-target and profile refs.
 3. Exact second-confirmation shape for force-kill on macOS.
 4. How much terminal reason detail belongs in the Core Control panel's first viewport.

@@ -3,6 +3,7 @@ import SwiftUI
 struct ChatView: View {
     @ObservedObject var viewModel: ChatViewModel
     @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(spacing: 0) {
@@ -80,6 +81,14 @@ struct ChatView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+
+            Button {
+                openWindow(id: "core-control")
+            } label: {
+                Image(systemName: "slider.horizontal.3")
+            }
+            .buttonStyle(.bordered)
+            .help("Open Core Control")
 
             Button {
                 openSettings()

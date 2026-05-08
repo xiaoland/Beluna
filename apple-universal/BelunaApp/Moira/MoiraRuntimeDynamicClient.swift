@@ -41,6 +41,24 @@ struct DynamicMoiraRuntimeClient: MoiraRuntimeClient {
             try library.loomSnapshot(configuration: configuration, selection: selection)
         }.value
     }
+
+    func wakeCore(request: MoiraCoreWakeRequest) async throws -> MoiraCoreStatus {
+        try await Task.detached(priority: .utility) {
+            try library.wakeCore(configuration: configuration, request: request)
+        }.value
+    }
+
+    func stopCore() async throws -> MoiraCoreStatus {
+        try await Task.detached(priority: .utility) {
+            try library.stopCore(configuration: configuration)
+        }.value
+    }
+
+    func forceKillCore() async throws -> MoiraCoreStatus {
+        try await Task.detached(priority: .utility) {
+            try library.forceKillCore(configuration: configuration)
+        }.value
+    }
 }
 
 enum MoiraRuntimeDynamicClientError: Error, CustomStringConvertible {
@@ -48,6 +66,7 @@ enum MoiraRuntimeDynamicClientError: Error, CustomStringConvertible {
     case libraryLoadFailed([String])
     case symbolMissing(String)
     case statusFailure(String)
+    case invalidRequestPayload(String)
     case missingStatusPayload
     case invalidStatusPayload(String)
 
@@ -61,6 +80,8 @@ enum MoiraRuntimeDynamicClientError: Error, CustomStringConvertible {
             "Moira FFI symbol missing: \(symbol)"
         case let .statusFailure(message):
             message
+        case let .invalidRequestPayload(message):
+            "Moira FFI request could not be encoded: \(message)"
         case .missingStatusPayload:
             "Moira FFI returned an empty status payload"
         case let .invalidStatusPayload(message):

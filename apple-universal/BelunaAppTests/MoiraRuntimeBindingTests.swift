@@ -67,6 +67,87 @@ struct MoiraRuntimeBindingTests {
     }
 
     @MainActor
+    @Test func coreControlViewModelWakesSelectedLaunchTarget() async {
+        let idleSnapshot = MoiraRuntimeBindingFixtures.loomSnapshot()
+        let runningStatus = MoiraCoreStatus(
+            phase: "running",
+            targetLabel: "Dev Core",
+            executablePath: "/tmp/beluna",
+            workingDir: "/tmp",
+            profilePath: "/tmp/default.jsonc",
+            pid: 1234,
+            terminalReason: nil
+        )
+        let client = RecordingMoiraRuntimeClient(
+            snapshots: [
+                idleSnapshot,
+                idleSnapshot.withCoreStatus(runningStatus),
+            ],
+            operationStatus: runningStatus
+        )
+        let viewModel = MoiraOperationsViewModel(client: client)
+
+        await viewModel.refreshNow()
+        await viewModel.wakeCoreNow()
+
+        #expect(client.wakeRequests.count == 1)
+        #expect(client.wakeRequests.first?.target == idleSnapshot.launchTargets.first?.target)
+        #expect(client.wakeRequests.first?.profile?.profileID == "default")
+        #expect(viewModel.coreStatusText == "running")
+        #expect(viewModel.snapshot.status.core.pid == 1234)
+        #expect(viewModel.lastErrorText == nil)
+    }
+
+    @MainActor
+    @Test func coreControlViewModelRoutesStopAndForceKill() async {
+        let runningStatus = MoiraCoreStatus(
+            phase: "running",
+            targetLabel: "Dev Core",
+            executablePath: "/tmp/beluna",
+            workingDir: "/tmp",
+            profilePath: nil,
+            pid: 99,
+            terminalReason: nil
+        )
+        let stoppingStatus = MoiraCoreStatus(
+            phase: "stopping",
+            targetLabel: "Dev Core",
+            executablePath: "/tmp/beluna",
+            workingDir: "/tmp",
+            profilePath: nil,
+            pid: 99,
+            terminalReason: nil
+        )
+        let runningSnapshot = MoiraRuntimeBindingFixtures
+            .loomSnapshot()
+            .withCoreStatus(runningStatus)
+        let client = RecordingMoiraRuntimeClient(
+            snapshots: [runningSnapshot, runningSnapshot, runningSnapshot],
+            operationStatus: stoppingStatus
+        )
+        let viewModel = MoiraOperationsViewModel(client: client)
+
+        await viewModel.refreshNow()
+        await viewModel.stopCoreNow()
+        await viewModel.forceKillCoreNow()
+
+        #expect(client.stopCount == 1)
+        #expect(client.forceKillCount == 1)
+        #expect(viewModel.lastErrorText == nil)
+    }
+
+    @MainActor
+    @Test func coreControlViewModelReportsMissingLaunchTarget() async {
+        let viewModel = MoiraOperationsViewModel(
+            client: StaticMoiraRuntimeClient(loomSnapshot: .unavailable(reason: "fixture"))
+        )
+
+        await viewModel.wakeCoreNow()
+
+        #expect(viewModel.lastErrorText == "Select a launch target before waking Core.")
+    }
+
+    @MainActor
     @Test func moiraOperationsViewModelKeepsSnapshotAndReportsRefreshError() async {
         let viewModel = MoiraOperationsViewModel(client: FailingMoiraRuntimeClient())
 
@@ -136,6 +217,27 @@ struct MoiraRuntimeBindingTests {
         #expect(snapshot.tickDetail?.raw.first?.eventName == "started")
     }
 
+    @Test func encodesMoiraCoreWakeRequestJSON() throws {
+        let request = MoiraCoreWakeRequest(
+            target: MoiraLaunchTargetRef(
+                kind: "knownLocalBuild",
+                buildID: "dev-core",
+                releaseTag: nil,
+                rustTargetTriple: nil
+            ),
+            profile: MoiraProfileRef(profileID: "default")
+        )
+
+        let data = try JSONEncoder().encode(request)
+        let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let target = object?["target"] as? [String: Any]
+        let profile = object?["profile"] as? [String: Any]
+
+        #expect(target?["kind"] as? String == "knownLocalBuild")
+        #expect(target?["buildId"] as? String == "dev-core")
+        #expect(profile?["profileId"] as? String == "default")
+    }
+
 #if os(macOS)
     @Test func dynamicClientLoadsBundledMoiraFFI() throws {
         let fileManager = FileManager.default
@@ -178,6 +280,19 @@ struct MoiraRuntimeBindingTests {
         #expect(snapshot.status.receiver.dbPath.hasPrefix(rootURL.path))
         #expect(snapshot.runs.isEmpty)
         #expect(snapshot.tickDetail == nil)
+
+        var stopError: String?
+        do {
+            _ = try library.stopCore(
+                configuration: MoiraRuntimeConfiguration(
+                    rootDirectoryPath: rootURL.path,
+                    receiverBind: "127.0.0.1:0"
+                )
+            )
+        } catch {
+            stopError = String(describing: error)
+        }
+        #expect(stopError?.contains("no supervised Core") == true)
     }
 #endif
 
@@ -187,8 +302,63 @@ private struct FailingMoiraRuntimeClient: MoiraRuntimeClient {
     func loadLoomSnapshot(selection: MoiraLoomSelection) async throws -> MoiraLoomSnapshot {
         throw MoiraRuntimeClientFixtureError.fixtureFailure
     }
+
+    func wakeCore(request: MoiraCoreWakeRequest) async throws -> MoiraCoreStatus {
+        throw MoiraRuntimeClientFixtureError.fixtureFailure
+    }
+
+    func stopCore() async throws -> MoiraCoreStatus {
+        throw MoiraRuntimeClientFixtureError.fixtureFailure
+    }
+
+    func forceKillCore() async throws -> MoiraCoreStatus {
+        throw MoiraRuntimeClientFixtureError.fixtureFailure
+    }
 }
 
 private enum MoiraRuntimeClientFixtureError: Error {
     case fixtureFailure
+}
+
+private final class RecordingMoiraRuntimeClient: MoiraRuntimeClient, @unchecked Sendable {
+    private var snapshots: [MoiraLoomSnapshot]
+    private let operationStatus: MoiraCoreStatus
+    private(set) var wakeRequests: [MoiraCoreWakeRequest] = []
+    private(set) var stopCount = 0
+    private(set) var forceKillCount = 0
+
+    init(snapshots: [MoiraLoomSnapshot], operationStatus: MoiraCoreStatus) {
+        self.snapshots = snapshots
+        self.operationStatus = operationStatus
+    }
+
+    func loadLoomSnapshot(selection: MoiraLoomSelection) async throws -> MoiraLoomSnapshot {
+        guard !snapshots.isEmpty else {
+            return MoiraRuntimeBindingFixtures.loomSnapshot()
+        }
+        return snapshots.removeFirst()
+    }
+
+    func wakeCore(request: MoiraCoreWakeRequest) async throws -> MoiraCoreStatus {
+        wakeRequests.append(request)
+        return operationStatus
+    }
+
+    func stopCore() async throws -> MoiraCoreStatus {
+        stopCount += 1
+        return operationStatus
+    }
+
+    func forceKillCore() async throws -> MoiraCoreStatus {
+        forceKillCount += 1
+        return operationStatus
+    }
+}
+
+private extension MoiraLoomSnapshot {
+    func withCoreStatus(_ coreStatus: MoiraCoreStatus) -> Self {
+        var copy = self
+        copy.status.core = coreStatus
+        return copy
+    }
 }

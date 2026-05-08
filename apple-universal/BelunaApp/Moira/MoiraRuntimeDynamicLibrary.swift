@@ -17,6 +17,19 @@ final class MoiraRuntimeDynamicLibrary: @unchecked Sendable {
         UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>,
         UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
     ) -> Int32
+    private typealias WakeFunction = @convention(c) (
+        UnsafePointer<CChar>,
+        UnsafePointer<CChar>,
+        UnsafePointer<CChar>,
+        UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>,
+        UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
+    ) -> Int32
+    private typealias CoreLifecycleFunction = @convention(c) (
+        UnsafePointer<CChar>,
+        UnsafePointer<CChar>,
+        UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>,
+        UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
+    ) -> Int32
     private typealias ShutdownFunction = @convention(c) (
         UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>,
         UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
@@ -26,6 +39,9 @@ final class MoiraRuntimeDynamicLibrary: @unchecked Sendable {
     private let handle: UnsafeMutableRawPointer
     private let statusFunction: StatusFunction
     private let loomFunction: LoomFunction
+    private let wakeFunction: WakeFunction
+    private let stopFunction: CoreLifecycleFunction
+    private let forceKillFunction: CoreLifecycleFunction
     private let shutdownFunction: ShutdownFunction
     private let freeFunction: FreeFunction
 
@@ -33,12 +49,18 @@ final class MoiraRuntimeDynamicLibrary: @unchecked Sendable {
         handle: UnsafeMutableRawPointer,
         statusFunction: @escaping StatusFunction,
         loomFunction: @escaping LoomFunction,
+        wakeFunction: @escaping WakeFunction,
+        stopFunction: @escaping CoreLifecycleFunction,
+        forceKillFunction: @escaping CoreLifecycleFunction,
         shutdownFunction: @escaping ShutdownFunction,
         freeFunction: @escaping FreeFunction
     ) {
         self.handle = handle
         self.statusFunction = statusFunction
         self.loomFunction = loomFunction
+        self.wakeFunction = wakeFunction
+        self.stopFunction = stopFunction
+        self.forceKillFunction = forceKillFunction
         self.shutdownFunction = shutdownFunction
         self.freeFunction = freeFunction
     }
@@ -139,6 +161,30 @@ final class MoiraRuntimeDynamicLibrary: @unchecked Sendable {
         }
     }
 
+    func wakeCore(
+        configuration: MoiraRuntimeConfiguration,
+        request: MoiraCoreWakeRequest
+    ) throws -> MoiraCoreStatus {
+        let data = try JSONEncoder().encode(request)
+        guard let requestText = String(data: data, encoding: .utf8) else {
+            throw MoiraRuntimeDynamicClientError.invalidRequestPayload("wake request is not UTF-8")
+        }
+
+        return try callWakeFunction(
+            configuration: configuration,
+            requestText: requestText,
+            function: wakeFunction
+        )
+    }
+
+    func stopCore(configuration: MoiraRuntimeConfiguration) throws -> MoiraCoreStatus {
+        try callCoreLifecycleFunction(configuration: configuration, function: stopFunction)
+    }
+
+    func forceKillCore(configuration: MoiraRuntimeConfiguration) throws -> MoiraCoreStatus {
+        try callCoreLifecycleFunction(configuration: configuration, function: forceKillFunction)
+    }
+
     func shutdownResources() throws -> [MoiraResourceStatus] {
         var jsonPointer: UnsafeMutablePointer<CChar>?
         var errorPointer: UnsafeMutablePointer<CChar>?
@@ -175,7 +221,12 @@ final class MoiraRuntimeDynamicLibrary: @unchecked Sendable {
                 switch error {
                 case let .libraryLoadFailed(errors):
                     loadErrors.append(contentsOf: errors)
-                case .libraryMissing, .symbolMissing, .statusFailure, .missingStatusPayload, .invalidStatusPayload:
+                case .libraryMissing,
+                     .symbolMissing,
+                     .statusFailure,
+                     .invalidRequestPayload,
+                     .missingStatusPayload,
+                     .invalidStatusPayload:
                     throw error
                 }
             } catch {
@@ -206,6 +257,18 @@ final class MoiraRuntimeDynamicLibrary: @unchecked Sendable {
                 handle: handle,
                 name: "moira_runtime_loom_json"
             )
+            let wakeFunction: WakeFunction = try loadSymbol(
+                handle: handle,
+                name: "moira_runtime_wake_json"
+            )
+            let stopFunction: CoreLifecycleFunction = try loadSymbol(
+                handle: handle,
+                name: "moira_runtime_stop_json"
+            )
+            let forceKillFunction: CoreLifecycleFunction = try loadSymbol(
+                handle: handle,
+                name: "moira_runtime_force_kill_json"
+            )
             let shutdownFunction: ShutdownFunction = try loadSymbol(
                 handle: handle,
                 name: "moira_runtime_shutdown_json"
@@ -219,6 +282,9 @@ final class MoiraRuntimeDynamicLibrary: @unchecked Sendable {
                 handle: handle,
                 statusFunction: statusFunction,
                 loomFunction: loomFunction,
+                wakeFunction: wakeFunction,
+                stopFunction: stopFunction,
+                forceKillFunction: forceKillFunction,
                 shutdownFunction: shutdownFunction,
                 freeFunction: freeFunction
             )
@@ -269,6 +335,78 @@ final class MoiraRuntimeDynamicLibrary: @unchecked Sendable {
         urls.append(repoRoot.appendingPathComponent("target/release/libmoira_ffi.dylib"))
 
         return urls
+    }
+
+    private func callWakeFunction(
+        configuration: MoiraRuntimeConfiguration,
+        requestText: String,
+        function: WakeFunction
+    ) throws -> MoiraCoreStatus {
+        var jsonPointer: UnsafeMutablePointer<CChar>?
+        var errorPointer: UnsafeMutablePointer<CChar>?
+        defer {
+            freeFunction(jsonPointer)
+            freeFunction(errorPointer)
+        }
+
+        let statusCode = configuration.rootDirectoryPath.withCString { rootPointer in
+            configuration.receiverBind.withCString { bindPointer in
+                requestText.withCString { requestPointer in
+                    function(rootPointer, bindPointer, requestPointer, &jsonPointer, &errorPointer)
+                }
+            }
+        }
+
+        return try decodeCoreStatus(
+            statusCode: statusCode,
+            jsonPointer: jsonPointer,
+            errorPointer: errorPointer
+        )
+    }
+
+    private func callCoreLifecycleFunction(
+        configuration: MoiraRuntimeConfiguration,
+        function: CoreLifecycleFunction
+    ) throws -> MoiraCoreStatus {
+        var jsonPointer: UnsafeMutablePointer<CChar>?
+        var errorPointer: UnsafeMutablePointer<CChar>?
+        defer {
+            freeFunction(jsonPointer)
+            freeFunction(errorPointer)
+        }
+
+        let statusCode = configuration.rootDirectoryPath.withCString { rootPointer in
+            configuration.receiverBind.withCString { bindPointer in
+                function(rootPointer, bindPointer, &jsonPointer, &errorPointer)
+            }
+        }
+
+        return try decodeCoreStatus(
+            statusCode: statusCode,
+            jsonPointer: jsonPointer,
+            errorPointer: errorPointer
+        )
+    }
+
+    private func decodeCoreStatus(
+        statusCode: Int32,
+        jsonPointer: UnsafeMutablePointer<CChar>?,
+        errorPointer: UnsafeMutablePointer<CChar>?
+    ) throws -> MoiraCoreStatus {
+        if statusCode != 0 {
+            throw MoiraRuntimeDynamicClientError.statusFailure(readCString(errorPointer))
+        }
+
+        guard let jsonPointer else {
+            throw MoiraRuntimeDynamicClientError.missingStatusPayload
+        }
+
+        let jsonText = String(cString: jsonPointer)
+        do {
+            return try JSONDecoder().decode(MoiraCoreStatus.self, from: Data(jsonText.utf8))
+        } catch {
+            throw MoiraRuntimeDynamicClientError.invalidStatusPayload(String(describing: error))
+        }
     }
 
     private func readCString(_ pointer: UnsafeMutablePointer<CChar>?) -> String {

@@ -15,9 +15,9 @@
 3. Clotho launch-target/profile context needed by the first Core Control surface.
 4. Atropos runtime phase and wake/stop operation surface where available.
 5. Lachesis receiver status, wake list, tick list, and selected tick raw records.
-6. Swift host boundary starts with `MoiraRuntimeClient`, `MoiraRuntimeSnapshot`, `MoiraLoomSnapshot`, `MoiraLoomSelection`, and `MoiraOperationsViewModel`.
+6. Swift host boundary starts with `MoiraRuntimeClient`, `MoiraRuntimeSnapshot`, `MoiraLoomSnapshot`, `MoiraLoomSelection`, `MoiraCoreWakeRequest`, and `MoiraOperationsViewModel`.
 7. Rust binding adapters must implement `MoiraRuntimeClient` so SwiftUI views stay independent of ABI mechanics.
-8. The first macOS adapter uses dynamic loading for `libmoira_ffi.dylib`, resolves `moira_runtime_status_json` and `moira_runtime_loom_json`, and decodes returned JSON into Swift DTOs.
+8. The first macOS adapter uses dynamic loading for `libmoira_ffi.dylib`, resolves `moira_runtime_status_json`, `moira_runtime_loom_json`, `moira_runtime_wake_json`, `moira_runtime_stop_json`, and `moira_runtime_force_kill_json`, and decodes returned JSON into Swift DTOs.
 9. The macOS build bundles `libmoira_ffi.dylib` and `libduckdb.dylib` under `BelunaApp.app/Contents/Frameworks`.
 10. The first dynamic adapter also resolves `moira_runtime_shutdown_json` for explicit runtime cleanup in integration tests.
 
@@ -34,6 +34,7 @@
 1. Connection controls (socket path, connect/disconnect, retry).
 2. Chat history controls and bounded in-memory buffering.
 3. Local persistence for sense/act history.
-4. Settings-integrated Moira operations panel.
+4. Standalone Core Control panel parallel to Settings.
 5. Raw-first local observability browsing for the selected wake/tick.
-6. Read-only Clotho launch-target/profile context inside the first Settings-integrated Moira slice.
+6. Clotho launch-target/profile context inside the Core Control panel.
+7. Settings-integrated Moira status and minimum local observability pending the dedicated O11y / Lachesis panel.

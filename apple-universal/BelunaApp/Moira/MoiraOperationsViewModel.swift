@@ -4,11 +4,14 @@ import Foundation
 final class MoiraOperationsViewModel: ObservableObject {
     @Published private(set) var snapshot: MoiraLoomSnapshot
     @Published private(set) var isRefreshing = false
+    @Published private(set) var isOperating = false
     @Published private(set) var lastErrorText: String?
     @Published private(set) var selectedLaunchTargetID = ""
     @Published private(set) var selectedProfileID = ""
 
     private let client: any MoiraRuntimeClient
+    private var didInitializeLaunchTargetSelection = false
+    private var didInitializeProfileSelection = false
 
     init(client: any MoiraRuntimeClient) {
         self.client = client
@@ -40,7 +43,34 @@ final class MoiraOperationsViewModel: ObservableObject {
     }
 
     var canRefresh: Bool {
-        !isRefreshing
+        !isRefreshing && !isOperating
+    }
+
+    var canWakeCore: Bool {
+        guard selectedLaunchTarget != nil else {
+            return false
+        }
+
+        return !isRefreshing
+            && !isOperating
+            && snapshot.status.receiver.canSupportWake
+            && snapshot.status.core.canWake
+    }
+
+    var canStopCore: Bool {
+        !isRefreshing && !isOperating && snapshot.status.core.canStop
+    }
+
+    var canForceKillCore: Bool {
+        !isRefreshing && !isOperating && snapshot.status.core.canForceKill
+    }
+
+    var selectedLaunchTarget: MoiraLaunchTargetSummary? {
+        snapshot.launchTargets.first { $0.id == selectedLaunchTargetID }
+    }
+
+    var selectedProfile: MoiraProfileDocumentSummary? {
+        snapshot.profiles.first { $0.id == selectedProfileID }
     }
 
     var selectedRunID: String? {
@@ -86,10 +116,12 @@ final class MoiraOperationsViewModel: ObservableObject {
     }
 
     func selectLaunchTarget(id: String) {
+        didInitializeLaunchTargetSelection = true
         selectedLaunchTargetID = id
     }
 
     func selectProfile(id: String) {
+        didInitializeProfileSelection = true
         selectedProfileID = id
     }
 
@@ -109,6 +141,52 @@ final class MoiraOperationsViewModel: ObservableObject {
 
     func refreshNow() async {
         await refreshNow(selection: MoiraLoomSelection(runID: selectedRunID, tick: selectedTick))
+    }
+
+    func wakeCore() {
+        Task {
+            await wakeCoreNow()
+        }
+    }
+
+    func stopCore() {
+        Task {
+            await stopCoreNow()
+        }
+    }
+
+    func forceKillCore() {
+        Task {
+            await forceKillCoreNow()
+        }
+    }
+
+    func wakeCoreNow() async {
+        guard let target = selectedLaunchTarget else {
+            lastErrorText = MoiraRuntimeClientError.missingLaunchTarget.description
+            return
+        }
+
+        let request = MoiraCoreWakeRequest(
+            target: target.target,
+            profile: selectedProfile.map { MoiraProfileRef(profileID: $0.profileID) }
+        )
+
+        await performCoreOperation {
+            try await client.wakeCore(request: request)
+        }
+    }
+
+    func stopCoreNow() async {
+        await performCoreOperation {
+            try await client.stopCore()
+        }
+    }
+
+    func forceKillCoreNow() async {
+        await performCoreOperation {
+            try await client.forceKillCore()
+        }
     }
 
     private func refreshNow(selection: MoiraLoomSelection) async {
@@ -132,17 +210,64 @@ final class MoiraOperationsViewModel: ObservableObject {
         }
     }
 
+    private func performCoreOperation(_ operation: () async throws -> MoiraCoreStatus) async {
+        guard !isOperating, !isRefreshing else {
+            return
+        }
+
+        isOperating = true
+        defer {
+            isOperating = false
+        }
+
+        do {
+            let coreStatus = try await operation()
+            snapshot.status.core = coreStatus
+            lastErrorText = nil
+            await refreshNow()
+        } catch {
+            lastErrorText = String(describing: error)
+        }
+    }
+
     private func syncSelections() {
-        if selectedLaunchTargetID.isEmpty, let firstTarget = snapshot.launchTargets.first {
+        if selectedLaunchTargetID.isEmpty,
+           !didInitializeLaunchTargetSelection,
+           let firstTarget = snapshot.launchTargets.first {
             selectedLaunchTargetID = firstTarget.id
+            didInitializeLaunchTargetSelection = true
         } else if !snapshot.launchTargets.contains(where: { $0.id == selectedLaunchTargetID }) {
             selectedLaunchTargetID = snapshot.launchTargets.first?.id ?? ""
         }
 
-        if selectedProfileID.isEmpty, let firstProfile = snapshot.profiles.first {
+        if selectedProfileID.isEmpty,
+           !didInitializeProfileSelection,
+           let firstProfile = snapshot.profiles.first {
             selectedProfileID = firstProfile.id
-        } else if !snapshot.profiles.contains(where: { $0.id == selectedProfileID }) {
-            selectedProfileID = snapshot.profiles.first?.id ?? ""
+            didInitializeProfileSelection = true
+        } else if !selectedProfileID.isEmpty,
+                  !snapshot.profiles.contains(where: { $0.id == selectedProfileID }) {
+            selectedProfileID = ""
         }
+    }
+}
+
+private extension MoiraReceiverStatus {
+    var canSupportWake: Bool {
+        wakeState == "listening" || wakeState == "awake"
+    }
+}
+
+private extension MoiraCoreStatus {
+    var canWake: Bool {
+        phase == "idle" || phase == "terminated" || phase == "unavailable"
+    }
+
+    var canStop: Bool {
+        phase == "running" && pid != nil
+    }
+
+    var canForceKill: Bool {
+        (phase == "running" || phase == "stopping") && pid != nil
     }
 }

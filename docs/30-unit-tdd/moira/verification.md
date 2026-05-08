@@ -7,7 +7,7 @@
 3. Moira can wake the selected launch target with the selected profile, or wake with profile omitted and omit `--config`.
 4. Atropos exposes runtime status, graceful stop, explicit force-kill with second confirmation, and app-exit stop behavior.
 5. Host-native Loom exposes Lachesis, Atropos, and Clotho capabilities through explicit host UI owners.
-6. Apple Universal exposes the first minimum native Loom through a Settings-integrated operations panel.
+6. Apple Universal exposes the first minimum native Loom through Settings status/O11y and a standalone Core Control panel for Clotho/Atropos operations.
 
 ## Current Clotho Follow-On Checks
 
@@ -38,6 +38,7 @@
 8. Process-local resource conflicts surface as runtime status.
 9. Body endpoint socket discovery remains usable when Core is already listening from another launch path.
 10. `moira_runtime_loom_json` returns the minimum operator snapshot through the FFI boundary.
+11. `moira_runtime_wake_json`, `moira_runtime_stop_json`, and `moira_runtime_force_kill_json` route host lifecycle requests through Atropos and return Core status JSON.
 
 ## Observability Checks
 
@@ -58,11 +59,11 @@
 1. Moira Clotho preparation and Atropos supervision logic in the Moira backend runtime.
 2. Core OTLP event-shape tests, [Core Observability](../core/observability.md), contract fixtures, and config validation guardrails.
 3. Live end-to-end operator walkthroughs remain valid evidence for wake/stop and browse-surface checks while the current local read models and control-plane slices continue to stabilize.
-4. `moira/ffi/src/tests.rs` covers the status JSON and minimum Loom snapshot JSON C ABI surfaces.
+4. `moira/ffi/src/tests.rs` covers the status JSON, minimum Loom snapshot JSON, and lifecycle operation JSON C ABI surfaces.
 
 ## Current Architecture Checks
 
-1. Apple Universal minimum Loom exposes runtime/receiver status, launch-target/profile read context, wake list, tick list, and selected tick raw inspection from `MoiraRuntime::loom_snapshot(selection)`.
+1. Apple Universal minimum Loom exposes runtime/receiver status, launch-target/profile read context, Core lifecycle operation state, wake list, tick list, and selected tick raw inspection from Moira host APIs.
 2. Lachesis persistence and Lachesis projections remain the owner of Lachesis state; Clotho and Atropos state use dedicated ownership paths.
 3. Clotho durable manifests and profile documents remain app-local preparation truth, while current selected launch-target/profile refs remain host session state until an explicit persistence slice lands.
 4. Tauri/Vue retirement used the selected Apple Universal minimum Loom contract as the gate, with legacy-only features assigned to follow-on owners.

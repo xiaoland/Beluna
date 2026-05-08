@@ -9,7 +9,7 @@ use std::{
 
 use moira_runtime::{
     MoiraLoomSelection, MoiraPaths, MoiraRuntime, MoiraRuntimeConfig, NoopEventSink,
-    TokioTaskSpawner,
+    TokioTaskSpawner, clotho::model::WakeInputRequest,
 };
 
 static RUNTIME: Mutex<Option<FfiRuntime>> = Mutex::new(None);
@@ -59,6 +59,73 @@ pub extern "C" fn moira_runtime_loom_json(
     clear_out(out_error);
 
     match loom_json(root_dir, receiver_bind, selected_run_id, selected_tick) {
+        Ok(json) => {
+            write_out(out_json, json);
+            0
+        }
+        Err(error) => {
+            write_out(out_error, error);
+            1
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn moira_runtime_wake_json(
+    root_dir: *const c_char,
+    receiver_bind: *const c_char,
+    wake_json: *const c_char,
+    out_json: *mut *mut c_char,
+    out_error: *mut *mut c_char,
+) -> i32 {
+    clear_out(out_json);
+    clear_out(out_error);
+
+    match wake_json_operation(root_dir, receiver_bind, wake_json) {
+        Ok(json) => {
+            write_out(out_json, json);
+            0
+        }
+        Err(error) => {
+            write_out(out_error, error);
+            1
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn moira_runtime_stop_json(
+    root_dir: *const c_char,
+    receiver_bind: *const c_char,
+    out_json: *mut *mut c_char,
+    out_error: *mut *mut c_char,
+) -> i32 {
+    clear_out(out_json);
+    clear_out(out_error);
+
+    match stop_json(root_dir, receiver_bind) {
+        Ok(json) => {
+            write_out(out_json, json);
+            0
+        }
+        Err(error) => {
+            write_out(out_error, error);
+            1
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn moira_runtime_force_kill_json(
+    root_dir: *const c_char,
+    receiver_bind: *const c_char,
+    out_json: *mut *mut c_char,
+    out_error: *mut *mut c_char,
+) -> i32 {
+    clear_out(out_json);
+    clear_out(out_error);
+
+    match force_kill_json(root_dir, receiver_bind) {
         Ok(json) => {
             write_out(out_json, json);
             0
@@ -137,6 +204,53 @@ fn loom_json(
 
     serde_json::to_string(&snapshot)
         .map_err(|err| format!("failed to encode Moira Loom snapshot: {err}"))
+}
+
+fn wake_json_operation(
+    root_dir: *const c_char,
+    receiver_bind: *const c_char,
+    wake_json: *const c_char,
+) -> Result<String, String> {
+    let request_json = read_string(wake_json, "wake_json")?;
+    let request = serde_json::from_str::<WakeInputRequest>(&request_json)
+        .map_err(|err| format!("failed to decode Moira wake request: {err}"))?;
+    let guard = ensure_runtime(root_dir, receiver_bind)?;
+    let runtime = guard
+        .as_ref()
+        .ok_or_else(|| "Moira runtime failed to initialize".to_string())?;
+    let status = runtime
+        .tokio
+        .block_on(runtime.runtime.atropos().wake(request))?;
+
+    serde_json::to_string(&status)
+        .map_err(|err| format!("failed to encode Moira Core status: {err}"))
+}
+
+fn stop_json(root_dir: *const c_char, receiver_bind: *const c_char) -> Result<String, String> {
+    let guard = ensure_runtime(root_dir, receiver_bind)?;
+    let runtime = guard
+        .as_ref()
+        .ok_or_else(|| "Moira runtime failed to initialize".to_string())?;
+    let status = runtime.tokio.block_on(runtime.runtime.atropos().stop())?;
+
+    serde_json::to_string(&status)
+        .map_err(|err| format!("failed to encode Moira Core status: {err}"))
+}
+
+fn force_kill_json(
+    root_dir: *const c_char,
+    receiver_bind: *const c_char,
+) -> Result<String, String> {
+    let guard = ensure_runtime(root_dir, receiver_bind)?;
+    let runtime = guard
+        .as_ref()
+        .ok_or_else(|| "Moira runtime failed to initialize".to_string())?;
+    let status = runtime
+        .tokio
+        .block_on(runtime.runtime.atropos().force_kill())?;
+
+    serde_json::to_string(&status)
+        .map_err(|err| format!("failed to encode Moira Core status: {err}"))
 }
 
 fn ensure_runtime(

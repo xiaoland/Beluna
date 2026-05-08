@@ -7,7 +7,6 @@ struct MoiraOperationsSection: View {
         Section("Moira") {
             runtimeHeader
             receiverStatus
-            coreContext
             localObservability
             rawTickRecords
         }
@@ -77,46 +76,6 @@ struct MoiraOperationsSection: View {
         }
     }
 
-    private var coreContext: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Divider()
-
-            LabeledContent("Core", value: viewModel.coreStatusText)
-
-            if viewModel.hasLaunchTargets {
-                Picker("Launch Target", selection: launchTargetSelection) {
-                    ForEach(viewModel.snapshot.launchTargets) { target in
-                        Text(target.label).tag(target.id)
-                    }
-                }
-            } else {
-                LabeledContent("Launch Target", value: "none")
-            }
-
-            if viewModel.hasProfiles {
-                Picker("Profile", selection: profileSelection) {
-                    ForEach(viewModel.snapshot.profiles) { profile in
-                        Text(profile.profileID).tag(profile.id)
-                    }
-                }
-            } else {
-                LabeledContent("Profile", value: "none")
-            }
-
-            if let target = viewModel.snapshot.launchTargets.first(where: {
-                $0.id == viewModel.selectedLaunchTargetID
-            }) {
-                launchTargetDetail(target)
-            }
-
-            if let profile = viewModel.snapshot.profiles.first(where: {
-                $0.id == viewModel.selectedProfileID
-            }) {
-                pathText("Profile Path", profile.profilePath)
-            }
-        }
-    }
-
     private var localObservability: some View {
         VStack(alignment: .leading, spacing: 8) {
             Divider()
@@ -165,20 +124,6 @@ struct MoiraOperationsSection: View {
         }
     }
 
-    private var launchTargetSelection: Binding<String> {
-        Binding(
-            get: { viewModel.selectedLaunchTargetID },
-            set: { viewModel.selectLaunchTarget(id: $0) }
-        )
-    }
-
-    private var profileSelection: Binding<String> {
-        Binding(
-            get: { viewModel.selectedProfileID },
-            set: { viewModel.selectProfile(id: $0) }
-        )
-    }
-
     private var runSelection: Binding<String> {
         Binding(
             get: { viewModel.selectedRunBindingValue },
@@ -191,36 +136,6 @@ struct MoiraOperationsSection: View {
             get: { viewModel.selectedTickBindingValue },
             set: { viewModel.selectTick(value: $0) }
         )
-    }
-
-    private func launchTargetDetail(_ target: MoiraLaunchTargetSummary) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            LabeledContent("Readiness", value: target.readiness)
-            LabeledContent("Provenance", value: target.provenance)
-
-            if let issue = target.issue {
-                Text(issue)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .textSelection(.enabled)
-            }
-
-            if let executablePath = target.executablePath {
-                pathText("Executable", executablePath)
-            }
-            if let workingDir = target.workingDir {
-                pathText("Working Dir", workingDir)
-            }
-        }
-    }
-
-    private func pathText(_ label: String, _ path: String) -> some View {
-        LabeledContent(label) {
-            Text(path)
-                .font(.caption.monospaced())
-                .lineLimit(2)
-                .textSelection(.enabled)
-        }
     }
 
     private func runRowTitle(_ run: MoiraRunSummary) -> String {

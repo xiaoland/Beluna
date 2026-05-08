@@ -9,7 +9,7 @@
 - Typed Clotho, Lachesis, and Atropos query/operation surfaces.
 - Runtime status, resource status, minimum Loom snapshot queries, and event/pulse delivery for host-native Loom UI.
 - Apple Universal is the first host for the minimum native Loom surface.
-- First Apple binding proof: `moira/ffi` builds `libmoira_ffi.dylib` and exposes `moira_runtime_status_json`, `moira_runtime_loom_json`, `moira_runtime_shutdown_json`, plus string-freeing ABI.
+- First Apple binding proof: `moira/ffi` builds `libmoira_ffi.dylib` and exposes `moira_runtime_status_json`, `moira_runtime_loom_json`, `moira_runtime_wake_json`, `moira_runtime_stop_json`, `moira_runtime_force_kill_json`, `moira_runtime_shutdown_json`, plus string-freeing ABI.
 - Apple Universal macOS packaging bundles `libmoira_ffi.dylib` and DuckDB's `libduckdb.dylib` into the host app's `Contents/Frameworks`.
 
 2. Artifact preparation interface:

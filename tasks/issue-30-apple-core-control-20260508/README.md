@@ -12,7 +12,7 @@ UI integration target: a standalone Core Control panel parallel to Settings. Set
 
 ## Current Packet Status
 
-Mode: opened for scope confirmation.
+Mode: Execute.
 
 Current target:
 
@@ -20,3 +20,9 @@ Current target:
 - Stop supervised Core from Apple Universal.
 - Expose force-kill through an explicit second confirmation path.
 - Keep launch context, resource conflicts, and terminal supervision state visible in the Core Control panel.
+
+Current slice state:
+
+- Moira FFI exposes lifecycle JSON ABI functions for wake, stop, and force-kill.
+- Apple Universal has a standalone Core Control window parallel to Settings.
+- `MoiraOperationsViewModel` owns the shared refresh and lifecycle operation state for this first slice.
