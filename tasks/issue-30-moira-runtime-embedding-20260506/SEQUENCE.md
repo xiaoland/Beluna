@@ -135,6 +135,8 @@ Verification:
 
 Goal: embed Moira backend into Apple Universal as an internal package and expose the first native minimum Loom surface through process-local runtime calls.
 
+Status: Swift host binding seam, first Rust C ABI status adapter proof, and macOS Xcode packaging automation implemented locally.
+
 Candidate options:
 
 - Swift calls Moira runtime through an explicit internal package binding.
@@ -150,6 +152,28 @@ Verification:
 - Multi-process smoke test proves the second process reports resource conflicts cleanly.
 - Socket discovery smoke test proves body endpoint use when Core is already listening.
 - Main-thread responsiveness remains protected.
+
+Implemented verification:
+
+- `xcodebuild test -project apple-universal/BelunaApp.xcodeproj -scheme BelunaApp -destination 'platform=macOS' -only-testing:BelunaAppTests`
+- `cargo check -p moira-ffi --locked`
+- `cargo test -p moira-ffi --locked`
+- `cargo build -p moira-ffi --lib --locked`
+- `bash -n apple-universal/script/build_moira_ffi.sh`
+- `plutil -lint apple-universal/BelunaApp.xcodeproj/project.pbxproj`
+- `xcodebuild build -project apple-universal/BelunaApp.xcodeproj -scheme BelunaApp -destination 'platform=macOS'`
+- `codesign --verify --deep --strict /Users/lanzhijiang/Library/Developer/Xcode/DerivedData/BelunaApp-hbfvzmxvgxyigodcpjjrlfecfmtn/Build/Products/Debug/BelunaApp.app`
+- `otool -D /Users/lanzhijiang/Library/Developer/Xcode/DerivedData/BelunaApp-hbfvzmxvgxyigodcpjjrlfecfmtn/Build/Products/Debug/BelunaApp.app/Contents/Frameworks/libmoira_ffi.dylib`
+- `otool -L /Users/lanzhijiang/Library/Developer/Xcode/DerivedData/BelunaApp-hbfvzmxvgxyigodcpjjrlfecfmtn/Build/Products/Debug/BelunaApp.app/Contents/Frameworks/libmoira_ffi.dylib`
+- `xcodebuild test -project apple-universal/BelunaApp.xcodeproj -scheme BelunaApp -destination 'platform=macOS' -only-testing:BelunaAppTests/BelunaAppTests`
+- `xcodebuild test -project apple-universal/BelunaApp.xcodeproj -scheme BelunaApp -destination 'platform=macOS' -only-testing:BelunaAppTests/MoiraRuntimeBindingTests`
+- `xcodebuild test -project apple-universal/BelunaApp.xcodeproj -scheme BelunaApp -destination 'platform=macOS' -only-testing:BelunaAppTests`
+
+Packaging proof:
+
+- `Build Moira FFI` invokes Cargo from the BelunaApp macOS target.
+- `libmoira_ffi.dylib` and `libduckdb.dylib` are copied into `BelunaApp.app/Contents/Frameworks` and signed.
+- `dynamicClientLoadsBundledMoiraFFI` loads the bundled FFI dylib and calls real Moira runtime status.
 
 ## Slice 5: Apple Universal Minimum Loom
 

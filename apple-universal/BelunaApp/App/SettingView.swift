@@ -2,13 +2,14 @@ import SwiftUI
 
 struct SettingView: View {
     @ObservedObject var viewModel: ChatViewModel
+    @ObservedObject var moiraViewModel: MoiraOperationsViewModel
 
     var body: some View {
         Form {
             ConnectionSettingsSection(viewModel: viewModel)
             ChatRetentionSettingsSection(viewModel: viewModel)
             RuntimeStatusSection(viewModel: viewModel)
-            MoiraOperationsSection()
+            MoiraOperationsSection(viewModel: moiraViewModel)
         }
         .formStyle(.grouped)
         .padding(16)

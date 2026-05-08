@@ -21,12 +21,13 @@ Moira provides Beluna's first-party local control-plane runtime for:
 
 1. Current Rust backend code realizes Lachesis local ingestion, storage, query, and inspection for one wake and one selected tick.
 2. The backend owner split is explicit in code: `moira/runtime` owns `clotho`, `lachesis`, `atropos`, and the host-facing `runtime` API.
-3. The Tauri container under `moira/src-tauri` is a transitional adapter that resolves Tauri app paths, installs a Tauri event sink/task spawner, and exposes existing command names.
-4. Clotho currently owns launch-target preparation plus app-local JSONC profile-document list/load/save. `profile_id` is a logical Clotho key that maps to app-local `profiles/<profile-id>.jsonc`.
-5. Atropos currently owns runtime status, wake, graceful stop, force-kill, and app-exit stop wiring for the supervised Core process.
-6. Current Clotho realization includes known local build registration, explicit forge from a local Beluna repo root or `core/` crate root, published release discovery, checksum verification against `SHA256SUMS`, and version-isolated install directories.
-7. Schema-validation interactions with Core authority remain deferred to a later Clotho slice.
-8. The current Tauri/Vue Loom is transitional implementation evidence. Apple Universal receives the first minimum native Loom surface in the issue #30 slice.
+3. `moira/ffi` owns the first narrow C ABI proof for Apple Universal, currently exposing runtime status JSON from a process-local `MoiraRuntime`.
+4. The Tauri container under `moira/src-tauri` is a transitional adapter that resolves Tauri app paths, installs a Tauri event sink/task spawner, and exposes existing command names.
+5. Clotho currently owns launch-target preparation plus app-local JSONC profile-document list/load/save. `profile_id` is a logical Clotho key that maps to app-local `profiles/<profile-id>.jsonc`.
+6. Atropos currently owns runtime status, wake, graceful stop, force-kill, and app-exit stop wiring for the supervised Core process.
+7. Current Clotho realization includes known local build registration, explicit forge from a local Beluna repo root or `core/` crate root, published release discovery, checksum verification against `SHA256SUMS`, and version-isolated install directories.
+8. Schema-validation interactions with Core authority remain deferred to a later Clotho slice.
+9. The current Tauri/Vue Loom is transitional implementation evidence. Apple Universal receives the first minimum native Loom surface in the issue #30 slice.
 
 ## Runtime Split
 
@@ -44,6 +45,8 @@ Moira provides Beluna's first-party local control-plane runtime for:
 4. `host API`
 - Owns the stable surface exposed to host apps, including typed queries, operations, runtime status, and event/pulse delivery.
 - Current Rust implementation lives in `moira/runtime/src/runtime` as `MoiraRuntime`, `MoiraRuntimeConfig`, `MoiraPaths`, `MoiraEventSink`, and `MoiraTaskSpawner`.
+- Current Apple proof adapter lives in `moira/ffi` and bridges `MoiraRuntime.status()` as C ABI status JSON.
+- Apple Universal macOS builds package the current FFI adapter as bundled runtime dylibs through the host app target.
 - Apple Universal consumes the first narrow host API needed for Settings-integrated minimum Loom.
 
 5. `platform adapters`

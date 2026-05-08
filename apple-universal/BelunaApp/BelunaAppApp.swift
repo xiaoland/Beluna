@@ -10,6 +10,9 @@ import SwiftUI
 @main
 struct BelunaAppApp: App {
     @StateObject private var viewModel = ChatViewModel()
+    @StateObject private var moiraViewModel = MoiraOperationsViewModel(
+        client: MoiraRuntimeClientFactory.makeDefault()
+    )
 
     var body: some Scene {
         Window("Beluna", id: "main") {
@@ -21,7 +24,7 @@ struct BelunaAppApp: App {
         }
 
         Settings {
-            SettingView(viewModel: viewModel)
+            SettingView(viewModel: viewModel, moiraViewModel: moiraViewModel)
         }
     }
 }

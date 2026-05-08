@@ -10,3 +10,8 @@
 8. Keep body endpoint connection usable when Core is already listening from another launch path.
 9. Keep Moira operations UI grouped with connection and runtime status in the first slice.
 10. Permit multiple Apple Universal instances; rely on Core-assigned endpoint ids and future user-configured endpoint names for runtime disambiguation.
+11. Load Moira status through `MoiraOperationsViewModel` and an async `MoiraRuntimeClient`.
+12. Keep Rust binding setup behind a replaceable client adapter.
+13. Keep dynamic Rust calls off the main actor; the current adapter runs status refresh work through a detached utility task.
+14. Bundle macOS Moira FFI runtime dylibs through the BelunaApp target's `Build Moira FFI` script phase.
+15. Keep bundled Rust dylibs in `BelunaApp.app/Contents/Frameworks` so `Bundle.main.privateFrameworksURL` can resolve the runtime.

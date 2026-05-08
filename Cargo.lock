@@ -2825,6 +2825,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "moira-ffi"
+version = "0.1.0"
+dependencies = [
+ "moira-runtime",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "moira-runtime"
 version = "0.1.0"
 dependencies = [

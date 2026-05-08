@@ -15,6 +15,11 @@
 3. Clotho launch-target/profile context needed by the first Core Control surface.
 4. Atropos runtime phase and wake/stop operation surface where available.
 5. Lachesis receiver status, wake list, tick list, and selected tick raw records.
+6. Swift host boundary starts with `MoiraRuntimeClient`, `MoiraRuntimeSnapshot`, and `MoiraOperationsViewModel`.
+7. Rust binding adapters must implement `MoiraRuntimeClient` so SwiftUI views stay independent of ABI mechanics.
+8. The first macOS adapter uses dynamic loading for `libmoira_ffi.dylib`, resolves `moira_runtime_status_json`, and decodes returned JSON into Swift DTOs.
+9. The macOS build bundles `libmoira_ffi.dylib` and `libduckdb.dylib` under `BelunaApp.app/Contents/Frameworks`.
+10. The first dynamic adapter also resolves `moira_runtime_shutdown_json` for explicit runtime cleanup in integration tests.
 
 ## Socket Discovery Interface
 

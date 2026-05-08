@@ -58,6 +58,23 @@ The package may be present in multiple processes. This task proves the Apple pro
 - Use the smallest binding approach that preserves async correctness and memory safety.
 - Keep future authority coordination below host UI so every Human Interface client can share the same semantics later.
 
+## Current Proof
+
+The first Apple proof uses C ABI plus a Swift dynamic-loader wrapper and macOS Xcode packaging:
+
+- Rust crate: `moira/ffi`
+- Cargo artifacts: `target/debug/libmoira_ffi.dylib` and `target/debug/deps/libduckdb.dylib`
+- Xcode script: `apple-universal/script/build_moira_ffi.sh`
+- Bundled artifacts: `BelunaApp.app/Contents/Frameworks/libmoira_ffi.dylib` and `BelunaApp.app/Contents/Frameworks/libduckdb.dylib`
+- ABI functions: `moira_runtime_status_json`, `moira_runtime_shutdown_json`, and `moira_runtime_string_free`
+- Swift adapter: `DynamicMoiraRuntimeClient`
+
+This proves that Apple Universal can call `MoiraRuntime.status()` through the host seam, decode the result into `MoiraRuntimeSnapshot`, and load the Rust runtime from the app bundle in Xcode-built macOS products.
+
+The current development path loads either `BELUNA_MOIRA_FFI_DYLIB`, a bundled private framework copy, or the repo-local Cargo artifact. The macOS app target invokes Cargo directly, copies both runtime dylibs into `Contents/Frameworks`, sets the `libmoira_ffi` install name to `@rpath/libmoira_ffi.dylib`, and signs the dylibs when Xcode provides a signing identity.
+
+The BelunaApp target sets `ENABLE_USER_SCRIPT_SANDBOXING = NO` at target scope so Cargo can read the Rust workspace and write `target/` artifacts during Xcode builds.
+
 ## Out Of Scope For This Task
 
 - Public package publishing.

@@ -57,3 +57,12 @@ Apple Universal source cleanup is part of the Moira integration path.
 4. Moira DTOs and runtime calls belong under a Moira-owned app namespace.
 5. `ContentView.swift` is a placeholder cleanup candidate because app entry currently uses `ChatView`.
 6. App process singleton guards are outside the Apple Universal boundary. Runtime resource conflicts belong to Core or Moira-owned coordination surfaces.
+
+## Current Moira Host Boundary
+
+1. Apple Universal owns a Swift-side Moira namespace under `BelunaApp/Moira`.
+2. `MoiraRuntimeClient` is the app-facing binding protocol for Moira runtime snapshots.
+3. `MoiraOperationsViewModel` owns Settings-integrated Moira status state and keeps refresh work async.
+4. `SettingView` receives Moira state explicitly instead of routing Moira operations through `ChatViewModel`.
+5. The current macOS default client attempts to load `libmoira_ffi.dylib`, calls the C ABI status proof, and maps Rust JSON into `MoiraRuntimeSnapshot`.
+6. The default client reports an unavailable snapshot when the local Rust dylib is absent, keeping Settings usable during packaging work.

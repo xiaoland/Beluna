@@ -30,11 +30,15 @@ Cross-unit contracts, system authority ownership, and decomposition policy live 
 - Evidence homes: app launch smoke checks, UI test launch checks, and future multi-instance endpoint registration tests.
 
 6. Minimum Moira Loom contract:
-- Settings-integrated operations panel shows embedded Moira runtime status, receiver status, and resource conflicts.
+- Settings-integrated operations panel shows embedded Moira runtime status, receiver status, and degraded/conflict/fault resources.
 - Wake list, tick list, and selected tick raw-first inspection are available through Moira host APIs.
-- Evidence homes: `apple-universal/BelunaApp/App` or future Apple UI owners, Moira binding DTO tests, and targeted view-state tests.
+- Evidence homes: `apple-universal/BelunaApp/App`, `apple-universal/BelunaApp/Moira`, `apple-universal/BelunaAppTests/MoiraRuntimeBindingTests.swift`, Moira binding DTO tests, and targeted view-state tests.
 
-7. Socket discovery contract:
+7. Moira FFI packaging contract:
+- macOS BelunaApp builds run the Moira FFI build script, bundle required Rust dylibs in `Contents/Frameworks`, and keep the app signature valid.
+- Evidence homes: `apple-universal/script/build_moira_ffi.sh`, `apple-universal/BelunaApp.xcodeproj/project.pbxproj`, `codesign --verify`, `otool`, and `dynamicClientLoadsBundledMoiraFFI`.
+
+8. Socket discovery contract:
 - Configured path, recent successful path, app-local runtime candidate, deployment-supported platform candidates, and Moira-reported paths are available where supported.
 - Evidence homes: socket discovery model tests and settings UI smoke checks.
 

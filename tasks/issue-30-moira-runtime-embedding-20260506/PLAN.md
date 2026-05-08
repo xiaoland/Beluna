@@ -68,3 +68,5 @@
   - Slice 2A recorded the Moira runtime API boundary, DTO sketch, and extraction map as task-packet artifacts.
   - Slice 2B introduced `moira/runtime`, moved Clotho/Lachesis/Atropos backend owners into it, and turned `moira/src-tauri` into a transitional adapter over `MoiraRuntime`.
   - Slice 2C added public-boundary integration tests for runtime open/status, receiver conflict, Clotho wake preparation, Lachesis OTLP ingest, and Atropos process supervision.
+  - Apple Universal host integration added a Swift Moira namespace, `MoiraRuntimeClient`, `MoiraOperationsViewModel`, Settings integration, and focused view-model tests.
+  - Apple Universal Rust adapter proof added `moira/ffi`, dynamic Swift loading for `libmoira_ffi.dylib`, and DTO decoding tests for `MoiraRuntime.status()` JSON.

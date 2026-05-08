@@ -102,6 +102,7 @@
 				68F9D7AB2F4805C900DEE75C /* Sources */,
 				68F9D7AC2F4805C900DEE75C /* Frameworks */,
 				68F9D7AD2F4805C900DEE75C /* Resources */,
+				68F9D7DD2F4805CB00DEE75C /* Build Moira FFI */,
 			);
 			buildRules = (
 			);
@@ -230,6 +231,36 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		68F9D7DD2F4805CB00DEE75C /* Build Moira FFI */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(PROJECT_DIR)/script/build_moira_ffi.sh",
+				"$(PROJECT_DIR)/../Cargo.lock",
+				"$(PROJECT_DIR)/../Cargo.toml",
+				"$(PROJECT_DIR)/../moira/ffi/Cargo.toml",
+				"$(PROJECT_DIR)/../moira/ffi/src/lib.rs",
+				"$(PROJECT_DIR)/../moira/runtime/Cargo.toml",
+			);
+			name = "Build Moira FFI";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libmoira_ffi.dylib",
+				"$(TARGET_BUILD_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libduckdb.dylib",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "/bin/bash \"${PROJECT_DIR}/script/build_moira_ffi.sh\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		68F9D7AB2F4805C900DEE75C /* Sources */ = {
@@ -394,6 +425,7 @@
 				DEVELOPMENT_ASSET_PATHS = "\"BelunaApp/Preview Content\"";
 				DEVELOPMENT_TEAM = 7J9DJNJ782;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
@@ -433,6 +465,7 @@
 				DEVELOPMENT_ASSET_PATHS = "\"BelunaApp/Preview Content\"";
 				DEVELOPMENT_TEAM = 7J9DJNJ782;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
