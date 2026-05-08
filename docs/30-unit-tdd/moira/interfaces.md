@@ -12,10 +12,7 @@
 - First Apple binding proof: `moira/ffi` builds `libmoira_ffi.dylib` and exposes `moira_runtime_status_json`, `moira_runtime_loom_json`, `moira_runtime_shutdown_json`, plus string-freeing ABI.
 - Apple Universal macOS packaging bundles `libmoira_ffi.dylib` and DuckDB's `libduckdb.dylib` into the host app's `Contents/Frameworks`.
 
-2. Transitional desktop entrypoint:
-- Current Tauri/Vue app remains a migration container over `moira/runtime` while Apple coverage lands.
-
-3. Artifact preparation interface:
+2. Artifact preparation interface:
 - GitHub Releases discovery for published Core artifacts.
 - Trusted checksum file: `SHA256SUMS`.
 - Trusted Core archive pattern: `beluna-core-<rust-target-triple>.tar.gz`.
@@ -24,12 +21,12 @@
 - Local source-folder input accepts a Beluna repo root or `core/` crate root for explicit development forge before launch.
 - App-local JSONC profile documents managed under Clotho-owned profile ids.
 
-4. Lifecycle supervision interface:
+3. Lifecycle supervision interface:
 - Wake local Core with a selected Clotho launch target and JSONC profile.
 - Graceful stop for supervised Core.
 - Explicit force-kill behind second confirmation.
 
-5. Observability interface:
+4. Observability interface:
 - Local OTLP gRPC logs receiver.
 - Raw-event query and live-pulse interfaces for host-native Loom.
 - Aggregate minimum Loom snapshot through `MoiraRuntime::loom_snapshot(selection)`, combining runtime status, Clotho launch targets/profiles, Lachesis wake/tick summaries, and selected tick raw detail.
@@ -58,3 +55,4 @@
 4. Cross-client Owner/Attach authority coordination belongs to later design.
 5. Host-native Loom UI may choose its own layout while preserving Moira-owned query/control semantics.
 6. The C ABI proof returns JSON for the first status and minimum Loom snapshot slices; broader Loom APIs should move toward typed binding ownership as the surface grows.
+7. Host-native Loom APIs draw authority from Moira runtime contracts and host product docs.

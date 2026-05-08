@@ -1,10 +1,10 @@
 # Runtime API Extraction Map
 
-This file maps current Tauri-backed Moira code to the host-independent runtime API.
+This historical map records how the former Tauri-backed Moira code moved into the host-independent runtime API.
 
-## Current Commands To Runtime Facades
+## Former Commands To Runtime Facades
 
-| Current Tauri command | Runtime facade | Owner |
+| Former Tauri command | Runtime facade | Owner |
 | --- | --- | --- |
 | `register_known_local_build` | `runtime.clotho().register_known_local_build` | Clotho |
 | `prepare_wake_input` | `runtime.clotho().prepare_wake_input` | Clotho |
@@ -78,17 +78,17 @@ Required:
 
 - `cargo check --manifest-path moira/runtime/Cargo.toml --locked`
 - `cargo test --manifest-path moira/runtime/Cargo.toml --locked`
-- `cargo check --manifest-path moira/src-tauri/Cargo.toml --locked`
+- Transitional desktop adapter check during extraction.
 
 Optional when DuckDB linking requires source build:
 
 - `cargo check --manifest-path moira/runtime/Cargo.toml --locked --no-default-features --features duckdb-bundled`
-- `cargo check --manifest-path moira/src-tauri/Cargo.toml --locked --no-default-features --features duckdb-bundled`
+- Transitional desktop adapter bundled-DuckDB check during extraction.
 
 Acceptance:
 
 - backend services are reachable through `MoiraRuntime`
-- Tauri types remain in `moira/src-tauri`
+- desktop-shell types stay out of `moira/runtime`
 - tests instantiate runtime services through direct harnesses independent of Tauri app bootstrap
 - existing command names remain callable during the transition
 

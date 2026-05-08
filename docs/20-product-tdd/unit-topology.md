@@ -21,7 +21,7 @@ Beluna currently has four technical units.
 4. `moira`
 - Library-first local control-plane and observability runtime unit for Beluna operation.
 - Prepares local Core artifacts/profiles, supervises local Core lifecycle, ingests Core OTLP logs, and exposes host-facing control/query APIs.
-- Loom is the operator-facing experience implemented by Human Interface hosts. The current Tauri/Vue Loom is a transitional implementation while Apple Universal receives the first native minimum Loom surface.
+- Loom is the operator-facing experience implemented by Human Interface hosts. Apple Universal hosts the first native minimum Loom surface through an embedded Moira backend runtime.
 
 ## Authority Summary
 

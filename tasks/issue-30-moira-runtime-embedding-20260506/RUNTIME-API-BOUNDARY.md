@@ -163,7 +163,7 @@ moira/
         └── app/
 ```
 
-`moira/src-tauri` then becomes a transitional app adapter over `moira/runtime`.
+The legacy desktop shell then becomes a transitional app adapter over `moira/runtime`.
 
 ## Slice 2A Boundaries
 

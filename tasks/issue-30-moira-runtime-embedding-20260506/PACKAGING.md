@@ -40,7 +40,7 @@ The package may be present in multiple processes. This task proves the Apple pro
 
 ## Package Boundary Questions
 
-1. Should Moira runtime live under current `moira/src-tauri/src` during extraction, or move to a new workspace crate such as `moira/runtime`?
+1. Moira runtime lives in the workspace crate `moira/runtime`.
 2. Should the Swift binding expose one coarse `MoiraRuntime` handle, or separate `Clotho`, `Lachesis`, and `Atropos` handles?
 3. Should event delivery use callbacks, async streams, polling, or a mixed model?
 4. Should Apple Universal own app-data path selection, with Moira only receiving explicit `MoiraPaths`?

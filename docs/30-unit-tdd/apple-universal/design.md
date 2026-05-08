@@ -21,6 +21,8 @@
 
 The first Apple-native Moira Loom lands as a Settings-integrated operations panel.
 
+This surface is judged against the issue #30 minimum Apple contract. Legacy Tauri/Vue Loom behavior is migration evidence, and Apple Universal selects native interaction shape independently.
+
 Initial sections:
 
 1. Connection:

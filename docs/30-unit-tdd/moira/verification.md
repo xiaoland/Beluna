@@ -21,8 +21,8 @@
 
 1. Local Moira runtime verification passes with `cargo check --manifest-path moira/runtime/Cargo.toml --locked`.
 2. Local Moira runtime tests pass with `cargo test --manifest-path moira/runtime/Cargo.toml --locked`.
-3. Transitional Tauri adapter verification passes with `cargo check --manifest-path moira/src-tauri/Cargo.toml --locked`.
-4. DuckDB bundled verification is explicit through the runtime and adapter checks with `--features duckdb-bundled`.
+3. Apple binding verification passes with `cargo check -p moira-ffi --locked` and `cargo test -p moira-ffi --locked`.
+4. DuckDB bundled verification is explicit through the runtime and Apple binding checks with `--features duckdb-bundled`.
 5. Cargo metadata for the default Moira feature set resolves DuckDB with the prebuilt DuckDB path.
 6. Cargo metadata with `--features duckdb-bundled` resolves `duckdb/bundled` and `libduckdb-sys/bundled`.
 
@@ -50,7 +50,7 @@
 7. Raw inspection surfaces `record_kind` so operators can distinguish native owner records, legacy contract records, and ordinary logs during migration.
 8. Legacy contract payloads remain readable through compatibility normalization while native records keep scope/event/trace/span identity.
 9. Loom can inspect AI transport, AI Chat, Stem, Spine, and goal-forest data through raw records first and targeted projections as those projections mature.
-10. Goal-forest comparison is derived from selected ticks rather than loaded from a precomputed diff artifact.
+10. Goal-forest comparison is computed from selected ticks at inspection time.
 11. Metrics/traces surfaces show exporter status and handoff links.
 
 ## Evidence Homes
@@ -62,10 +62,7 @@
 
 ## Current Architecture Checks
 
-1. Current wake list, broader tick list, Cortex timeline mode, and raw-event inspection remain operator-equivalent after the Cortex View reshape.
-2. Tauri command handlers delegate through `app` into explicit backend owners rather than accumulating ownership directly.
-3. Loom root views delegate live refresh wiring and selection-state orchestration; bridge transport delegates normalization and sorting.
-4. Bridge contracts, normalized Loom-facing models, and query-owned UI state remain distinct layers rather than collapsing back into one shared frontend type bucket.
-5. Lachesis persistence and Lachesis projections remain the owner of Lachesis state; Clotho and Atropos state use dedicated ownership paths.
-6. Clotho durable manifests and profile documents remain app-local preparation truth, while current selected launch-target/profile refs remain query-owned session state until an explicit persistence slice lands.
-7. Shared shell chrome such as feature tabs and dialog scaffolding remains reusable, with feature-specific preparation, supervision, and observability semantics owned by feature namespaces.
+1. Apple Universal minimum Loom exposes runtime/receiver status, launch-target/profile read context, wake list, tick list, and selected tick raw inspection from `MoiraRuntime::loom_snapshot(selection)`.
+2. Lachesis persistence and Lachesis projections remain the owner of Lachesis state; Clotho and Atropos state use dedicated ownership paths.
+3. Clotho durable manifests and profile documents remain app-local preparation truth, while current selected launch-target/profile refs remain host session state until an explicit persistence slice lands.
+4. Tauri/Vue retirement used the selected Apple Universal minimum Loom contract as the gate, with legacy-only features assigned to follow-on owners.

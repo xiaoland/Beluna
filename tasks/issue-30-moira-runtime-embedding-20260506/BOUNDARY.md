@@ -50,14 +50,14 @@ Expected responsibilities:
 
 ## Legacy Tauri/Vue Loom
 
-The current Tauri/Vue Loom is a legacy implementation of Moira's human-facing surface.
+The Tauri/Vue Loom was the legacy implementation of Moira's human-facing surface.
 
-Target disposition:
+Disposition:
 
-- Preserve as a reference only while replacement hosts are being built.
-- Extract backend runtime behavior away from Tauri types.
-- Retire Tauri command/event surfaces after a replacement Human Interface path covers the required operator workflows.
-- Delete Vue Loom frontend after the replacement path is verified and durable docs reflect the new architecture.
+- Backend runtime behavior has moved into `moira/runtime`.
+- Apple Universal covers the selected minimum native Loom read/query surface.
+- Tauri command/event surfaces and the Vue frontend have been removed from the active code surface.
+- Useful legacy ideas are assigned to native follow-on owners.
 
 ## Authority Rules
 
@@ -122,7 +122,6 @@ Minimum target:
 
 - Moira runtime status.
 - Core launch-target/profile visibility sufficient to understand what can be woken.
-- Wake/stop status controls only if the runtime API slice reaches that capability safely.
 - Lachesis receiver status.
 - Wake list and tick list.
 - Selected tick raw-first inspection.

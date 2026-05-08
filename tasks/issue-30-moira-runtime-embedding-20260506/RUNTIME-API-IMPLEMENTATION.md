@@ -25,7 +25,7 @@ Owner modules moved into the runtime crate:
 - `moira/runtime/src/lachesis`
 - `moira/runtime/src/atropos`
 
-The transitional Tauri crate now depends on `moira-runtime` and keeps:
+Historical transition state: the desktop crate depended on `moira-runtime` and kept:
 
 - Tauri bootstrap
 - existing Tauri command names
@@ -36,7 +36,7 @@ The transitional Tauri crate now depends on `moira-runtime` and keeps:
 
 ## Boundary Result
 
-`moira/src-tauri` is now an adapter over `moira/runtime`.
+Slice 2B moved backend behavior into `moira/runtime`; Slice 6 later retired the desktop adapter.
 
 The runtime crate owns backend behavior and can be compiled/tested independently from Tauri.
 
@@ -52,7 +52,7 @@ Passed on 2026-05-07:
 
 - `cargo check --manifest-path moira/runtime/Cargo.toml --locked`
 - `cargo test --manifest-path moira/runtime/Cargo.toml --locked`
-- `cargo check --manifest-path moira/src-tauri/Cargo.toml --locked`
+- Transitional desktop adapter check passed during this slice before retirement.
 
 Runtime test coverage includes receiver bind conflict reporting as `MoiraResourceState::Conflict`.
 
@@ -60,12 +60,12 @@ Slice 2C moved that receiver-conflict coverage into public integration tests and
 
 ## Next Slice Pressure
 
-Apple Universal still needs a binding strategy before it can call `moira/runtime`.
+Apple Universal uses the first C ABI binding proof for the minimum Loom surface.
 
-The next technical design decision is how to cross Rust/Swift:
+Follow-on binding design can decide how to scale Rust/Swift calls:
 
 - UniFFI-style generated Swift bindings
 - C ABI plus Swift wrapper
 - Swift Package wrapping a local Rust artifact
 
-The first Apple binding should prove runtime status and receiver status before exposing broader Clotho/Lachesis/Atropos operations.
+The current Apple binding proves runtime status and minimum Loom snapshots. Broader Clotho/Lachesis/Atropos operations remain follow-on design.

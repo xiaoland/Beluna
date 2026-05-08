@@ -44,7 +44,7 @@ This note captures the first integration coverage added for `moira/runtime`.
 Passed on 2026-05-07:
 
 - `cargo test --manifest-path moira/runtime/Cargo.toml --locked`
-- `cargo check --manifest-path moira/src-tauri/Cargo.toml --locked`
+- Transitional desktop adapter check passed during this slice before retirement.
 
 Runtime test count after this slice:
 

@@ -11,7 +11,7 @@
 1. Moira owns local preparation, supervision, ingestion, storage, query, projection, and host-facing Loom runtime semantics.
 2. Core retains runtime behavior, config schema, endpoint protocol, and observability emission authority.
 3. Human Interface hosts own platform-native Loom presentation.
-4. The current Tauri/Vue Loom is transitional during backend runtime extraction.
+4. The legacy Tauri/Vue Loom has been retired from the active Moira code surface.
 5. Use biological lifecycle verbs for Moira-facing actions where reasonable, while keeping existing cross-unit correlation names stable until the docs move first.
 
 ## Stage 1 Constraint

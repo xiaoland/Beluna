@@ -68,7 +68,7 @@ Primary artifacts:
 
 ## Slice 2B: Runtime API Implementation
 
-Goal: introduce the host-independent Rust runtime API and keep the current Tauri app as a thin adapter during the transition.
+Goal: introduce the host-independent Rust runtime API and keep the legacy desktop shell as a thin adapter during the transition.
 
 Status: implemented locally.
 
@@ -86,7 +86,7 @@ Candidate shape:
 Verification:
 
 - Backend compiles with service code reachable through host-independent API.
-- Tauri-specific types live in adapter modules during the transition window.
+- Desktop-shell-specific types live in adapter modules during the transition window.
 - Unit tests can instantiate runtime services through direct Rust test harnesses.
 - Unit tests cover resource-claim success and conflict reporting.
 
@@ -94,7 +94,7 @@ Implemented verification:
 
 - `cargo check --manifest-path moira/runtime/Cargo.toml --locked`
 - `cargo test --manifest-path moira/runtime/Cargo.toml --locked`
-- `cargo check --manifest-path moira/src-tauri/Cargo.toml --locked`
+- Transitional desktop adapter compiled during this slice before retirement.
 
 ## Slice 2C: Runtime Integration Tests
 
@@ -113,23 +113,23 @@ Coverage:
 Implemented verification:
 
 - `cargo test --manifest-path moira/runtime/Cargo.toml --locked`
-- `cargo check --manifest-path moira/src-tauri/Cargo.toml --locked`
+- Transitional desktop adapter compiled during this slice before retirement.
 
-## Slice 3: Tauri Removal Prep
+## Slice 3: Legacy Desktop Removal Prep
 
-Goal: prepare full Tauri/Vue removal after Apple coverage by shrinking the remaining transitional adapter and frontend dependency surface.
+Goal: prepare full legacy desktop removal after Apple coverage by shrinking the remaining transitional adapter and frontend dependency surface.
 
 Targets:
 
 - Keep command facades thin during the transition.
-- Keep Tauri event/task handling inside adapter code.
-- List remaining Tauri/Vue deletion candidates with Apple replacement coverage.
+- Keep event/task handling inside adapter code.
+- List remaining legacy desktop deletion candidates with Apple replacement coverage.
 
 Verification:
 
 - Existing Moira backend checks pass.
 - Existing frontend behavior remains reachable through the transitional adapter while replacement hosts are prepared.
-- Tauri deletion candidates are listed with Apple replacement coverage.
+- Legacy desktop deletion candidates are listed with Apple replacement coverage.
 
 ## Slice 4: Apple Universal Host Integration
 
@@ -214,16 +214,32 @@ Implementation proof:
 
 Goal: decide the Tauri/Vue Loom retirement scope for this issue or a follow-on issue.
 
+Status: retirement gate and deletion implemented locally.
+
 Gate criteria:
 
 - Apple Universal covers the minimum operator workflows selected for this issue.
 - Durable docs refer to Apple Universal-hosted minimum Loom.
 - Remaining Tauri/Vue features have an explicit follow-on owner.
+- Acceptance follows the issue #30 Apple Universal minimum Loom contract.
 
 Verification:
 
 - Workspace builds and tests pass with the chosen retirement scope.
 - Packaging scripts and maintenance scripts match the chosen scope.
+
+Decision:
+
+- The gate is ready because Slice 5 covers the selected minimum Apple Universal Loom contract.
+- Legacy Clotho mutation, Atropos operation, and richer Lachesis inspection ideas move to follow-on packets.
+- Tauri/Vue deletion proceeded in this slice with the guardrails in `TAURI-LOOM-RETIREMENT.md`.
+
+Implemented deletion scope:
+
+- Removed the legacy Vue frontend and Tauri desktop container.
+- Removed frontend package, Vite, TypeScript, and Tauri build metadata.
+- Removed the Tauri workspace member from root Cargo metadata.
+- Updated active maintenance scripts and durable docs to use `moira/runtime` and `moira/ffi` as the Moira code surface.
 
 ## Future Slices
 

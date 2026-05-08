@@ -31,8 +31,8 @@
 2. Local Moira backend builds use the prebuilt DuckDB library path through `DUCKDB_DOWNLOAD_LIB=1`.
 3. macOS debug Moira binaries embed `@loader_path/deps` as a runtime search path so the prebuilt DuckDB dylib in `target/debug/deps` is visible to VSCode Launch and direct binary startup.
 4. Routine runtime verification runs `cargo check --manifest-path moira/runtime/Cargo.toml --locked` and `cargo test --manifest-path moira/runtime/Cargo.toml --locked`.
-5. Routine Tauri adapter verification runs `cargo check --manifest-path moira/src-tauri/Cargo.toml --locked` from the repo root.
-6. Source-bundled DuckDB verification runs the same runtime and adapter checks with `--features duckdb-bundled`.
+5. Routine Apple binding verification runs `cargo check -p moira-ffi --locked` and `cargo test -p moira-ffi --locked`.
+6. Source-bundled DuckDB verification runs the runtime and Apple binding checks with `--features duckdb-bundled`.
 7. Local Rust storage preview runs `bash scripts/rust-storage-maintenance.sh sweep-all-dry-run`.
 8. Local Rust storage cleanup runs `bash scripts/rust-storage-maintenance.sh sweep-all`.
 
@@ -44,6 +44,12 @@
 4. Body endpoint socket discovery remains available for Core processes started by another process or prior session.
 5. Apple Universal currently consumes a JSON FFI adapter for status and minimum Loom snapshots.
 6. Future Owner/Attach coordination can promote one local Moira authority per user/session or configured scope.
+
+## Legacy Tauri/Vue Retirement Flow
+
+1. The selected Apple Universal minimum Loom contract served as the retirement gate.
+2. Backend semantics remain in `moira/runtime` after frontend/container retirement.
+3. Useful legacy-only workflows have explicit follow-on owners for native host design.
 
 ## Observability Flow
 
@@ -68,7 +74,7 @@
 3. Local source build failure blocks wake and surfaces explicit failure state.
 4. OTLP receiver/storage readiness failure blocks supervised wake.
 5. Unexpected Core exit becomes explicit terminal supervision state visible in Loom.
-6. Missing selected launch target input, or an explicitly selected but unresolved profile input, blocks wake rather than letting Atropos invent a fallback path.
+6. Missing selected launch target input, or an explicitly selected but unresolved profile input, blocks wake with an explicit failure state.
 
 ## Current Extension Boundary
 

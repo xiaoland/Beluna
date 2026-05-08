@@ -23,7 +23,7 @@
 - Temporary Assumptions:
   - `apple-universal`, `cli`, and future `win-native` should be described as Beluna Human Interface clients.
   - Each Human Interface client may implement its own Loom-equivalent operator UI.
-  - The current Tauri/Vue Loom is a legacy host surface kept only until Apple Universal covers the minimum operator path.
+  - The legacy Tauri/Vue Loom can retire after Apple Universal covers the minimum operator path.
   - This task implements the Apple Universal path only.
   - CLI and Windows embedding remain follow-on design targets.
   - This task uses process-local Moira backend inside Apple Universal.
@@ -51,13 +51,12 @@
 
 - key findings:
   - Current Moira backend already has explicit `clotho`, `lachesis`, and `atropos` service boundaries.
-  - Tauri coupling is concentrated in app bootstrap, command facades, event emission, and a small amount of task spawning.
+  - Legacy Tauri coupling was concentrated in app bootstrap, command facades, event emission, and a small amount of task spawning.
   - The existing crate already declares `staticlib`, `cdylib`, and `rlib` outputs, which supports a library-first direction.
   - Apple Universal currently concentrates endpoint lifecycle, reconnect policy, message paging, persistence, and settings draft state in `ChatViewModel`.
   - `SettingView` is the accepted first-slice container for Moira Loom, so it needs section-level extraction before adding operations UI.
 - decisions made:
   - Apple Universal Moira Loom starts as a Settings-integrated operations panel.
-  - "Tauri/Loom as host adapter" describes transitional code framing for the existing shell.
   - Target architecture removes the Tauri/Vue Loom surface after Apple Universal provides the first minimum native Loom path.
   - This issue's implementation target is limited to Apple Universal.
   - Embedded Moira means each host can include the package; this task proves the Apple process-local path first.
@@ -66,8 +65,10 @@
   - Slice 0 promoted the architecture restatement into Product TDD, Moira Unit TDD, Apple Universal Unit TDD, and local AGENTS files.
   - Slice 1 prepared Apple Universal Settings boundaries and removed process singleton guarding.
   - Slice 2A recorded the Moira runtime API boundary, DTO sketch, and extraction map as task-packet artifacts.
-  - Slice 2B introduced `moira/runtime`, moved Clotho/Lachesis/Atropos backend owners into it, and turned `moira/src-tauri` into a transitional adapter over `MoiraRuntime`.
+  - Slice 2B introduced `moira/runtime`, moved Clotho/Lachesis/Atropos backend owners into it, and temporarily used the legacy desktop shell as an adapter over `MoiraRuntime`.
   - Slice 2C added public-boundary integration tests for runtime open/status, receiver conflict, Clotho wake preparation, Lachesis OTLP ingest, and Atropos process supervision.
   - Apple Universal host integration added a Swift Moira namespace, `MoiraRuntimeClient`, `MoiraOperationsViewModel`, Settings integration, and focused view-model tests.
   - Apple Universal Rust adapter proof added `moira/ffi`, dynamic Swift loading for `libmoira_ffi.dylib`, and DTO decoding tests for `MoiraRuntime.status()` JSON.
   - Slice 5 added the minimum Apple-native Loom read/query surface: runtime/receiver status, launch-target/profile context, wake list, tick list, and selected tick raw records through `MoiraRuntime::loom_snapshot(selection)` and `moira_runtime_loom_json`.
+  - Slice 6 reframed Tauri/Vue retirement around the issue #30 Apple Universal minimum Loom contract, with legacy-only Clotho/Atropos/Lachesis ideas assigned to follow-on packets.
+  - Slice 6 deletion removed the legacy Tauri/Vue code surface and left `moira/runtime` plus `moira/ffi` as Moira's active Rust packages.

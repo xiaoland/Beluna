@@ -26,13 +26,14 @@ Cross-unit contracts, system authority ownership, and decomposition policy live 
 - Evidence homes: runtime behavior checks and targeted unit/UI tests for reconnect and large-history scenarios.
 
 5. Multi-instance contract:
-- App launch must allow concurrent Apple Universal instances. Runtime resource conflicts must surface through Core/Moira status rather than app process termination.
+- App launch must allow concurrent Apple Universal instances. Runtime resource conflicts surface through Core/Moira status.
 - Evidence homes: app launch smoke checks, UI test launch checks, and future multi-instance endpoint registration tests.
 
 6. Minimum Moira Loom contract:
 - Settings-integrated operations panel shows embedded Moira runtime status, receiver status, and degraded/conflict/fault resources.
 - Wake list, tick list, and selected tick raw-first inspection are available through Moira host APIs.
 - Launch-target/profile read context is available inside the first Core context section.
+- Acceptance follows the issue #30 minimum Apple contract and Apple-native host design.
 - Evidence homes: `apple-universal/BelunaApp/App`, `apple-universal/BelunaApp/Moira`, `apple-universal/BelunaAppTests/MoiraRuntimeBindingTests.swift`, `apple-universal/BelunaAppTests/MoiraRuntimeBindingFixtures.swift`, Moira binding DTO tests, and targeted view-state tests.
 
 7. Moira FFI packaging contract:

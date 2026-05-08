@@ -4,6 +4,5 @@ members = [
     "cli",
     "moira/ffi",
     "moira/runtime",
-    "moira/src-tauri",
 ]
 resolver = "3"

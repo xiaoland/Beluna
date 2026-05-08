@@ -39,11 +39,6 @@ scan() {
   print_size "$repo_root/target"
   print_size "$repo_root/core/target"
   print_size "$repo_root/cli/target"
-  print_size "$repo_root/moira/src-tauri/target"
-  echo
-  echo "Moira frontend artifacts:"
-  print_size "$repo_root/moira/node_modules"
-  print_size "$repo_root/moira/dist"
   echo
   echo "Cargo and Rust global state:"
   print_size "${CARGO_HOME:-$HOME/.cargo}"
@@ -110,7 +105,6 @@ sweep_legacy_targets() {
   local projects=(
     "$repo_root/core"
     "$repo_root/cli"
-    "$repo_root/moira/src-tauri"
   )
   local project
   local target_dir

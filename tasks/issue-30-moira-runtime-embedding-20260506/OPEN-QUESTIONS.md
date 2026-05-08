@@ -14,6 +14,7 @@
 1. Should this issue include wake/stop controls in Apple Universal, or stop at status plus observability browsing?
 2. Should this issue include Clotho write operations, or read-only launch/profile context?
 3. Should Tauri/Vue deletion happen in this issue after Apple minimum coverage, or become a follow-on issue?
+- Current Slice 6 answer: deletion belongs in this issue after the contract-based retirement gate. Useful legacy ideas move to follow-on owners.
 
 ## Packaging
 

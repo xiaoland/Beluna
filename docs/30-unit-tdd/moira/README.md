@@ -10,9 +10,9 @@ Current backend code realizes the first explicit multi-owner Moira runtime:
 2. `Atropos` for supervised runtime status, wake, graceful stop, and force-kill.
 3. `Clotho` for launch-target preparation and profile curation, including known local build registration, explicit local forge, published release intake, and app-local JSONC profile documents.
 
-The current Tauri/Vue Loom is transitional. Apple Universal hosts the first minimum native Loom surface through an embedded process-local Moira backend runtime.
+Apple Universal hosts the first minimum native Loom surface through an embedded process-local Moira backend runtime. The legacy Tauri/Vue Loom has been retired from the active Moira code surface.
 
-Schema-validation interactions with Core authority remain deferred to a later Clotho slice rather than current realization.
+Schema-validation interactions with Core authority remain deferred to a later Clotho slice.
 
 - [Design](./design.md)
 - [Interfaces](./interfaces.md)
