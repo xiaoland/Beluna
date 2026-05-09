@@ -12,12 +12,11 @@ UI integration target: an Apple O11y / Lachesis panel parallel to Core Control a
 
 ## Current Packet Status
 
-Mode: opened for scope confirmation.
+Mode: Execute.
 
-Current target:
+First slice landed:
 
-- Deepen wake and tick browsing beyond the minimum Settings proof.
+- Add standalone Apple `O11y / Lachesis` panel parallel to Core Control and Settings.
+- Use existing `MoiraLoomSnapshot` as the first binding for wake/tick/raw detail browsing.
 - Provide selected tick raw-first inspection with a native raw event inspector.
-- Reintroduce useful investigation concepts from the retired Loom as native Apple surfaces after product restatement.
-- Prepare UI requirements for event/pulse-driven refresh without forcing transport implementation into this packet.
-
+- Keep Cortex timeline, narrative investigation, owner drilldown, and event/pulse refresh as separate follow-on slices.

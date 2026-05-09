@@ -30,6 +30,25 @@
 - Add Apple view-model tests for wake/tick selection, raw event inspection state, empty states, and refresh errors.
 - Add focused UI state tests where SwiftUI rendering boundaries allow stable assertions.
 
+## Slice 1 Record
+
+Decision:
+
+- Start the Apple O11y panel from the existing `MoiraRuntime::loom_snapshot(selection)` / `MoiraLoomSnapshot` binding.
+- Add narrower Lachesis query FFI calls when panel interactions or payload size require a separate contract.
+
+Implemented:
+
+- `MoiraO11yViewModel` owns wake/tick/raw event selection, refresh state, selected raw-event state, and refresh error text.
+- `MoiraO11yPanel` adds a standalone Apple-native window parallel to Core Control and Settings.
+- The first detail surface shows selected tick summary, raw event list, and a source-grounded raw JSON inspector.
+- The main Beluna window exposes an O11y / Lachesis entry point.
+
+Verified:
+
+- `xcodebuild test -project apple-universal/BelunaApp.xcodeproj -scheme BelunaApp -destination 'platform=macOS' -derivedDataPath apple-universal/.derived-data -only-testing:BelunaAppTests/MoiraRuntimeBindingTests CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO`
+- Real-app Computer Use smoke opened `O11y / Lachesis` from the Beluna main window and confirmed wake list, tick list, raw event list, and raw inspector render from the embedded Moira runtime.
+
 ## Scope Boundaries
 
 - Core Control owns wake, stop, force-kill, terminal reason, and process-state operation UI.
@@ -40,8 +59,7 @@
 
 ## Open Decisions
 
-1. Whether the first O11y panel starts from the existing `MoiraRuntime::loom_snapshot(selection)` or adds narrower Lachesis query FFI calls.
-2. Which timeline grouping should appear first: raw chronological event list, Cortex owner-lane timeline, or tick-level summary lanes.
-3. How much raw JSON should appear in the first viewport before requiring an inspector drilldown.
-4. Which retired Loom ideas deserve product restatement before native implementation: narrative mode, Stem/Spine panels, AI transport, goal-forest comparison.
-5. Whether event/pulse-driven refresh is a prerequisite for rich timeline interaction or a follow-on after the first native panel.
+1. Which timeline grouping should appear first after raw chronological inspection: Cortex owner-lane timeline or tick-level summary lanes.
+2. How much raw JSON should appear in the first viewport before requiring deeper inspector modes.
+3. Which retired Loom ideas deserve product restatement before native implementation: narrative mode, Stem/Spine panels, AI transport, goal-forest comparison.
+4. Whether event/pulse-driven refresh is a prerequisite for rich timeline interaction or a follow-on after the first native panel.

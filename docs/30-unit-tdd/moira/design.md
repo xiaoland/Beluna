@@ -48,7 +48,7 @@ Moira provides Beluna's first-party local control-plane runtime for:
 - Current Rust implementation lives in `moira/runtime/src/runtime` as `MoiraRuntime`, `MoiraRuntimeConfig`, `MoiraPaths`, `MoiraEventSink`, and `MoiraTaskSpawner`.
 - Current Apple proof adapter lives in `moira/ffi` and bridges `MoiraRuntime.status()`, `MoiraRuntime::loom_snapshot(selection)`, Atropos wake/stop/force-kill operations, Clotho raw profile load/save, structured profile draft load/save, and known-local-build registration as C ABI JSON.
 - Apple Universal macOS builds package the current FFI adapter as bundled runtime dylibs through the host app target.
-- Apple Universal consumes the first narrow host API needed for Settings status/O11y plus the standalone Core Control panel.
+- Apple Universal consumes the first narrow host API needed for compact Settings status, standalone Core Control, and standalone O11y / Lachesis browsing.
 
 5. `platform adapters`
 - Own OS-specific process, filesystem, permission, sandbox, and ledger integration points.
@@ -72,7 +72,9 @@ Apple Universal follow-on UI splits Moira operator surfaces into three panels:
 2. O11y / Lachesis owns wake/tick browsing, selected tick raw-first inspection, raw event inspection, Cortex timeline, narrative investigation, and owner-specific drilldown.
 3. Settings owns Moira configuration such as runtime paths, receiver bind address, socket candidates, refresh policy, diagnostics policy, and host-local preferences.
 
-Current Apple Core Control follow-on state has landed the standalone Core Control panel, lifecycle ABI, first Clotho target registration/update controls, and profile draft controls for `core_config`, env files, and inline environment variables. The richer O11y / Lachesis panel remains a separate follow-on.
+Current Apple Core Control follow-on state has landed the standalone Core Control panel, lifecycle ABI, first Clotho target registration/update controls, and profile draft controls for `core_config`, env files, and inline environment variables.
+
+Current Apple O11y / Lachesis follow-on state has landed the first standalone panel using `MoiraLoomSnapshot` for wake/tick navigation, selected tick summary, raw event selection, and raw JSON inspection. Rich timeline projections, narrative investigation, owner-specific drilldown, and event/pulse refresh remain separate follow-on owners.
 
 Apple Universal Core Control keeps runtime refresh, Core lifecycle, launch-target management, and profile management operation errors scoped to their owning panel sections.
 

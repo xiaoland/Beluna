@@ -67,6 +67,58 @@ struct MoiraRuntimeBindingTests {
     }
 
     @MainActor
+    @Test func moiraO11yViewModelLoadsSelectionAndRawInspectorState() async {
+        let loom = MoiraRuntimeBindingFixtures.loomSnapshot()
+        let viewModel = MoiraO11yViewModel(
+            client: StaticMoiraRuntimeClient(loomSnapshot: loom)
+        )
+
+        await viewModel.refreshNow()
+
+        #expect(viewModel.runtimeStatusText == "ready")
+        #expect(viewModel.receiverStatusText == "listening")
+        #expect(viewModel.selectedRunID == "run-1")
+        #expect(viewModel.selectedTick == 3)
+        #expect(viewModel.selectedTickID == "run-1:3")
+        #expect(viewModel.rawEvents.map(\.rawEventID) == ["evt-1"])
+        #expect(viewModel.selectedRawEventID == "evt-1")
+        #expect(viewModel.selectedRawEvent?.displayTitle == "started")
+        #expect(viewModel.errorText == nil)
+    }
+
+    @MainActor
+    @Test func moiraO11yViewModelRefreshesSelectedWakeAndTick() async {
+        let client = RecordingMoiraRuntimeClient(
+            snapshots: [
+                MoiraRuntimeBindingFixtures.loomSnapshot(),
+                MoiraRuntimeBindingFixtures.loomSnapshot(),
+                MoiraRuntimeBindingFixtures.loomSnapshot(),
+            ],
+            operationStatus: MoiraRuntimeBindingFixtures.loomSnapshot().status.core
+        )
+        let viewModel = MoiraO11yViewModel(client: client)
+
+        await viewModel.refreshNow()
+        await viewModel.selectRunNow(id: "run-1")
+        await viewModel.selectTickNow(id: "run-1:3")
+
+        #expect(client.loomSelections.map(\.runID) == [nil, "run-1", "run-1"])
+        #expect(client.loomSelections.map(\.tick) == [nil, nil, 3])
+        #expect(viewModel.selectedRawEventID == "evt-1")
+    }
+
+    @MainActor
+    @Test func moiraO11yViewModelKeepsSnapshotAndReportsRefreshError() async {
+        let viewModel = MoiraO11yViewModel(client: FailingMoiraRuntimeClient())
+
+        await viewModel.refreshNow()
+
+        #expect(viewModel.runtimeStatusText == "unavailable")
+        #expect(viewModel.errorText?.contains("fixtureFailure") == true)
+        #expect(viewModel.selectedRawEventID == nil)
+    }
+
+    @MainActor
     @Test func coreControlViewModelWakesSelectedLaunchTarget() async {
         let idleSnapshot = MoiraRuntimeBindingFixtures.loomSnapshot()
         let runningStatus = MoiraCoreStatus(
@@ -422,6 +474,22 @@ struct MoiraRuntimeBindingTests {
         #expect(snapshot.tickDetail?.raw.first?.eventName == "started")
     }
 
+    @Test func formatsMoiraJSONForRawInspector() {
+        let value = JSONValue.object([
+            "z": .number(3),
+            "a": .object([
+                "message": .string("hello"),
+            ]),
+        ])
+
+        let pretty = MoiraJSONFormatter.prettyString(value)
+        let compact = MoiraJSONFormatter.compactString(value)
+
+        #expect(pretty.contains("\"a\""))
+        #expect(pretty.contains("\"message\" : \"hello\""))
+        #expect(compact == "{a: {message: hello}, z: 3.0}")
+    }
+
     @Test func encodesMoiraCoreWakeRequestJSON() throws {
         let request = MoiraCoreWakeRequest(
             target: MoiraLaunchTargetRef(
@@ -559,6 +627,7 @@ private final class RecordingMoiraRuntimeClient: MoiraRuntimeClient, @unchecked 
     private(set) var savedProfiles: [MoiraProfileSaveRequest] = []
     private(set) var savedProfileDrafts: [MoiraProfileDraftSaveRequest] = []
     private(set) var registrations: [MoiraKnownLocalBuildRegistration] = []
+    private(set) var loomSelections: [MoiraLoomSelection] = []
     private(set) var stopCount = 0
     private(set) var forceKillCount = 0
 
@@ -575,6 +644,7 @@ private final class RecordingMoiraRuntimeClient: MoiraRuntimeClient, @unchecked 
     }
 
     func loadLoomSnapshot(selection: MoiraLoomSelection) async throws -> MoiraLoomSnapshot {
+        loomSelections.append(selection)
         guard !snapshots.isEmpty else {
             return MoiraRuntimeBindingFixtures.loomSnapshot()
         }

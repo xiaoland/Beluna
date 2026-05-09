@@ -91,6 +91,14 @@ struct ChatView: View {
             .help("Open Core Control")
 
             Button {
+                openWindow(id: "o11y-lachesis")
+            } label: {
+                Image(systemName: "waveform.path.ecg")
+            }
+            .buttonStyle(.bordered)
+            .help("Open O11y / Lachesis")
+
+            Button {
                 openSettings()
             } label: {
                 Image(systemName: "gearshape")

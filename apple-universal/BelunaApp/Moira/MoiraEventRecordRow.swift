@@ -53,37 +53,10 @@ struct MoiraEventRecordRow: View {
 
     private func jsonPreview(_ label: String, _ value: JSONValue) -> some View {
         LabeledContent(label) {
-            Text(value.moiraCompactDescription)
+            Text(MoiraJSONFormatter.compactString(value))
                 .font(.caption.monospaced())
                 .lineLimit(5)
                 .textSelection(.enabled)
         }
-    }
-}
-
-private extension JSONValue {
-    var moiraCompactDescription: String {
-        let text: String
-        switch self {
-        case let .string(value):
-            text = value
-        case let .number(value):
-            text = String(value)
-        case let .bool(value):
-            text = value ? "true" : "false"
-        case .null:
-            text = "null"
-        case let .array(values):
-            text = "[" + values.map(\.moiraCompactDescription).joined(separator: ", ") + "]"
-        case let .object(values):
-            text = "{" + values.keys.sorted().map { key in
-                "\(key): \(values[key]?.moiraCompactDescription ?? "null")"
-            }.joined(separator: ", ") + "}"
-        }
-
-        if text.count > 600 {
-            return String(text.prefix(600)) + "..."
-        }
-        return text
     }
 }

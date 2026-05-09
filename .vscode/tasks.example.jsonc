@@ -10,7 +10,10 @@
                 "build"
             ],
             "options": {
-                "cwd": "${workspaceFolder}/core"
+                "cwd": "${workspaceFolder}/core",
+                "env": {
+                    "CARGO_TARGET_DIR": "${workspaceFolder}/core/target"
+                }
             },
             "problemMatcher": [
                 "$rustc"
@@ -23,7 +26,7 @@
                 "build-core"
             ],
             "type": "process",
-            "command": "${workspaceFolder}/target/debug/beluna",
+            "command": "${workspaceFolder}/core/target/debug/beluna",
             "args": [
                 "config",
                 "schema",
