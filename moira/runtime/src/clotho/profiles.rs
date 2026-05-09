@@ -2,7 +2,11 @@ use std::fs;
 
 use super::{
     ClothoService,
-    model::{ProfileDocument, ProfileDocumentSummary, ProfileRef, SaveProfileDocumentRequest},
+    model::{
+        ProfileDocument, ProfileDocumentSummary, ProfileDraftDocument, ProfileRef,
+        SaveProfileDocumentRequest, SaveProfileDraftRequest,
+    },
+    profile_runtime::{parse_profile_draft_document, render_profile_draft_contents},
     service::{canonicalize_file, validate_ref_id},
 };
 
@@ -88,6 +92,24 @@ impl ClothoService {
 
         self.load_profile_document(&ProfileRef { profile_id })
     }
+
+    pub fn load_profile_draft(&self, profile: &ProfileRef) -> Result<ProfileDraftDocument, String> {
+        let document = self.load_profile_document(profile)?;
+        parse_profile_draft_document(document)
+    }
+
+    pub fn save_profile_draft(
+        &self,
+        request: SaveProfileDraftRequest,
+    ) -> Result<ProfileDraftDocument, String> {
+        let profile_id = request.profile_id.clone();
+        let contents = render_profile_draft_contents(request)?;
+        let document = self.save_profile_document(SaveProfileDocumentRequest {
+            profile_id,
+            contents,
+        })?;
+        parse_profile_draft_document(document)
+    }
 }
 
 fn ensure_trailing_newline(contents: String) -> String {
@@ -109,7 +131,13 @@ mod tests {
 
     use crate::MoiraPaths;
 
-    use super::{super::model::SaveProfileDocumentRequest, ClothoService};
+    use super::{
+        super::model::{
+            ProfileDraftEnvFile, ProfileDraftInlineEnvironment, SaveProfileDocumentRequest,
+            SaveProfileDraftRequest,
+        },
+        ClothoService,
+    };
 
     #[test]
     fn save_list_and_load_profile_documents_round_trip() {
@@ -156,6 +184,43 @@ mod tests {
             .expect("profile documents should list");
 
         assert!(listed.is_empty());
+    }
+
+    #[test]
+    fn save_and_load_profile_draft_round_trip_environment_sources() {
+        let sandbox = TestSandbox::new();
+        let paths = MoiraPaths::from_root(sandbox.root.clone());
+        paths.ensure_dirs().expect("app paths should initialize");
+
+        let service = ClothoService::new(paths);
+        let saved = service
+            .save_profile_draft(SaveProfileDraftRequest {
+                profile_id: "default".to_string(),
+                core_config: "{ logging: { dir: \"./logs\" } }".to_string(),
+                env_files: vec![ProfileDraftEnvFile {
+                    path: PathBuf::from("./local.env"),
+                    required: false,
+                }],
+                inline_environment: vec![ProfileDraftInlineEnvironment {
+                    key: "OPENAI_API_KEY".to_string(),
+                    value: "inline-openai".to_string(),
+                }],
+            })
+            .expect("profile draft should save");
+
+        assert_eq!(saved.profile_id, "default");
+        assert!(saved.core_config.contains("\"logging\""));
+        assert_eq!(saved.env_files[0].path, PathBuf::from("./local.env"));
+        assert!(!saved.env_files[0].required);
+        assert_eq!(saved.inline_environment[0].key, "OPENAI_API_KEY");
+
+        let loaded = service
+            .load_profile_draft(&super::super::model::ProfileRef {
+                profile_id: "default".to_string(),
+            })
+            .expect("profile draft should load");
+
+        assert_eq!(loaded, saved);
     }
 
     struct TestSandbox {

@@ -59,6 +59,43 @@ struct DynamicMoiraRuntimeClient: MoiraRuntimeClient {
             try library.forceKillCore(configuration: configuration)
         }.value
     }
+
+    func loadProfileDocument(profileID: String) async throws -> MoiraProfileDocument {
+        try await Task.detached(priority: .utility) {
+            try library.loadProfileDocument(configuration: configuration, profileID: profileID)
+        }.value
+    }
+
+    func saveProfileDocument(request: MoiraProfileSaveRequest) async throws -> MoiraProfileDocument {
+        try await Task.detached(priority: .utility) {
+            try library.saveProfileDocument(configuration: configuration, request: request)
+        }.value
+    }
+
+    func loadProfileDraft(profileID: String) async throws -> MoiraProfileDraftDocument {
+        try await Task.detached(priority: .utility) {
+            try library.loadProfileDraft(configuration: configuration, profileID: profileID)
+        }.value
+    }
+
+    func saveProfileDraft(
+        request: MoiraProfileDraftSaveRequest
+    ) async throws -> MoiraProfileDraftDocument {
+        try await Task.detached(priority: .utility) {
+            try library.saveProfileDraft(configuration: configuration, request: request)
+        }.value
+    }
+
+    func registerKnownLocalBuild(
+        registration: MoiraKnownLocalBuildRegistration
+    ) async throws -> MoiraLaunchTargetRef {
+        try await Task.detached(priority: .utility) {
+            try library.registerKnownLocalBuild(
+                configuration: configuration,
+                registration: registration
+            )
+        }.value
+    }
 }
 
 enum MoiraRuntimeDynamicClientError: Error, CustomStringConvertible {

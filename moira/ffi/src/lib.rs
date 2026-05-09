@@ -9,7 +9,11 @@ use std::{
 
 use moira_runtime::{
     MoiraLoomSelection, MoiraPaths, MoiraRuntime, MoiraRuntimeConfig, NoopEventSink,
-    TokioTaskSpawner, clotho::model::WakeInputRequest,
+    TokioTaskSpawner,
+    clotho::model::{
+        KnownLocalBuildRegistration, ProfileRef, SaveProfileDocumentRequest,
+        SaveProfileDraftRequest, WakeInputRequest,
+    },
 };
 
 static RUNTIME: Mutex<Option<FfiRuntime>> = Mutex::new(None);
@@ -138,6 +142,121 @@ pub extern "C" fn moira_runtime_force_kill_json(
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn moira_runtime_load_profile_json(
+    root_dir: *const c_char,
+    receiver_bind: *const c_char,
+    profile_id: *const c_char,
+    out_json: *mut *mut c_char,
+    out_error: *mut *mut c_char,
+) -> i32 {
+    clear_out(out_json);
+    clear_out(out_error);
+
+    match load_profile_json(root_dir, receiver_bind, profile_id) {
+        Ok(json) => {
+            write_out(out_json, json);
+            0
+        }
+        Err(error) => {
+            write_out(out_error, error);
+            1
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn moira_runtime_save_profile_json(
+    root_dir: *const c_char,
+    receiver_bind: *const c_char,
+    profile_json: *const c_char,
+    out_json: *mut *mut c_char,
+    out_error: *mut *mut c_char,
+) -> i32 {
+    clear_out(out_json);
+    clear_out(out_error);
+
+    match save_profile_json(root_dir, receiver_bind, profile_json) {
+        Ok(json) => {
+            write_out(out_json, json);
+            0
+        }
+        Err(error) => {
+            write_out(out_error, error);
+            1
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn moira_runtime_load_profile_draft_json(
+    root_dir: *const c_char,
+    receiver_bind: *const c_char,
+    profile_id: *const c_char,
+    out_json: *mut *mut c_char,
+    out_error: *mut *mut c_char,
+) -> i32 {
+    clear_out(out_json);
+    clear_out(out_error);
+
+    match load_profile_draft_json(root_dir, receiver_bind, profile_id) {
+        Ok(json) => {
+            write_out(out_json, json);
+            0
+        }
+        Err(error) => {
+            write_out(out_error, error);
+            1
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn moira_runtime_save_profile_draft_json(
+    root_dir: *const c_char,
+    receiver_bind: *const c_char,
+    draft_json: *const c_char,
+    out_json: *mut *mut c_char,
+    out_error: *mut *mut c_char,
+) -> i32 {
+    clear_out(out_json);
+    clear_out(out_error);
+
+    match save_profile_draft_json(root_dir, receiver_bind, draft_json) {
+        Ok(json) => {
+            write_out(out_json, json);
+            0
+        }
+        Err(error) => {
+            write_out(out_error, error);
+            1
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn moira_runtime_register_known_local_build_json(
+    root_dir: *const c_char,
+    receiver_bind: *const c_char,
+    registration_json: *const c_char,
+    out_json: *mut *mut c_char,
+    out_error: *mut *mut c_char,
+) -> i32 {
+    clear_out(out_json);
+    clear_out(out_error);
+
+    match register_known_local_build_json(root_dir, receiver_bind, registration_json) {
+        Ok(json) => {
+            write_out(out_json, json);
+            0
+        }
+        Err(error) => {
+            write_out(out_error, error);
+            1
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn moira_runtime_shutdown_json(
     out_json: *mut *mut c_char,
     out_error: *mut *mut c_char,
@@ -251,6 +370,101 @@ fn force_kill_json(
 
     serde_json::to_string(&status)
         .map_err(|err| format!("failed to encode Moira Core status: {err}"))
+}
+
+fn load_profile_json(
+    root_dir: *const c_char,
+    receiver_bind: *const c_char,
+    profile_id: *const c_char,
+) -> Result<String, String> {
+    let profile_id = read_string(profile_id, "profile_id")?;
+    let guard = ensure_runtime(root_dir, receiver_bind)?;
+    let runtime = guard
+        .as_ref()
+        .ok_or_else(|| "Moira runtime failed to initialize".to_string())?;
+    let document = runtime
+        .runtime
+        .clotho()
+        .load_profile_document(&ProfileRef { profile_id })?;
+
+    serde_json::to_string(&document)
+        .map_err(|err| format!("failed to encode Moira profile document: {err}"))
+}
+
+fn save_profile_json(
+    root_dir: *const c_char,
+    receiver_bind: *const c_char,
+    profile_json: *const c_char,
+) -> Result<String, String> {
+    let request_json = read_string(profile_json, "profile_json")?;
+    let request = serde_json::from_str::<SaveProfileDocumentRequest>(&request_json)
+        .map_err(|err| format!("failed to decode Moira profile save request: {err}"))?;
+    let guard = ensure_runtime(root_dir, receiver_bind)?;
+    let runtime = guard
+        .as_ref()
+        .ok_or_else(|| "Moira runtime failed to initialize".to_string())?;
+    let document = runtime.runtime.clotho().save_profile_document(request)?;
+
+    serde_json::to_string(&document)
+        .map_err(|err| format!("failed to encode Moira profile document: {err}"))
+}
+
+fn load_profile_draft_json(
+    root_dir: *const c_char,
+    receiver_bind: *const c_char,
+    profile_id: *const c_char,
+) -> Result<String, String> {
+    let profile_id = read_string(profile_id, "profile_id")?;
+    let guard = ensure_runtime(root_dir, receiver_bind)?;
+    let runtime = guard
+        .as_ref()
+        .ok_or_else(|| "Moira runtime failed to initialize".to_string())?;
+    let document = runtime
+        .runtime
+        .clotho()
+        .load_profile_draft(&ProfileRef { profile_id })?;
+
+    serde_json::to_string(&document)
+        .map_err(|err| format!("failed to encode Moira profile draft: {err}"))
+}
+
+fn save_profile_draft_json(
+    root_dir: *const c_char,
+    receiver_bind: *const c_char,
+    draft_json: *const c_char,
+) -> Result<String, String> {
+    let request_json = read_string(draft_json, "draft_json")?;
+    let request = serde_json::from_str::<SaveProfileDraftRequest>(&request_json)
+        .map_err(|err| format!("failed to decode Moira profile draft save request: {err}"))?;
+    let guard = ensure_runtime(root_dir, receiver_bind)?;
+    let runtime = guard
+        .as_ref()
+        .ok_or_else(|| "Moira runtime failed to initialize".to_string())?;
+    let document = runtime.runtime.clotho().save_profile_draft(request)?;
+
+    serde_json::to_string(&document)
+        .map_err(|err| format!("failed to encode Moira profile draft: {err}"))
+}
+
+fn register_known_local_build_json(
+    root_dir: *const c_char,
+    receiver_bind: *const c_char,
+    registration_json: *const c_char,
+) -> Result<String, String> {
+    let request_json = read_string(registration_json, "registration_json")?;
+    let registration = serde_json::from_str::<KnownLocalBuildRegistration>(&request_json)
+        .map_err(|err| format!("failed to decode Moira local build registration: {err}"))?;
+    let guard = ensure_runtime(root_dir, receiver_bind)?;
+    let runtime = guard
+        .as_ref()
+        .ok_or_else(|| "Moira runtime failed to initialize".to_string())?;
+    let target = runtime
+        .runtime
+        .clotho()
+        .register_known_local_build(registration)?;
+
+    serde_json::to_string(&target)
+        .map_err(|err| format!("failed to encode Moira launch target ref: {err}"))
 }
 
 fn ensure_runtime(

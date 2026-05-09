@@ -78,6 +78,12 @@ Current Core Control follow-on state:
 3. Wake, graceful stop, and force-kill actions flow through Moira-owned Atropos lifecycle semantics.
 4. Force-kill requires a second confirmation path in the host UI.
 5. Settings retains Moira status and minimum local observability until the dedicated O11y / Lachesis panel lands.
+6. The first Clotho Management slice keeps launch-target/profile selection in the Core Control Launch Context section and opens target/profile editing in focused modal sheets.
+7. Target editing uses sheet-local known-local-build draft state and commits through Moira's Clotho host API only from `Save`; `Cancel` discards the draft. Saving the same `buildId` updates that target manifest.
+8. Profile editing uses sheet-local `core_config` text plus structured `env_files` and inline environment variable rows keyed by `profileId`; `Save` commits through Moira's draft API and `Cancel` discards the draft. Core schema validation remains a later Core-authority integration.
+9. Core process state appears inside the Operations section with wake, stop, and force-kill controls.
+10. Stop/force-kill transition refreshes are quiet Core-status tracking updates, so lifecycle buttons do not pulse through global refresh disabled states while Atropos settles a process transition.
+11. Apple Universal relies on Moira-owned Atropos child-process setup to normalize Unix signal masks and SIGTERM/SIGINT dispositions before Core starts.
 
 ## Source Boundary Direction
 
@@ -97,7 +103,9 @@ Apple Universal source cleanup is part of the Moira integration path.
 3. `MoiraOperationsViewModel` owns the shared minimum Loom state used by Settings status/O11y and the first Core Control panel, keeping refresh and lifecycle work async.
 4. `SettingView` receives Moira state explicitly; `ChatViewModel` remains focused on endpoint chat workflows.
 5. `MoiraCoreControlPanel` owns Apple-native lifecycle presentation for launch context, Atropos phase, terminal state, wake, stop, and force-kill.
-6. The current macOS default client attempts to load `libmoira_ffi.dylib`, calls the C ABI status, minimum Loom snapshot, and lifecycle operation proofs, and maps Rust JSON into Swift DTOs.
-7. The first Loom payload uses `MoiraLoomSnapshot` for runtime status, launch targets, profiles, wakes, ticks, and selected tick raw records.
-8. The default client reports an unavailable snapshot when the local Rust dylib is absent, keeping Apple-native Moira surfaces usable during packaging work.
-9. Follow-on O11y / Lachesis panels may reuse the same binding namespace while owning separate view models and navigation state.
+6. `MoiraCoreControlPanel` owns Atropos lifecycle presentation while `MoiraLaunchContextSection` owns selected target/profile context and the first Clotho edit entry points.
+7. Apple profile editing uses sheet-local Moira-rendered structured drafts so SwiftUI manages environment rows while Rust owns wrapper profile parsing/rendering.
+8. The current macOS default client attempts to load `libmoira_ffi.dylib`, calls the C ABI status, minimum Loom snapshot, lifecycle operation, profile document, profile draft, and known-local-build registration proofs, and maps Rust JSON into Swift DTOs.
+9. The first Loom payload uses `MoiraLoomSnapshot` for runtime status, launch targets, profiles, wakes, ticks, and selected tick raw records.
+10. The default client reports an unavailable snapshot when the local Rust dylib is absent, keeping Apple-native Moira surfaces usable during packaging work.
+11. Follow-on O11y / Lachesis panels may reuse the same binding namespace while owning separate view models and navigation state.

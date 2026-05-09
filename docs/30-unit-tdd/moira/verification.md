@@ -33,12 +33,15 @@
 3. `moira/runtime/tests/runtime_open.rs` covers runtime open, directory creation, receiver readiness, and receiver bind conflict status.
 4. `moira/runtime/tests/clotho_prepare.rs` covers Clotho registration and profile-backed wake preparation through the public runtime boundary.
 5. `moira/runtime/tests/lachesis_ingest.rs` covers OTLP ingest through a tonic client and verifies run/tick/detail projections.
-6. `moira/runtime/tests/atropos_supervision.rs` covers Unix process wake and graceful stop through Atropos.
+6. `moira/runtime/tests/atropos_supervision.rs` covers Unix process wake, child signal-mask restoration, bounded graceful stop settling, and terminal status through Atropos.
 7. Apple Universal can consume the narrow Moira host API needed for minimum Loom.
 8. Process-local resource conflicts surface as runtime status.
 9. Body endpoint socket discovery remains usable when Core is already listening from another launch path.
 10. `moira_runtime_loom_json` returns the minimum operator snapshot through the FFI boundary.
 11. `moira_runtime_wake_json`, `moira_runtime_stop_json`, and `moira_runtime_force_kill_json` route host lifecycle requests through Atropos and return Core status JSON.
+12. `moira_runtime_save_profile_json` and `moira_runtime_load_profile_json` round-trip app-local JSONC profile documents through the FFI boundary.
+13. `moira_runtime_save_profile_draft_json` and `moira_runtime_load_profile_draft_json` round-trip `core_config`, env file rows, and inline environment rows through the FFI boundary.
+14. `moira_runtime_register_known_local_build_json` registers a known local build through Clotho and exposes the launch target through the Loom snapshot.
 
 ## Observability Checks
 
@@ -59,11 +62,13 @@
 1. Moira Clotho preparation and Atropos supervision logic in the Moira backend runtime.
 2. Core OTLP event-shape tests, [Core Observability](../core/observability.md), contract fixtures, and config validation guardrails.
 3. Live end-to-end operator walkthroughs remain valid evidence for wake/stop and browse-surface checks while the current local read models and control-plane slices continue to stabilize.
-4. `moira/ffi/src/tests.rs` covers the status JSON, minimum Loom snapshot JSON, and lifecycle operation JSON C ABI surfaces.
+4. `moira/ffi/src/tests.rs` covers the status JSON, minimum Loom snapshot JSON, lifecycle operation JSON, profile document JSON, profile draft JSON, and known-local-build registration JSON C ABI surfaces.
 
 ## Current Architecture Checks
 
 1. Apple Universal minimum Loom exposes runtime/receiver status, launch-target/profile read context, Core lifecycle operation state, wake list, tick list, and selected tick raw inspection from Moira host APIs.
 2. Lachesis persistence and Lachesis projections remain the owner of Lachesis state; Clotho and Atropos state use dedicated ownership paths.
 3. Clotho durable manifests and profile documents remain app-local preparation truth, while current selected launch-target/profile refs remain host session state until an explicit persistence slice lands.
-4. Tauri/Vue retirement used the selected Apple Universal minimum Loom contract as the gate, with legacy-only features assigned to follow-on owners.
+4. Apple Universal's first Clotho Management slice proves structured profile draft load/save, environment variable management, and known-local-build registration/update through host binding tests.
+5. Apple Universal Core Control view-model tests keep operation errors scoped to the owning UI section.
+6. Tauri/Vue retirement used the selected Apple Universal minimum Loom contract as the gate, with legacy-only features assigned to follow-on owners.

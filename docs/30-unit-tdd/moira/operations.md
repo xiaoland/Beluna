@@ -13,9 +13,10 @@
 1. Host UI state provides the current selected Clotho launch-target ref plus the optional selected profile id for the next wake.
 2. Clotho resolves the selected launch target, derives the optional profile path from `profile_id`, and returns prepared wake input to Atropos.
 3. Atropos ensures the OTLP logs receiver is ready before starting supervised Core.
-4. Atropos launches Core and records supervised wake tracking.
-5. Host-native Loom refreshes runtime status through Atropos query orchestration while Lachesis reacts to ingest updates for wake and tick browsing.
-6. Schema validation against Core authority remains deferred to a later slice.
+4. On Unix hosts, Atropos restores the child process signal mask and SIGTERM/SIGINT dispositions before `exec`, so host app signal state cannot make supervised Core ignore graceful-stop signals.
+5. Atropos launches Core and records supervised wake tracking.
+6. Host-native Loom refreshes runtime status through Atropos query orchestration while Lachesis reacts to ingest updates for wake and tick browsing.
+7. Schema validation against Core authority remains deferred to a later slice.
 
 ## Clotho Preparation Flow
 
@@ -64,8 +65,10 @@
 ## Shutdown
 
 1. When a host that owns a supervised Core exits, the host asks Atropos for graceful stop according to host lifecycle policy.
-2. Offer explicit force-kill only through a second confirmation path.
-3. Flush local observability state and close control-plane resources.
+2. Atropos sends the graceful stop signal and waits for a bounded settle window before returning the latest supervised process state. The supervised child signal environment is normalized at wake time so SIGTERM delivery works even when the host process inherited a blocked signal mask.
+3. If graceful stop remains in progress after the settle window, Atropos keeps `stopping` plus the supervised pid visible so the host can offer force-kill.
+4. Offer explicit force-kill only through a second confirmation path.
+5. Flush local observability state and close control-plane resources.
 
 ## Failure Handling
 

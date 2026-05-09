@@ -4,10 +4,16 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::service::canonicalize_file;
+use super::{
+    model::{
+        ProfileDocument, ProfileDraftDocument, ProfileDraftEnvFile, ProfileDraftInlineEnvironment,
+        SaveProfileDraftRequest,
+    },
+    service::canonicalize_file,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct PreparedProfileRuntime {
@@ -16,7 +22,7 @@ pub(super) struct PreparedProfileRuntime {
     pub environment_overrides: BTreeMap<String, String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct WrapperProfileDocument {
     core_config: Value,
@@ -24,7 +30,7 @@ struct WrapperProfileDocument {
     environment: ProfileEnvironment,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct ProfileEnvironment {
     #[serde(default)]
@@ -33,7 +39,7 @@ struct ProfileEnvironment {
     inline: BTreeMap<String, String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct ProfileEnvFile {
     path: PathBuf,
@@ -43,6 +49,90 @@ struct ProfileEnvFile {
 
 fn default_env_file_required() -> bool {
     true
+}
+
+pub(super) fn parse_profile_draft_document(
+    document: ProfileDocument,
+) -> Result<ProfileDraftDocument, String> {
+    let wrapper: WrapperProfileDocument = json5::from_str(&document.contents).map_err(|err| {
+        format!(
+            "failed to parse profile document `{}` as wrapper profile: {err}",
+            document.profile_path.display()
+        )
+    })?;
+    if !matches!(wrapper.core_config, Value::Object(_)) {
+        return Err(format!(
+            "profile document `{}` must define `core_config` as an object",
+            document.profile_path.display()
+        ));
+    }
+
+    let core_config =
+        render_json_value("core_config", &document.profile_path, &wrapper.core_config)?;
+    let inline_environment = wrapper
+        .environment
+        .inline
+        .into_iter()
+        .map(|(key, value)| ProfileDraftInlineEnvironment { key, value })
+        .collect();
+    let env_files = wrapper
+        .environment
+        .env_files
+        .into_iter()
+        .map(|env_file| ProfileDraftEnvFile {
+            path: env_file.path,
+            required: env_file.required,
+        })
+        .collect();
+
+    Ok(ProfileDraftDocument {
+        profile_id: document.profile_id,
+        profile_path: document.profile_path,
+        core_config,
+        env_files,
+        inline_environment,
+    })
+}
+
+pub(super) fn render_profile_draft_contents(
+    request: SaveProfileDraftRequest,
+) -> Result<String, String> {
+    let core_config: Value = json5::from_str(&request.core_config)
+        .map_err(|err| format!("failed to parse profile core_config draft: {err}"))?;
+    if !matches!(core_config, Value::Object(_)) {
+        return Err("profile core_config draft must be a JSON object".to_string());
+    }
+
+    let mut env_files = Vec::new();
+    for env_file in request.env_files {
+        if env_file.path.as_os_str().is_empty() {
+            return Err("profile environment file path must not be empty".to_string());
+        }
+        env_files.push(ProfileEnvFile {
+            path: env_file.path,
+            required: env_file.required,
+        });
+    }
+
+    let mut inline = BTreeMap::new();
+    for entry in request.inline_environment {
+        validate_env_entry(&entry.key, &entry.value, "profile inline environment")?;
+        if inline.insert(entry.key.clone(), entry.value).is_some() {
+            return Err(format!(
+                "profile inline environment contains duplicate variable `{}`",
+                entry.key
+            ));
+        }
+    }
+
+    let wrapper = WrapperProfileDocument {
+        core_config,
+        environment: ProfileEnvironment { env_files, inline },
+    };
+    let rendered = serde_json::to_string_pretty(&wrapper)
+        .map_err(|err| format!("failed to render profile document draft: {err}"))?;
+
+    Ok(ensure_trailing_newline(rendered))
 }
 
 pub(super) fn prepare_profile_runtime(
@@ -107,6 +197,15 @@ fn materialize_core_config(
     })?;
 
     canonicalize_file("prepared Core config", &config_path)
+}
+
+fn render_json_value(label: &str, profile_path: &Path, value: &Value) -> Result<String, String> {
+    serde_json::to_string_pretty(value).map_err(|err| {
+        format!(
+            "failed to render `{label}` for profile document `{}`: {err}",
+            profile_path.display()
+        )
+    })
 }
 
 fn resolve_environment_overrides(

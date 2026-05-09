@@ -84,6 +84,41 @@ pub struct SaveProfileDocumentRequest {
     pub contents: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileDraftDocument {
+    pub profile_id: String,
+    pub profile_path: PathBuf,
+    pub core_config: String,
+    pub env_files: Vec<ProfileDraftEnvFile>,
+    pub inline_environment: Vec<ProfileDraftInlineEnvironment>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveProfileDraftRequest {
+    pub profile_id: String,
+    pub core_config: String,
+    #[serde(default)]
+    pub env_files: Vec<ProfileDraftEnvFile>,
+    #[serde(default)]
+    pub inline_environment: Vec<ProfileDraftInlineEnvironment>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileDraftEnvFile {
+    pub path: PathBuf,
+    pub required: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileDraftInlineEnvironment {
+    pub key: String,
+    pub value: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WakeInputRequest {

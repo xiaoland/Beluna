@@ -17,9 +17,10 @@
 5. Lachesis receiver status, wake list, tick list, and selected tick raw records.
 6. Swift host boundary starts with `MoiraRuntimeClient`, `MoiraRuntimeSnapshot`, `MoiraLoomSnapshot`, `MoiraLoomSelection`, `MoiraCoreWakeRequest`, and `MoiraOperationsViewModel`.
 7. Rust binding adapters must implement `MoiraRuntimeClient` so SwiftUI views stay independent of ABI mechanics.
-8. The first macOS adapter uses dynamic loading for `libmoira_ffi.dylib`, resolves `moira_runtime_status_json`, `moira_runtime_loom_json`, `moira_runtime_wake_json`, `moira_runtime_stop_json`, and `moira_runtime_force_kill_json`, and decodes returned JSON into Swift DTOs.
+8. The first macOS adapter uses dynamic loading for `libmoira_ffi.dylib`, resolves `moira_runtime_status_json`, `moira_runtime_loom_json`, `moira_runtime_wake_json`, `moira_runtime_stop_json`, `moira_runtime_force_kill_json`, `moira_runtime_load_profile_json`, `moira_runtime_save_profile_json`, `moira_runtime_load_profile_draft_json`, `moira_runtime_save_profile_draft_json`, and `moira_runtime_register_known_local_build_json`, and decodes returned JSON into Swift DTOs.
 9. The macOS build bundles `libmoira_ffi.dylib` and `libduckdb.dylib` under `BelunaApp.app/Contents/Frameworks`.
 10. The first dynamic adapter also resolves `moira_runtime_shutdown_json` for explicit runtime cleanup in integration tests.
+11. The first Clotho Management binding surface uses `MoiraProfileDraftDocument`, `MoiraProfileDraftSaveRequest`, `MoiraProfileEnvFileDraft`, `MoiraProfileInlineEnvironmentDraft`, and `MoiraKnownLocalBuildRegistration` as narrow DTOs around Moira-owned profile and target mutation semantics.
 
 ## Socket Discovery Interface
 
@@ -37,4 +38,5 @@
 4. Standalone Core Control panel parallel to Settings.
 5. Raw-first local observability browsing for the selected wake/tick.
 6. Clotho launch-target/profile context inside the Core Control panel.
-7. Settings-integrated Moira status and minimum local observability pending the dedicated O11y / Lachesis panel.
+7. Create/Edit target and profile actions in Core Control Launch Context open focused sheets whose operation surface is limited to `Cancel` and `Save`; known-local-build drafts and structured profile drafts include `core_config`, env files, and inline environment variables.
+8. Settings-integrated Moira status and minimum local observability pending the dedicated O11y / Lachesis panel.

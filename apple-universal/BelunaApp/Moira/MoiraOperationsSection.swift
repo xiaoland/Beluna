@@ -29,7 +29,7 @@ struct MoiraOperationsSection: View {
                 .disabled(!viewModel.canRefresh)
             }
 
-            if let errorText = viewModel.lastErrorText {
+            if let errorText = viewModel.runtimeErrorText {
                 Text(errorText)
                     .font(.caption)
                     .foregroundStyle(.red)

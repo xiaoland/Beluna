@@ -30,6 +30,13 @@ final class MoiraRuntimeDynamicLibrary: @unchecked Sendable {
         UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>,
         UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
     ) -> Int32
+    private typealias ProfileLoadFunction = @convention(c) (
+        UnsafePointer<CChar>,
+        UnsafePointer<CChar>,
+        UnsafePointer<CChar>,
+        UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>,
+        UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
+    ) -> Int32
     private typealias ShutdownFunction = @convention(c) (
         UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>,
         UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
@@ -42,6 +49,11 @@ final class MoiraRuntimeDynamicLibrary: @unchecked Sendable {
     private let wakeFunction: WakeFunction
     private let stopFunction: CoreLifecycleFunction
     private let forceKillFunction: CoreLifecycleFunction
+    private let loadProfileFunction: ProfileLoadFunction
+    private let saveProfileFunction: WakeFunction
+    private let loadProfileDraftFunction: ProfileLoadFunction
+    private let saveProfileDraftFunction: WakeFunction
+    private let registerKnownLocalBuildFunction: WakeFunction
     private let shutdownFunction: ShutdownFunction
     private let freeFunction: FreeFunction
 
@@ -52,6 +64,11 @@ final class MoiraRuntimeDynamicLibrary: @unchecked Sendable {
         wakeFunction: @escaping WakeFunction,
         stopFunction: @escaping CoreLifecycleFunction,
         forceKillFunction: @escaping CoreLifecycleFunction,
+        loadProfileFunction: @escaping ProfileLoadFunction,
+        saveProfileFunction: @escaping WakeFunction,
+        loadProfileDraftFunction: @escaping ProfileLoadFunction,
+        saveProfileDraftFunction: @escaping WakeFunction,
+        registerKnownLocalBuildFunction: @escaping WakeFunction,
         shutdownFunction: @escaping ShutdownFunction,
         freeFunction: @escaping FreeFunction
     ) {
@@ -61,6 +78,11 @@ final class MoiraRuntimeDynamicLibrary: @unchecked Sendable {
         self.wakeFunction = wakeFunction
         self.stopFunction = stopFunction
         self.forceKillFunction = forceKillFunction
+        self.loadProfileFunction = loadProfileFunction
+        self.saveProfileFunction = saveProfileFunction
+        self.loadProfileDraftFunction = loadProfileDraftFunction
+        self.saveProfileDraftFunction = saveProfileDraftFunction
+        self.registerKnownLocalBuildFunction = registerKnownLocalBuildFunction
         self.shutdownFunction = shutdownFunction
         self.freeFunction = freeFunction
     }
@@ -185,6 +207,61 @@ final class MoiraRuntimeDynamicLibrary: @unchecked Sendable {
         try callCoreLifecycleFunction(configuration: configuration, function: forceKillFunction)
     }
 
+    func loadProfileDocument(
+        configuration: MoiraRuntimeConfiguration,
+        profileID: String
+    ) throws -> MoiraProfileDocument {
+        try callProfileLoadFunction(
+            configuration: configuration,
+            profileID: profileID,
+            function: loadProfileFunction
+        )
+    }
+
+    func saveProfileDocument(
+        configuration: MoiraRuntimeConfiguration,
+        request: MoiraProfileSaveRequest
+    ) throws -> MoiraProfileDocument {
+        try callJSONOperation(
+            configuration: configuration,
+            request: request,
+            function: saveProfileFunction
+        )
+    }
+
+    func loadProfileDraft(
+        configuration: MoiraRuntimeConfiguration,
+        profileID: String
+    ) throws -> MoiraProfileDraftDocument {
+        try callProfileLoadFunction(
+            configuration: configuration,
+            profileID: profileID,
+            function: loadProfileDraftFunction
+        )
+    }
+
+    func saveProfileDraft(
+        configuration: MoiraRuntimeConfiguration,
+        request: MoiraProfileDraftSaveRequest
+    ) throws -> MoiraProfileDraftDocument {
+        try callJSONOperation(
+            configuration: configuration,
+            request: request,
+            function: saveProfileDraftFunction
+        )
+    }
+
+    func registerKnownLocalBuild(
+        configuration: MoiraRuntimeConfiguration,
+        registration: MoiraKnownLocalBuildRegistration
+    ) throws -> MoiraLaunchTargetRef {
+        try callJSONOperation(
+            configuration: configuration,
+            request: registration,
+            function: registerKnownLocalBuildFunction
+        )
+    }
+
     func shutdownResources() throws -> [MoiraResourceStatus] {
         var jsonPointer: UnsafeMutablePointer<CChar>?
         var errorPointer: UnsafeMutablePointer<CChar>?
@@ -269,6 +346,26 @@ final class MoiraRuntimeDynamicLibrary: @unchecked Sendable {
                 handle: handle,
                 name: "moira_runtime_force_kill_json"
             )
+            let loadProfileFunction: ProfileLoadFunction = try loadSymbol(
+                handle: handle,
+                name: "moira_runtime_load_profile_json"
+            )
+            let saveProfileFunction: WakeFunction = try loadSymbol(
+                handle: handle,
+                name: "moira_runtime_save_profile_json"
+            )
+            let loadProfileDraftFunction: ProfileLoadFunction = try loadSymbol(
+                handle: handle,
+                name: "moira_runtime_load_profile_draft_json"
+            )
+            let saveProfileDraftFunction: WakeFunction = try loadSymbol(
+                handle: handle,
+                name: "moira_runtime_save_profile_draft_json"
+            )
+            let registerKnownLocalBuildFunction: WakeFunction = try loadSymbol(
+                handle: handle,
+                name: "moira_runtime_register_known_local_build_json"
+            )
             let shutdownFunction: ShutdownFunction = try loadSymbol(
                 handle: handle,
                 name: "moira_runtime_shutdown_json"
@@ -285,6 +382,11 @@ final class MoiraRuntimeDynamicLibrary: @unchecked Sendable {
                 wakeFunction: wakeFunction,
                 stopFunction: stopFunction,
                 forceKillFunction: forceKillFunction,
+                loadProfileFunction: loadProfileFunction,
+                saveProfileFunction: saveProfileFunction,
+                loadProfileDraftFunction: loadProfileDraftFunction,
+                saveProfileDraftFunction: saveProfileDraftFunction,
+                registerKnownLocalBuildFunction: registerKnownLocalBuildFunction,
                 shutdownFunction: shutdownFunction,
                 freeFunction: freeFunction
             )
@@ -388,11 +490,82 @@ final class MoiraRuntimeDynamicLibrary: @unchecked Sendable {
         )
     }
 
+    private func callProfileLoadFunction<Response: Decodable>(
+        configuration: MoiraRuntimeConfiguration,
+        profileID: String,
+        function: ProfileLoadFunction
+    ) throws -> Response {
+        var jsonPointer: UnsafeMutablePointer<CChar>?
+        var errorPointer: UnsafeMutablePointer<CChar>?
+        defer {
+            freeFunction(jsonPointer)
+            freeFunction(errorPointer)
+        }
+
+        let statusCode = configuration.rootDirectoryPath.withCString { rootPointer in
+            configuration.receiverBind.withCString { bindPointer in
+                profileID.withCString { profilePointer in
+                    function(rootPointer, bindPointer, profilePointer, &jsonPointer, &errorPointer)
+                }
+            }
+        }
+
+        return try decodePayload(
+            statusCode: statusCode,
+            jsonPointer: jsonPointer,
+            errorPointer: errorPointer
+        )
+    }
+
+    private func callJSONOperation<Request: Encodable, Response: Decodable>(
+        configuration: MoiraRuntimeConfiguration,
+        request: Request,
+        function: WakeFunction
+    ) throws -> Response {
+        let data = try JSONEncoder().encode(request)
+        guard let requestText = String(data: data, encoding: .utf8) else {
+            throw MoiraRuntimeDynamicClientError.invalidRequestPayload("request is not UTF-8")
+        }
+
+        var jsonPointer: UnsafeMutablePointer<CChar>?
+        var errorPointer: UnsafeMutablePointer<CChar>?
+        defer {
+            freeFunction(jsonPointer)
+            freeFunction(errorPointer)
+        }
+
+        let statusCode = configuration.rootDirectoryPath.withCString { rootPointer in
+            configuration.receiverBind.withCString { bindPointer in
+                requestText.withCString { requestPointer in
+                    function(rootPointer, bindPointer, requestPointer, &jsonPointer, &errorPointer)
+                }
+            }
+        }
+
+        return try decodePayload(
+            statusCode: statusCode,
+            jsonPointer: jsonPointer,
+            errorPointer: errorPointer
+        )
+    }
+
     private func decodeCoreStatus(
         statusCode: Int32,
         jsonPointer: UnsafeMutablePointer<CChar>?,
         errorPointer: UnsafeMutablePointer<CChar>?
     ) throws -> MoiraCoreStatus {
+        try decodePayload(
+            statusCode: statusCode,
+            jsonPointer: jsonPointer,
+            errorPointer: errorPointer
+        )
+    }
+
+    private func decodePayload<T: Decodable>(
+        statusCode: Int32,
+        jsonPointer: UnsafeMutablePointer<CChar>?,
+        errorPointer: UnsafeMutablePointer<CChar>?
+    ) throws -> T {
         if statusCode != 0 {
             throw MoiraRuntimeDynamicClientError.statusFailure(readCString(errorPointer))
         }
@@ -403,7 +576,7 @@ final class MoiraRuntimeDynamicLibrary: @unchecked Sendable {
 
         let jsonText = String(cString: jsonPointer)
         do {
-            return try JSONDecoder().decode(MoiraCoreStatus.self, from: Data(jsonText.utf8))
+            return try JSONDecoder().decode(T.self, from: Data(jsonText.utf8))
         } catch {
             throw MoiraRuntimeDynamicClientError.invalidStatusPayload(String(describing: error))
         }

@@ -7,13 +7,12 @@ struct MoiraCoreControlPanel: View {
     var body: some View {
         Form {
             runtimeSection
-            coreSection
-            launchSection
+            MoiraLaunchContextSection(viewModel: viewModel)
             operationSection
         }
         .formStyle(.grouped)
         .padding(16)
-        .frame(minWidth: 560, minHeight: 460)
+        .frame(minWidth: 620, minHeight: 680)
         .task {
             await viewModel.refreshNow()
         }
@@ -47,7 +46,7 @@ struct MoiraCoreControlPanel: View {
                     .textSelection(.enabled)
             }
 
-            if let errorText = viewModel.lastErrorText {
+            if let errorText = viewModel.runtimeErrorText {
                 Text(errorText)
                     .font(.caption)
                     .foregroundStyle(.red)
@@ -69,69 +68,12 @@ struct MoiraCoreControlPanel: View {
         }
     }
 
-    private var coreSection: some View {
-        Section("Core") {
-            LabeledContent("Phase", value: viewModel.coreStatusText)
-
-            if let pid = viewModel.snapshot.status.core.pid {
-                LabeledContent("PID", value: "\(pid)")
-            }
-
-            if let terminalReason = viewModel.snapshot.status.core.terminalReason {
-                LabeledContent("Terminal") {
-                    Text(terminalReason)
-                        .font(.caption.monospaced())
-                        .textSelection(.enabled)
-                }
-            }
-
-            if let executablePath = viewModel.snapshot.status.core.executablePath {
-                pathText("Executable", executablePath)
-            }
-            if let workingDir = viewModel.snapshot.status.core.workingDir {
-                pathText("Working Dir", workingDir)
-            }
-            if let profilePath = viewModel.snapshot.status.core.profilePath {
-                pathText("Profile", profilePath)
-            }
-        }
-    }
-
-    private var launchSection: some View {
-        Section("Launch Context") {
-            if viewModel.hasLaunchTargets {
-                Picker("Launch Target", selection: launchTargetSelection) {
-                    ForEach(viewModel.snapshot.launchTargets) { target in
-                        Text(target.label).tag(target.id)
-                    }
-                }
-            } else {
-                LabeledContent("Launch Target", value: "none")
-            }
-
-            if viewModel.hasProfiles {
-                Picker("Profile", selection: profileSelection) {
-                    Text("None").tag("")
-                    ForEach(viewModel.snapshot.profiles) { profile in
-                        Text(profile.profileID).tag(profile.id)
-                    }
-                }
-            } else {
-                LabeledContent("Profile", value: "none")
-            }
-
-            if let target = viewModel.selectedLaunchTarget {
-                launchTargetDetail(target)
-            }
-
-            if let profile = viewModel.selectedProfile {
-                pathText("Profile Path", profile.profilePath)
-            }
-        }
-    }
-
     private var operationSection: some View {
         Section("Operations") {
+            coreOperationStatus
+
+            Divider()
+
             HStack(spacing: 10) {
                 Button(action: viewModel.wakeCore) {
                     Label("Wake", systemImage: "play.fill")
@@ -153,45 +95,45 @@ struct MoiraCoreControlPanel: View {
                 .buttonStyle(.bordered)
                 .disabled(!viewModel.canForceKillCore)
 
-                if viewModel.isOperating {
+                if viewModel.isOperating || viewModel.isTrackingCoreTransition {
                     ProgressView()
                         .controlSize(.small)
                 }
             }
-        }
-    }
 
-    private var launchTargetSelection: Binding<String> {
-        Binding(
-            get: { viewModel.selectedLaunchTargetID },
-            set: { viewModel.selectLaunchTarget(id: $0) }
-        )
-    }
-
-    private var profileSelection: Binding<String> {
-        Binding(
-            get: { viewModel.selectedProfileID },
-            set: { viewModel.selectProfile(id: $0) }
-        )
-    }
-
-    private func launchTargetDetail(_ target: MoiraLaunchTargetSummary) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            LabeledContent("Readiness", value: target.readiness)
-            LabeledContent("Provenance", value: target.provenance)
-
-            if let issue = target.issue {
-                Text(issue)
+            if let errorText = viewModel.coreOperationErrorText {
+                Text(errorText)
                     .font(.caption)
                     .foregroundStyle(.red)
                     .textSelection(.enabled)
             }
+        }
+    }
 
-            if let executablePath = target.executablePath {
+    private var coreOperationStatus: some View {
+        Group {
+            LabeledContent("Core Phase", value: viewModel.coreStatusText)
+
+            if let pid = viewModel.snapshot.status.core.pid {
+                LabeledContent("PID", value: "\(pid)")
+            }
+
+            if let terminalReason = viewModel.snapshot.status.core.terminalReason {
+                LabeledContent("Terminal") {
+                    Text(terminalReason)
+                        .font(.caption.monospaced())
+                        .textSelection(.enabled)
+                }
+            }
+
+            if let executablePath = viewModel.snapshot.status.core.executablePath {
                 pathText("Executable", executablePath)
             }
-            if let workingDir = target.workingDir {
+            if let workingDir = viewModel.snapshot.status.core.workingDir {
                 pathText("Working Dir", workingDir)
+            }
+            if let profilePath = viewModel.snapshot.status.core.profilePath {
+                pathText("Profile", profilePath)
             }
         }
     }

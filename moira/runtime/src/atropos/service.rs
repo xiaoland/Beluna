@@ -1,6 +1,10 @@
 use std::{process::ExitStatus, sync::Arc, time::Duration};
 
-use tokio::{process::Child, sync::Mutex, time::sleep};
+use tokio::{
+    process::Child,
+    sync::Mutex,
+    time::{Instant, sleep},
+};
 
 use crate::{
     MoiraPaths, MoiraTaskSpawner,
@@ -16,6 +20,8 @@ use super::{
     wake_command::build_wake_command,
 };
 const MONITOR_INTERVAL: Duration = Duration::from_millis(250);
+const GRACEFUL_STOP_SETTLE_TIMEOUT: Duration = Duration::from_secs(8);
+const FORCE_KILL_SETTLE_TIMEOUT: Duration = Duration::from_secs(2);
 
 pub struct AtroposService {
     #[allow(dead_code)]
@@ -109,50 +115,70 @@ impl AtroposService {
         result
     }
     pub async fn stop(&self) -> Result<RuntimeStatus, String> {
-        let mut guard = self.state.lock().await;
-        sync_terminal_state(&mut guard);
-
-        let Some(running) = guard.running.as_mut() else {
+        let Some(status) = self.request_graceful_stop().await? else {
             return Err("no supervised Core is currently running".to_string());
         };
-        if running.termination_intent.is_some() {
-            return Ok(guard.status());
+
+        if status.phase == SupervisionPhase::Stopping {
+            return self
+                .wait_for_terminal_state(GRACEFUL_STOP_SETTLE_TIMEOUT)
+                .await;
         }
 
-        send_graceful_stop(running.pid)?;
-        running.termination_intent = Some(TerminationIntent::GracefulStop);
-        guard.phase = SupervisionPhase::Stopping;
-
-        Ok(guard.status())
+        Ok(status)
     }
 
     pub async fn force_kill(&self) -> Result<RuntimeStatus, String> {
-        let mut guard = self.state.lock().await;
-        sync_terminal_state(&mut guard);
+        let status = {
+            let mut guard = self.state.lock().await;
+            sync_terminal_state(&mut guard);
 
-        let Some(running) = guard.running.as_mut() else {
-            return Err("no supervised Core is currently running".to_string());
+            let Some(running) = guard.running.as_mut() else {
+                return Err("no supervised Core is currently running".to_string());
+            };
+            if matches!(
+                running.termination_intent,
+                Some(TerminationIntent::ForceKill)
+            ) {
+                guard.status()
+            } else {
+                running.child.start_kill().map_err(|err| {
+                    format!(
+                        "failed to force-kill supervised Core pid={}: {err}",
+                        running.pid
+                    )
+                })?;
+                running.termination_intent = Some(TerminationIntent::ForceKill);
+                guard.phase = SupervisionPhase::Stopping;
+                guard.status()
+            }
         };
-        if matches!(
-            running.termination_intent,
-            Some(TerminationIntent::ForceKill)
-        ) {
-            return Ok(guard.status());
+
+        if status.phase == SupervisionPhase::Stopping {
+            return self
+                .wait_for_terminal_state(FORCE_KILL_SETTLE_TIMEOUT)
+                .await;
         }
 
-        running.child.start_kill().map_err(|err| {
-            format!(
-                "failed to force-kill supervised Core pid={}: {err}",
-                running.pid
-            )
-        })?;
-        running.termination_intent = Some(TerminationIntent::ForceKill);
-        guard.phase = SupervisionPhase::Stopping;
-
-        Ok(guard.status())
+        Ok(status)
     }
 
     pub async fn stop_if_running(&self) -> Result<Option<RuntimeStatus>, String> {
+        let Some(status) = self.request_graceful_stop().await? else {
+            return Ok(None);
+        };
+
+        if status.phase == SupervisionPhase::Stopping {
+            return self
+                .wait_for_terminal_state(GRACEFUL_STOP_SETTLE_TIMEOUT)
+                .await
+                .map(Some);
+        }
+
+        Ok(Some(status))
+    }
+
+    async fn request_graceful_stop(&self) -> Result<Option<RuntimeStatus>, String> {
         let mut guard = self.state.lock().await;
         sync_terminal_state(&mut guard);
 
@@ -168,6 +194,22 @@ impl AtroposService {
         guard.phase = SupervisionPhase::Stopping;
 
         Ok(Some(guard.status()))
+    }
+    async fn wait_for_terminal_state(&self, timeout: Duration) -> Result<RuntimeStatus, String> {
+        let deadline = Instant::now() + timeout;
+
+        loop {
+            let status = {
+                let mut guard = self.state.lock().await;
+                sync_terminal_state(&mut guard);
+                guard.status()
+            };
+            if status.phase != SupervisionPhase::Stopping || Instant::now() >= deadline {
+                return Ok(status);
+            }
+
+            sleep(MONITOR_INTERVAL).await;
+        }
     }
     async fn reserve_wake_slot(&self) -> Result<(), String> {
         let mut guard = self.state.lock().await;

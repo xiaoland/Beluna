@@ -38,13 +38,17 @@ Cross-unit contracts, system authority ownership, and decomposition policy live 
 
 7. Apple Moira panel split contract:
 - Core Control owns Clotho/Atropos operation UI as a panel parallel to Settings.
+- Core Control includes the first Clotho target/profile Create/Edit entry points around the same selected target/profile context used by wake.
+- Target/profile editors use sheet-local drafts with `Cancel` and `Save` as their commit surface.
+- Core Control Operations co-locates Core process state with wake, stop, and force-kill controls.
+- Profile management covers `core_config`, environment file rows, and inline environment variable rows through Moira-owned draft APIs.
 - O11y / Lachesis owns observability browsing and investigation UI as a panel parallel to Settings.
 - Settings owns Moira configuration, receiver/socket defaults, refresh policy, diagnostics policy, and host-local preferences.
-- Evidence homes: `MoiraCoreControlPanel`, `MoiraOperationsViewModel` lifecycle operation tests, follow-on task packets, Apple navigation/view-model tests, and panel-level UI smoke checks.
+- Evidence homes: `MoiraCoreControlPanel`, `MoiraLaunchContextSection`, `MoiraTargetEditorSheet`, `MoiraProfileEditorSheet`, `MoiraOperationsViewModel` lifecycle and Clotho management tests, follow-on task packets, Apple navigation/view-model tests, and panel-level UI smoke checks.
 
 8. Moira FFI packaging contract:
 - macOS BelunaApp builds run the Moira FFI build script, bundle required Rust dylibs in `Contents/Frameworks`, and keep the app signature valid.
-- Evidence homes: `apple-universal/script/build_moira_ffi.sh`, `apple-universal/BelunaApp.xcodeproj/project.pbxproj`, `codesign --verify`, `otool`, and `dynamicClientLoadsBundledMoiraFFI`, including the bundled `moira_runtime_loom_json` and lifecycle symbol paths.
+- Evidence homes: `apple-universal/script/build_moira_ffi.sh`, `apple-universal/BelunaApp.xcodeproj/project.pbxproj`, `codesign --verify`, `otool`, and `dynamicClientLoadsBundledMoiraFFI`, including the bundled `moira_runtime_loom_json`, lifecycle, profile document, profile draft, and known-local-build symbol paths.
 
 9. Socket discovery contract:
 - Configured path, recent successful path, app-local runtime candidate, deployment-supported platform candidates, and Moira-reported paths are available where supported.

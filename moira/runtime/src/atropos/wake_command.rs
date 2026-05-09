@@ -1,4 +1,4 @@
-use std::process::Stdio;
+use std::{io, process::Stdio};
 
 use tokio::process::Command;
 
@@ -15,8 +15,51 @@ pub(super) fn build_wake_command(wake_input: &PreparedRuntimeWakeInput) -> Comma
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
+    configure_child_process(&mut command);
 
     command
+}
+
+#[cfg(unix)]
+fn configure_child_process(command: &mut Command) {
+    unsafe {
+        command.pre_exec(restore_child_signal_environment);
+    }
+}
+
+#[cfg(not(unix))]
+fn configure_child_process(_command: &mut Command) {}
+
+#[cfg(unix)]
+fn restore_child_signal_environment() -> io::Result<()> {
+    unsafe {
+        let mut empty_mask = std::mem::MaybeUninit::<libc::sigset_t>::uninit();
+        if libc::sigemptyset(empty_mask.as_mut_ptr()) != 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let empty_mask = empty_mask.assume_init();
+        if libc::sigprocmask(libc::SIG_SETMASK, &empty_mask, std::ptr::null_mut()) != 0 {
+            return Err(io::Error::last_os_error());
+        }
+
+        reset_signal_disposition(libc::SIGTERM)?;
+        reset_signal_disposition(libc::SIGINT)?;
+    }
+
+    Ok(())
+}
+
+#[cfg(unix)]
+unsafe fn reset_signal_disposition(signal: libc::c_int) -> io::Result<()> {
+    let mut action: libc::sigaction = unsafe { std::mem::zeroed() };
+    action.sa_sigaction = libc::SIG_DFL;
+    if unsafe { libc::sigemptyset(&mut action.sa_mask) } != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    if unsafe { libc::sigaction(signal, &action, std::ptr::null_mut()) } != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
 }
 
 #[cfg(test)]

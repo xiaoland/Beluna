@@ -21,9 +21,9 @@ Moira provides Beluna's first-party local control-plane runtime for:
 
 1. Current Rust backend code realizes Lachesis local ingestion, storage, query, and inspection for one wake and one selected tick.
 2. The backend owner split is explicit in code: `moira/runtime` owns `clotho`, `lachesis`, `atropos`, and the host-facing `runtime` API.
-3. `moira/ffi` owns the first narrow C ABI proof for Apple Universal, currently exposing runtime status JSON, minimum Loom snapshot JSON, and Core lifecycle operation JSON from a process-local `MoiraRuntime`.
+3. `moira/ffi` owns the first narrow C ABI proof for Apple Universal, currently exposing runtime status JSON, minimum Loom snapshot JSON, Core lifecycle operation JSON, raw profile document JSON, structured profile draft JSON, and known-local-build registration JSON from a process-local `MoiraRuntime`.
 4. Clotho currently owns launch-target preparation plus app-local JSONC profile-document list/load/save. `profile_id` is a logical Clotho key that maps to app-local `profiles/<profile-id>.jsonc`.
-5. Atropos currently owns runtime status, wake, graceful stop, force-kill, and app-exit stop wiring for the supervised Core process.
+5. Atropos currently owns runtime status, wake, child process signal-environment restoration, graceful stop, force-kill, and app-exit stop wiring for the supervised Core process.
 6. Current Clotho realization includes known local build registration, explicit forge from a local Beluna repo root or `core/` crate root, published release discovery, checksum verification against `SHA256SUMS`, and version-isolated install directories.
 7. Schema-validation interactions with Core authority remain deferred to a later Clotho slice.
 8. Apple Universal receives the first minimum native Loom surface in the issue #30 slice, and its acceptance criteria come from the selected Apple contract.
@@ -41,11 +41,12 @@ Moira provides Beluna's first-party local control-plane runtime for:
 
 3. `atropos`
 - Owns `wake`, graceful stop, force-kill, supervised process state, readiness gating, and terminal reason tracking.
+- On Unix, owns child process signal-environment restoration before `exec`, including clearing inherited signal masks and restoring SIGTERM/SIGINT dispositions for supervised Core.
 
 4. `host API`
 - Owns the stable surface exposed to host apps, including typed queries, operations, runtime status, and event/pulse delivery.
 - Current Rust implementation lives in `moira/runtime/src/runtime` as `MoiraRuntime`, `MoiraRuntimeConfig`, `MoiraPaths`, `MoiraEventSink`, and `MoiraTaskSpawner`.
-- Current Apple proof adapter lives in `moira/ffi` and bridges `MoiraRuntime.status()`, `MoiraRuntime::loom_snapshot(selection)`, and Atropos wake/stop/force-kill operations as C ABI JSON.
+- Current Apple proof adapter lives in `moira/ffi` and bridges `MoiraRuntime.status()`, `MoiraRuntime::loom_snapshot(selection)`, Atropos wake/stop/force-kill operations, Clotho raw profile load/save, structured profile draft load/save, and known-local-build registration as C ABI JSON.
 - Apple Universal macOS builds package the current FFI adapter as bundled runtime dylibs through the host app target.
 - Apple Universal consumes the first narrow host API needed for Settings status/O11y plus the standalone Core Control panel.
 
@@ -71,7 +72,11 @@ Apple Universal follow-on UI splits Moira operator surfaces into three panels:
 2. O11y / Lachesis owns wake/tick browsing, selected tick raw-first inspection, raw event inspection, Cortex timeline, narrative investigation, and owner-specific drilldown.
 3. Settings owns Moira configuration such as runtime paths, receiver bind address, socket candidates, refresh policy, diagnostics policy, and host-local preferences.
 
-Current Apple Core Control follow-on state has landed the standalone Core Control panel and lifecycle ABI, while the richer O11y / Lachesis panel remains a separate follow-on.
+Current Apple Core Control follow-on state has landed the standalone Core Control panel, lifecycle ABI, first Clotho target registration/update controls, and profile draft controls for `core_config`, env files, and inline environment variables. The richer O11y / Lachesis panel remains a separate follow-on.
+
+Apple Universal Core Control keeps runtime refresh, Core lifecycle, launch-target management, and profile management operation errors scoped to their owning panel sections.
+
+Apple Universal Core Control presents Atropos process state inside Operations with the lifecycle controls.
 
 Legacy Tauri/Vue concepts with durable value have follow-on owners:
 
