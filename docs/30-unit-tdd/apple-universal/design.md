@@ -91,7 +91,9 @@ Current O11y / Lachesis follow-on state:
 2. The panel uses `MoiraO11yViewModel` for wake selection, tick selection, raw-event selection, refresh state, and scoped refresh errors.
 3. The first Apple O11y slice consumes the existing `MoiraLoomSnapshot` binding for wake/tick/raw detail browsing.
 4. The native panel uses source-list wake navigation, tick navigation, selected tick summary, raw event list, and a raw JSON inspector for body, attributes, resource, and scope payloads.
-5. Cortex timeline, narrative investigation, owner-specific drilldown, and live event/pulse refresh remain owned follow-on slices with separate projection or transport contracts.
+5. The selected tick detail surface offers a raw-derived Tick Gantt view parallel to Raw view, grouping selected tick source records into owner lanes and pairing recognized lifecycle events into interval blocks without requiring a richer Moira projection contract.
+6. Tick Gantt selection opens an in-panel bottom detail surface for the selected event or event pair, using source records as the inspection evidence.
+7. Cortex interval reconstruction, narrative investigation, owner-specific drilldown, and live event/pulse refresh remain owned follow-on slices with separate projection or transport contracts.
 
 ## Source Boundary Direction
 

@@ -74,7 +74,7 @@ Apple Universal follow-on UI splits Moira operator surfaces into three panels:
 
 Current Apple Core Control follow-on state has landed the standalone Core Control panel, lifecycle ABI, first Clotho target registration/update controls, and profile draft controls for `core_config`, env files, and inline environment variables.
 
-Current Apple O11y / Lachesis follow-on state has landed the first standalone panel using `MoiraLoomSnapshot` for wake/tick navigation, selected tick summary, raw event selection, and raw JSON inspection. Rich timeline projections, narrative investigation, owner-specific drilldown, and event/pulse refresh remain separate follow-on owners.
+Current Apple O11y / Lachesis follow-on state has landed the first standalone panel using `MoiraLoomSnapshot` for wake/tick navigation, selected tick summary, raw event selection, raw JSON inspection, and an Apple-side raw-derived Tick Gantt view with lifecycle interval pairing and selected item detail. Rich Moira-side timeline projections, narrative investigation, owner-specific drilldown, and event/pulse refresh remain separate follow-on owners.
 
 Apple Universal Core Control keeps runtime refresh, Core lifecycle, launch-target management, and profile management operation errors scoped to their owning panel sections.
 

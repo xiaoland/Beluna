@@ -82,7 +82,9 @@ struct MoiraO11yPanel: View {
                 VStack(spacing: 0) {
                     tickHeader(tickDetail.summary)
                     Divider()
-                    rawEventSplit
+                    detailModePicker
+                    Divider()
+                    selectedTickDetail
                 }
             } else {
                 MoiraO11yEmptyPane(
@@ -132,6 +134,36 @@ struct MoiraO11yPanel: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private var detailModePicker: some View {
+        HStack {
+            Picker("Tick Detail", selection: detailModeSelection) {
+                ForEach(MoiraO11yDetailMode.allCases) { mode in
+                    Text(mode.rawValue).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 180)
+
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+    }
+
+    private var selectedTickDetail: some View {
+        Group {
+            switch viewModel.detailMode {
+            case .gantt:
+                MoiraTickGanttView(
+                    snapshot: viewModel.ganttSnapshot,
+                    selectedRawEventID: rawEventSelection
+                )
+            case .raw:
+                rawEventSplit
+            }
+        }
+    }
+
     private var rawEventSplit: some View {
         HStack(spacing: 0) {
             if viewModel.rawEvents.isEmpty {
@@ -170,6 +202,13 @@ struct MoiraO11yPanel: View {
         Binding(
             get: { viewModel.selectedTickID },
             set: { viewModel.selectTick(id: $0) }
+        )
+    }
+
+    private var detailModeSelection: Binding<MoiraO11yDetailMode> {
+        Binding(
+            get: { viewModel.detailMode },
+            set: { viewModel.selectDetailMode($0) }
         )
     }
 

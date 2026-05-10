@@ -42,7 +42,7 @@ Cross-unit contracts, system authority ownership, and decomposition policy live 
 - Target/profile editors use sheet-local drafts with `Cancel` and `Save` as their commit surface.
 - Core Control Operations co-locates Core process state with wake, stop, and force-kill controls.
 - Profile management covers `core_config`, environment file rows, and inline environment variable rows through Moira-owned draft APIs.
-- O11y / Lachesis owns observability browsing and investigation UI as a panel parallel to Settings, with wake/tick navigation and raw event inspection in the first slice.
+- O11y / Lachesis owns observability browsing and investigation UI as a panel parallel to Settings, with wake/tick navigation, raw event inspection, raw-derived Tick Gantt inspection, lifecycle interval pairing, and selected Gantt item detail in the current slice.
 - Settings owns Moira configuration, receiver/socket defaults, refresh policy, diagnostics policy, and host-local preferences.
 - Evidence homes: `MoiraCoreControlPanel`, `MoiraLaunchContextSection`, `MoiraTargetEditorSheet`, `MoiraProfileEditorSheet`, `MoiraO11yPanel`, `MoiraO11yViewModel`, `MoiraOperationsViewModel` lifecycle and Clotho management tests, O11y view-model tests, follow-on task packets, Apple navigation/view-model tests, and panel-level UI smoke checks.
 

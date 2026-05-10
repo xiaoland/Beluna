@@ -49,6 +49,26 @@ Verified:
 - `xcodebuild test -project apple-universal/BelunaApp.xcodeproj -scheme BelunaApp -destination 'platform=macOS' -derivedDataPath apple-universal/.derived-data -only-testing:BelunaAppTests/MoiraRuntimeBindingTests CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO`
 - Real-app Computer Use smoke opened `O11y / Lachesis` from the Beluna main window and confirmed wake list, tick list, raw event list, and raw inspector render from the embedded Moira runtime.
 
+## Slice 2 Record
+
+Decision:
+
+- Add the first Tick Gantt view as an Apple-side raw-derived visualization parallel to Raw view.
+- Keep interval pairing and richer owner projections behind later Moira query contracts.
+
+Implemented:
+
+- `MoiraTickGanttSnapshot` derives owner lanes and event positions from selected tick raw records.
+- `MoiraTickGanttSnapshot` pairs recognized lifecycle records such as `started`/`finished`, `*.started`/`*.finished`, and `dispatched`/`committed` into interval items.
+- `MoiraTickGanttView` renders selected tick source records as lane-based event markers and interval blocks on a relative timeline.
+- Gantt selection shows a bottom detail pane with the selected point or interval source records.
+- `MoiraO11yPanel` switches selected tick detail between `Gantt` and `Raw`.
+- `MoiraO11yViewModel` owns the selected detail mode while preserving raw-event selection.
+
+Verification target:
+
+- `MoiraRuntimeBindingTests` covers Gantt lane derivation, lifecycle interval pairing, timeline positions, and Gantt/Raw detail mode switching.
+
 ## Scope Boundaries
 
 - Core Control owns wake, stop, force-kill, terminal reason, and process-state operation UI.
@@ -59,7 +79,7 @@ Verified:
 
 ## Open Decisions
 
-1. Which timeline grouping should appear first after raw chronological inspection: Cortex owner-lane timeline or tick-level summary lanes.
+1. How much owner-specific interval reconstruction belongs in Apple raw-derived UI before Moira exposes richer projections.
 2. How much raw JSON should appear in the first viewport before requiring deeper inspector modes.
 3. Which retired Loom ideas deserve product restatement before native implementation: narrative mode, Stem/Spine panels, AI transport, goal-forest comparison.
 4. Whether event/pulse-driven refresh is a prerequisite for rich timeline interaction or a follow-on after the first native panel.

@@ -19,4 +19,5 @@ First slice landed:
 - Add standalone Apple `O11y / Lachesis` panel parallel to Core Control and Settings.
 - Use existing `MoiraLoomSnapshot` as the first binding for wake/tick/raw detail browsing.
 - Provide selected tick raw-first inspection with a native raw event inspector.
+- Add a raw-derived Tick Gantt view parallel to Raw view, including lifecycle interval blocks and selected item detail.
 - Keep Cortex timeline, narrative investigation, owner drilldown, and event/pulse refresh as separate follow-on slices.

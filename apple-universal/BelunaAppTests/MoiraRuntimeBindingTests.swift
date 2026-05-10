@@ -87,6 +87,92 @@ struct MoiraRuntimeBindingTests {
     }
 
     @MainActor
+    @Test func moiraO11yViewModelBuildsTickGanttFromRawEvents() async {
+        var loom = MoiraRuntimeBindingFixtures.loomSnapshot()
+        loom.tickDetail?.raw = [
+            moiraEventRecord(
+                id: "evt-stem",
+                observedAt: "2026-05-08T00:00:00Z",
+                subsystem: "stem",
+                scopeName: "beluna.core.stem.tick",
+                eventName: "granted"
+            ),
+            moiraEventRecord(
+                id: "evt-request-start",
+                observedAt: "2026-05-08T00:00:00.250Z",
+                subsystem: "ai-gateway",
+                scopeName: "beluna.core.ai-gateway.transport",
+                eventName: "request.started"
+            ),
+            moiraEventRecord(
+                id: "evt-cortex-start",
+                observedAt: "2026-05-08T00:00:00.500Z",
+                subsystem: "cortex",
+                scopeName: "beluna.core.cortex.primary",
+                eventName: "started"
+            ),
+            moiraEventRecord(
+                id: "evt-request-finished",
+                observedAt: "2026-05-08T00:00:00.750Z",
+                severityText: "ERROR",
+                subsystem: "ai-gateway",
+                scopeName: "beluna.core.ai-gateway.transport",
+                eventName: "request.finished"
+            ),
+            moiraEventRecord(
+                id: "evt-cortex-finished",
+                observedAt: "2026-05-08T00:00:01Z",
+                subsystem: "cortex",
+                scopeName: "beluna.core.cortex.primary",
+                eventName: "finished"
+            ),
+        ]
+        loom.tickDetail?.summary.eventCount = 5
+
+        let viewModel = MoiraO11yViewModel(
+            client: StaticMoiraRuntimeClient(loomSnapshot: loom)
+        )
+
+        await viewModel.refreshNow()
+
+        let gantt = viewModel.ganttSnapshot
+        #expect(viewModel.detailMode == .gantt)
+        #expect(gantt.lanes.map(\.title) == ["stem", "ai-gateway", "cortex"])
+        #expect(gantt.durationText == "1.00 s")
+        #expect(gantt.eventCount == 5)
+        #expect(gantt.itemCount == 3)
+        #expect(gantt.lanes[0].items.first?.kind == .point)
+        #expect(gantt.lanes[0].items.first?.startPosition == 0)
+        #expect(gantt.lanes[1].items.first?.kind == .interval)
+        #expect(gantt.lanes[1].items.first?.startPosition == 0.25)
+        #expect(gantt.lanes[1].items.first?.endPosition == 0.75)
+        #expect(gantt.lanes[1].items.first?.severityText == "ERROR")
+        #expect(gantt.lanes[1].items.first?.rawEventIDs == [
+            "evt-request-start",
+            "evt-request-finished",
+        ])
+        #expect(gantt.lanes[2].items.first?.kind == .interval)
+        #expect(gantt.lanes[2].items.first?.title == "started -> finished")
+        #expect(gantt.selectedItem(containing: "evt-request-finished")?.records.count == 2)
+    }
+
+    @MainActor
+    @Test func moiraO11yViewModelSwitchesBetweenGanttAndRawDetail() async {
+        let loom = MoiraRuntimeBindingFixtures.loomSnapshot()
+        let viewModel = MoiraO11yViewModel(
+            client: StaticMoiraRuntimeClient(loomSnapshot: loom)
+        )
+
+        await viewModel.refreshNow()
+        viewModel.selectDetailMode(.raw)
+        viewModel.selectRawEvent(id: "evt-1")
+        viewModel.selectDetailMode(.gantt)
+
+        #expect(viewModel.detailMode == .gantt)
+        #expect(viewModel.selectedRawEventID == "evt-1")
+    }
+
+    @MainActor
     @Test func moiraO11yViewModelRefreshesSelectedWakeAndTick() async {
         let client = RecordingMoiraRuntimeClient(
             snapshots: [
@@ -615,6 +701,38 @@ private struct FailingMoiraRuntimeClient: MoiraRuntimeClient {
 
 private enum MoiraRuntimeClientFixtureError: Error {
     case fixtureFailure
+}
+
+private func moiraEventRecord(
+    id: String,
+    observedAt: String,
+    severityText: String = "INFO",
+    subsystem: String,
+    scopeName: String,
+    eventName: String
+) -> MoiraEventRecord {
+    MoiraEventRecord(
+        rawEventID: id,
+        receivedAt: observedAt,
+        observedAt: observedAt,
+        severityText: severityText,
+        recordKind: "native_owner",
+        scopeName: scopeName,
+        eventName: eventName,
+        traceID: "trace-1",
+        spanID: id,
+        traceFlags: 1,
+        target: subsystem,
+        family: subsystem,
+        subsystem: subsystem,
+        runID: "run-1",
+        tick: 3,
+        messageText: eventName,
+        attributes: .object(["tick": .number(3)]),
+        body: .object(["event": .string(eventName)]),
+        resource: .object([:]),
+        scope: .object([:])
+    )
 }
 
 private final class RecordingMoiraRuntimeClient: MoiraRuntimeClient, @unchecked Sendable {

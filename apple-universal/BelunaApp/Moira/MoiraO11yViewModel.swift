@@ -1,11 +1,21 @@
 import Foundation
 
+enum MoiraO11yDetailMode: String, CaseIterable, Identifiable {
+    case gantt = "Gantt"
+    case raw = "Raw"
+
+    var id: String {
+        rawValue
+    }
+}
+
 @MainActor
 final class MoiraO11yViewModel: ObservableObject {
     @Published private(set) var snapshot: MoiraLoomSnapshot
     @Published private(set) var isRefreshing = false
     @Published private(set) var errorText: String?
     @Published private(set) var selectedRawEventID: String?
+    @Published private(set) var detailMode: MoiraO11yDetailMode = .gantt
 
     private let client: any MoiraRuntimeClient
 
@@ -64,6 +74,10 @@ final class MoiraO11yViewModel: ObservableObject {
         snapshot.tickDetail?.raw ?? []
     }
 
+    var ganttSnapshot: MoiraTickGanttSnapshot {
+        MoiraTickGanttSnapshot.make(records: rawEvents)
+    }
+
     var selectedRawEvent: MoiraEventRecord? {
         guard let selectedRawEventID else {
             return rawEvents.first
@@ -117,6 +131,10 @@ final class MoiraO11yViewModel: ObservableObject {
 
     func selectRawEvent(id: String?) {
         selectedRawEventID = id
+    }
+
+    func selectDetailMode(_ mode: MoiraO11yDetailMode) {
+        detailMode = mode
     }
 
     private func refreshNow(selection: MoiraLoomSelection) async {
