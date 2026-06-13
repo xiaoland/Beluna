@@ -22,7 +22,7 @@ Documentation is selective memory, not a parallel runtime.
 - Product TDD (`docs/20-product-tdd/`): owns cross-unit technical contracts, topology, and authority boundaries.
 - Unit TDD (`docs/30-unit-tdd/`): owns hard-unit local design memory and verification.
 - Local `AGENTS.md`: owns tactical hazards and recurrence tripwires closest to code.
-- `tasks/`: owns volatile exploration, diagnostics, and tactical artifacts.
+- `tasks/`: owns agent-owned, task-local volatile workspaces for exploration, diagnostics, evidence, and tactical artifacts.
 
 ## Documentation
 
@@ -30,6 +30,7 @@ Documentation is selective memory, not a parallel runtime.
 - Before changing files in a subtree, recursively inspect local `AGENTS.md` files from the target directory upward to the repo root.
 - Use `docs/00-meta/` only when you need typed input protocols, mode SOPs, or framework ontology.
 - Read `docs/00-meta/concepts.md` only when boundary language is unclear.
+- Read `docs/00-meta/implementation-taste.md` for non-trivial code design or implementation changes that shape structure, boundaries, data shape, authority flow, durable naming, abstraction, or complexity budget.
 - Read only the owning slice of `docs/10-prd/`, `docs/20-product-tdd/`, `docs/30-unit-tdd/`, or `docs/40-deployment/`.
 - Treat `tasks/` as procedural and non-authoritative.
 - When implementation reveals reusable knowledge, promote it into durable docs.
@@ -44,15 +45,19 @@ Documentation is selective memory, not a parallel runtime.
 
 1. Classify the incoming request as `Intent`, `Constraint`, `Reality`, or `Artifact`.
 2. Identify the durable owner and likely blast radius before acting.
-3. For non-trivial work, open a task packet with the three MVT anchors:
+3. For non-trivial work, open or update an agent-owned task packet with the three MVT anchors:
    - `Objective & Hypothesis`
    - `Guardrails Touched`
    - `Verification`
-4. Choose the active mode for the current slice of work: `Explore`, `Solidify`, `Execute`, or `Diagnose`.
-5. Load only the matching route doc, mode SOP, and governing anchors needed for this step.
-6. Execute and verify.
-7. Switch modes when evidence or uncertainty changes.
-8. Promote only stable truths after verification.
+4. Keep the task packet current when discussion, exploration, implementation friction, or verification changes the working state.
+5. Choose the active mode for the current slice of work: `Explore`, `Solidify`, `Execute`, or `Diagnose`.
+6. Load only the matching route doc, mode SOP, and governing anchors needed for this step.
+7. For non-trivial code design or implementation changes, load `docs/00-meta/implementation-taste.md`.
+8. Search source and durable docs with volatile workspaces, generated output, dependencies, caches, and virtual environments excluded by default.
+9. Expand into alignment substrate fields only when MVT is not enough to constrain mutation safely.
+10. Execute and verify.
+11. Switch modes when evidence or uncertainty changes.
+12. Promote only stable truths after verification.
 
 ### Typed Input Guide
 
@@ -70,9 +75,24 @@ Documentation is selective memory, not a parallel runtime.
 
 Mode guidance:
 
+- creative engineering is non-linear; do not model work as design -> code -> verify
+- prepare the verification shape as soon as a design claim is stable enough, and let it constrain execution
 - do not assume one task equals one mode
 - switch modes when evidence or clarity changes
 - mode selection never overrides durable ownership
+
+Task packet guidance:
+
+- task packets are agent-owned and may be updated, split, and reorganized by the agent inside the task boundary
+- keep each packet human-agent-collaboration-oriented: readable, inspectable, and steerable by the human
+- preserve a compact control surface with objective, guardrails, verification, current understanding, and next step
+- split by collaboration pressure rather than by a fixed folder scheme
+- keep volatile packet content out of durable docs until it passes the promotion test
+
+Search guidance:
+
+- when searching source or durable docs, exclude `tasks/`, `temp/`, generated output, dependency folders, virtual environments, and tool caches by default
+- search those locations only when the task explicitly targets them or when recovering or reviewing task evidence
 
 ### Beluna Gates
 
@@ -83,16 +103,15 @@ Mode guidance:
 
 ### Restatement Rule
 
-For risky or reference-sensitive changes, restate:
+For risky, reference-sensitive, or non-obviously-local durable mutations, restate:
 
-- Target.
-- Target path or anchor.
-- State and context.
-- Operation type.
-- Scope boundaries.
-- Invariants that must remain unchanged.
-- Likely affected files.
-- Uncertainty.
+- Address and object: the target path, anchor, symbol, or surface being changed.
+- State diff: the intended `From -> To` change.
+- Operation type: the mutation class and side effects expected.
+- Blast radius forecast: likely affected files, modules, or downstream surfaces.
+- Invariants check: scope boundaries and facts that must remain unchanged.
+- Verification: objective proof that bounds side effects.
+- Uncertainty: evidence gaps or assumptions that could change the operation.
 
 ### Negotiation Triggers
 
@@ -105,12 +124,12 @@ Pause and ask the human when any of these happen:
 
 ## Documentation Index
 
-- [Meta Engine](./docs/00-meta/index.md): typed routes, mode SOPs, and framework ontology.
+- [Meta Engine](./docs/00-meta/index.md): typed routes, mode SOPs, framework ontology, and implementation taste.
 - [PRD](./docs/10-prd/index.md): product intent, behavior, scope, and glossary.
 - [Product TDD](./docs/20-product-tdd/index.md): cross-unit technical realization.
 - [Unit TDD](./docs/30-unit-tdd/index.md): unit-local contracts and verification.
 - [Deployment](./docs/40-deployment/index.md): runtime and operational truth.
-- [Tasks](./tasks/README.md): volatile planning, diagnostics, and artifact workspace.
+- [Tasks](./tasks/README.md): volatile task-local workspaces for planning, diagnostics, evidence, and artifacts.
 - [Core AGENTS](./core/AGENTS.md)
 - [Apple Universal AGENTS](./apple-universal/AGENTS.md)
 - [Monitor AGENTS](./monitor/AGENTS.md)
@@ -129,6 +148,10 @@ Pause and ask the human when any of these happen:
 
 ## Coding Guidelines
 
+- Preserve SSoT for durable facts, state, relationships, and decisions.
+- Treat cross-boundary values by provenance: authority fact, stable reference, command or proposal, user-authored value, or derived projection.
+- Name durable semantics directly and consistently.
+- Spend complexity only for clear return; avoid premature optimization, premature abstraction, and over-application of OOP or design patterns.
 - Prefer abstraction only when duplication or patterns become clear.
 - Source files should stay under 300 lines where practical.
 

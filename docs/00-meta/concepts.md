@@ -14,8 +14,13 @@ Runtime and unit-specific terminology belongs in `20-product-tdd`, `30-unit-tdd`
 - Governing Layer: the authoritative home of the decision being changed.
 - Hard Unit: a unit whose local complexity deserves durable design memory in `30-unit-tdd`.
 - Local AGENTS: closest-to-target tactical guardrails and recurrence tripwires for a code area.
-- Task Packet: a bounded task note in `tasks/` used to absorb volatility without polluting durable docs.
+- Task Packet: an agent-owned, task-local workspace in `tasks/` used to absorb volatility without polluting durable docs.
 - MVT Anchors: `Objective & Hypothesis`, `Guardrails Touched`, and `Verification`.
+- Implementation Taste: language- and tech-stack-neutral guidance for non-trivial implementation structure, authority, naming, and complexity tradeoffs.
+- Alignment Substrate: optional coordination grammar for ambiguous targeting, state-dependent mutation, weak evidence, or non-local blast radius.
+- Impact Handshake: a pre-execution restatement of address, object, state diff, blast radius, invariants, and verification before risky durable mutation.
+- Search Isolation: default exclusion of volatile tasks, generated output, dependencies, caches, and virtual environments from ordinary source and durable-doc search.
+- Provenance: the authority class of a cross-boundary value, such as fact, reference, command, user-authored value, or derived projection.
 - Explore: mode for mapping unknowns, alternatives, and assumptions.
 - Solidify: mode for turning findings into explicit claims, contracts, or decisions.
 - Execute: mode for implementing a clear, verified change.

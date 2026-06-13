@@ -6,6 +6,8 @@ Use when observed reality diverges from expectations and evidence must be collec
 
 This mode is common in `Reality` work, but it can reappear anywhere execution produces unexplained behavior.
 
+For non-trivial code work, use implementation taste to check whether the failure came from authority drift, trust-boundary confusion, semantic naming drift, or unjustified complexity.
+
 ## Forbidden
 
 - No evidence, no modification.

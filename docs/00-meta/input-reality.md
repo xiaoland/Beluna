@@ -24,12 +24,15 @@ Use when a bug, outage, anomaly, failing test, or runtime observation shows that
 
 1. Capture the observable symptom, timeline, and blast radius.
 2. Collect logs, metrics, traces, failing tests, or other direct evidence.
-3. Rank likely causes and make missing evidence explicit.
-4. Apply the fix only after the next step is justified.
-5. Add or refine the nearest local `AGENTS.md` tripwire if the same class of mistake is likely to recur.
+3. Build a diagnostics matrix when multiple causes remain plausible.
+4. Rank likely causes by evidence quality and make missing evidence explicit.
+5. Apply the fix only after the next step is justified by validation.
+6. Add or refine the nearest local `AGENTS.md` tripwire if the same class of mistake is likely to recur.
+7. Promote stable operational or technical lessons into Deployment or TDD docs when justified.
 
 ## Exit Criteria
 
-- Likely causes are ranked with evidence.
+- Likely cause is evidence-backed, or likely causes are ranked with explicit missing evidence.
+- Validation steps are explicit.
 - The next action is justified rather than guessed.
 - Recurrence guardrails are updated when needed.

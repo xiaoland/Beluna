@@ -15,6 +15,8 @@ Use when product behavior stays the same, but technical, dependency, performance
 - `Execute`
 - `Diagnose` when runtime reality diverges from the intended constraint
 
+Mode selection must not blur whether the constraint is cross-unit, unit-local, operational, or mechanically enforced.
+
 ## Forbidden
 
 - Do not rewrite PRD just to justify an implementation choice.
@@ -23,12 +25,15 @@ Use when product behavior stays the same, but technical, dependency, performance
 ## Read-Do Steps
 
 1. Restate which boundary changed and which user-visible behavior must remain stable.
-2. Read the smallest relevant Product TDD, Unit TDD, Deployment, and local `AGENTS.md` slices.
-3. Update the technical contract in the correct owner layer.
-4. If the constraint changes runtime procedure rather than design ownership, route the durable truth into `40-deployment`.
+2. Identify affected units, contracts, authority paths, and verification expectations.
+3. Read the smallest relevant Product TDD, Unit TDD, Deployment, and local `AGENTS.md` slices.
+4. Update the technical contract in the correct owner layer.
+5. If the constraint changes runtime procedure rather than design ownership, route the durable truth into `40-deployment`.
+6. Define verification that proves the constrained design still satisfies PRD commitments.
 
 ## Exit Criteria
 
 - The changed technical or operational boundary is explicit.
+- Verification for the constrained design is defined.
 - PRD commitments remain unchanged unless renegotiated.
 - Cross-unit and unit-local owners remain consistent.
