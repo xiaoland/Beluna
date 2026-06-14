@@ -24,6 +24,7 @@ futures-util = "0.3.31"
 json5 = "0.4.1"
 jsonschema = "0.18.2"
 md5 = "0.7.0"
+opendal = { version = "0.57.0", default-features = false, features = ["blocking", "services-fs", "services-memory"] }
 opentelemetry = "0.31.0"
 opentelemetry-appender-tracing = "0.31.1"
 opentelemetry-otlp = { version = "0.31.0", default-features = false, features = ["grpc-tonic", "http-proto", "logs", "metrics", "reqwest-blocking-client"] }

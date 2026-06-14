@@ -1,8 +1,10 @@
+use std::collections::BTreeSet;
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use super::helpers::goal_forest_helper::GoalForest;
+use super::helpers::goal_forest_helper::{GoalForest, GoalNode};
 
 fn default_sense_passthrough_max_bytes() -> usize {
     2_048
@@ -99,6 +101,36 @@ impl Default for CognitionState {
             goal_forest: GoalForest::default(),
         }
     }
+}
+
+pub(crate) fn validate_cognition_state(state: &CognitionState) -> Result<(), String> {
+    let mut ids = BTreeSet::new();
+    for node in &state.goal_forest.nodes {
+        validate_goal_node(node, &mut ids)?;
+    }
+    Ok(())
+}
+
+fn validate_goal_node(node: &GoalNode, ids: &mut BTreeSet<String>) -> Result<(), String> {
+    if node.id.trim().is_empty() {
+        return Err("goal node id cannot be empty".to_string());
+    }
+    if node.status.trim().is_empty() {
+        return Err(format!("goal node '{}' status cannot be empty", node.id));
+    }
+    if node.summary.trim().is_empty() {
+        return Err(format!("goal node '{}' summary cannot be empty", node.id));
+    }
+    if !node.weight.is_finite() || !(0.0..=1.0).contains(&node.weight) {
+        return Err(format!("goal node '{}' weight must be in [0,1]", node.id));
+    }
+    if !ids.insert(node.id.clone()) {
+        return Err(format!("duplicate goal node id '{}'", node.id));
+    }
+    for child in &node.children {
+        validate_goal_node(child, ids)?;
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -19,16 +19,22 @@ use crate::{
     },
     ai_gateway::types::{CHAT_CAPABILITY_ID, ChatRouteAlias, ChatRouteRef},
     config::CortexRoutesConfig,
-    continuity::ContinuityEngine,
+    continuity::{
+        ContinuityEngine,
+        types::{ContinuityRecordBody, ContinuityRecordKey},
+    },
     cortex::{
-        error::{CortexError, extractor_failed, primary_failed},
+        error::{CortexError, extractor_failed, internal_error, primary_failed},
         helpers::{
             self, CognitionOrgan, CortexHelper, HelperRuntime, goal_forest_helper::GoalNode,
             sense_input_helper,
         },
         ir, prompts,
         testing::{PrimaryRequest as TestPrimaryRequest, TestHooks},
-        types::{CognitionState, CortexControlDirective, CortexOutput, ReactionLimits},
+        types::{
+            CognitionState, CortexControlDirective, CortexOutput, ReactionLimits,
+            validate_cognition_state,
+        },
     },
     observability::{
         metrics as observability_metrics,
@@ -40,6 +46,15 @@ use crate::{
 };
 
 use super::AfferentRuleControlPort;
+
+const COGNITION_STATE_NAMESPACE: &str = "continuity.cognition";
+const COGNITION_STATE_RECORD_ID: &str = "state";
+const COGNITION_STATE_SCHEMA_VERSION: &str = "cognition-state.v1";
+const COGNITION_STATE_CONTENT_TYPE: &str = "application/json";
+
+fn cognition_state_record_key() -> ContinuityRecordKey {
+    ContinuityRecordKey::new(COGNITION_STATE_NAMESPACE, COGNITION_STATE_RECORD_ID)
+}
 
 mod apply;
 mod attention;
@@ -156,33 +171,66 @@ impl Cortex {
         }
     }
 
-    pub async fn cognition_state_snapshot(&self) -> Result<CognitionState, CortexError> {
+    pub async fn load_cognition_state(&self) -> Result<CognitionState, CortexError> {
         let continuity = self.continuity.as_ref().ok_or_else(|| {
             CortexError::new(
                 crate::cortex::error::CortexErrorKind::Internal,
                 "continuity is not configured for this Cortex instance",
             )
         })?;
-        Ok(continuity.lock().await.cognition_state_snapshot())
+        let key = cognition_state_record_key();
+        let record = continuity
+            .lock()
+            .await
+            .get_record(&key)
+            .map_err(|err| internal_error(format!("load_cognition_state_failed: {err}")))?;
+
+        let Some(record) = record else {
+            return Ok(CognitionState::default());
+        };
+        if record.schema_version != COGNITION_STATE_SCHEMA_VERSION {
+            return Err(internal_error(format!(
+                "unsupported cognition state schema_version '{}'",
+                record.schema_version
+            )));
+        }
+        if record.body.content_type != COGNITION_STATE_CONTENT_TYPE {
+            return Err(internal_error(format!(
+                "unsupported cognition state content_type '{}'",
+                record.body.content_type
+            )));
+        }
+
+        let state: CognitionState = serde_json::from_slice(&record.body.bytes).map_err(|err| {
+            internal_error(format!("failed to decode cognition state record: {err}"))
+        })?;
+        validate_cognition_state(&state)
+            .map_err(|err| internal_error(format!("invalid persisted cognition state: {err}")))?;
+        Ok(state)
     }
 
-    pub async fn persist_cognition_state(&self, state: CognitionState) -> Result<(), CortexError> {
+    pub async fn save_cognition_state(&self, state: CognitionState) -> Result<(), CortexError> {
         let continuity = self.continuity.as_ref().ok_or_else(|| {
             CortexError::new(
                 crate::cortex::error::CortexErrorKind::Internal,
                 "continuity is not configured for this Cortex instance",
             )
         })?;
+        validate_cognition_state(&state)
+            .map_err(|err| internal_error(format!("invalid cognition state: {err}")))?;
+        let bytes = serde_json::to_vec(&state)
+            .map_err(|err| internal_error(format!("encode_cognition_state_failed: {err}")))?;
         continuity
             .lock()
             .await
-            .persist_cognition_state(state)
-            .map_err(|err| {
-                CortexError::new(
-                    crate::cortex::error::CortexErrorKind::Internal,
-                    format!("persist_cognition_state_failed: {err}"),
-                )
-            })
+            .put_record(
+                cognition_state_record_key(),
+                None,
+                COGNITION_STATE_SCHEMA_VERSION,
+                ContinuityRecordBody::new(COGNITION_STATE_CONTENT_TYPE, bytes),
+            )
+            .map_err(|err| internal_error(format!("save_cognition_state_failed: {err}")))?;
+        Ok(())
     }
 
     pub async fn cortex(
@@ -195,7 +243,7 @@ impl Cortex {
         });
         observability_metrics::record_cortex_cycle_id(physical_state.cycle_id);
 
-        let cognition_state = match self.cognition_state_snapshot().await {
+        let cognition_state = match self.load_cognition_state().await {
             Ok(state) => state,
             Err(err) => {
                 self.emit(CortexTelemetryEvent::StageFailed {
@@ -927,13 +975,13 @@ impl Cortex {
         &self,
         goal_forest_nodes: &[GoalNode],
     ) -> Result<u64, CortexError> {
-        let mut state = self.cognition_state_snapshot().await?;
+        let mut state = self.load_cognition_state().await?;
         if state.goal_forest.nodes == goal_forest_nodes {
             return Ok(state.revision);
         }
         state.goal_forest.nodes = goal_forest_nodes.to_vec();
         state.revision = state.revision.saturating_add(1);
-        self.persist_cognition_state(state.clone()).await?;
+        self.save_cognition_state(state.clone()).await?;
         Ok(state.revision)
     }
 
@@ -1211,5 +1259,65 @@ fn build_primary_user_message(primary_input: &str) -> ChatMessage {
         tool_call_id: None,
         tool_name: None,
         tool_calls: vec![],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs, path::PathBuf};
+
+    use uuid::Uuid;
+
+    use super::*;
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn cognition_state_persists_through_generic_continuity_record()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let path = unique_state_path("cognition");
+        let continuity = Arc::new(Mutex::new(ContinuityEngine::with_defaults_at(
+            path.clone(),
+        )?));
+        let cortex = Cortex {
+            chat: None,
+            tick_interval_ms: 1,
+            routes: CortexRoutesConfig::default(),
+            hooks: None,
+            helper: CortexHelper::default(),
+            telemetry_hook: None,
+            limits: ReactionLimits::default(),
+            continuity: Some(Arc::clone(&continuity)),
+            afferent_rule_control: None,
+            efferent_producer: None,
+            primary_session: PrimarySession::new(),
+        };
+
+        let mut state = CognitionState::default();
+        state.revision = 7;
+        cortex.save_cognition_state(state.clone()).await?;
+
+        let loaded = cortex.load_cognition_state().await?;
+        assert_eq!(loaded, state);
+
+        let record = continuity
+            .lock()
+            .await
+            .get_record(&cognition_state_record_key())?
+            .expect("cognition record should exist");
+        assert_eq!(record.schema_version, COGNITION_STATE_SCHEMA_VERSION);
+        assert_eq!(record.body.content_type, COGNITION_STATE_CONTENT_TYPE);
+        let decoded: CognitionState = serde_json::from_slice(&record.body.bytes)?;
+        assert_eq!(decoded, state);
+
+        let _ = fs::remove_file(&path);
+        if let Some(parent) = path.parent() {
+            let _ = fs::remove_dir(parent);
+        }
+        Ok(())
+    }
+
+    fn unique_state_path(label: &str) -> PathBuf {
+        std::env::temp_dir()
+            .join(format!("beluna-cortex-{label}-{}", Uuid::new_v4()))
+            .join("state.json")
     }
 }

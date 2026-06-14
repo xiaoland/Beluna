@@ -25,18 +25,21 @@ Relevant notes:
 - [PATHWAY-BUS-IMPLEMENTATION.md](./PATHWAY-BUS-IMPLEMENTATION.md)
 - [PATHWAY-SOURCE-MIDDLEWARE-MODEL.md](./PATHWAY-SOURCE-MIDDLEWARE-MODEL.md)
 - [PATHWAY-MIDDLEWARE-CONTRACT.md](./PATHWAY-MIDDLEWARE-CONTRACT.md)
-- [CONTINUITY-STORE-ABSTRACTION.md](./CONTINUITY-STORE-ABSTRACTION.md)
+- [continuity-store-abstraction/CONTINUITY-STORE-ABSTRACTION.md](./continuity-store-abstraction/CONTINUITY-STORE-ABSTRACTION.md)
 
 ## Current Execution Topic
 
-Implement Core topology correction.
+Core topology correction and Continuity generic store prerequisites are now
+implemented in Core.
 
-The solidified contract lives at
-[core-topology-correction/SOLIDIFIED-CONTRACT.md](./core-topology-correction/SOLIDIFIED-CONTRACT.md).
+Relevant result files:
 
-## Recommended Next Topic After Execution
+- [core-topology-correction/IMPLEMENTATION-RESULT.md](./core-topology-correction/IMPLEMENTATION-RESULT.md)
+- [continuity-store-abstraction/IMPLEMENTATION-RESULT.md](./continuity-store-abstraction/IMPLEMENTATION-RESULT.md)
 
-Continuity generic store abstraction.
+## Recommended Next Topic
+
+Motor routine lifecycle / Act-Sense surface design.
 
 Reason:
 

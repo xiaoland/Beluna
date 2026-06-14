@@ -10,4 +10,7 @@ pub use engine::ContinuityEngine;
 pub use error::{ContinuityError, ContinuityErrorKind};
 pub use persistence::ContinuityPersistence;
 pub use state::ContinuityState;
-pub use types::{DispatchContext, ExternalDebitObservation};
+pub use types::{
+    ContinuityRecord, ContinuityRecordBody, ContinuityRecordKey, ContinuityStore, DispatchContext,
+    ExternalDebitObservation,
+};

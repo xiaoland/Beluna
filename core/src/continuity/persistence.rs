@@ -1,143 +1,205 @@
 use std::{
-    fs,
-    io::{BufWriter, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
+    sync::OnceLock,
 };
 
+use opendal::{Error as OpenDalError, ErrorKind as OpenDalErrorKind, Operator, blocking, services};
 use serde::{Deserialize, Serialize};
+use tokio::runtime::{Builder as TokioRuntimeBuilder, Runtime};
 
-use crate::{
-    continuity::error::{ContinuityError, internal_error},
-    cortex::CognitionState,
+use crate::continuity::{
+    error::{ContinuityError, internal_error},
+    types::{CONTINUITY_STORE_ENVELOPE_VERSION, ContinuityStore},
 };
 
-const PERSISTENCE_VERSION: u64 = 1;
+static OPENDAL_BLOCKING_RUNTIME: OnceLock<Runtime> = OnceLock::new();
 
 #[derive(Debug, Clone)]
 pub struct ContinuityPersistence {
     path: PathBuf,
+    object_key: String,
+    operator: blocking::Operator,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct PersistedContinuityState {
     version: u64,
-    cognition_state: CognitionState,
+    #[serde(default)]
+    records: ContinuityStore,
+}
+
+#[derive(Debug)]
+enum StorageCallError {
+    OpenDal(OpenDalError),
+    Panic,
 }
 
 impl ContinuityPersistence {
-    pub fn new(path: PathBuf) -> Self {
-        Self { path }
+    pub fn new(path: PathBuf) -> Result<Self, ContinuityError> {
+        let (root, object_key) = split_state_path(&path)?;
+        let builder = services::Fs::default().root(&root);
+        let operator = Operator::new(builder)
+            .map_err(|err| map_opendal_error("create continuity fs operator", &path, err))?
+            .finish();
+        let operator = build_blocking_operator(operator, &path)?;
+        Ok(Self {
+            path,
+            object_key,
+            operator,
+        })
     }
 
     pub fn path(&self) -> &PathBuf {
         &self.path
     }
 
-    pub fn load(&self) -> Result<Option<CognitionState>, ContinuityError> {
-        let content = match fs::read_to_string(&self.path) {
+    pub fn load(&self) -> Result<Option<ContinuityStore>, ContinuityError> {
+        let object_key = self.object_key.clone();
+        let content = match self.run_storage_call(move |operator| {
+            operator.read(&object_key).map(|content| content.to_vec())
+        }) {
             Ok(content) => content,
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(err) => {
-                return Err(internal_error(format!(
-                    "failed to read continuity state '{}': {err}",
-                    self.path.display()
-                )));
+            Err(StorageCallError::OpenDal(err)) if err.kind() == OpenDalErrorKind::NotFound => {
+                return Ok(None);
             }
+            Err(err) => return Err(self.map_storage_call_error("read continuity state", err)),
         };
 
-        let parsed: PersistedContinuityState = serde_json::from_str(&content).map_err(|err| {
+        let parsed: PersistedContinuityState = serde_json::from_slice(&content).map_err(|err| {
             internal_error(format!(
                 "failed to parse continuity state '{}': {err}",
                 self.path.display()
             ))
         })?;
-        if parsed.version != PERSISTENCE_VERSION {
+        if parsed.version != CONTINUITY_STORE_ENVELOPE_VERSION {
             return Err(internal_error(format!(
                 "unsupported continuity state version {} at '{}'",
                 parsed.version,
                 self.path.display()
             )));
         }
+        parsed.records.validate()?;
 
-        Ok(Some(parsed.cognition_state))
+        Ok(Some(parsed.records))
     }
 
-    pub fn save(&self, cognition_state: &CognitionState) -> Result<(), ContinuityError> {
-        let parent = self.path.parent().ok_or_else(|| {
+    pub fn save(&self, store: &ContinuityStore) -> Result<(), ContinuityError> {
+        store.validate()?;
+        let persisted = PersistedContinuityState {
+            version: CONTINUITY_STORE_ENVELOPE_VERSION,
+            records: store.clone(),
+        };
+        let mut content = serde_json::to_vec_pretty(&persisted).map_err(|err| {
             internal_error(format!(
-                "continuity state path '{}' has no parent",
+                "failed to serialize continuity state '{}': {err}",
                 self.path.display()
             ))
         })?;
-        fs::create_dir_all(parent).map_err(|err| {
-            internal_error(format!(
-                "failed to create continuity state directory '{}': {err}",
-                parent.display()
-            ))
-        })?;
+        content.push(b'\n');
 
-        let persisted = PersistedContinuityState {
-            version: PERSISTENCE_VERSION,
-            cognition_state: cognition_state.clone(),
-        };
-
-        let tmp_path = self.path.with_extension("tmp");
-        let file = fs::File::create(&tmp_path).map_err(|err| {
-            internal_error(format!(
-                "failed to create continuity temp file '{}': {err}",
-                tmp_path.display()
-            ))
-        })?;
-        {
-            let mut writer = BufWriter::new(file);
-            serde_json::to_writer_pretty(&mut writer, &persisted).map_err(|err| {
-                internal_error(format!(
-                    "failed to serialize continuity state '{}': {err}",
-                    tmp_path.display()
-                ))
-            })?;
-            writer.write_all(b"\n").map_err(|err| {
-                internal_error(format!(
-                    "failed to finalize continuity state '{}': {err}",
-                    tmp_path.display()
-                ))
-            })?;
-            writer.flush().map_err(|err| {
-                internal_error(format!(
-                    "failed to flush continuity state '{}': {err}",
-                    tmp_path.display()
-                ))
-            })?;
-        }
-
-        let tmp_file = fs::OpenOptions::new()
-            .read(true)
-            .open(&tmp_path)
-            .map_err(|err| {
-                internal_error(format!(
-                    "failed to reopen continuity temp file '{}': {err}",
-                    tmp_path.display()
-                ))
-            })?;
-        tmp_file.sync_all().map_err(|err| {
-            internal_error(format!(
-                "failed to sync continuity temp file '{}': {err}",
-                tmp_path.display()
-            ))
-        })?;
-
-        fs::rename(&tmp_path, &self.path).map_err(|err| {
-            internal_error(format!(
-                "failed to replace continuity state '{}' from '{}': {err}",
-                self.path.display(),
-                tmp_path.display()
-            ))
-        })?;
-
-        if let Ok(parent_file) = fs::File::open(parent) {
-            let _ = parent_file.sync_all();
-        }
-
-        Ok(())
+        let object_key = self.object_key.clone();
+        self.run_storage_call(move |operator| operator.write(&object_key, content).map(|_| ()))
+            .map_err(|err| self.map_storage_call_error("write continuity state", err))
     }
+
+    fn run_storage_call<T, F>(&self, call: F) -> Result<T, StorageCallError>
+    where
+        T: Send + 'static,
+        F: FnOnce(blocking::Operator) -> Result<T, OpenDalError> + Send + 'static,
+    {
+        let operator = self.operator.clone();
+        if tokio::runtime::Handle::try_current().is_ok() {
+            return std::thread::spawn(move || call(operator))
+                .join()
+                .map_err(|_| StorageCallError::Panic)?
+                .map_err(StorageCallError::OpenDal);
+        }
+
+        call(operator).map_err(StorageCallError::OpenDal)
+    }
+
+    fn map_storage_call_error(
+        &self,
+        operation: &'static str,
+        err: StorageCallError,
+    ) -> ContinuityError {
+        match err {
+            StorageCallError::OpenDal(err) => {
+                map_opendal_error(operation, self.path.as_path(), err)
+            }
+            StorageCallError::Panic => {
+                internal_error(format!("{operation} '{}' panicked", self.path.display()))
+            }
+        }
+    }
+}
+
+fn split_state_path(path: &Path) -> Result<(String, String), ContinuityError> {
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let root = parent.to_str().ok_or_else(|| {
+        internal_error(format!(
+            "continuity state root '{}' is not valid UTF-8",
+            parent.display()
+        ))
+    })?;
+    let object_key = path
+        .file_name()
+        .and_then(|file_name| file_name.to_str())
+        .ok_or_else(|| {
+            internal_error(format!(
+                "continuity state path '{}' has no file name",
+                path.display()
+            ))
+        })?;
+    if object_key.trim().is_empty() {
+        return Err(internal_error(format!(
+            "continuity state path '{}' has empty file name",
+            path.display()
+        )));
+    }
+
+    Ok((root.to_string(), object_key.to_string()))
+}
+
+fn build_blocking_operator(
+    operator: Operator,
+    path: &Path,
+) -> Result<blocking::Operator, ContinuityError> {
+    if let Ok(handle) = tokio::runtime::Handle::try_current() {
+        let _guard = handle.enter();
+        return blocking::Operator::new(operator)
+            .map_err(|err| map_opendal_error("create continuity blocking operator", path, err));
+    }
+
+    let runtime = opendal_blocking_runtime()?;
+    let _guard = runtime.enter();
+    blocking::Operator::new(operator)
+        .map_err(|err| map_opendal_error("create continuity blocking operator", path, err))
+}
+
+fn opendal_blocking_runtime() -> Result<&'static Runtime, ContinuityError> {
+    if let Some(runtime) = OPENDAL_BLOCKING_RUNTIME.get() {
+        return Ok(runtime);
+    }
+
+    let runtime = TokioRuntimeBuilder::new_multi_thread()
+        .enable_all()
+        .thread_name("continuity-opendal-blocking")
+        .build()
+        .map_err(|err| {
+            internal_error(format!(
+                "failed to build continuity OpenDAL blocking runtime: {err}"
+            ))
+        })?;
+    let _ = OPENDAL_BLOCKING_RUNTIME.set(runtime);
+    Ok(OPENDAL_BLOCKING_RUNTIME
+        .get()
+        .expect("OpenDAL blocking runtime should be initialized"))
+}
+
+fn map_opendal_error(operation: &'static str, path: &Path, err: OpenDalError) -> ContinuityError {
+    internal_error(format!("{operation} '{}' failed: {err}", path.display()))
 }

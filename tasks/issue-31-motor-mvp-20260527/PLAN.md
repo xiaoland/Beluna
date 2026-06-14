@@ -1,7 +1,7 @@
 # Issue #31 Motor MVP - Plan
 
 > Last Updated: 2026-06-14
-> Status: core topology correction implemented; next prerequisite pending
+> Status: continuity generic store implemented
 > Scope: entrypoint only; detailed exploration lives in sibling files
 > Related issue: `#31`
 
@@ -24,7 +24,7 @@
 - [core-topology-correction/](./core-topology-correction/): Core topology correction sub-task.
 - [MOTOR-AGENT-RATIONALE.md](./MOTOR-AGENT-RATIONALE.md): Motor's rationale from Beluna-as-agent and LLM Cortex constraints.
 - [PREREQUISITE-SUBTASKS.md](./PREREQUISITE-SUBTASKS.md): Issue 31 prerequisite subtasks before Motor implementation.
-- [CONTINUITY-STORE-ABSTRACTION.md](./CONTINUITY-STORE-ABSTRACTION.md): Continuity generic store direction with routine source as forcing case.
+- [continuity-store-abstraction/](./continuity-store-abstraction/): Continuity generic store sub-task.
 - [MOTOR-INTERNAL.md](./MOTOR-INTERNAL.md): current routine / DSL / registry assumptions.
 - [ROUTINE-REFLEX-MODEL.md](./ROUTINE-REFLEX-MODEL.md): corrected routine lifecycle and Sense-to-Act reflex model.
 - [ROUTINE-STATE.md](./ROUTINE-STATE.md): routine stateless/stateful decision and explicit activation state model.
@@ -40,5 +40,9 @@
 
 The Core topology correction sub-task is implemented in code and verified with
 `cargo check` plus `cargo test --lib --bins`.
+
+The Continuity generic store sub-task is implemented in code and verified with
+`cargo check` plus `cargo test --lib --bins`. Full core tests still stop at the
+pre-existing Agent Task AIMock readiness failure.
 
 Durable docs are still deferred until implementation verifies the exact shape.

@@ -21,8 +21,9 @@ Current prerequisite subtasks:
 - More precisely, model Afferent/Efferent as buses with multiple tx/rx. See
   [core-topology-correction/PATHWAY-BUS-MODEL.md](./core-topology-correction/PATHWAY-BUS-MODEL.md).
 - Evolve Continuity toward a generic store abstraction, with routine source
-  definitions as the first forcing case. See
-  [CONTINUITY-STORE-ABSTRACTION.md](./CONTINUITY-STORE-ABSTRACTION.md).
+  definitions as the first forcing case. This prerequisite is implemented in
+  Core. See
+  [continuity-store-abstraction/](./continuity-store-abstraction/).
 
 The current corrected read:
 

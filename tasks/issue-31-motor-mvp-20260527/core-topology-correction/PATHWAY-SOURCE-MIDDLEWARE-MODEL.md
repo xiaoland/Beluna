@@ -154,7 +154,7 @@ Continuity can be modeled as:
 - Store service for durable cognition-adjacent state.
 
 The store role should not be over-coupled to routine storage. See
-[CONTINUITY-STORE-ABSTRACTION.md](./CONTINUITY-STORE-ABSTRACTION.md).
+[CONTINUITY-STORE-ABSTRACTION.md](../continuity-store-abstraction/CONTINUITY-STORE-ABSTRACTION.md).
 
 ### Motor
 

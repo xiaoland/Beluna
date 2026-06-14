@@ -1,7 +1,9 @@
 # Continuity Store Abstraction
 
 > Last Updated: 2026-06-13
-> Status: proposed prerequisite
+> Status: historical exploration; superseded by
+> [OPEN-DECISIONS.md](./OPEN-DECISIONS.md) and
+> [IMPLEMENTATION-PLAN.md](./IMPLEMENTATION-PLAN.md)
 
 ## Purpose
 
@@ -183,11 +185,24 @@ Stem owns descriptor visibility.
 Pathways own signal flow.
 ```
 
+## Confirmed Direction
+
+- `CognitionState` should migrate into a generic store namespace.
+- Continuity should leave room for storage backends beyond the current fs JSON
+  implementation.
+- No old cognition-state file migration is required for this issue.
+- Leave an architectural migration hook for future storage backend and data
+  schema migrations.
+- Prefer OpenDAL as the storage backend abstraction while keeping it out of the
+  Continuity domain store contract.
+
 ## Open Decisions
 
-1. Is the store a sibling to `CognitionState` or a generalized replacement that
-   contains `CognitionState` as one namespace?
+1. What namespace / record id represents the singleton `CognitionState`?
 2. Should Continuity support compare-and-set revisions for writes?
 3. Should record payloads be arbitrary JSON or typed Rust enums per namespace?
 4. Should routine source persistence be Act-mediated or internal-port mediated?
 5. What observability is required for store put/get/delete/list?
+6. Should the storage backend trait be sync or async?
+7. Should the first implementation adopt OpenDAL immediately as the fs/memory
+   backend implementation?
