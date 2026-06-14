@@ -12,8 +12,8 @@ mod types;
 pub use error::{CortexError, CortexErrorKind};
 pub use helpers::goal_forest_helper::{GoalForest, GoalNode};
 pub use runtime::{
-    Cortex, CortexDeps, CortexRuntime, CortexTelemetryEvent, CortexTelemetryHook,
-    PhysicalStateReadPort,
+    AfferentRuleControlPort, Cortex, CortexAfferentAdmission, CortexDeps, CortexRuntime,
+    CortexTelemetryEvent, CortexTelemetryHook, PhysicalStateReadPort,
 };
 pub use types::{
     CognitionState, CortexControlDirective, CortexOutput, ReactionLimits,

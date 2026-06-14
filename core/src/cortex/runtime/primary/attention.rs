@@ -15,8 +15,9 @@ use crate::{
         prompts,
     },
     observability::runtime::{self as observability_runtime, OrganResponseStatus},
-    stem::DeferralRuleAddInput,
 };
+
+use crate::cortex::runtime::DeferralRuleAddInput;
 
 use super::{
     Cortex, ai_gateway_request_id, alias_route_ref, build_turn_input, gateway_error_summary,

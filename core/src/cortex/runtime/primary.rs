@@ -35,9 +35,11 @@ use crate::{
         runtime::{self as observability_runtime, OrganResponseStatus},
     },
     spine::ActDispatchResult,
-    stem::{ActProducerHandle, AfferentRuleControlPort, EfferentActEnvelope},
+    stem::ActProducerHandle,
     types::{Act, NeuralSignalDescriptor, PhysicalState, Sense},
 };
+
+use super::AfferentRuleControlPort;
 
 mod apply;
 mod attention;
@@ -946,10 +948,7 @@ impl Cortex {
         };
 
         Ok(producer
-            .dispatch_and_wait(
-                EfferentActEnvelope::with_response(cycle_id, act_seq_no, act),
-                Duration::from_millis(1),
-            )
+            .emit_act_and_wait(cycle_id, act_seq_no, act, Duration::from_millis(1))
             .await)
     }
 

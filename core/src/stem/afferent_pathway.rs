@@ -1,5 +1,4 @@
 use std::{
-    collections::{BTreeMap, VecDeque},
     fmt,
     sync::{
         Arc,
@@ -8,18 +7,21 @@ use std::{
 };
 
 use async_trait::async_trait;
-use regex::Regex;
-use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tokio::sync::{Mutex, broadcast, mpsc, oneshot};
+use tokio::sync::{Mutex, mpsc, oneshot};
 
 use crate::{
     observability::runtime as observability_runtime,
-    types::{Sense, build_fq_neural_signal_id},
+    stem::{ContinueOutput, PathwayMiddlewareDecision},
+    types::Sense,
 };
+
+const DEFAULT_AFFERENT_WAIT_TIMEOUT_MS: u64 = 100;
 
 pub type SenseIngressHandle = SenseAfferentPathway;
 pub type AfferentControlHandle = SenseAfferentPathway;
+
+pub type AfferentMiddlewareDecision = PathwayMiddlewareDecision<Sense, ()>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AfferentPathwayErrorKind {
@@ -58,119 +60,26 @@ impl fmt::Display for AfferentPathwayError {
 impl std::error::Error for AfferentPathwayError {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RuleControlErrorKind {
-    InvalidInput,
-    Internal,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RuleControlError {
-    pub kind: RuleControlErrorKind,
-    pub message: String,
-}
-
-impl RuleControlError {
-    fn invalid_input(message: impl Into<String>) -> Self {
-        Self {
-            kind: RuleControlErrorKind::InvalidInput,
-            message: message.into(),
-        }
-    }
-
-    fn internal(message: impl Into<String>) -> Self {
-        Self {
-            kind: RuleControlErrorKind::Internal,
-            message: message.into(),
-        }
-    }
-}
-
-impl fmt::Display for RuleControlError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.message)
-    }
-}
-
-impl std::error::Error for RuleControlError {}
-
-pub type RuleRevision = u64;
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct DeferralRuleAddInput {
-    pub rule_id: String,
-    #[serde(default)]
-    pub min_weight: Option<f64>,
-    #[serde(default)]
-    pub fq_sense_id_pattern: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct DeferralRuleSnapshot {
-    pub rule_id: String,
-    pub min_weight: Option<f64>,
-    pub fq_sense_id_pattern: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct DeferralRuleSetSnapshot {
-    pub revision: RuleRevision,
-    pub rules: Vec<DeferralRuleSnapshot>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum AfferentSidecarEvent {
-    RuleAdded {
-        revision: RuleRevision,
-        rule_id: String,
+pub enum AfferentDispatchResult {
+    Accepted {
+        reference_id: String,
     },
-    RuleRemoved {
-        revision: RuleRevision,
-        rule_id: String,
-        removed: bool,
+    Rejected {
+        reason_code: String,
+        reference_id: String,
     },
-    SenseDeferred {
-        sense_instance_id: String,
-        rule_ids: Vec<String>,
-        deferred_len: usize,
+    Lost {
+        reason_code: String,
+        reference_id: String,
     },
-    SenseReleased {
-        sense_instance_id: String,
-        deferred_len: usize,
-    },
-    SenseEvicted {
-        sense_instance_id: String,
-        reason: String,
-        deferred_len: usize,
-    },
-}
-
-pub struct AfferentSidecarSubscription {
-    rx: broadcast::Receiver<AfferentSidecarEvent>,
-}
-
-impl AfferentSidecarSubscription {
-    pub async fn recv(&mut self) -> Result<AfferentSidecarEvent, broadcast::error::RecvError> {
-        self.rx.recv().await
-    }
-}
-
-pub trait AfferentSidecarPort {
-    fn subscribe_sidecar(&self) -> AfferentSidecarSubscription;
 }
 
 #[async_trait]
-pub trait AfferentRuleControlPort: Send + Sync {
-    async fn add_rule(&self, input: DeferralRuleAddInput)
-    -> Result<RuleRevision, RuleControlError>;
-
-    async fn remove_rule(&self, rule_id: String) -> Result<RuleRevision, RuleControlError>;
-
-    async fn replace_ruleset(
+pub trait AfferentMiddleware: Send + Sync {
+    async fn handle_sense(
         &self,
-        rules: Vec<DeferralRuleAddInput>,
-    ) -> Result<RuleRevision, RuleControlError>;
-
-    async fn snapshot_rules(&self) -> DeferralRuleSetSnapshot;
+        sense: &Sense,
+    ) -> Result<AfferentMiddlewareDecision, AfferentPathwayError>;
 }
 
 pub struct SenseConsumerHandle {
@@ -191,180 +100,123 @@ impl SenseConsumerHandle {
     }
 }
 
-#[derive(Debug, Clone)]
-struct DeferralRuleRuntime {
-    rule_id: String,
-    min_weight: Option<f64>,
-    fq_sense_id_pattern: Option<String>,
-    fq_sense_id_regex: Option<Regex>,
-}
-
-impl DeferralRuleRuntime {
-    fn from_input(input: DeferralRuleAddInput) -> Result<Self, RuleControlError> {
-        let rule_id = input.rule_id.trim().to_string();
-        if rule_id.is_empty() {
-            return Err(RuleControlError::invalid_input("rule_id cannot be empty"));
-        }
-        if input.min_weight.is_none() && input.fq_sense_id_pattern.is_none() {
-            return Err(RuleControlError::invalid_input(
-                "at least one selector is required: min_weight or fq_sense_id_pattern",
-            ));
-        }
-        if let Some(min_weight) = input.min_weight
-            && !(0.0..=1.0).contains(&min_weight)
-        {
-            return Err(RuleControlError::invalid_input(
-                "min_weight must be within [0, 1]",
-            ));
-        }
-
-        let regex = if let Some(pattern) = &input.fq_sense_id_pattern {
-            Some(Regex::new(pattern).map_err(|err| {
-                RuleControlError::invalid_input(format!("invalid fq_sense_id_pattern regex: {err}"))
-            })?)
-        } else {
-            None
-        };
-
-        Ok(Self {
-            rule_id,
-            min_weight: input.min_weight,
-            fq_sense_id_pattern: input.fq_sense_id_pattern,
-            fq_sense_id_regex: regex,
-        })
-    }
-
-    fn snapshot(&self) -> DeferralRuleSnapshot {
-        DeferralRuleSnapshot {
-            rule_id: self.rule_id.clone(),
-            min_weight: self.min_weight,
-            fq_sense_id_pattern: self.fq_sense_id_pattern.clone(),
-        }
-    }
-
-    fn matches(&self, sense: &Sense, fq_sense_id: &str) -> bool {
-        if let Some(min_weight) = self.min_weight
-            && !(sense.weight < min_weight)
-        {
-            return false;
-        }
-
-        if let Some(regex) = &self.fq_sense_id_regex
-            && !regex.is_match(fq_sense_id)
-        {
-            return false;
-        }
-
-        true
-    }
-}
-
 #[derive(Debug)]
-struct DeferredSenseEntry {
+struct AfferentSenseEnvelope {
+    seq_no: u64,
     sense: Sense,
+    response_tx: Option<oneshot::Sender<AfferentDispatchResult>>,
 }
 
-#[derive(Debug, Default)]
-struct DeferralState {
-    revision: RuleRevision,
-    rules_by_id: BTreeMap<String, DeferralRuleRuntime>,
-    deferred_fifo: VecDeque<DeferredSenseEntry>,
-}
-
-enum RuleCommand {
-    AddOne {
-        input: DeferralRuleAddInput,
-        reply_tx: oneshot::Sender<Result<RuleRevision, RuleControlError>>,
-    },
-    RemoveOne {
-        rule_id: String,
-        reply_tx: oneshot::Sender<Result<RuleRevision, RuleControlError>>,
-    },
-    ReplaceAll {
-        rules: Vec<DeferralRuleAddInput>,
-        reply_tx: oneshot::Sender<Result<RuleRevision, RuleControlError>>,
-    },
-    Snapshot {
-        reply_tx: oneshot::Sender<DeferralRuleSetSnapshot>,
-    },
+enum AfferentBusCommand {
+    Emit(AfferentSenseEnvelope),
 }
 
 #[derive(Clone)]
 pub struct SenseAfferentPathway {
     gate_open: Arc<AtomicBool>,
     send_lock: Arc<Mutex<()>>,
-    ingress_tx: mpsc::Sender<Sense>,
-    command_tx: mpsc::Sender<RuleCommand>,
-    sidecar_tx: broadcast::Sender<AfferentSidecarEvent>,
+    tx: mpsc::Sender<AfferentBusCommand>,
+    next_seq_no: Arc<Mutex<u64>>,
 }
 
 impl SenseAfferentPathway {
-    pub fn new(
-        queue_capacity: usize,
-        max_deferring_nums: usize,
-        sidecar_capacity: usize,
-    ) -> (Self, mpsc::Receiver<Sense>) {
-        let queue_capacity = queue_capacity.max(1);
-        let max_deferring_nums = max_deferring_nums.max(1);
-        let sidecar_capacity = sidecar_capacity.max(1);
-
-        let (ingress_tx, ingress_rx) = mpsc::channel(queue_capacity);
-        let (egress_tx, egress_rx) = mpsc::channel(queue_capacity);
-        let (command_tx, command_rx) = mpsc::channel(queue_capacity);
-        let (sidecar_tx, _) = broadcast::channel(sidecar_capacity);
-
-        tokio::spawn(run_scheduler_loop(
-            ingress_rx,
-            egress_tx,
-            command_rx,
-            sidecar_tx.clone(),
-            max_deferring_nums,
-        ));
-
-        (
-            Self {
-                gate_open: Arc::new(AtomicBool::new(true)),
-                send_lock: Arc::new(Mutex::new(())),
-                ingress_tx,
-                command_tx,
-                sidecar_tx,
-            },
-            egress_rx,
-        )
+    pub fn new(queue_capacity: usize, middleware: Vec<Arc<dyn AfferentMiddleware>>) -> Self {
+        let (tx, rx) = mpsc::channel(queue_capacity.max(1));
+        tokio::spawn(run_afferent_runtime(rx, middleware));
+        Self {
+            gate_open: Arc::new(AtomicBool::new(true)),
+            send_lock: Arc::new(Mutex::new(())),
+            tx,
+            next_seq_no: Arc::new(Mutex::new(0)),
+        }
     }
 
     pub fn new_handles(
         queue_capacity: usize,
-        max_deferring_nums: usize,
-        sidecar_capacity: usize,
-    ) -> (
-        SenseIngressHandle,
-        SenseConsumerHandle,
-        AfferentControlHandle,
-    ) {
-        let (ingress, rx) = Self::new(queue_capacity, max_deferring_nums, sidecar_capacity);
+        middleware: Vec<Arc<dyn AfferentMiddleware>>,
+    ) -> (SenseIngressHandle, AfferentControlHandle) {
+        let ingress = Self::new(queue_capacity, middleware);
         let control = ingress.clone();
-        (ingress, SenseConsumerHandle::new(rx), control)
+        (ingress, control)
     }
 
     pub fn is_open(&self) -> bool {
         self.gate_open.load(Ordering::Acquire)
     }
 
+    pub async fn emit_sense(&self, sense: Sense) -> Result<(), AfferentPathwayError> {
+        self.enqueue(sense, None).await
+    }
+
+    pub async fn emit_sense_and_wait(&self, sense: Sense) -> AfferentDispatchResult {
+        let reference_id = sense.sense_instance_id.clone();
+        let (tx, rx) = oneshot::channel();
+        if self.enqueue(sense, Some(tx)).await.is_err() {
+            return AfferentDispatchResult::Lost {
+                reason_code: "afferent_queue_closed".to_string(),
+                reference_id,
+            };
+        }
+
+        match tokio::time::timeout(
+            std::time::Duration::from_millis(DEFAULT_AFFERENT_WAIT_TIMEOUT_MS),
+            rx,
+        )
+        .await
+        {
+            Ok(Ok(result)) => result,
+            Ok(Err(_)) => AfferentDispatchResult::Lost {
+                reason_code: "afferent_response_dropped".to_string(),
+                reference_id,
+            },
+            Err(_) => AfferentDispatchResult::Lost {
+                reason_code: "afferent_dispatch_timeout".to_string(),
+                reference_id,
+            },
+        }
+    }
+
     pub async fn send(&self, sense: Sense) -> Result<(), AfferentPathwayError> {
+        self.emit_sense(sense).await
+    }
+
+    pub async fn close_gate(&self) {
+        let _guard = self.send_lock.lock().await;
+        self.gate_open.store(false, Ordering::Release);
+    }
+
+    async fn enqueue(
+        &self,
+        sense: Sense,
+        response_tx: Option<oneshot::Sender<AfferentDispatchResult>>,
+    ) -> Result<(), AfferentPathwayError> {
         let _guard = self.send_lock.lock().await;
         if !self.gate_open.load(Ordering::Acquire) {
             return Err(AfferentPathwayError::closed());
         }
+
+        let seq_no = {
+            let mut next = self.next_seq_no.lock().await;
+            *next = next.saturating_add(1);
+            *next
+        };
+
         let endpoint_id = sense.endpoint_id.clone();
         let descriptor_id = sense.neural_signal_descriptor_id.clone();
         let sense_id = sense.sense_instance_id.clone();
         let sense_payload = json!(sense.payload.clone());
         let sense_weight = sense.weight;
-        self.ingress_tx
-            .send(sense)
+        let envelope = AfferentSenseEnvelope {
+            seq_no,
+            sense,
+            response_tx,
+        };
+
+        self.tx
+            .send(AfferentBusCommand::Emit(envelope))
             .await
             .map_err(|_| AfferentPathwayError::queue_closed())?;
+
         observability_runtime::emit_stem_afferent(
             "enqueue",
             &descriptor_id,
@@ -375,440 +227,203 @@ impl SenseAfferentPathway {
             Some(sense_weight),
             Some(json!({
                 "queue_name": "afferent",
+                "seq_no": seq_no,
             })),
             None,
             None,
         );
         Ok(())
     }
-
-    pub async fn close_gate(&self) {
-        let _guard = self.send_lock.lock().await;
-        self.gate_open.store(false, Ordering::Release);
-    }
 }
 
-impl AfferentSidecarPort for SenseAfferentPathway {
-    fn subscribe_sidecar(&self) -> AfferentSidecarSubscription {
-        AfferentSidecarSubscription {
-            rx: self.sidecar_tx.subscribe(),
-        }
-    }
-}
-
-#[async_trait]
-impl AfferentRuleControlPort for SenseAfferentPathway {
-    async fn add_rule(
-        &self,
-        input: DeferralRuleAddInput,
-    ) -> Result<RuleRevision, RuleControlError> {
-        let (reply_tx, reply_rx) = oneshot::channel();
-        self.command_tx
-            .send(RuleCommand::AddOne { input, reply_tx })
-            .await
-            .map_err(|_| RuleControlError::internal("rule command channel is closed"))?;
-
-        reply_rx
-            .await
-            .map_err(|_| RuleControlError::internal("rule add response dropped"))?
-    }
-
-    async fn remove_rule(&self, rule_id: String) -> Result<RuleRevision, RuleControlError> {
-        let (reply_tx, reply_rx) = oneshot::channel();
-        self.command_tx
-            .send(RuleCommand::RemoveOne { rule_id, reply_tx })
-            .await
-            .map_err(|_| RuleControlError::internal("rule command channel is closed"))?;
-
-        reply_rx
-            .await
-            .map_err(|_| RuleControlError::internal("rule remove response dropped"))?
-    }
-
-    async fn replace_ruleset(
-        &self,
-        rules: Vec<DeferralRuleAddInput>,
-    ) -> Result<RuleRevision, RuleControlError> {
-        let (reply_tx, reply_rx) = oneshot::channel();
-        self.command_tx
-            .send(RuleCommand::ReplaceAll { rules, reply_tx })
-            .await
-            .map_err(|_| RuleControlError::internal("rule command channel is closed"))?;
-
-        reply_rx
-            .await
-            .map_err(|_| RuleControlError::internal("rule replace response dropped"))?
-    }
-
-    async fn snapshot_rules(&self) -> DeferralRuleSetSnapshot {
-        let (reply_tx, reply_rx) = oneshot::channel();
-        if self
-            .command_tx
-            .send(RuleCommand::Snapshot { reply_tx })
-            .await
-            .is_err()
-        {
-            return DeferralRuleSetSnapshot {
-                revision: 0,
-                rules: Vec::new(),
-            };
-        }
-
-        reply_rx.await.unwrap_or(DeferralRuleSetSnapshot {
-            revision: 0,
-            rules: Vec::new(),
-        })
-    }
-}
-
-async fn run_scheduler_loop(
-    mut ingress_rx: mpsc::Receiver<Sense>,
-    egress_tx: mpsc::Sender<Sense>,
-    mut command_rx: mpsc::Receiver<RuleCommand>,
-    sidecar_tx: broadcast::Sender<AfferentSidecarEvent>,
-    max_deferring_nums: usize,
+async fn run_afferent_runtime(
+    mut rx: mpsc::Receiver<AfferentBusCommand>,
+    middleware: Vec<Arc<dyn AfferentMiddleware>>,
 ) {
-    let mut state = DeferralState::default();
-
-    loop {
-        tokio::select! {
-            maybe_sense = ingress_rx.recv() => {
-                let Some(sense) = maybe_sense else {
-                    break;
-                };
-                handle_ingress_sense(
-                    &mut state,
-                    sense,
-                    &egress_tx,
-                    &sidecar_tx,
-                    max_deferring_nums,
-                ).await;
-            }
-            maybe_cmd = command_rx.recv() => {
-                let Some(cmd) = maybe_cmd else {
-                    break;
-                };
-                handle_command(
-                    &mut state,
-                    cmd,
-                    &egress_tx,
-                    &sidecar_tx,
-                ).await;
+    while let Some(command) = rx.recv().await {
+        match command {
+            AfferentBusCommand::Emit(envelope) => {
+                process_sense_envelope(envelope, &middleware).await;
             }
         }
     }
 }
 
-async fn handle_ingress_sense(
-    state: &mut DeferralState,
-    sense: Sense,
-    egress_tx: &mpsc::Sender<Sense>,
-    sidecar_tx: &broadcast::Sender<AfferentSidecarEvent>,
-    max_deferring_nums: usize,
+async fn process_sense_envelope(
+    envelope: AfferentSenseEnvelope,
+    middleware: &[Arc<dyn AfferentMiddleware>],
 ) {
-    let matched_rule_ids = matching_rule_ids(state, &sense);
-    if matched_rule_ids.is_empty() {
-        if egress_tx.send(sense).await.is_err() {
-            tracing::warn!(target: "stem.afferent", "consumer_channel_closed_drop_sense");
-        }
-        return;
-    }
+    let AfferentSenseEnvelope {
+        seq_no,
+        sense,
+        response_tx,
+    } = envelope;
+    let endpoint_id = sense.endpoint_id.clone();
+    let descriptor_id = sense.neural_signal_descriptor_id.clone();
+    let result = run_afferent_sequence(sense, middleware, 0).await;
 
-    state.deferred_fifo.push_back(DeferredSenseEntry {
-        sense: sense.clone(),
-    });
-    let sense_instance_id = sense.sense_instance_id.clone();
-    emit_sidecar(
-        sidecar_tx,
-        AfferentSidecarEvent::SenseDeferred {
-            sense_instance_id,
-            rule_ids: matched_rule_ids.clone(),
-            deferred_len: state.deferred_fifo.len(),
-        },
-    );
     observability_runtime::emit_stem_afferent(
-        "defer",
-        &sense.neural_signal_descriptor_id,
-        Some(&sense.endpoint_id),
-        Some(&sense.sense_instance_id),
+        "result",
+        &descriptor_id,
+        Some(&endpoint_id),
+        Some(result_reference_id(&result)),
         None,
-        Some(json!(sense.payload)),
-        Some(sense.weight),
+        None,
+        None,
         Some(json!({
             "queue_name": "afferent",
-            "deferred_len": state.deferred_fifo.len(),
+            "seq_no": seq_no,
+            "status": afferent_result_status(&result),
         })),
-        Some(json!(matched_rule_ids)),
         None,
+        result_reason_code(&result),
     );
 
-    while state.deferred_fifo.len() > max_deferring_nums {
-        if let Some(evicted) = state.deferred_fifo.pop_front() {
-            let evicted_sense_id = evicted.sense.sense_instance_id.clone();
-            tracing::warn!(
-                target: "stem.afferent",
-                sense_instance_id = %evicted_sense_id,
-                deferred_len = state.deferred_fifo.len(),
-                max_deferring_nums = max_deferring_nums,
-                "deferred_fifo_overflow_evict_oldest"
-            );
-            emit_sidecar(
-                sidecar_tx,
-                AfferentSidecarEvent::SenseEvicted {
-                    sense_instance_id: evicted_sense_id.clone(),
-                    reason: "deferred_fifo_overflow".to_string(),
-                    deferred_len: state.deferred_fifo.len(),
-                },
-            );
-            observability_runtime::emit_stem_afferent(
-                "drop",
-                &evicted.sense.neural_signal_descriptor_id,
-                Some(&evicted.sense.endpoint_id),
-                Some(&evicted_sense_id),
-                None,
-                Some(json!(evicted.sense.payload)),
-                Some(evicted.sense.weight),
-                Some(json!({
-                    "queue_name": "afferent",
-                    "deferred_len": state.deferred_fifo.len(),
-                })),
-                Some(json!(matched_rule_ids.clone())),
-                Some("deferred_fifo_overflow"),
-            );
-        }
+    if let Some(tx) = response_tx {
+        let _ = tx.send(result);
     }
 }
 
-async fn handle_command(
-    state: &mut DeferralState,
-    cmd: RuleCommand,
-    egress_tx: &mpsc::Sender<Sense>,
-    sidecar_tx: &broadcast::Sender<AfferentSidecarEvent>,
-) {
-    match cmd {
-        RuleCommand::AddOne { input, reply_tx } => {
-            let result = DeferralRuleRuntime::from_input(input).and_then(|runtime_rule| {
-                let rule_snapshot = runtime_rule.snapshot();
-                let rule_id = runtime_rule.rule_id.clone();
-                if state.rules_by_id.contains_key(rule_id.as_str()) {
-                    return Err(RuleControlError::invalid_input(format!(
-                        "rule_id '{rule_id}' already exists"
-                    )));
+async fn run_afferent_sequence(
+    sense: Sense,
+    middleware: &[Arc<dyn AfferentMiddleware>],
+    start_index: usize,
+) -> AfferentDispatchResult {
+    if middleware.is_empty() || start_index >= middleware.len() {
+        return AfferentDispatchResult::Rejected {
+            reason_code: "route_not_found".to_string(),
+            reference_id: sense.sense_instance_id,
+        };
+    }
+
+    let mut current = vec![sense];
+    for middleware_index in start_index..middleware.len() {
+        let mut next = Vec::new();
+        for signal in current {
+            let reference_id = signal.sense_instance_id.clone();
+            let decision = match middleware[middleware_index].handle_sense(&signal).await {
+                Ok(decision) => decision,
+                Err(_err) => {
+                    return AfferentDispatchResult::Lost {
+                        reason_code: format!("afferent_middleware_failed:{middleware_index}"),
+                        reference_id,
+                    };
                 }
-                state.rules_by_id.insert(rule_id.clone(), runtime_rule);
-                state.revision = state.revision.saturating_add(1);
-                emit_sidecar(
-                    sidecar_tx,
-                    AfferentSidecarEvent::RuleAdded {
-                        revision: state.revision,
-                        rule_id: rule_id.clone(),
-                    },
-                );
-                observability_runtime::emit_stem_afferent_rule(
-                    None,
-                    "add",
-                    state.revision,
-                    &rule_id,
-                    Some(json!({
-                        "rule_id": rule_snapshot.rule_id,
-                        "min_weight": rule_snapshot.min_weight,
-                        "fq_sense_id_pattern": rule_snapshot.fq_sense_id_pattern,
-                    })),
-                    None,
-                );
-                Ok(state.revision)
-            });
-            let _ = reply_tx.send(result);
-            release_unblocked_front_fifo(state, egress_tx, sidecar_tx).await;
-        }
-        RuleCommand::RemoveOne { rule_id, reply_tx } => {
-            let rule_id = rule_id.trim().to_string();
-            let result = if rule_id.is_empty() {
-                Err(RuleControlError::invalid_input("rule_id cannot be empty"))
-            } else {
-                let removed_rule = state.rules_by_id.remove(rule_id.as_str());
-                let removed = removed_rule.is_some();
-                state.revision = state.revision.saturating_add(1);
-                emit_sidecar(
-                    sidecar_tx,
-                    AfferentSidecarEvent::RuleRemoved {
-                        revision: state.revision,
-                        rule_id: rule_id.clone(),
-                        removed,
-                    },
-                );
-                observability_runtime::emit_stem_afferent_rule(
-                    None,
-                    "remove",
-                    state.revision,
-                    &rule_id,
-                    removed_rule.map(|rule| json!(rule.snapshot())),
-                    Some(removed),
-                );
-                Ok(state.revision)
             };
-            let _ = reply_tx.send(result);
-            release_unblocked_front_fifo(state, egress_tx, sidecar_tx).await;
-        }
-        RuleCommand::ReplaceAll { rules, reply_tx } => {
-            let result = build_replacement_ruleset(rules).map(|replacement| {
-                let previous_rule_ids = state.rules_by_id.keys().cloned().collect::<Vec<_>>();
-                state.rules_by_id = replacement;
-                state.revision = state.revision.saturating_add(1);
-                for rule_id in previous_rule_ids {
-                    emit_sidecar(
-                        sidecar_tx,
-                        AfferentSidecarEvent::RuleRemoved {
-                            revision: state.revision,
-                            rule_id,
-                            removed: true,
-                        },
-                    );
+            match decision {
+                PathwayMiddlewareDecision::Accepted(()) => {
+                    return AfferentDispatchResult::Accepted { reference_id };
                 }
-                for rule_id in state.rules_by_id.keys() {
-                    emit_sidecar(
-                        sidecar_tx,
-                        AfferentSidecarEvent::RuleAdded {
-                            revision: state.revision,
-                            rule_id: rule_id.clone(),
-                        },
-                    );
+                PathwayMiddlewareDecision::Rejected { reason_code, .. } => {
+                    return AfferentDispatchResult::Rejected {
+                        reason_code,
+                        reference_id,
+                    };
                 }
-                observability_runtime::emit_stem_afferent_rule(
-                    None,
-                    "replace",
-                    state.revision,
-                    "ruleset",
-                    Some(json!({
-                        "rules": state.rules_by_id
-                            .values()
-                            .map(|rule| rule.snapshot())
-                            .collect::<Vec<_>>(),
-                    })),
-                    None,
-                );
-                state.revision
-            });
-            let _ = reply_tx.send(result);
-            release_unblocked_front_fifo(state, egress_tx, sidecar_tx).await;
+                PathwayMiddlewareDecision::Continue(ContinueOutput::Original) => {
+                    next.push(signal);
+                }
+                PathwayMiddlewareDecision::Continue(ContinueOutput::Replace(signals)) => {
+                    next.extend(signals);
+                }
+            }
         }
-        RuleCommand::Snapshot { reply_tx } => {
-            let mut rules = state
-                .rules_by_id
-                .values()
-                .map(|rule| rule.snapshot())
-                .collect::<Vec<_>>();
-            rules.sort_by(|lhs, rhs| lhs.rule_id.cmp(&rhs.rule_id));
-            let _ = reply_tx.send(DeferralRuleSetSnapshot {
-                revision: state.revision,
-                rules,
-            });
+        current = next;
+        if current.is_empty() {
+            return AfferentDispatchResult::Rejected {
+                reason_code: "empty_transform".to_string(),
+                reference_id: "afferent".to_string(),
+            };
         }
+    }
+
+    let reference_id = current
+        .into_iter()
+        .next()
+        .map(|sense| sense.sense_instance_id)
+        .unwrap_or_else(|| "afferent".to_string());
+    AfferentDispatchResult::Rejected {
+        reason_code: "route_not_found".to_string(),
+        reference_id,
     }
 }
 
-fn build_replacement_ruleset(
-    rules: Vec<DeferralRuleAddInput>,
-) -> Result<BTreeMap<String, DeferralRuleRuntime>, RuleControlError> {
-    let mut replacement = BTreeMap::new();
-    for input in rules {
-        let runtime_rule = DeferralRuleRuntime::from_input(input)?;
-        let rule_id = runtime_rule.rule_id.clone();
-        if replacement.contains_key(rule_id.as_str()) {
-            return Err(RuleControlError::invalid_input(format!(
-                "duplicate rule_id '{rule_id}'"
-            )));
-        }
-        replacement.insert(rule_id, runtime_rule);
+fn afferent_result_status(result: &AfferentDispatchResult) -> &'static str {
+    match result {
+        AfferentDispatchResult::Accepted { .. } => "ACCEPTED",
+        AfferentDispatchResult::Rejected { .. } => "REJECTED",
+        AfferentDispatchResult::Lost { .. } => "LOST",
     }
-    Ok(replacement)
 }
 
-async fn release_unblocked_front_fifo(
-    state: &mut DeferralState,
-    egress_tx: &mpsc::Sender<Sense>,
-    sidecar_tx: &broadcast::Sender<AfferentSidecarEvent>,
-) {
-    loop {
-        let Some(front) = state.deferred_fifo.front() else {
-            break;
+fn result_reference_id(result: &AfferentDispatchResult) -> &str {
+    match result {
+        AfferentDispatchResult::Accepted { reference_id }
+        | AfferentDispatchResult::Rejected { reference_id, .. }
+        | AfferentDispatchResult::Lost { reference_id, .. } => reference_id,
+    }
+}
+
+fn result_reason_code(result: &AfferentDispatchResult) -> Option<&str> {
+    match result {
+        AfferentDispatchResult::Accepted { .. } => None,
+        AfferentDispatchResult::Rejected { reason_code, .. }
+        | AfferentDispatchResult::Lost { reason_code, .. } => Some(reason_code),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::time::{Duration, timeout};
+
+    struct RecordingAcceptMiddleware {
+        tx: mpsc::Sender<String>,
+    }
+
+    #[async_trait]
+    impl AfferentMiddleware for RecordingAcceptMiddleware {
+        async fn handle_sense(
+            &self,
+            sense: &Sense,
+        ) -> Result<AfferentMiddlewareDecision, AfferentPathwayError> {
+            self.tx
+                .send(sense.sense_instance_id.clone())
+                .await
+                .expect("recording channel should stay open");
+            Ok(PathwayMiddlewareDecision::Accepted(()))
+        }
+    }
+
+    #[tokio::test]
+    async fn emit_sense_and_wait_returns_accepted_from_fixed_sequence() {
+        let (record_tx, mut record_rx) = mpsc::channel(1);
+        let pathway = SenseAfferentPathway::new(
+            4,
+            vec![Arc::new(RecordingAcceptMiddleware { tx: record_tx })],
+        );
+        let sense = Sense {
+            sense_instance_id: "sense-1".to_string(),
+            endpoint_id: "endpoint".to_string(),
+            neural_signal_descriptor_id: "sense.test".to_string(),
+            payload: "{}".to_string(),
+            weight: 1.0,
+            act_instance_id: None,
         };
 
-        if !matching_rule_ids(state, &front.sense).is_empty() {
-            break;
-        }
+        let result = pathway.emit_sense_and_wait(sense).await;
 
-        let Some(released) = state.deferred_fifo.pop_front() else {
-            break;
-        };
-
-        let sense_instance_id = released.sense.sense_instance_id.clone();
-        let endpoint_id = released.sense.endpoint_id.clone();
-        let descriptor_id = released.sense.neural_signal_descriptor_id.clone();
-        let payload = json!(released.sense.payload.clone());
-        let weight = released.sense.weight;
-        if egress_tx.send(released.sense.clone()).await.is_err() {
-            tracing::warn!(target: "stem.afferent", "consumer_channel_closed_drop_released_sense");
-            observability_runtime::emit_stem_afferent(
-                "drop",
-                &descriptor_id,
-                Some(&endpoint_id),
-                Some(&sense_instance_id),
-                None,
-                Some(payload.clone()),
-                Some(weight),
-                Some(json!({
-                    "queue_name": "afferent",
-                    "deferred_len": state.deferred_fifo.len(),
-                })),
-                Some(json!([])),
-                Some("consumer_channel_closed"),
-            );
-            break;
-        }
-
-        emit_sidecar(
-            sidecar_tx,
-            AfferentSidecarEvent::SenseReleased {
-                sense_instance_id: sense_instance_id.clone(),
-                deferred_len: state.deferred_fifo.len(),
-            },
+        assert_eq!(
+            result,
+            AfferentDispatchResult::Accepted {
+                reference_id: "sense-1".to_string()
+            }
         );
-        observability_runtime::emit_stem_afferent(
-            "release",
-            &descriptor_id,
-            Some(&endpoint_id),
-            Some(&sense_instance_id),
-            None,
-            Some(payload),
-            Some(weight),
-            Some(json!({
-                "queue_name": "afferent",
-                "deferred_len": state.deferred_fifo.len(),
-            })),
-            Some(json!([])),
-            None,
+        assert_eq!(
+            timeout(Duration::from_millis(100), record_rx.recv())
+                .await
+                .expect("recording should arrive"),
+            Some("sense-1".to_string())
         );
-    }
-}
-
-fn matching_rule_ids(state: &DeferralState, sense: &Sense) -> Vec<String> {
-    if state.rules_by_id.is_empty() {
-        return Vec::new();
-    }
-
-    let fq_sense_id =
-        build_fq_neural_signal_id(&sense.endpoint_id, &sense.neural_signal_descriptor_id);
-    state
-        .rules_by_id
-        .values()
-        .filter(|rule| rule.matches(sense, &fq_sense_id))
-        .map(|rule| rule.rule_id.clone())
-        .collect()
-}
-
-fn emit_sidecar(sidecar_tx: &broadcast::Sender<AfferentSidecarEvent>, event: AfferentSidecarEvent) {
-    if sidecar_tx.send(event).is_err() {
-        tracing::debug!(target: "stem.afferent", "sidecar_event_dropped_no_subscribers");
     }
 }

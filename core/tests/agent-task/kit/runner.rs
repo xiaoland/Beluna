@@ -25,11 +25,11 @@ use beluna::{
         Config, CortexRuntimeConfig, InlineAdapterConfig, SpineAdapterConfig, SpineRuntimeConfig,
     },
     continuity::ContinuityEngine,
-    cortex::Cortex,
+    cortex::{AfferentRuleControlPort, Cortex, CortexAfferentAdmission},
     spine::{Endpoint, EndpointExecutionOutcome, Spine},
     stem::{
-        AfferentRuleControlPort, SenseAfferentPathway, StemControlPort, StemPhysicalStateStore,
-        new_efferent_pathway, spawn_efferent_runtime,
+        ContinuityEfferentMiddleware, SenseAfferentPathway, SpineEfferentMiddleware,
+        StemControlPort, StemPhysicalStateStore, new_efferent_pathway, spawn_efferent_runtime,
     },
     types::{Act, NeuralSignalDescriptor, NeuralSignalType, Sense},
 };
@@ -97,8 +97,10 @@ impl AgentTaskRunner {
         let _cwd_guard = bind_case_working_directory(case, &workspace, &journal)?;
 
         let tick_clock = TickClock::new(1);
-        let (ingress, mut consumer, afferent_control) =
-            SenseAfferentPathway::new_handles(16, 16, 16);
+        let (cortex_afferent_admission, mut consumer) = CortexAfferentAdmission::new(16, 16);
+        let cortex_afferent_admission = Arc::new(cortex_afferent_admission);
+        let (ingress, _afferent_control) =
+            SenseAfferentPathway::new_handles(16, vec![cortex_afferent_admission.clone()]);
         let proprioception = case.world.proprioception.entries.clone();
         let stem_state = StemPhysicalStateStore::new(proprioception);
         let stem_control: Arc<dyn StemControlPort> = Arc::new(stem_state.clone());
@@ -131,8 +133,10 @@ impl AgentTaskRunner {
         let shutdown = CancellationToken::new();
         let efferent_task = spawn_efferent_runtime(
             efferent_rx,
-            Arc::clone(&continuity),
-            Arc::clone(&spine),
+            vec![
+                Arc::new(ContinuityEfferentMiddleware::new(Arc::clone(&continuity))),
+                Arc::new(SpineEfferentMiddleware::new(Arc::clone(&spine))),
+            ],
             shutdown.clone(),
             Duration::from_millis(100),
         );
@@ -141,7 +145,8 @@ impl AgentTaskRunner {
             &ai_runtime.config,
             Arc::new(EnvCredentialProvider),
         )?);
-        let afferent_rule_control: Arc<dyn AfferentRuleControlPort> = Arc::new(afferent_control);
+        let afferent_rule_control: Arc<dyn AfferentRuleControlPort> =
+            cortex_afferent_admission.clone();
         let cortex = Cortex::from_config(
             &cortex_config(case, &mode),
             1,

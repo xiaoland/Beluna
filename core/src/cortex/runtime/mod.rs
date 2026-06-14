@@ -10,8 +10,14 @@ use crate::{
     types::{PhysicalState, Sense},
 };
 
+mod afferent_admission;
 mod primary;
 
+pub use afferent_admission::{
+    AfferentRuleControlPort, CortexAfferentAdmission, DeferralRuleAddInput,
+    DeferralRuleSetSnapshot, DeferralRuleSnapshot, RuleControlError, RuleControlErrorKind,
+    RuleRevision,
+};
 pub use primary::{Cortex, CortexTelemetryEvent, CortexTelemetryHook};
 
 #[async_trait]

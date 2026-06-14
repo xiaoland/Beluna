@@ -16,14 +16,17 @@ use beluna::{
     cli::{CliCommand, command_from_args},
     config::{Config, TickMissedBehavior, generate_schema_json_pretty, write_schema_to_path},
     continuity::ContinuityEngine,
-    cortex::{Cortex, CortexDeps, CortexRuntime, PhysicalStateReadPort},
+    cortex::{
+        AfferentRuleControlPort, Cortex, CortexAfferentAdmission, CortexDeps, CortexRuntime,
+        PhysicalStateReadPort,
+    },
     logging::{init_tracing, new_run_id},
     observability::{otel::OpenTelemetryRuntime, owner_log, runtime as observability_runtime},
     spine::{Spine, shutdown_global_spine},
     stem::{
-        AfferentControlHandle, AfferentRuleControlPort, SenseAfferentPathway, StemControlPort,
-        StemDeps, StemPhysicalStateStore, StemTickRuntime, new_efferent_pathway,
-        spawn_efferent_runtime,
+        AfferentControlHandle, ContinuityEfferentMiddleware, SenseAfferentPathway,
+        SpineEfferentMiddleware, StemControlPort, StemDeps, StemPhysicalStateStore,
+        StemTickRuntime, new_efferent_pathway, spawn_efferent_runtime,
     },
     types::PhysicalState,
 };
@@ -200,10 +203,14 @@ async fn main() -> Result<()> {
         tracing::warn!(target: "core", "unsupported_tick_missed_behavior_fallback_to_skip");
     }
 
-    let (afferent_ingress, afferent_consumer, afferent_control) = SenseAfferentPathway::new_handles(
+    let (cortex_afferent_admission, afferent_consumer) = CortexAfferentAdmission::new(
         config.r#loop.sense_queue_capacity,
         config.r#loop.max_deferring_nums,
-        config.r#loop.afferent_sidecar_capacity,
+    );
+    let cortex_afferent_admission = Arc::new(cortex_afferent_admission);
+    let (afferent_ingress, afferent_control) = SenseAfferentPathway::new_handles(
+        config.r#loop.sense_queue_capacity,
+        vec![cortex_afferent_admission.clone()],
     );
     let stem_state = Arc::new(StemPhysicalStateStore::new(
         collect_main_startup_proprioception(),
@@ -235,8 +242,7 @@ async fn main() -> Result<()> {
         ContinuityEngine::with_defaults_at(config.continuity.state_path.clone())
             .context("failed to initialize continuity engine")?,
     ));
-    let afferent_rule_control: Arc<dyn AfferentRuleControlPort> =
-        Arc::new(afferent_control.clone());
+    let afferent_rule_control: Arc<dyn AfferentRuleControlPort> = cortex_afferent_admission.clone();
     let (efferent_producer, efferent_rx) =
         new_efferent_pathway(Some(config.cortex.outbox_capacity));
 
@@ -277,8 +283,10 @@ async fn main() -> Result<()> {
 
     let efferent_task = spawn_efferent_runtime(
         efferent_rx,
-        continuity.clone(),
-        spine_runtime,
+        vec![
+            Arc::new(ContinuityEfferentMiddleware::new(continuity.clone())),
+            Arc::new(SpineEfferentMiddleware::new(spine_runtime)),
+        ],
         app_context.shutdown.child_token(),
         Duration::from_millis(config.r#loop.efferent_shutdown_drain_timeout_ms),
     );
